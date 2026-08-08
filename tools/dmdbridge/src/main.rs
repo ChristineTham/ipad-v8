@@ -196,6 +196,8 @@ fn main() {
     let mut done_at: Option<Instant> = None;
     let mut last_progress = Instant::now();
     let mut stall_reported = false;
+    let mut tx_ring: VecDeque<u8> = VecDeque::new();
+    let mut tx_since_mux: u64 = 0;
     const MUXTERM_SIZE: u64 = 144_603; // ls -l /usr/jerq/lib/muxterm on the V8 image
 
     // Pace the emulated CPU to ~10 MHz of wall time. The DUART is a
@@ -238,8 +240,20 @@ fn main() {
             if b == IAC {
                 txbuf.push(IAC);
             }
+            if mux_t.is_some() {
+                tx_since_mux += 1;
+                tx_ring.push_back(b);
+                if tx_ring.len() > 64 {
+                    tx_ring.pop_front();
+                }
+            }
         }
         while dmd.keyboard_tx().is_some() {} // drain keyboard-channel beeps
+        if dmd.rs232_tx_break() {
+            txbuf.push(IAC);
+            txbuf.push(243); // telnet BREAK command
+            println!("[{:7.2}s] terminal BREAK -> telnet IAC BRK", secs(Instant::now()));
+        }
 
         // Keyboard typing, spaced out.
         if kb_gap > 0 {
@@ -307,7 +321,7 @@ fn main() {
             Phase::WaitShell => {
                 if has(&scan, b"# ") {
                     println!("[{:7.2}s] shell prompt; starting mux", secs(Instant::now()));
-                    kbq.extend(b"/usr/jerq/bin/mux\r");
+                    kbq.extend(b"cd /tmp; /usr/jerq/bin/mux 2>muxerr\r");
                     scan.clear();
                     mux_t = Some(Instant::now());
                     phase = Phase::MuxRunning;
@@ -342,6 +356,26 @@ fn main() {
                             pcs.push(dmd.get_pc());
                         }
                         let tail: Vec<u8> = scan.iter().rev().take(160).rev().cloned().collect();
+                        println!("[{:7.2}s] STALL duart: {}", secs(now), dmd.duart_debug());
+                        let txv: Vec<u8> = tx_ring.iter().cloned().collect();
+                        println!("[{:7.2}s] STALL tx_since_mux={} last tx bytes: {:02x?}",
+                            secs(now), tx_since_mux, txv);
+                        // Extract printable ASCII runs from the whole scan buffer:
+                        // a dying mux/32ld error message hides among binary.
+                        let mut runs: Vec<String> = Vec::new();
+                        let mut cur = String::new();
+                        for &b in scan.iter() {
+                            if (0x20..0x7f).contains(&b) {
+                                cur.push(b as char);
+                            } else {
+                                if cur.len() >= 5 { runs.push(cur.clone()); }
+                                cur.clear();
+                            }
+                        }
+                        if cur.len() >= 5 { runs.push(cur); }
+                        let n = runs.len();
+                        println!("[{:7.2}s] STALL ascii runs (last 12 of {}): {:?}",
+                            secs(now), n, &runs[n.saturating_sub(12)..]);
                         println!(
                             "[{:7.2}s] STALL: {} bytes, no rx 15s. pc: {:x?} kbq={} txbuf={} scan tail: {:?}",
                             secs(now), burst_bytes, pcs, kbq.len(), txbuf.len(),

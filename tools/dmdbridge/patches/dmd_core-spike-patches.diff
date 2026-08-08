@@ -1,11 +1,19 @@
 diff --git a/src/bus.rs b/src/bus.rs
-index 342e723..58fd0b4 100644
+index 342e723..186b156 100644
 --- a/src/bus.rs
 +++ b/src/bus.rs
-@@ -227,6 +227,10 @@ impl Bus {
+@@ -227,6 +227,18 @@ impl Bus {
          self.duart.rs232_rx(c);
      }
  
++    pub fn duart_debug(&self) -> String {
++        self.duart.debug_state()
++    }
++
++    pub fn rs232_tx_break(&mut self) -> bool {
++        self.duart.rs232_tx_break()
++    }
++
 +    pub fn rs232_break(&mut self) {
 +        self.duart.rs232_break();
 +    }
@@ -29,7 +37,7 @@ index dd3c8c8..2976872 100644
          self.r[R_AP]
      }
 diff --git a/src/dmd.rs b/src/dmd.rs
-index 9576473..7ca9371 100644
+index 9576473..1c7918e 100644
 --- a/src/dmd.rs
 +++ b/src/dmd.rs
 @@ -76,6 +76,10 @@ impl Dmd {
@@ -43,10 +51,18 @@ index 9576473..7ca9371 100644
      pub fn get_ap(&self) -> u32 {
          self.cpu.get_ap()
      }
-@@ -124,6 +128,10 @@ impl Dmd {
+@@ -124,6 +128,18 @@ impl Dmd {
          self.bus.rs232_rx(c);
      }
  
++    pub fn duart_debug(&self) -> String {
++        self.bus.duart_debug()
++    }
++
++    pub fn rs232_tx_break(&mut self) -> bool {
++        self.bus.rs232_tx_break()
++    }
++
 +    pub fn rs232_break(&mut self) {
 +        self.bus.rs232_break();
 +    }
@@ -55,10 +71,19 @@ index 9576473..7ca9371 100644
          self.bus.keyboard_rx(keycode);
      }
 diff --git a/src/duart.rs b/src/duart.rs
-index ed7eea0..0aab578 100644
+index ed7eea0..8d8c98f 100644
 --- a/src/duart.rs
 +++ b/src/duart.rs
-@@ -378,7 +378,11 @@ fn delay_rate(csr_bits: u8, acr_bits: u8) -> Duration {
+@@ -347,6 +347,8 @@ impl Port {
+ 
+ pub struct Duart {
+     ports: [Port; 2],
++    tx_break_pending: bool,
++    cmd_log: std::collections::VecDeque<(usize, u8)>,
+     acr: u8,
+     ipcr: u8,
+     inprt: u8,
+@@ -378,13 +380,19 @@ fn delay_rate(csr_bits: u8, acr_bits: u8) -> Duration {
          BAUD_RATES_B[baud_bits]
      };
  
@@ -71,12 +96,40 @@ index ed7eea0..0aab578 100644
  }
  
  impl Duart {
-@@ -457,6 +461,14 @@ impl Duart {
+     pub fn new() -> Duart {
+         Duart {
+             ports: [Port::new(), Port::new()],
++            tx_break_pending: false,
++            cmd_log: std::collections::VecDeque::new(),
+             acr: 0,
+             ipcr: 0x40,
+             inprt: 0xb,
+@@ -457,6 +465,34 @@ impl Duart {
          self.ports[PORT_0].rx_deque.push_front(c);
      }
  
 +    /// Deliver a BREAK condition on the RS232 (host) line: error flags plus
 +    /// the 0x00 data byte a real UART receives. (ipad-v8 spike patch.)
++    /// Debug dump of both ports' live state (ipad-v8 spike diagnostics).
++    pub fn debug_state(&self) -> String {
++        let p = |i: usize| {
++            let port = &self.ports[i];
++            format!(
++                "port{}: conf={:02x} stat={:02x} hold={:02x?} shift={:02x?} rxfifo={} txdq={} rxdq={} delay={:?}",
++                i, port.conf, port.stat, port.tx_holding_reg, port.tx_shift_reg,
++                port.rx_fifo.len(), port.tx_deque.len(), port.rx_deque.len(), port.char_delay
++            )
++        };
++        format!("{} | {} | isr={:02x} imr={:02x} ivec={:02x} | cmds={:02x?}", p(0), p(1), self.isr, self.imr, self.ivec, self.cmd_log)
++    }
++
++    /// Poll-and-clear: has the terminal started a BREAK toward the host?
++    pub fn rs232_tx_break(&mut self) -> bool {
++        let b = self.tx_break_pending;
++        self.tx_break_pending = false;
++        b
++    }
++
 +    pub fn rs232_break(&mut self) {
 +        let port = &mut self.ports[PORT_0];
 +        port.stat |= STS_RXB | STS_PER;
@@ -86,7 +139,30 @@ index ed7eea0..0aab578 100644
      /// Queue a single character for processing by the keyboard port
      pub fn keyboard_rx(&mut self, c: u8) {
          self.ports[PORT_1].rx_deque.push_front(c);
-@@ -595,6 +607,11 @@ impl Duart {
+@@ -512,6 +548,10 @@ impl Duart {
+     }
+ 
+     fn handle_command(&mut self, cmd: u8, port_no: usize) {
++        self.cmd_log.push_back((port_no, cmd));
++        if self.cmd_log.len() > 48 {
++            self.cmd_log.pop_front();
++        }
+         let port = &mut self.ports[port_no];
+ 
+         let (tx_ists, rx_ists, dbk_ists) = match port_no {
+@@ -588,6 +628,11 @@ impl Duart {
+             }
+             CR_START_BRK => {
+                 debug!("PORT{}: Start Break.", port_no);
++                if !port.loopback() && port_no == PORT_0 {
++                    // ipad-v8 spike patch: expose the outgoing BREAK (the
++                    // in-code TODO) — 32ld's download handshake needs it.
++                    self.tx_break_pending = true;
++                }
+                 if port.loopback() {
+                     // We only care about a BREAK condition if it's
+                     // looping back to te receiver.
+@@ -595,6 +640,11 @@ impl Duart {
                      // TODO: We may want to expose a BREAK condition
                      // to the outside world at some point.
                      port.stat |= STS_RXB | STS_PER;

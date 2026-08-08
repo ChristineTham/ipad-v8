@@ -132,6 +132,38 @@ SIMH's tmxr delivers inbound breaks to the DZ), then the mux desktop should appe
 The inbound half is already plumbed: `rs232_break()` added to the core, and the bridge
 translates telnet `IAC BREAK` (243) into it, in-order.
 
+### Session 4 addendum — the 55,138-byte stall fully diagnosed
+
+Deep instrumentation (DUART state dump + command-byte ring + V8-side probes mid-stall)
+turned the stall from a mystery into a three-party deadlock with a named culprit:
+
+- **The stall is not a death.** With stderr captured, host-side `mux` is *alive and
+  blocked* at stall time (earlier "getty respawned" observations were later-stage timeouts).
+- **Terminal side**: phase-1 load (`0x80|seq`-framed 128-byte packets, per
+  `/usr/jerq/src/32ld/proto.h` read off the V8 disk) completes ~55 KB ≈ muxterm's first
+  segment; the downloaded second stage runs (PC in RAM), sends its `0xc0`-framed
+  relocation packet, toggles its transmitter off (command ring: `…04,08,04,08`), and waits.
+  Its ISR shows **delta-break bits pending** — it is waiting for a **BREAK**.
+- **Host side**: V8's `mux` sends that BREAK at the phase boundary via the DZ's
+  transmit-break bit — and **SIMH's DZ discards it: `TDR_V_TBR "xmit break - NI"`** (not
+  implemented, verified in pdp11_dz.c). Terminal waits for a break that never comes; host
+  waits for a reply that never comes.
+- The kernel-config theory was eliminated (the `alice` config has `mesg 128`, `sp`,
+  `connld` — everything mux needs; the zero-grep was a stripped kernel). A
+  `disable_tx`-flag-semantics experiment was tried and reverted (breaks the ROM's normal
+  typing path both ways it can be scoped).
+
+**The fix for next session** (small and precise): implement DZ transmit-break in the local
+SIMH — in `dz_wr`, on a rising TBR bit, emit telnet `IAC BRK` on that line (mind tmxr's
+IAC escaping) — and the bridge's existing inbound plumbing (`IAC BRK` → `rs232_break()`)
+delivers it to the terminal. This also explains why loomcom's own tests work: the dmd
+frontends attach via pty/real tty, where breaks propagate natively; the telnet path is the
+only one that loses them.
+
+Also hard-won this session: rebuild the disk with `./setup y` if boots get flaky, keep
+`rp06v8.golden` for instant restore, and wait for port 8888 to leave TIME_WAIT between
+rapid SIMH restarts (`lsof -i :8888`).
+
 ## Session artifacts (all under gitignored `work/`)
 
 `simh312/sim/BIN/vax780` · `myv8/rp06v8` (the bootable V8 disk) · `myv8/setup.log` ·
