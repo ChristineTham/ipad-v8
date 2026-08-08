@@ -1,0 +1,58 @@
+--- PDP11/pdp11_dz.c.orig	2026-08-08 20:55:28
++++ PDP11/pdp11_dz.c	2026-08-08 20:55:28
+@@ -163,6 +163,28 @@
+ 
+ DEVICE dz_dev;
+ t_stat dz_rd (int32 *data, int32 PA, int32 access);
++
++/* ipad-v8 spike patch: transmit a telnet BREAK (IAC BRK) on a line, raw —
++   tmxr_putc_ln would double the IAC. Implements the DZ's TDR break bits
++   (previously "NI"), which Research Unix mux uses in the 32ld handshake. */
++#define DZP_IAC 0xffu
++#define DZP_BRK 0xf3u
++static void dz_send_break (TMLN *lp)
++{
++if (lp->conn == 0)
++    return;
++if (tmxr_tqln (lp) < (TMXR_MAXBUF - 2)) {
++    lp->txb[lp->txbpi] = (char) DZP_IAC;
++    lp->txbpi = lp->txbpi + 1;
++    if (lp->txbpi >= TMXR_MAXBUF)
++        lp->txbpi = 0;
++    lp->txb[lp->txbpi] = (char) DZP_BRK;
++    lp->txbpi = lp->txbpi + 1;
++    if (lp->txbpi >= TMXR_MAXBUF)
++        lp->txbpi = 0;
++    }
++}
++
+ t_stat dz_wr (int32 data, int32 PA, int32 access);
+ int32 dz_rxinta (void);
+ int32 dz_txinta (void);
+@@ -362,11 +384,23 @@
+         break;
+ 
+     case 03:                                            /* TDR */
+-        if (PA & 1) {                                   /* odd byte? */
++        {
++        int32 obrk = (dz_tdr[dz] >> 8) & 0377;          /* old break bits */
++        int32 nbrk, bi;
++        if (PA & 1)                                     /* odd byte? */
+             dz_tdr[dz] = (dz_tdr[dz] & 0377) | (data << 8);     /* just save */
+-            break;
++        else dz_tdr[dz] = data;
++        nbrk = ((dz_tdr[dz] >> 8) & 0377) & ~obrk;      /* rising edges */
++        if (nbrk && (dz_csr[dz] & CSR_MSE)) {
++            for (bi = 0; bi < DZ_LINES; bi++) {
++                if (nbrk & (1 << bi))
++                    dz_send_break (&dz_ldsc[(dz * DZ_LINES) + bi]);
++                }
++            tmxr_poll_tx (&dz_desc);
+             }
+-        dz_tdr[dz] = data;
++        if (PA & 1)
++            break;
++        }
+         if (dz_csr[dz] & CSR_MSE) {                     /* enabled? */
+             line = (dz * DZ_LINES) + CSR_GETTL (dz_csr[dz]);
+             lp = &dz_ldsc[line];                        /* get line desc */

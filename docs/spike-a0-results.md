@@ -164,6 +164,21 @@ Also hard-won this session: rebuild the disk with `./setup y` if boots get flaky
 `rp06v8.golden` for instant restore, and wait for port 8888 to leave TIME_WAIT between
 rapid SIMH restarts (`lsof -i :8888`).
 
+**Session 5 correction — break theory falsified by direct test.** DZ transmit-break was
+implemented in the local SIMH (patch: `tools/dmdbridge/patches/simh-dz-txbreak.diff` —
+rising TBR edges → raw telnet `IAC BRK`, bypassing tmxr's IAC doubling) and the bridge's
+inbound plumbing verified. Result: **mux never sets the TBR bits** — no break flows in
+either direction at the stall; the terminal ISR's delta-break bits were stale artifacts of
+the self-test loopback patch. Both break hypotheses are now dead. The stall stands as: host
+`mux` blocked reading, second stage spinning at PC ~0x720af6–0x720b39 after its
+`c0 02 06 03 de 61` message, TX disabled by its own final command. Next candidates, in
+order: (1) single-step the second stage's spin loop with `ir_debug()` to name the exact
+register/value it polls (same technique that cracked the self-test); (2) run Seth's dmd_gtk
+against this same SIMH via a pty↔telnet bridge to bisect transport vs. emulator vs. bridge;
+(3) inspect V8-side mux's open fds/wait channel via /proc at stall. A login-retry loop was
+added to the bridge (intermittent keystroke loss makes runs a coin flip — root cause still
+open in the kb path). Bridge run logs: `work/run*.log`.
+
 ## Session artifacts (all under gitignored `work/`)
 
 `simh312/sim/BIN/vax780` · `myv8/rp06v8` (the bootable V8 disk) · `myv8/setup.log` ·

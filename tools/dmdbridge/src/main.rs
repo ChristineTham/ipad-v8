@@ -155,6 +155,7 @@ fn main() {
     let mut scan: Vec<u8> = Vec::new(); // parity-stripped host stream for prompts
     let mut kbq: VecDeque<u8> = VecDeque::new(); // pending keystrokes
     let mut phase = Phase::WaitLogin;
+    let mut phase_since = Instant::now();
 
     // Metrics.
     let mut host_bytes_total: u64 = 0;
@@ -316,15 +317,27 @@ fn main() {
                     kbq.extend(b"root\r");
                     scan.clear();
                     phase = Phase::WaitShell;
+                    phase_since = Instant::now();
                 }
             }
             Phase::WaitShell => {
-                if has(&scan, b"# ") {
+                if Instant::now().duration_since(phase_since) > Duration::from_secs(25) {
+                    println!(
+                        "[{:7.2}s] shell never appeared; retrying login (keystroke loss)",
+                        secs(Instant::now())
+                    );
+                    kbq.clear();
+                    kbq.extend(b"\r");
+                    scan.clear();
+                    phase = Phase::WaitLogin;
+                    phase_since = Instant::now();
+                } else if has(&scan, b"# ") {
                     println!("[{:7.2}s] shell prompt; starting mux", secs(Instant::now()));
                     kbq.extend(b"cd /tmp; /usr/jerq/bin/mux 2>muxerr\r");
                     scan.clear();
                     mux_t = Some(Instant::now());
                     phase = Phase::MuxRunning;
+                    phase_since = Instant::now();
                 }
             }
             Phase::MuxRunning => {
