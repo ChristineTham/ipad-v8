@@ -149,7 +149,10 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
 - In-app SIMH listeners must rotate ports per launch: tmxr binds without `SO_REUSEADDR`,
   so a quick relaunch hits the previous incarnation's TIME_WAIT pairs ("bind error 48")
   and scp runs with **no listeners**; a failed console re-attach also leaves the restore
-  path one `cont` from a NULL-deref segfault (`_tmxr_activate_delay`). Don't "fix" the
+  path one `cont` from a NULL-deref segfault (`_tmxr_activate_delay`) — `save` persists
+  `UNIT_TM_POLL` in the unit's dynflags, but never the `uptr->tmxr` pointer that only a
+  *successful* `tmxr_attach` sets, and restore reports success either way (filed upstream
+  as [open-simh/simh#576](https://github.com/open-simh/simh/issues/576)). Don't "fix" the
   crash with `reset tti` — that zeroes the guest-configured CSR and V8 stops seeing
   console input.
 - A `state.sav` is only disk-consistent while the machine stays paused — the app deletes

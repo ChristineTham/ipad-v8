@@ -107,14 +107,21 @@ The remote-console dialect in full, all desktop-verified:
     one-shot: if the attempt dies (crash, kill), the next launch drops the
     snapshot and cold-boots instead of crash-looping.
   - The restore path re-attaches the console and DZ on this launch's
-    ports, and those binds must **succeed**: `tmxr_detach` NULLs the VAX
-    TTI/TTO units' tmxr backpointers and a *successful* `tmxr_attach` is
-    what re-links them — after a failed bind, `cont` segfaults in
-    `_tmxr_activate_delay` (upstream-report candidate: a failed console
-    re-attach leaves the machine one `cont` away from a NULL deref).
-    Tempting wrong fix: `reset tti` re-links too, but zeroes the CSR the
-    guest kernel configured — interrupt enable included — and V8 stops
-    noticing console input entirely.
+    ports, and those binds must **succeed**. `SAVE` persists each unit's
+    `dynflags` — `UNIT_TM_POLL`, the "I am a mux polling unit" tag,
+    included — but `uptr->tmxr` is a runtime pointer that only a
+    *successful* `tmxr_attach` sets, and no save file can carry it. A
+    restore whose re-attach fails therefore brings the unit back tagged
+    for polling with a NULL backpointer, and the next `cont` segfaults in
+    `_tmxr_activate_delay`; restore reports success either way, so the
+    session looks healthy right up to the crash. Filed upstream as
+    [open-simh/simh#576](https://github.com/open-simh/simh/issues/576),
+    reproduced on a stock `vax780` with no disk image and no OS — *any*
+    failed re-attach does it, and the TIME_WAIT collision below is just
+    the trigger we happened to hit. Tempting wrong fix: `reset tti`
+    re-links the pointers, but zeroes the CSR the guest kernel configured
+    — interrupt enable included — and V8 stops noticing console input
+    entirely.
   - **Snapshot consumption**: `state.sav` is deleted the moment the
     machine runs again (foreground continue or restore success). A
     snapshot is only consistent with the disk while the machine stays
