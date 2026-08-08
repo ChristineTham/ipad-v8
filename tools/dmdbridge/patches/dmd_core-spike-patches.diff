@@ -1,0 +1,110 @@
+diff --git a/src/bus.rs b/src/bus.rs
+index 342e723..58fd0b4 100644
+--- a/src/bus.rs
++++ b/src/bus.rs
+@@ -227,6 +227,10 @@ impl Bus {
+         self.duart.rs232_rx(c);
+     }
+ 
++    pub fn rs232_break(&mut self) {
++        self.duart.rs232_break();
++    }
++
+     pub fn keyboard_rx(&mut self, keycode: u8) {
+         self.duart.keyboard_rx(keycode);
+     }
+diff --git a/src/cpu.rs b/src/cpu.rs
+index dd3c8c8..2976872 100644
+--- a/src/cpu.rs
++++ b/src/cpu.rs
+@@ -2630,6 +2630,10 @@ impl Cpu {
+         self.r[R_PC]
+     }
+ 
++    pub fn ir_debug(&self) -> String {
++        format!("{:?}", self.ir)
++    }
++
+     pub fn get_ap(&self) -> u32 {
+         self.r[R_AP]
+     }
+diff --git a/src/dmd.rs b/src/dmd.rs
+index 9576473..7ca9371 100644
+--- a/src/dmd.rs
++++ b/src/dmd.rs
+@@ -76,6 +76,10 @@ impl Dmd {
+         self.cpu.get_pc()
+     }
+ 
++    pub fn ir_debug(&self) -> String {
++        self.cpu.ir_debug()
++    }
++
+     pub fn get_ap(&self) -> u32 {
+         self.cpu.get_ap()
+     }
+@@ -124,6 +128,10 @@ impl Dmd {
+         self.bus.rs232_rx(c);
+     }
+ 
++    pub fn rs232_break(&mut self) {
++        self.bus.rs232_break();
++    }
++
+     pub fn keyboard_rx(&mut self, keycode: u8) {
+         self.bus.keyboard_rx(keycode);
+     }
+diff --git a/src/duart.rs b/src/duart.rs
+index ed7eea0..0aab578 100644
+--- a/src/duart.rs
++++ b/src/duart.rs
+@@ -378,7 +378,11 @@ fn delay_rate(csr_bits: u8, acr_bits: u8) -> Duration {
+         BAUD_RATES_B[baud_bits]
+     };
+ 
+-    Duration::new(0, NS_PER_SEC / (baud_rate / BITS_PER_CHAR))
++    // ipad-v8 spike TURBO patch: run the wire 8x the programmed baud
++    // (9600-equivalent at the 1200-baud NVRAM default) — the speed real
++    // 5620 hardware supported. The 32ld protocol is block-acked and
++    // self-paces safely at this rate.
++    Duration::new(0, (NS_PER_SEC / (baud_rate / BITS_PER_CHAR)) / 8)
+ }
+ 
+ impl Duart {
+@@ -457,6 +461,14 @@ impl Duart {
+         self.ports[PORT_0].rx_deque.push_front(c);
+     }
+ 
++    /// Deliver a BREAK condition on the RS232 (host) line: error flags plus
++    /// the 0x00 data byte a real UART receives. (ipad-v8 spike patch.)
++    pub fn rs232_break(&mut self) {
++        let port = &mut self.ports[PORT_0];
++        port.stat |= STS_RXB | STS_PER;
++        port.rx_char(0);
++    }
++
+     /// Queue a single character for processing by the keyboard port
+     pub fn keyboard_rx(&mut self, c: u8) {
+         self.ports[PORT_1].rx_deque.push_front(c);
+@@ -595,6 +607,11 @@ impl Duart {
+                     // TODO: We may want to expose a BREAK condition
+                     // to the outside world at some point.
+                     port.stat |= STS_RXB | STS_PER;
++                    // ipad-v8 spike patch: a real UART receives a BREAK as a
++                    // 0x00 data byte alongside the error flags. The 8;7;3
++                    // ROM's loopback self-test waits for that byte to end its
++                    // walking-bit sequence.
++                    port.rx_char(0);
+                     // Set "Delta Break"
+                     self.isr |= dbk_ists;
+                 }
+diff --git a/src/lib.rs b/src/lib.rs
+index b9aaf30..6016950 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -19,3 +19,5 @@ mod utils;
+ extern crate lazy_static;
+ extern crate libc;
+ extern crate log;
++
++pub use crate::dmd::Dmd;

@@ -92,6 +92,46 @@ avoids WE32100 corner-cases that dmd_core never needed for SVR3.** Two viable pa
 MOVTRW-identity); `tools/dmdbridge/.cargo/config.toml` redirects the build to it — delete
 that file to build pristine. `work/turbo-run.sh` = one-shot run-with-cleanup harness.
 
+## Session 3 (2026-08-08, evening): the 8;7;3 ROM — found, fixed, nearly there
+
+**The ROM hunt succeeded.** The dmdmtg GitHub mirrors are stale (pre-2022); the canonical
+repos live on Seth Morabito's Gitea (`git.loomcom.com/seth/{dmd_core,dmd_gtk,dmd_sdl}` —
+the HTML is bot-walled but `git clone` and the Gitea API work). Canonical `dmd_core` 0.7.1
+(rev `ee222b68`) embeds **both** firmwares — `Dmd::reset(1)` = 8;7;3, `reset(2)` = 8;7;5 —
+and the bridge now builds against it ([tools/dmdbridge/Cargo.toml](../tools/dmdbridge/Cargo.toml)).
+
+**Three real emulator bugs found and fixed** (patches:
+[tools/dmdbridge/patches/dmd_core-spike-patches.diff](../tools/dmdbridge/patches/dmd_core-spike-patches.diff),
+applied to a local checkout via the gitignored `.cargo/config.toml` redirect; all are
+upstream-PR candidates):
+
+1. **8;7;3 power-on hang**: the ROM's walking-bit DUART loopback self-test ends each
+   sequence with a BREAK — which a real UART receives as a 0x00 data byte plus error flags.
+   The core set the flags but never delivered the byte, so the ROM retried the self-test
+   forever ("RAM TEST" frozen on screen). Diagnosed by single-stepping with an added
+   `ir_debug()`; fixed by delivering the byte. **The 8;7;3 terminal now boots fully** and
+   renders the V8 login session (screenshot captured).
+2. **Keyboard overrun**: the kb FIFO is 3-deep and wall-clock-paced; typing faster than
+   ~a few ms/key silently drops keystrokes mid-word. Bridge now types at 100 ms/key.
+3. **CPU pacing**: the DUART is a wall-clock state machine; a flat-out CPU races its
+   service deadlines nondeterministically. Bridge now paces the WE32100 to ~10 MHz
+   (exactly what Seth's SDL frontend does).
+
+Also confirmed: 8;7;5 hits the `MOVTRW` wall on the canonical core too — **8;7;3 is
+mandatory for V8**, now understood three levels deep.
+
+**Where it stands — one wall left**: with 8;7;3 booted and typing fixed, `mux`'s download
+runs and stalls **deterministically at 55,138 bytes (38%)**, reproduced twice at the exact
+same byte. Prime suspect, with direct evidence: the terminal signals `32ld` block/segment
+boundaries by sending a **BREAK to the host**, and `dmd_core`'s `CR_START_BRK` handler
+contains literally `TODO: We may want to expose a BREAK condition to the outside world` —
+the outgoing break is dropped, so V8 waits forever. **Next session**: surface the outgoing
+break (core patch → bridge translates it to telnet `IAC BREAK` toward SIMH; verify classic
+SIMH's tmxr delivers inbound breaks to the DZ), then the mux desktop should appear.
+
+The inbound half is already plumbed: `rs232_break()` added to the core, and the bridge
+translates telnet `IAC BREAK` (243) into it, in-order.
+
 ## Session artifacts (all under gitignored `work/`)
 
 `simh312/sim/BIN/vax780` · `myv8/rp06v8` (the bootable V8 disk) · `myv8/setup.log` ·

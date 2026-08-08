@@ -5,7 +5,7 @@
 //! dumps the 800x1024 framebuffer to PNG files as visual proof. This is a
 //! desktop prototype of exactly the embedding the iPad app performs.
 
-use dmd_core::dmd::Dmd;
+use dmd_core::Dmd;
 use std::collections::VecDeque;
 use std::fs;
 use std::io::{ErrorKind, Read, Write};
@@ -32,18 +32,23 @@ impl Telnet {
     fn new() -> Self {
         Telnet { state: 0, verb: 0 }
     }
-    fn push(&mut self, b: u8, out: &mut VecDeque<u8>, reply: &mut Vec<u8>) {
+    fn push(&mut self, b: u8, out: &mut VecDeque<u16>, reply: &mut Vec<u8>) {
         match self.state {
             0 => {
                 if b == IAC {
                     self.state = 1;
                 } else {
-                    out.push_back(b);
+                    out.push_back(b as u16);
                 }
             }
             1 => match b {
                 IAC => {
-                    out.push_back(IAC);
+                    out.push_back(IAC as u16);
+                    self.state = 0;
+                }
+                243 => {
+                    // Telnet BREAK command: deliver as an in-order break marker.
+                    out.push_back(256);
                     self.state = 0;
                 }
                 DO | DONT | WILL | WONT => {
@@ -138,14 +143,14 @@ fn main() {
     println!("connected to SIMH DZ on 127.0.0.1:8888");
 
     let mut dmd = Dmd::new();
-    dmd.reset().expect("dmd reset");
+    dmd.reset(1).expect("dmd reset"); // firmware version 1 = 8;7;3 (required for V8 mux)
     println!("dmd_core reset; video_ram len = {}", dmd.video_ram().len());
 
     let t0 = Instant::now();
     let secs = |t: Instant| t.duration_since(t0).as_secs_f64();
 
     let mut telnet = Telnet::new();
-    let mut rxq: VecDeque<u8> = VecDeque::new(); // host -> terminal, paced
+    let mut rxq: VecDeque<u16> = VecDeque::new(); // host -> terminal, paced (256 = BREAK)
     let mut txbuf: Vec<u8> = Vec::new(); // terminal -> host, IAC-escaped
     let mut scan: Vec<u8> = Vec::new(); // parity-stripped host stream for prompts
     let mut kbq: VecDeque<u8> = VecDeque::new(); // pending keystrokes
@@ -168,18 +173,18 @@ fn main() {
     // Mouse gesture script: open the button-3 menu, select an item, then
     // sweep a rectangle with button 3 (the classic "New layer" flow).
     let gestures: Vec<(u64, Act)> = vec![
-        (0, Act::Move(400, 500)),
-        (300, Act::Down(3)),
-        (900, Act::Move(400, 460)),
+        (0, Act::Move(400, 524)),
+        (300, Act::Down(2)),
+        (900, Act::Move(400, 564)),
         (1500, Act::Shot("menu")),
-        (1800, Act::Up(3)),
+        (1800, Act::Up(2)),
         (2600, Act::Shot("aftermenu")),
-        (3000, Act::Move(180, 260)),
-        (3300, Act::Down(3)),
-        (3700, Act::Move(340, 430)),
-        (4100, Act::Move(500, 610)),
-        (4500, Act::Move(620, 820)),
-        (4900, Act::Up(3)),
+        (3000, Act::Move(180, 764)),
+        (3300, Act::Down(2)),
+        (3700, Act::Move(340, 594)),
+        (4100, Act::Move(500, 414)),
+        (4500, Act::Move(620, 204)),
+        (4900, Act::Up(2)),
         (7000, Act::Shot("layer")),
     ];
     let mut gest_i = 0usize;
@@ -190,17 +195,37 @@ fn main() {
     let hard_stop = t0 + Duration::from_secs(1500);
     let mut done_at: Option<Instant> = None;
     let mut last_progress = Instant::now();
+    let mut stall_reported = false;
     const MUXTERM_SIZE: u64 = 144_603; // ls -l /usr/jerq/lib/muxterm on the V8 image
 
+    // Pace the emulated CPU to ~10 MHz of wall time. The DUART is a
+    // wall-clock state machine (like real hardware); a flat-out CPU races
+    // its service deadlines and wedges the firmware's serial handshakes.
+    let pace_start = Instant::now();
+    let mut steps_total: u64 = 0;
     loop {
         dmd.run(500);
+        steps_total += 500;
         iter += 1;
+        if iter % 100 == 0 {
+            let virt = steps_total as f64 / 10_000_000.0;
+            let real = pace_start.elapsed().as_secs_f64();
+            if virt > real + 0.002 {
+                std::thread::sleep(Duration::from_micros(((virt - real) * 1e6) as u64));
+            }
+        }
 
         // Paced host->terminal injection: one byte per ~1000 emulated steps.
         if iter % 2 == 0 {
-            if let Some(b) = rxq.pop_front() {
-                dmd.rx_char(b);
-                scan.push(b & 0x7f);
+            if let Some(v) = rxq.pop_front() {
+                if v == 256 {
+                    println!("[{:7.2}s] BREAK delivered to terminal", secs(Instant::now()));
+                    dmd.rs232_break();
+                } else {
+                    let b = v as u8;
+                    dmd.rs232_rx(b);
+                    scan.push(b & 0x7f);
+                }
                 if scan.len() > 8192 {
                     scan.drain(..4096);
                 }
@@ -208,20 +233,20 @@ fn main() {
         }
 
         // Terminal -> host (escape IAC for telnet).
-        while let Some(b) = dmd.rs232_tx_poll() {
+        while let Some(b) = dmd.rs232_tx() {
             txbuf.push(b);
             if b == IAC {
                 txbuf.push(IAC);
             }
         }
-        while dmd.kb_tx_poll().is_some() {} // drain keyboard-channel beeps
+        while dmd.keyboard_tx().is_some() {} // drain keyboard-channel beeps
 
         // Keyboard typing, spaced out.
         if kb_gap > 0 {
             kb_gap -= 1;
         } else if let Some(k) = kbq.pop_front() {
-            dmd.rx_keyboard(k);
-            kb_gap = 40; // ~20k steps between keystrokes
+            dmd.keyboard_rx(k);
+            kb_gap = 2000; // ~100ms/key at paced 10MHz: kb FIFO is 3-deep and wall-clock paced
         }
 
         // Socket I/O.
@@ -305,6 +330,22 @@ fn main() {
                             100.0 * burst_bytes as f64 / MUXTERM_SIZE as f64,
                             rate,
                             eta
+                        );
+                    }
+                    if now.duration_since(last_rx_at) > Duration::from_secs(15)
+                        && !stall_reported
+                    {
+                        stall_reported = true;
+                        let mut pcs = Vec::new();
+                        for _ in 0..8 {
+                            dmd.run(2000);
+                            pcs.push(dmd.get_pc());
+                        }
+                        let tail: Vec<u8> = scan.iter().rev().take(160).rev().cloned().collect();
+                        println!(
+                            "[{:7.2}s] STALL: {} bytes, no rx 15s. pc: {:x?} kbq={} txbuf={} scan tail: {:?}",
+                            secs(now), burst_bytes, pcs, kbq.len(), txbuf.len(),
+                            String::from_utf8_lossy(&tail)
                         );
                     }
                     if burst_bytes > MUXTERM_SIZE * 7 / 10

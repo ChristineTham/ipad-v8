@@ -6,5 +6,5 @@ description = "Headless DMD 5620 bridge: dmd_core <-> SIMH DZ telnet line, with 
 license = "MIT"
 
 [dependencies]
-dmd_core = { git = "https://github.com/dmdmtg/dmd_core", rev = "d08a5930c5c167860434e08e59979045f538d48a" }
+dmd_core = { git = "https://git.loomcom.com/seth/dmd_core.git", rev = "ee222b68db8a7adc4d29a9d23c12e2ecb893f88e" }
 png = "0.17"

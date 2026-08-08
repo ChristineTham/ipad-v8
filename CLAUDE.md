@@ -83,6 +83,13 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   mechanism behind the documented "use firmware 8;7;3" requirement. Serial pacing lives in
   dmd_core's DUART (wall-clock per-char at programmed baud; fresh NVRAM = 1200 baud), not
   in SIMH. Details: docs/spike-a0-results.md, Session 2.
+- The **canonical** dmd repos are on git.loomcom.com (Gitea; HTML bot-walled, `git clone` +
+  API work) — GitHub mirrors are stale. Canonical dmd_core 0.7.1: `reset(1)` = 8;7;3.
+  Three emulator gotchas cost this project a day: the 8;7;3 self-test needs BREAK delivered
+  as a 0x00 byte (patched); the kb FIFO drops keys typed faster than ~ms (type at 100 ms);
+  the DUART needs a ~real-time-paced CPU (~10 MHz), never flat-out. Patches:
+  tools/dmdbridge/patches/. Open: outgoing BREAK (core TODO) blocks 32ld at 55,138 bytes —
+  Session 3 of docs/spike-a0-results.md.
 - V10's `/usr/include` is a 1997 reconstruction of a 1995 tree — expect header/source skew
   during Track B; log every reconciliation as a patch.
 - The Alhadis GitHub mirrors are incomplete (v10 mirror omits `630/`) — TUHS tarballs are

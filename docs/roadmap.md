@@ -16,9 +16,10 @@ Runbook: [spike-a0.md](spike-a0.md)
 - [x] Build SIMH `vax780` on macOS (classic 3.12-5; zip unpacks into `sim/`; warnings only)
 - [x] Produce the V8 disk via myv8 (`rp06v8`, ~2.5 min; all media bundled in the repo)
 - [x] Boot V8 to multi-user login on the Mac (console `# ` → `^D` → DZ gettys)
-- [ ] Connect a terminal emulator and run `mux` — *headless dmdbridge built and working
-      (login + mux + 30 KB of download); blocked on the 8;7;5-ROM `MOVTRW` wall — needs the
-      genuine **8;7;3 ROM image** (or WE32100 fidelity fixes in dmd_core)*
+- [ ] Connect a terminal emulator and run `mux` — *8;7;3 ROM found (canonical
+      git.loomcom.com dmd_core), its self-test hang fixed, terminal boots and renders the
+      V8 session; download runs to a deterministic 55,138-byte stall — next: expose the
+      terminal's outgoing BREAK (the core's own TODO) so 32ld's block handshake completes*
 - [x] Measure `muxterm` download time — *answered: 144,603 B at 1200-baud default = ~15.5
       min (the "17-minute" lore, explained); ÷8 turbo ≈ 2 min; pacing lives in dmd_core's
       DUART, not SIMH*
