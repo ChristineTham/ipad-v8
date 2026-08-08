@@ -14,6 +14,7 @@ target/
 
 # Local work areas (spike outputs, emulator checkouts, scratch)
 work/
+libsimh/dist/
 tools/vendor/
 tools/dmdbridge/.cargo/
 
@@ -27,3 +28,4 @@ tools/dmdbridge/.cargo/
 *.tgz
 *.cpio
 *.iso
+app/*.log
