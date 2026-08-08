@@ -1,0 +1,16 @@
+// Swift-facing Clang modules for the two embedded C libraries. Lives in
+// the app (SWIFT_INCLUDE_PATHS points here) rather than inside each
+// xcframework because Xcode copies every framework's Headers into one
+// flat products include/ dir — two bundled module.modulemap files collide
+// ("Multiple commands produce ... module.modulemap").
+// Header paths are relative to this file.
+
+module SimhVAX {
+    header "../../../libsimh/include/simh_vax780.h"
+    export *
+}
+
+module DmdCore {
+    header "../../../libdmd/include/dmdcore.h"
+    export *
+}

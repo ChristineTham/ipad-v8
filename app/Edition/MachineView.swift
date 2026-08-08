@@ -1,16 +1,26 @@
 import SwiftUI
 import SwiftTerm
 
-/// The console screen: a SwiftTerm view wired to the machine's byte stream,
-/// with a status capsule while the machine isn't at the login prompt yet.
+/// The machine's screens: the SwiftTerm operator console and the DMD 5620
+/// (Blit) display, switchable — both stay mounted so the console transcript
+/// and its output binding survive. Auto-switches to the 5620 once the
+/// machine is up (the product experience: login happens on the terminal).
 struct MachineView: View {
     @ObservedObject var machine: Machine
+    @ObservedObject var terminal: Terminal5620
+    @State private var showBlit = false
+    @State private var autoSwitched = false
 
     var body: some View {
         ZStack(alignment: .top) {
             Color.black.ignoresSafeArea()
             ConsoleView(machine: machine)
                 .padding(.horizontal, 4)
+                .opacity(showBlit ? 0 : 1)
+                .allowsHitTesting(!showBlit)
+            Blit5620View(terminal: terminal)
+                .opacity(showBlit ? 1 : 0)
+                .allowsHitTesting(showBlit)
             if let status = statusText {
                 HStack(spacing: 10) {
                     if !isFailure { ProgressView().tint(.green) }
@@ -23,6 +33,25 @@ struct MachineView: View {
                 .background(.black.opacity(0.75), in: Capsule())
                 .overlay(Capsule().strokeBorder(.green.opacity(0.4)))
                 .padding(.top, 8)
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            Button(showBlit ? "Console" : "5620") {
+                showBlit.toggle()
+            }
+            .buttonStyle(.bordered)
+            .tint(.green)
+            .font(.system(.caption, design: .monospaced))
+            .padding(14)
+        }
+        .onReceive(machine.$phase) { phase in
+            guard phase == .up else { return }
+            if terminal.state == .idle {
+                terminal.start(dzPort: machine.dzPort)
+            }
+            if !autoSwitched {
+                autoSwitched = true
+                showBlit = true
             }
         }
         .preferredColorScheme(.dark)

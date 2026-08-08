@@ -124,7 +124,7 @@ final class ConsoleLink {
             Task { @MainActor [weak self] in
                 guard let self, self.conn === c else { return }
                 if let data, !data.isEmpty {
-                    let (payload, reply) = self.telnet.filter(data)
+                    let (payload, reply, _) = self.telnet.filter(data)
                     if !reply.isEmpty { self.send(reply) }
                     if !payload.isEmpty { self.consume(payload) }
                 }

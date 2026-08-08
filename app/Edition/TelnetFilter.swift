@@ -28,11 +28,14 @@ struct TelnetFilter {
     private static let WONT: UInt8 = 252
     private static let WILL: UInt8 = 251
 
-    /// Returns the payload bytes and any protocol replies to send back.
-    mutating func filter(_ input: Data) -> (payload: [UInt8], reply: [UInt8]) {
+    /// Returns the payload bytes, any protocol replies to send back, and
+    /// bare IAC commands seen (e.g. 243 = BREAK, which the 5620 serial
+    /// link must deliver to the terminal as a break condition).
+    mutating func filter(_ input: Data) -> (payload: [UInt8], reply: [UInt8], commands: [UInt8]) {
         var payload: [UInt8] = []
         payload.reserveCapacity(input.count)
         var reply: [UInt8] = []
+        var commands: [UInt8] = []
         for b in input {
             switch state {
             case .data:
@@ -44,7 +47,8 @@ struct TelnetFilter {
                     state = .data
                 case Self.WILL, Self.WONT, Self.DO, Self.DONT:
                     state = .option(b)
-                default:                             // NOP/GA/etc: swallow
+                default:                             // NOP/GA/BRK/etc
+                    commands.append(b)
                     state = .data
                 }
             case .option(let verb):
@@ -58,6 +62,6 @@ struct TelnetFilter {
                 state = .data
             }
         }
-        return (payload, reply)
+        return (payload, reply, commands)
     }
 }

@@ -25,13 +25,18 @@ this document holds the current design. Update it as code lands.*
 
 ## Process model
 
-One iOS process. Threads (simh thread real since A1; dmd thread lands in A2):
+One iOS process. Threads (all real since A2):
 
 - **simh thread** — runs the SIMH main loop via `simh_vax780_run()`
   (`libsimh/`; compiled **without** `SIM_ASYNCH_IO`, so the V8-critical
   synchronous mode is a build-time guarantee, not a config line).
-- **dmd thread** — steps the WE32100 core; exchanges bytes with the serial transport.
-- **main thread** — SwiftUI (Metal from A2); feeds input events.
+- **dmd thread** — steps the WE32100 at ~10 MHz wall-clock (`libdmd/`,
+  `Terminal5620.swift`: the A0 bridge's pacing model ported verbatim —
+  the DUART is a wall-clock state machine) and exchanges bytes with the
+  DZ socket.
+- **main thread** — SwiftUI + Metal (the 5620's packed VRAM expanded in a
+  fragment shader with the phosphor tint); feeds input events as mouse
+  counter deltas and paced keyboard bytes.
 
 Control plane (A1, desktop-proven): the app talks to the embedded SIMH over
 two localhost sockets — the **telnet console** (127.0.0.1:42323, a pure V8
@@ -50,8 +55,10 @@ The DZ11's line 0 connects to the 5620's DUART port A.
   and drains its TX queue, stripping telnet IAC minimally. This is exactly how the proven
   desktop setups work; localhost sockets inside one app are fine on iOS.
 - **v2 (the pacing fix):** patch `sim_tmxr` to expose one line as an in-process byte-queue
-  pair and run it unthrottled, eliminating both socket overhead and the ~17-minute `mux`
-  download. A0 spike decides whether per-line `SPEED` settings suffice without a patch.
+  pair and run it unthrottled. **Deferred indefinitely by evidence** (A0/A2): serial
+  pacing lives in dmd_core's DUART, not the transport — with the ÷8 turbo patch the
+  `mux` download measures ~100 s on the iPad over the v1 socket, and an unthrottled
+  transport would not change that floor.
 
 ## Display
 

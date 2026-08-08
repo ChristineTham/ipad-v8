@@ -1,4 +1,0 @@
-module DmdCore {
-    header "dmdcore.h"
-    export *
-}

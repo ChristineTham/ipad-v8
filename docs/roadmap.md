@@ -4,11 +4,12 @@
 research moonshot that lands into the same app shell. Update checkboxes and the status line
 as work completes.*
 
-**Current phase: A1 — complete (2026-08-09); A2 is next.** A0 proved the machinery on
-the desktop ([spike-a0-results.md](spike-a0-results.md)); A1 shipped it into an iPad
-app: open-simh as a static library, the Edition app booting V8 to `login:` in a
-SwiftTerm console in ~25–30 s, and instant-on via SIMH save/restore. Implementation
-record and hard-won channel semantics: [a1-notes.md](a1-notes.md).
+**Current phase: A2 — complete (2026-08-09); A3 and Track B are next.** A0 proved the
+machinery on the desktop ([spike-a0-results.md](spike-a0-results.md)); A1 shipped the
+text-mode app (open-simh as a library, V8 to `login:` in ~25–30 s, save/restore
+instant-on — [a1-notes.md](a1-notes.md)); A2 shipped the Blit experience (dmd_core on
+iOS, Metal phosphor screen, touch-as-mouse — `mux` and `jim` run end-to-end on the
+iPad simulator — [a2-notes.md](a2-notes.md)).
 
 ## Phase A0 — desktop spike *(shared by both tracks; no iOS code)*
 
@@ -46,12 +47,21 @@ Runbook: [spike-a0.md](spike-a0.md)
       live console after restore; snapshots are consumed the moment the machine runs
       again, so unclean kills cold-boot and fsck heals*
 
-### A2 — the Blit experience
-- [ ] dmd_core built for `aarch64-apple-ios` (C FFI staticlib), firmware 8;7;3
-- [ ] Metal framebuffer view (800×1024×1, phosphor tint)
-- [ ] Serial transport v1 (localhost) → v2 (in-process, unthrottled)
-- [ ] Input mapping: touch/Pencil/trackpad → 3-button mouse; hardware + soft keyboard
-- [ ] `mux` + `jim` usable end-to-end on iPad
+### A2 — the Blit experience *(complete 2026-08-09; see [a2-notes.md](a2-notes.md))*
+- [x] dmd_core built for `aarch64-apple-ios` (C FFI staticlib), firmware 8;7;3 —
+      *`libdmd/`: the crate's built-in FFI + a logged patch for the two BREAK exports;
+      echo-test smoke proof*
+- [x] Metal framebuffer view (800×1024×1, phosphor tint) — *packed VRAM as R8Uint,
+      fragment-shader bit expansion, dirty-flag uploads*
+- [x] Serial transport v1 (localhost) → v2 (in-process, unthrottled) — *v1 shipped;
+      v2 deliberately deferred: the ÷8 DUART turbo already puts the mux download at
+      ~100 s measured on iPad — the pacing floor is the DUART, not the transport*
+- [x] Input mapping: touch/Pencil/trackpad → 3-button mouse; hardware + soft keyboard —
+      *trackpad-style counter deltas + B1/B2/B3 latches + BREAK; UIKeyInput keyboard;
+      hover/Pencil polish deferred to A3*
+- [x] `mux` + `jim` usable end-to-end on iPad — *login on the 5620 → mux download →
+      B3 menu → New → sweep → layer with root shell (`date` + motd round-trip); jim
+      downloads and takes over a layer (deep editing choreography untested)*
 
 ### A3 — ship v1
 - [ ] Settings, snapshots, disk import/export via Files

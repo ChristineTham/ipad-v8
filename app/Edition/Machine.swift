@@ -50,7 +50,8 @@ final class Machine: ObservableObject {
     }()
     private var consolePort: UInt16 { portBase }
     private var controlPort: UInt16 { portBase + 1 }
-    private var dzPort: UInt16 { portBase + 2 }
+    /// The DZ11 mux listener — the 5620 terminal dials line 0 here.
+    var dzPort: UInt16 { portBase + 2 }
     private var simThread: Thread?
     private var restartedAfterFailedRestore = false
 

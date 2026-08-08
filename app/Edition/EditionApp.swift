@@ -7,11 +7,12 @@ import UIKit
 @main
 struct EditionApp: App {
     @StateObject private var machine = Machine()
+    @StateObject private var terminal = Terminal5620()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
-            MachineView(machine: machine)
+            MachineView(machine: machine, terminal: terminal)
                 .onAppear { machine.start() }
         }
         .onChange(of: scenePhase) { _, newPhase in

@@ -9,10 +9,12 @@
 /* Begin PBXBuildFile section */
 		ED17A10000000000000000A1 /* SimhVAX.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = ED17A10000000000000000A3 /* SimhVAX.xcframework */; };
 		ED17A10000000000000000A2 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = ED17A10000000000000000B6 /* SwiftTerm */; };
+		ED17A10000000000000000B8 /* DmdCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = ED17A10000000000000000B7 /* DmdCore.xcframework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		ED17A10000000000000000A3 /* SimhVAX.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = SimhVAX.xcframework; path = ../libsimh/dist/SimhVAX.xcframework; sourceTree = "<group>"; };
+		ED17A10000000000000000B7 /* DmdCore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = DmdCore.xcframework; path = ../libdmd/dist/DmdCore.xcframework; sourceTree = "<group>"; };
 		ED17A10000000000000000A4 /* Edition.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Edition.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -27,6 +29,7 @@
 			files = (
 				ED17A10000000000000000A1 /* SimhVAX.xcframework in Frameworks */,
 				ED17A10000000000000000A2 /* SwiftTerm in Frameworks */,
+				ED17A10000000000000000B8 /* DmdCore.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -54,6 +57,7 @@
 			isa = PBXGroup;
 			children = (
 				ED17A10000000000000000A3 /* SimhVAX.xcframework */,
+				ED17A10000000000000000B7 /* DmdCore.xcframework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -235,6 +239,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.hellotham.edition;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Edition/Modules";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 2;
 			};
@@ -260,6 +265,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.hellotham.edition;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Edition/Modules";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 2;
 			};

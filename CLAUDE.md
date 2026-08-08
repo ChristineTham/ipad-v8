@@ -11,11 +11,12 @@ bearing decision: the Research Unix kernel forks processes inside the emulated m
 iOS's no-fork/no-JIT restrictions never apply, and both cores are plain AOT-compiled
 interpreters (App Store-legal per UTM SE / iAltair precedent).
 
-**Current state: Track A1 complete.** `libsimh/` builds open-simh's `vax780` as
-`SimhVAX.xcframework`; `app/` is the Edition iPad app (SwiftTerm console) that boots V8
-to `login:` in ~25–30 s and survives background/foreground via SIMH save/restore.
-Implementation record: [docs/a1-notes.md](docs/a1-notes.md). Next: A2 (the Blit
-experience) and Track B. [RESEARCH.md](RESEARCH.md) is the evidence base for every
+**Current state: Tracks A1 and A2 complete.** `libsimh/` and `libdmd/` package both
+emulator cores as xcframeworks; `app/` is the Edition iPad app: V8 boots to `login:`
+in ~25–30 s with save/restore instant-on ([docs/a1-notes.md](docs/a1-notes.md)), and
+the DMD 5620 runs as a Metal phosphor screen with touch-as-mouse — `mux` and `jim`
+work end-to-end on the iPad simulator ([docs/a2-notes.md](docs/a2-notes.md)). Next:
+A3 (ship v1) and Track B. [RESEARCH.md](RESEARCH.md) is the evidence base for every
 decision; trust it over memory, and record decision changes in the living docs, not by
 rewriting the study.
 
@@ -27,6 +28,11 @@ Track A commands (media prerequisites still come from the A0 workbench below —
 ```bash
 # Build SimhVAX.xcframework (clones open-simh into work/ pinned to the verified rev)
 libsimh/build-xcframework.sh
+```
+
+```bash
+# Build DmdCore.xcframework (clones + patches canonical dmd_core, needs rust iOS targets)
+libdmd/build-xcframework.sh
 ```
 
 ```bash
@@ -62,8 +68,11 @@ Toolchains:
   2026-08-09). Metal arrives with A2.
 - VAX core (real since A1): open-simh as a C static library — `libsimh/` (CMake →
   xcframework; scp's `main` renamed via `-Dmain` only; no async/network/SDL).
-- Terminal core (A2, planned): dmd_core as a Rust `aarch64-apple-ios` staticlib via its
-  C FFI.
+- Terminal core (real since A2): dmd_core as a Rust `aarch64-apple-ios` staticlib via
+  its **built-in** C FFI — `libdmd/` (never wrap it in another crate: the unmangled
+  exports collide; extend via logged patch, e.g. the A2 BREAK exports). Both
+  xcframeworks' Swift modules are declared in `app/Edition/Modules/module.modulemap` —
+  two frameworks cannot each bundle a modulemap (flat `include/` collision).
 
 ## Architecture (the big picture)
 
@@ -101,7 +110,10 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
 - SIMH newer than 3.9 needs `set noasync` or V8 corrupts RP06 I/O (simh issue #425).
 - V8's getty sends the first `login:` with **mark parity** (bit 7 set) — byte-matchers must
   strip the high bit until after login.
-- `mux` is not on root's PATH — invoke `/usr/jerq/bin/mux`.
+- `mux` is not on root's PATH — invoke `/usr/jerq/bin/mux` (same for `jim`).
+- mux's B3 menu pops centered on the cursor: park the cursor mid-screen first or the
+  menu clips at the screen edge and the selection is lost. After selecting New, the
+  sweep-corner cursor is the confirmation that the B3 sweep is armed.
 - SIMH `vax780` burns ~97% of a core while V8 idles (no idle detection) — a design
   constraint for the iPad app, and worth killing the simulator when not in use.
 - dmd_core's GitHub HEAD embeds only the **8;7;5** ROM, which V8's `32ld` download crashes
@@ -166,12 +178,12 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
 
 ## Status / next step
 
-Phase **A1 is complete** — see [docs/a1-notes.md](docs/a1-notes.md): the deferred
-open-simh + `set noasync` re-verification passed (issue #425 regression check), `libsimh/`
-packages `vax780` as `SimhVAX.xcframework`, and the Edition app boots V8 to `login:` in a
-SwiftTerm console in ~25–30 s with save/restore instant-on (3/3 terminate→relaunch
-cycles; evidence in `work/shots-a1-final/`). A0's results remain in
-[docs/spike-a0-results.md](docs/spike-a0-results.md) (mux end-to-end on the desktop
-bridge). Next: **A2 — the Blit experience** (dmd_core for `aarch64-apple-ios`, Metal
-framebuffer, serial transport v1→v2, input mapping) and Track B (V10 restoration) in
-parallel; update the checkboxes in [docs/roadmap.md](docs/roadmap.md) as phases complete.
+Phases **A1 and A2 are complete** (both 2026-08-09) — see
+[docs/a1-notes.md](docs/a1-notes.md) and [docs/a2-notes.md](docs/a2-notes.md): the app
+boots V8 to `login:` in ~25–30 s with save/restore instant-on, and the 5620 delivers
+the full Blit experience on the simulator — DZ login on the terminal, `mux` download
+(~100 s at the ÷8 DUART turbo), B3 menu → sweep → layer with a root shell, `jim` in a
+layer. Evidence: `work/shots-a1-final/`, `work/shots-a2/`. Next: **A3 — ship v1**
+(settings, snapshots UX incl. terminal-vs-snapshot reconciliation, licenses screen,
+App Store prep) and **Track B** (V10 restoration, desktop SIMH first) in parallel;
+update the checkboxes in [docs/roadmap.md](docs/roadmap.md) as phases complete.
