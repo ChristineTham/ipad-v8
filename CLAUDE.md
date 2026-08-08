@@ -11,12 +11,16 @@ bearing decision: the Research Unix kernel forks processes inside the emulated m
 iOS's no-fork/no-JIT restrictions never apply, and both cores are plain AOT-compiled
 interpreters (App Store-legal per UTM SE / iAltair precedent).
 
-**Current state: Tracks A1 and A2 complete.** `libsimh/` and `libdmd/` package both
-emulator cores as xcframeworks; `app/` is the Edition iPad app: V8 boots to `login:`
-in ~25–30 s with save/restore instant-on ([docs/a1-notes.md](docs/a1-notes.md)), and
-the DMD 5620 runs as a Metal phosphor screen with touch-as-mouse — `mux` and `jim`
-work end-to-end on the iPad simulator ([docs/a2-notes.md](docs/a2-notes.md)). Next:
-A3 (ship v1) and Track B. [RESEARCH.md](RESEARCH.md) is the evidence base for every
+**Current state: Track A complete (A1–A3), on iPad *and* Mac.** `libsimh/` and
+`libdmd/` package both emulator cores as xcframeworks (ios, ios-simulator,
+macos slices); `app/` is the Edition app, one source folder built by two targets:
+V8 boots to `login:` in ~25–30 s with save/restore instant-on
+([docs/a1-notes.md](docs/a1-notes.md)); the DMD 5620 runs as a Metal phosphor
+screen — `mux` and `jim` work end-to-end on iPad
+([docs/a2-notes.md](docs/a2-notes.md)); A3 added settings, media management,
+licences, App Store prep and the macOS app ([docs/a3-notes.md](docs/a3-notes.md),
+[docs/app-store.md](docs/app-store.md)). Next: **submission** (needs the Apple
+account) and **Track B**. [RESEARCH.md](RESEARCH.md) is the evidence base for every
 decision; trust it over memory, and record decision changes in the living docs, not by
 rewriting the study.
 
@@ -38,6 +42,11 @@ libdmd/build-xcframework.sh
 ```bash
 # Build the Edition iPad app for the simulator
 cd app && xcodebuild -project Edition.xcodeproj -scheme Edition -destination 'platform=iOS Simulator,name=iPad Pro 13-inch (M5)' build
+```
+
+```bash
+# Build the Edition Mac app (same sources, second target)
+cd app && xcodebuild -project Edition.xcodeproj -scheme EditionMac -destination 'platform=macOS,arch=arm64' build
 ```
 
 ```bash
@@ -65,7 +74,9 @@ Toolchains:
 - App shell (real since A1): Swift/SwiftUI, `app/Edition.xcodeproj` — hand-authored,
   synchronized-folder format. **Code signing: always the Hello Tham Pty. Ltd. org team —
   `DEVELOPMENT_TEAM = RPL5R637DS` — never the personal team** (set at creation, verified
-  2026-08-09). Metal arrives with A2.
+  2026-08-09). Two targets (`Edition` iPad, `EditionMac`) share the one `Edition/`
+  folder; platform differences go behind `#if os(macOS)` and the
+  `PlatformViewRepresentable` shim in `Platform.swift`, never a forked file.
 - VAX core (real since A1): open-simh as a C static library — `libsimh/` (CMake →
   xcframework; scp's `main` renamed via `-Dmain` only; no async/network/SDL).
 - Terminal core (real since A2): dmd_core as a Rust `aarch64-apple-ios` staticlib via
@@ -164,6 +175,17 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   redial fresh.
 - `libsimh` compiles without `SIM_ASYNCH_IO`, so `set noasynch` errors ("Command not
   allowed") and is unnecessary — the V8-safe synchronous mode is a build-time guarantee.
+- macOS gotchas (A3): our preferences type `Settings` **shadows SwiftUI's `Settings`
+  scene** — write `SwiftUI.Settings { … }` or the scene silently resolves to the wrong
+  initialiser. Exec'ing the app binary directly gets **no WindowServer connection** (it
+  boots V8 and binds sockets but never shows a window) — test with
+  `open -n Edition.app --stdout <log>`. The Mac deliberately suspends **only on quit**
+  (via `applicationShouldTerminate` + `.terminateLater`, since the save handshake is
+  async), never on hide: nothing reclaims the CPU there and a long build should keep
+  running.
+- Integer ("Crisp") screen scaling must be allowed to fail: forcing a minimum factor of
+  1 makes small windows request a screen *larger* than the space available. Below 1:1
+  there is no integral scale — fall back to filling.
 
 ## Conventions
 
@@ -181,12 +203,20 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
 
 ## Status / next step
 
-Phases **A1 and A2 are complete** (both 2026-08-09) — see
-[docs/a1-notes.md](docs/a1-notes.md) and [docs/a2-notes.md](docs/a2-notes.md): the app
-boots V8 to `login:` in ~25–30 s with save/restore instant-on, and the 5620 delivers
-the full Blit experience on the simulator — DZ login on the terminal, `mux` download
-(~100 s at the ÷8 DUART turbo), B3 menu → sweep → layer with a root shell, `jim` in a
-layer. Evidence: `work/shots-a1-final/`, `work/shots-a2/`. Next: **A3 — ship v1**
-(settings, snapshots UX incl. terminal-vs-snapshot reconciliation, licenses screen,
-App Store prep) and **Track B** (V10 restoration, desktop SIMH first) in parallel;
-update the checkboxes in [docs/roadmap.md](docs/roadmap.md) as phases complete.
+**Track A is complete** (A1–A3, all 2026-08-09) — see
+[docs/a1-notes.md](docs/a1-notes.md), [docs/a2-notes.md](docs/a2-notes.md) and
+[docs/a3-notes.md](docs/a3-notes.md). The app boots V8 to `login:` in ~25–30 s with
+save/restore instant-on; the 5620 delivers the full Blit experience on iPad — DZ login,
+`mux` download (~100 s at the ÷8 DUART turbo), B3 menu → sweep → layer with a root
+shell, `jim` in a layer; A3 added settings (phosphor, "Crisp" scaling — the moiré fix,
+pointer speed), 5620 NVRAM persistence, "Restart terminal" (the fix for a restored mux
+session with no muxterm), staged disk import/export/reset, a licences screen and App
+Store prep — plus a **native Mac app** sharing every line of app code. Evidence:
+`work/shots-a1-final/`, `work/shots-a2/`, `work/shots-a3/`.
+
+Next: **submit** — the remaining steps need the Apple account and a final name
+decision, all listed in [docs/app-store.md](docs/app-store.md) — and **Track B**
+(V10 restoration, desktop SIMH first). Not yet exercised: `mux`/`jim` driven by the
+Mac's real mouse, and restore-on-relaunch on macOS (both share all non-input code with
+the verified iPad paths). Update the checkboxes in [docs/roadmap.md](docs/roadmap.md)
+as phases complete.

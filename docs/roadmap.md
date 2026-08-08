@@ -4,12 +4,14 @@
 research moonshot that lands into the same app shell. Update checkboxes and the status line
 as work completes.*
 
-**Current phase: A2 — complete (2026-08-09); A3 and Track B are next.** A0 proved the
-machinery on the desktop ([spike-a0-results.md](spike-a0-results.md)); A1 shipped the
-text-mode app (open-simh as a library, V8 to `login:` in ~25–30 s, save/restore
-instant-on — [a1-notes.md](a1-notes.md)); A2 shipped the Blit experience (dmd_core on
-iOS, Metal phosphor screen, touch-as-mouse — `mux` and `jim` run end-to-end on the
-iPad simulator — [a2-notes.md](a2-notes.md)).
+**Current phase: A3 — complete (2026-08-09) bar the human submission steps; Track B is
+next.** A0 proved the machinery on the desktop ([spike-a0-results.md](spike-a0-results.md));
+A1 shipped the text-mode app (open-simh as a library, V8 to `login:` in ~25–30 s,
+save/restore instant-on — [a1-notes.md](a1-notes.md)); A2 shipped the Blit experience
+(dmd_core on iOS, Metal phosphor screen, touch-as-mouse — `mux` and `jim` run end-to-end
+on the iPad simulator — [a2-notes.md](a2-notes.md)); A3 made it shippable and added a
+**native macOS app** sharing all its code ([a3-notes.md](a3-notes.md), submission
+checklist in [app-store.md](app-store.md)).
 
 ## Phase A0 — desktop spike *(shared by both tracks; no iOS code)*
 
@@ -63,10 +65,25 @@ Runbook: [spike-a0.md](spike-a0.md)
       B3 menu → New → sweep → layer with root shell (`date` + motd round-trip); jim
       downloads and takes over a layer (deep editing choreography untested)*
 
-### A3 — ship v1
-- [ ] Settings, snapshots, disk import/export via Files
-- [ ] Licenses/credits screen (2017 statement PDF, acknowledgements)
-- [ ] App Store submission (free app; name avoids "UNIX")
+### A3 — ship v1 *(complete 2026-08-09 except the steps only a person can do; see [a3-notes.md](a3-notes.md))*
+- [x] Settings, snapshots, disk import/export via Files — *phosphor + scaling
+      (the "Crisp" mode is the moiré fix: exactly 2× on an iPad Pro 13-inch),
+      pointer speed, 5620 NVRAM persistence, snapshot visibility + discard,
+      staged disk import/reset applied at next launch so nothing is swapped
+      under a running VAX*
+- [x] Licenses/credits screen (acknowledgements) — *2017 covenant, TUHS and
+      Berkeley, open-simh / dmd_core / 5620 firmware / SwiftTerm; the statement
+      PDF is linked, and bundling it is on the submission checklist*
+- [x] App Store prep — *icon (generated, `tools/gen-icons.swift`), privacy
+      manifest, export-compliance boolean, category, v1.0, sandbox + hardened
+      runtime; **submission itself needs the Apple account** —
+      [app-store.md](app-store.md)*
+
+### A3+ — the Mac *(not originally scoped; complete 2026-08-09)*
+- [x] macOS slices for both xcframeworks
+- [x] Native macOS app target sharing one source folder — *V8 boots to `login:`
+      on the 5620 in a native window; real 3-button mouse (right-click is mux's
+      menu); snapshot on quit, never on hide*
 
 ## Track B — the V10 restoration *(desktop SIMH until it boots; see [v10-restoration.md](v10-restoration.md))*
 
