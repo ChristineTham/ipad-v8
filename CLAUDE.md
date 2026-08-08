@@ -35,7 +35,10 @@ python3 work/dztalk.py
 ```
 
 Planned toolchains, for when code lands (update this section with real commands then):
-- App shell: Swift/SwiftUI + Metal (Xcode project, Track A1+)
+- App shell: Swift/SwiftUI + Metal (Xcode project, Track A1+). **Code signing: always the
+  Hello Tham Pty. Ltd. org team — `DEVELOPMENT_TEAM = RPL5R637DS` — never the personal
+  team.** Set it in the project/xcconfig at creation time; both signing identities on
+  this machine already belong to that team (verified 2026-08-09).
 - VAX core: open-simh as a C static library (CMake → xcframework)
 - Terminal core: dmd_core as a Rust `aarch64-apple-ios` staticlib via its C FFI
 
