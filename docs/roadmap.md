@@ -4,18 +4,23 @@
 research moonshot that lands into the same app shell. Update checkboxes and the status line
 as work completes.*
 
-**Current phase: A0 (not started).**
+**Current phase: A0 — in progress (2026-08-08).** SIMH built, V8 disk produced, multiuser
+boot + DZ login + mux handshake proven; remaining: terminal-emulator leg (headless dmd_core
+via cargo — no package manager on this machine) and definitive mux timing. See
+[spike-a0-results.md](spike-a0-results.md).
 
 ## Phase A0 — desktop spike *(shared by both tracks; no iOS code)*
 
 Runbook: [spike-a0.md](spike-a0.md)
 
-- [ ] Build SIMH `vax780` on macOS
-- [ ] Produce `v8.disk` via myv8
-- [ ] Boot V8 to multi-user login on the Mac
-- [ ] Connect a terminal emulator (5620 preferred, 68K Blit acceptable) and run `mux`
-- [ ] Measure `muxterm` download time; test DZ speed/unthrottling options
-- [ ] Record findings in `docs/spike-a0-results.md`; correct runbook VERIFY items
+- [x] Build SIMH `vax780` on macOS (classic 3.12-5; zip unpacks into `sim/`; warnings only)
+- [x] Produce the V8 disk via myv8 (`rp06v8`, ~2.5 min; all media bundled in the repo)
+- [x] Boot V8 to multi-user login on the Mac (console `# ` → `^D` → DZ gettys)
+- [ ] Connect a terminal emulator and run `mux` — *host handshake proven (`ESC [ c` DA
+      query captured); emulator pending: no SDL2/GTK here → drive `dmd_core` headless via cargo*
+- [ ] Measure `muxterm` download time — *partial: no artificial DZ pacing under 3.12-5*
+- [x] Record findings in `docs/spike-a0-results.md`; runbook corrected (remaining VERIFY:
+      aap/blit flags, socat bridge, open-simh re-verification)
 
 *Exit criteria: `mux` usable end-to-end; serial-pacing fix chosen (config vs. patch).*
 

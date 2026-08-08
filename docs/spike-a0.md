@@ -16,24 +16,28 @@ All work happens in `work/` (gitignored — disk images and vendor checkouts nev
 mkdir -p work && cd work
 ```
 
-Homebrew packages — `expect` is required by myv8's install scripts; the rest support the
-terminal emulators and glue:
+Tooling reality on this machine (verified 2026-08-08): **there is no Homebrew installed.**
+What matters:
 
-```bash
-brew install expect socat sdl2 gtk+3 pkg-config
-```
+- `expect` ships with macOS (`/usr/bin/expect`) — myv8 needs nothing else.
+- No `telnet` client exists; use [work/dztalk.py](../work/dztalk.py), a minimal Python
+  telnet client (handles IAC negotiation and strips the mark-parity bit — see §4).
+- SDL2/GTK are unavailable without a package manager, so the GUI terminal emulators are
+  deferred. **Rust/`cargo` is installed** — the terminal route is headless `dmd_core`
+  (see [spike-a0-results.md](spike-a0-results.md), "Remaining for A0").
 
 ## 1. Build SIMH `vax780`
 
-Two options; the myv8 README warns that distro SIMH builds "don't quite cut it", so build
-from source. **VERIFY which option myv8's `run.conf` expects** (SIMH 3.x vs 4.x command
-syntax differs slightly).
+Resolved 2026-08-08: **classic SIMH 3.12-5 works end-to-end with myv8** (full install and
+multiuser boot verified on this machine). The zip extracts into a `sim/` subdirectory and
+builds with only cosmetic warnings on modern clang:
 
-**Option A — classic SIMH 3.x (what the 2017 recipes used, works without `set noasync`):**
+**Option A — classic SIMH 3.x (verified):**
 
 ```bash
-curl -LO http://simh.trailing-edge.com/sources/simhv312-4.zip
-unzip -d simh312 simhv312-4.zip && cd simh312 && make vax780 && cd ..
+curl -sLO http://simh.trailing-edge.com/sources/simhv312-5.zip
+mkdir -p simh312 && cd simh312 && unzip -oq ../simhv312-5.zip
+cd sim && make vax780     # binary lands in sim/BIN/vax780
 ```
 
 **Option B — open-simh (current, MIT; requires `set noasync` in every config):**
@@ -53,12 +57,14 @@ git clone https://github.com/timnewsham/myv8
 cd myv8
 ```
 
-Read its README first. The flow (**VERIFY details against the README**): fetch the
+Read its README first. The flow (resolved 2026-08-08: **all media is bundled in the myv8 repo** — nothing to fetch): fetch the
 prerequisite media it lists — the 4.1BSD tape, the 4.0 BSD boot file, and the TUHS
 `v8.tar.bz2` + `v8jerq.tar.bz2` from
 [Dan_Cross_v8](https://www.tuhs.org/Archive/Distributions/Research/Dan_Cross_v8/) — then run
 its expect scripts in order (`install41BSD` → `installV8` → `fixupV8` → `setup`), producing
-`v8.disk`. Budget real time: the scripted 4.1BSD + V8 install drives an emulated console.
+`v8.disk`. Measured: the entire scripted install takes **~2.5 minutes** on this machine, producing
+`rp06v8` — the 174 MB RP06 image (run.conf's name for what the app will bundle as
+`v8.disk`).
 
 ## 3. Boot V8 and log in
 
@@ -66,7 +72,8 @@ its expect scripts in order (`install41BSD` → `installV8` → `fixupV8` → `s
 ./vax780 run.conf
 ```
 
-(**VERIFY** the exact config filename in myv8.) Expect the V8 boot on the console; log in as
+(Resolved: the file is `run.conf`. Boot lands directly in a single-user root `# ` shell
+with no date prompt; `^D` brings up multiuser and the DZ gettys.) Expect the V8 boot on the console; log in as
 `root`. Confirm the DZ11 is a telnet listener (config lines equivalent to
 `set dz lines=8` / `att dz -m 8888`).
 
@@ -77,6 +84,13 @@ compile a hello.c with `cc`.
 
 Get a second login on a DZ line first: `telnet 127.0.0.1 8888` from the Mac — you should
 see a `login:` from V8. That proves the serial path before any graphics.
+
+Verified 2026-08-08 (via `work/dztalk.py` — no telnet client exists here): login works, `ps`
+/ `/proc` / `cc` all live. Two wire facts: the **first `login:` prompt arrives with the
+parity bit set** (mark parity — strip bit 7 until after login), and running
+`/usr/jerq/bin/mux` on a dumb connection makes mux emit **`ESC [ c`** (a Device Attributes
+query) and wait — the terminal-identification handshake that a 5620 with 8;7;3 firmware
+answers. The host side of the protocol is proven.
 
 **Option A — 68K Blit (fastest visual win; telnet built in):**
 
@@ -104,7 +118,7 @@ socat pty,link="$PWD/dz0",raw,echo=0 tcp:127.0.0.1:8888 &   # VERIFY: telnet IAC
 ```
 
 Log in inside the 5620 window, then run `mux` (host side lives in `/usr/jerq/bin` —
-**VERIFY** whether it's on root's default PATH). `mux` downloads `muxterm` into the terminal
+resolved: it is **not** on root's PATH — invoke `/usr/jerq/bin/mux`). `mux` downloads `muxterm` into the terminal
 via `32ld`; layers should appear, button 3 opens the menu. Try `jim`.
 
 ## 5. Measure (the actual point of the spike)
@@ -113,11 +127,16 @@ Record all of this in `docs/spike-a0-results.md`:
 
 1. **Wall-clock time from typing `mux` to a usable layer** — the community reports ~17 min
    under realistic DZ pacing. This number drives the v2 serial-transport design.
+   *Partial finding (2026-08-08): classic SIMH 3.12-5 shows no artificial DZ pacing — bulk
+   output renders instantly — so the 17-minute issue appears specific to newer SIMH's
+   line-speed emulation. Definitive mux timing still needs a real terminal emulator.*
 2. Effect of SIMH line-speed settings (`set dz speed=...`, per-line SPEED, or simulator
    defaults — enumerate what the chosen SIMH version supports) on that time.
 3. Whether Option-B (open-simh + `set noasync`) boots and runs V8 as reliably as 3.x.
 4. Rough emulated-CPU speed feel (e.g., time `cc` on hello.c) and host CPU usage at idle —
    the battery question for the iPad app.
+   *Measured 2026-08-08: `vax780` sits at ~97% of one core while V8 idles — idle detection
+   or throttling is mandatory for the iPad app.*
 5. Every place this runbook was wrong — fix it and drop the VERIFY marker.
 
 ## Exit criteria

@@ -22,6 +22,18 @@ There is no build system, test suite, or linter yet. The only executable work so
 (build SIMH `vax780`, produce `v8.disk` via timnewsham/myv8, connect a 5620/Blit terminal
 emulator, run `mux`), all inside the gitignored `work/` directory.
 
+Proven workbench commands (from the A0 spike; run from repo root):
+
+```bash
+# Boot V8 to multiuser and hold (console stays on this terminal)
+cd work/myv8 && PATH="$PWD/../simh312/sim/BIN:$PATH" expect ../boot-hold.exp
+```
+
+```bash
+# Prove a DZ login + exercise the system (separate shell, after boot)
+python3 work/dztalk.py
+```
+
 Planned toolchains, for when code lands (update this section with real commands then):
 - App shell: Swift/SwiftUI + Metal (Xcode project, Track A1+)
 - VAX core: open-simh as a C static library (CMake → xcframework)
@@ -61,6 +73,11 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   Blit. The "current" V8/V10 terminal is the 5620.
 - dmd_core must run firmware **8;7;3** for Research Unix `mux` (default 8;7;5 fails).
 - SIMH newer than 3.9 needs `set noasync` or V8 corrupts RP06 I/O (simh issue #425).
+- V8's getty sends the first `login:` with **mark parity** (bit 7 set) — byte-matchers must
+  strip the high bit until after login.
+- `mux` is not on root's PATH — invoke `/usr/jerq/bin/mux`.
+- SIMH `vax780` burns ~97% of a core while V8 idles (no idle detection) — a design
+  constraint for the iPad app, and worth killing the simulator when not in use.
 - V10's `/usr/include` is a 1997 reconstruction of a 1995 tree — expect header/source skew
   during Track B; log every reconciliation as a patch.
 - The Alhadis GitHub mirrors are incomplete (v10 mirror omits `630/`) — TUHS tarballs are
@@ -76,9 +93,15 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
 - Track B keeps pristine upstream sources separate from our patches; every fix is a logged
   patch with a rationale, plus a dated lab-notebook entry (`docs/v10-log/`).
 - Cite primary sources (TUHS preferred) for factual claims in docs.
+- Project automation: use `/verify-step` to resolve runbook VERIFY markers and `/v10-log`
+  for Track B lab-notebook entries. Hooks (`.claude/settings.json` + `tools/*.sh`) enforce
+  the no-binaries rule and check markdown links on edit.
 
 ## Status / next step
 
-Phase **A0** (desktop spike) is next — nothing is started. After A0, Track A (iOS app) and
+Phase **A0** is largely complete — see [docs/spike-a0-results.md](docs/spike-a0-results.md):
+V8 boots under classic SIMH 3.12-5 in `work/`, DZ login and the mux `ESC [ c` handshake are
+proven. Remaining: the terminal-emulator leg (**no Homebrew on this machine** — build
+`dmd_core` headless with cargo, firmware 8;7;3) and definitive mux timing. After A0, Track A (iOS app) and
 Track B (V10 restoration) proceed in parallel; update the checkboxes in
 [docs/roadmap.md](docs/roadmap.md) as phases complete.
