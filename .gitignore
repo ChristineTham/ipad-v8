@@ -15,6 +15,7 @@ target/
 # Local work areas (spike outputs, emulator checkouts, scratch)
 work/
 tools/vendor/
+tools/dmdbridge/.cargo/
 
 # Big historical artifacts — never commit; rebuild locally per docs/spike-a0.md
 *.disk

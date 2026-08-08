@@ -51,7 +51,50 @@ manager), with a clear path forward.
 - Definitive muxterm download timing (needs the above).
 - Re-verify the appliance under **open-simh + `set noasync`** (the app will ship open-simh).
 
+## Session 2 (2026-08-08, later): the headless dmd_core bridge
+
+**Built and working**: [tools/dmdbridge](../tools/dmdbridge) — a Rust binary embedding
+`dmd_core` (pinned git rev) that connects to SIMH's DZ telnet line, handles IAC, strips
+mark parity, auto-logs-in, starts `/usr/jerq/bin/mux`, paces bytes into the DUART, dumps
+the 800×1024 framebuffer to PNGs, and drives scripted mouse gestures. The full state
+machine (login → shell → mux → download) runs unattended. This is the iPad app's terminal
+embedding, prototyped.
+
+**Timing measurements (the spike's core question, now fully answered):**
+
+- SIMH does **no** serial throttling (3.12-5's tmxr has zero speed support). The pacing
+  lives in **dmd_core's DUART**, which delays per-character in *wall-clock* time at the
+  programmed baud.
+- A factory-fresh 5620 (empty NVRAM) runs its host port at the 1984 default of **1200
+  baud** → measured **156 B/s** sustained. muxterm is **144,603 bytes** → full download
+  ≈ **15.5 minutes**. *That* is the community's "17-minute" number, reproduced from first
+  principles — it was never SIMH.
+- Turbo experiment (local `delay_rate ÷ 8` patch ≈ 9600-baud equivalent, the real
+  hardware's supported speed): sustained **~1,100–1,230 B/s** → full download would be
+  ≈ 2 minutes. A ÷64 attempt destabilized the firmware — **app guidance: pace the wire at
+  hardware-realistic 9600/19200 equivalent, not unthrottled.**
+
+**The 8;7;3 firmware requirement, mechanically explained** (new finding): dmd_core's
+GitHub HEAD embeds only the **8;7;5** ROM. With V8's `32ld` download, that ROM
+deterministically executes **`MOVTRW`** (a WE32100 MMU-translation instruction) at
+PC=0x496c ~30 KB into the transfer — which dmd_core's CPU doesn't implement → panic.
+Patching MOVTRW as identity-translation advances execution *into the downloaded code*
+(PC in RAM), which then hits an **unaligned word access** — legal on real WE32100 silicon,
+unimplemented in dmd_core. So "use firmware 8;7;3" is not protocol lore: **8;7;3 simply
+avoids WE32100 corner-cases that dmd_core never needed for SVR3.** Two viable paths:
+
+1. **Obtain the genuine 8;7;3 ROM image** (Sark's 2022 dump, per the TUHS thread) and
+   swap it into `rom_lo.rs`/`rom_hi.rs` — the community-proven configuration. ← preferred
+2. Finish dmd_core's WE32100 fidelity (MOVTRW semantics from the manual + unaligned
+   access support) and upstream it to Seth Morabito.
+
+**Experiment state** (gitignored): `work/dmd_core` = patched checkout (÷8 turbo,
+MOVTRW-identity); `tools/dmdbridge/.cargo/config.toml` redirects the build to it — delete
+that file to build pristine. `work/turbo-run.sh` = one-shot run-with-cleanup harness.
+
 ## Session artifacts (all under gitignored `work/`)
 
 `simh312/sim/BIN/vax780` · `myv8/rp06v8` (the bootable V8 disk) · `myv8/setup.log` ·
-`myv8/boot.log` · `boot-hold.exp` · `dz-login.exp` · `dztalk.py`
+`myv8/boot.log` · `boot-hold.exp` · `dz-login.exp` · `dztalk.py` · `turbo-run.sh` ·
+`shots*/` (framebuffer PNG series from three bridge runs) · `dmd_core/`, `dmd_gtk/`
+(reference checkouts; dmd_core carries the experiment patches)

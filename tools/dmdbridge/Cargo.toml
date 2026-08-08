@@ -1,0 +1,10 @@
+[package]
+name = "dmdbridge"
+version = "0.1.0"
+edition = "2021"
+description = "Headless DMD 5620 bridge: dmd_core <-> SIMH DZ telnet line, with framebuffer PNG dumps. Prototype of the iPad app's terminal embedding."
+license = "MIT"
+
+[dependencies]
+dmd_core = { git = "https://github.com/dmdmtg/dmd_core", rev = "d08a5930c5c167860434e08e59979045f538d48a" }
+png = "0.17"

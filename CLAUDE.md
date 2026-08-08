@@ -78,6 +78,11 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
 - `mux` is not on root's PATH — invoke `/usr/jerq/bin/mux`.
 - SIMH `vax780` burns ~97% of a core while V8 idles (no idle detection) — a design
   constraint for the iPad app, and worth killing the simulator when not in use.
+- dmd_core's GitHub HEAD embeds only the **8;7;5** ROM, which V8's `32ld` download crashes
+  (unimplemented `MOVTRW` + unaligned access in the WE32100 core, ~30 KB in) — this is the
+  mechanism behind the documented "use firmware 8;7;3" requirement. Serial pacing lives in
+  dmd_core's DUART (wall-clock per-char at programmed baud; fresh NVRAM = 1200 baud), not
+  in SIMH. Details: docs/spike-a0-results.md, Session 2.
 - V10's `/usr/include` is a 1997 reconstruction of a 1995 tree — expect header/source skew
   during Track B; log every reconciliation as a patch.
 - The Alhadis GitHub mirrors are incomplete (v10 mirror omits `630/`) — TUHS tarballs are
