@@ -34,6 +34,7 @@ rm -rf dist/DmdCore.xcframework
 xcodebuild -create-xcframework \
   -library "$LIBS/aarch64-apple-ios/release/libdmd_core.a" -headers include \
   -library "$LIBS/aarch64-apple-ios-sim/release/libdmd_core.a" -headers include \
+  -library "$LIBS/aarch64-apple-darwin/release/libdmd_core.a" -headers include \
   -output dist/DmdCore.xcframework
 
 # macOS smoke test: firmware 8;7;3 must draw its screen under paced stepping.

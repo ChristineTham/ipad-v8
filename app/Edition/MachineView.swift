@@ -82,24 +82,27 @@ struct MachineView: View {
     }
 }
 
-/// UIKit bridge for SwiftTerm's TerminalView.
-struct ConsoleView: UIViewRepresentable {
+/// AppKit/UIKit bridge for SwiftTerm's TerminalView (an NSView on macOS, a
+/// UIView on iOS — the delegate protocol and `feed` are shared).
+struct ConsoleView: PlatformViewRepresentable {
     let machine: Machine
 
-    func makeUIView(context: Context) -> TerminalView {
+    func makePlatformView(context: Context) -> TerminalView {
         let tv = TerminalView(frame: .zero)
         tv.terminalDelegate = context.coordinator
-        tv.backgroundColor = .black
         tv.nativeBackgroundColor = .black
-        tv.nativeForegroundColor = UIColor(red: 0.45, green: 1.0, blue: 0.6, alpha: 1.0)
+        tv.nativeForegroundColor = PlatformColor(red: 0.45, green: 1.0, blue: 0.6, alpha: 1.0)
+        #if !os(macOS)
+        tv.backgroundColor = .black
+        #endif
         machine.onOutput = { [weak tv] bytes in
             tv?.feed(byteArray: bytes[...])
         }
-        DispatchQueue.main.async { _ = tv.becomeFirstResponder() }
+        tv.claimFirstResponder()
         return tv
     }
 
-    func updateUIView(_ uiView: TerminalView, context: Context) {}
+    func updatePlatformView(_ view: TerminalView, context: Context) {}
 
     func makeCoordinator() -> Coordinator { Coordinator(machine: machine) }
 

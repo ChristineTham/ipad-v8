@@ -24,7 +24,7 @@ slice() {  # <slug> [extra cmake args...]
 }
 
 mkdir -p build
-slice macos -DCMAKE_OSX_ARCHITECTURES=arm64
+slice macos -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0
 slice ios   -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_ARCHITECTURES=arm64 \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0 \
             -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY
@@ -38,6 +38,7 @@ rm -rf dist/SimhVAX.xcframework
 xcodebuild -create-xcframework \
   -library build/ios/libsimhvax.a -headers include \
   -library build/sim/libsimhvax.a -headers include \
+  -library build/macos/libsimhvax.a -headers include \
   -output dist/SimhVAX.xcframework
 
 echo "OK: dist/SimhVAX.xcframework (+ build/macos/vax780cli for desktop tests)"

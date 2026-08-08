@@ -10,12 +10,16 @@
 		ED17A10000000000000000A1 /* SimhVAX.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = ED17A10000000000000000A3 /* SimhVAX.xcframework */; };
 		ED17A10000000000000000A2 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = ED17A10000000000000000B6 /* SwiftTerm */; };
 		ED17A10000000000000000B8 /* DmdCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = ED17A10000000000000000B7 /* DmdCore.xcframework */; };
+		ED17A20000000000000000C1 /* SimhVAX.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = ED17A10000000000000000A3 /* SimhVAX.xcframework */; };
+		ED17A20000000000000000C2 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = ED17A20000000000000000CD /* SwiftTerm */; };
+		ED17A20000000000000000C3 /* DmdCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = ED17A10000000000000000B7 /* DmdCore.xcframework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		ED17A10000000000000000A3 /* SimhVAX.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = SimhVAX.xcframework; path = ../libsimh/dist/SimhVAX.xcframework; sourceTree = "<group>"; };
 		ED17A10000000000000000B7 /* DmdCore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = DmdCore.xcframework; path = ../libdmd/dist/DmdCore.xcframework; sourceTree = "<group>"; };
 		ED17A10000000000000000A4 /* Edition.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Edition.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		ED17A20000000000000000C4 /* Edition.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Edition.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -30,6 +34,16 @@
 				ED17A10000000000000000A1 /* SimhVAX.xcframework in Frameworks */,
 				ED17A10000000000000000A2 /* SwiftTerm in Frameworks */,
 				ED17A10000000000000000B8 /* DmdCore.xcframework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ED17A20000000000000000C5 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ED17A20000000000000000C1 /* SimhVAX.xcframework in Frameworks */,
+				ED17A20000000000000000C2 /* SwiftTerm in Frameworks */,
+				ED17A20000000000000000C3 /* DmdCore.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -49,6 +63,7 @@
 			isa = PBXGroup;
 			children = (
 				ED17A10000000000000000A4 /* Edition.app */,
+				ED17A20000000000000000C4 /* Edition.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -89,6 +104,30 @@
 			productReference = ED17A10000000000000000A4 /* Edition.app */;
 			productType = "com.apple.product-type.application";
 		};
+		ED17A20000000000000000C9 /* EditionMac */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = ED17A20000000000000000CA /* Build configuration list for PBXNativeTarget "EditionMac" */;
+			buildPhases = (
+				ED17A20000000000000000C6 /* Sources */,
+				ED17A20000000000000000C5 /* Frameworks */,
+				ED17A20000000000000000C7 /* Resources */,
+				ED17A20000000000000000C8 /* Embed V8 media */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				ED17A10000000000000000A5 /* Edition */,
+			);
+			name = EditionMac;
+			packageProductDependencies = (
+				ED17A20000000000000000CD /* SwiftTerm */,
+			);
+			productName = Edition;
+			productReference = ED17A20000000000000000C4 /* Edition.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -100,6 +139,9 @@
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					ED17A10000000000000000AA = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					ED17A20000000000000000C9 = {
 						CreatedOnToolsVersion = 26.0;
 					};
 				};
@@ -120,12 +162,20 @@
 			projectRoot = "";
 			targets = (
 				ED17A10000000000000000AA /* Edition */,
+				ED17A20000000000000000C9 /* EditionMac */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		ED17A10000000000000000AC /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ED17A20000000000000000C7 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -150,10 +200,32 @@
 			shellPath = /bin/sh;
 			shellScript = "set -e\nMEDIA=\"$SRCROOT/../work/myv8\"\nDEST=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nif [ ! -f \"$MEDIA/rp06v8.golden\" ]; then\n  echo \"warning: $MEDIA/rp06v8.golden not found - building without V8 media (build it per docs/spike-a0.md)\"\n  exit 0\nfi\nmkdir -p \"$DEST\"\nrsync -a \"$MEDIA/rp06v8.golden\" \"$DEST/v8.disk\"\nrsync -a \"$MEDIA/bootV8\" \"$DEST/bootV8\"\necho \"embedded v8.disk + bootV8\"\n";
 		};
+		ED17A20000000000000000C8 /* Embed V8 media */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Embed V8 media";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nMEDIA=\"$SRCROOT/../work/myv8\"\nDEST=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nif [ ! -f \"$MEDIA/rp06v8.golden\" ]; then\n  echo \"warning: $MEDIA/rp06v8.golden not found - building without V8 media (build it per docs/spike-a0.md)\"\n  exit 0\nfi\nmkdir -p \"$DEST\"\nrsync -a \"$MEDIA/rp06v8.golden\" \"$DEST/v8.disk\"\nrsync -a \"$MEDIA/bootV8\" \"$DEST/bootV8\"\necho \"embedded v8.disk + bootV8\"\n";
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		ED17A10000000000000000AB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ED17A20000000000000000C6 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -271,6 +343,60 @@
 			};
 			name = Release;
 		};
+		ED17A20000000000000000CB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Edition-macOS.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RPL5R637DS;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Edition;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hellotham.edition;
+				PRODUCT_NAME = Edition;
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Edition/Modules";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		ED17A20000000000000000CC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Edition-macOS.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RPL5R637DS;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Edition;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hellotham.edition;
+				PRODUCT_NAME = Edition;
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Edition/Modules";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -292,6 +418,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		ED17A20000000000000000CA /* Build configuration list for PBXNativeTarget "EditionMac" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				ED17A20000000000000000CB /* Debug */,
+				ED17A20000000000000000CC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -307,6 +442,11 @@
 
 /* Begin XCSwiftPackageProductDependency section */
 		ED17A10000000000000000B6 /* SwiftTerm */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ED17A10000000000000000B5 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
+			productName = SwiftTerm;
+		};
+		ED17A20000000000000000CD /* SwiftTerm */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = ED17A10000000000000000B5 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
 			productName = SwiftTerm;

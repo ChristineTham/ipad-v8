@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- App Store distribution requires the sandbox. -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<!-- The emulators talk to each other over loopback sockets: SIMH binds the
+	     console, remote-console and DZ listeners (server) and the 5620 dials
+	     the DZ line (client). Nothing leaves the machine. -->
+	<key>com.apple.security.network.server</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<!-- Disk image import/export the user explicitly picks. -->
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+</dict>
+</plist>

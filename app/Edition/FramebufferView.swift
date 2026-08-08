@@ -4,21 +4,25 @@ import SwiftUI
 /// The 5620's 800x1024x1 screen as a Metal view: uploads the packed VRAM
 /// (100x1024 R8Uint) when the FrameStore has a newer generation and lets
 /// the fragment shader expand bits with the phosphor tint.
-struct FramebufferView: UIViewRepresentable {
+struct FramebufferView: PlatformViewRepresentable {
     let frames: FrameStore
 
-    func makeUIView(context: Context) -> MTKView {
+    func makePlatformView(context: Context) -> MTKView {
         let view = MTKView(frame: .zero, device: MTLCreateSystemDefaultDevice())
         view.preferredFramesPerSecond = 30
         view.framebufferOnly = true
+        #if os(macOS)
+        view.layer?.backgroundColor = NSColor.black.cgColor
+        #else
         view.isOpaque = true
         view.backgroundColor = .black
+        #endif
         view.delegate = context.coordinator
         context.coordinator.configure(for: view)
         return view
     }
 
-    func updateUIView(_ uiView: MTKView, context: Context) {}
+    func updatePlatformView(_ view: MTKView, context: Context) {}
 
     func makeCoordinator() -> Renderer { Renderer(frames: frames) }
 

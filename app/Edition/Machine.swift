@@ -1,5 +1,4 @@
 import Foundation
-import UIKit
 import SimhVAX
 
 /// One V8 machine: provisions media into Application Support, runs the SIMH
@@ -31,6 +30,10 @@ final class Machine: ObservableObject {
     }
 
     @Published private(set) var phase: Phase = .idle
+
+    /// Whether a suspend+save handshake can run right now (the Mac's quit
+    /// path asks before deciding to defer termination).
+    var canSuspend: Bool { phase == .up && control.isConnected }
 
     /// Console bytes for the terminal view (wired up by the view layer).
     var onOutput: (([UInt8]) -> Void)?
@@ -90,13 +93,15 @@ final class Machine: ObservableObject {
     // Restore-path subtleties, all desktop/simulator-bisected:
     // - The snapshot records the PREVIOUS launch's ports; both the console
     //   and the DZ must be re-attached on this launch's ports, and those
-    //   binds must SUCCEED: tmxr_detach NULLs the VAX TTI/TTO units' tmxr
-    //   backpointers, and a successful tmxr_attach is what re-links them
-    //   (its ldsc[].uptr chain) — with a failed bind, `cont` segfaults in
-    //   _tmxr_activate_delay. Per-launch port rotation is what guarantees
-    //   the bind. Do NOT "fix" this with `reset tti` — that zeroes the
-    //   CSR the guest kernel configured (interrupt enable included) and
-    //   V8 stops noticing console input entirely.
+    //   binds must SUCCEED. `save` persists UNIT_TM_POLL in each unit's
+    //   dynflags, but `uptr->tmxr` is a runtime pointer only a successful
+    //   tmxr_attach can set — so a restore whose re-attach fails brings the
+    //   unit back tagged for mux polling with a NULL backpointer and `cont`
+    //   segfaults in _tmxr_activate_delay (open-simh/simh#576; restore
+    //   reports success either way). Per-launch port rotation is what
+    //   guarantees the bind. Do NOT "fix" this with `reset tti` — that
+    //   zeroes the CSR the guest kernel configured (interrupt enable
+    //   included) and V8 stops noticing console input entirely.
     private var resumeConf: String { """
     set remote telnet=127.0.0.1:\(controlPort)
     set remote timeout=600
