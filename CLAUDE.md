@@ -88,8 +88,14 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   Three emulator gotchas cost this project a day: the 8;7;3 self-test needs BREAK delivered
   as a 0x00 byte (patched); the kb FIFO drops keys typed faster than ~ms (type at 100 ms);
   the DUART needs a ~real-time-paced CPU (~10 MHz), never flat-out. Patches:
-  tools/dmdbridge/patches/. Open: outgoing BREAK (core TODO) blocks 32ld at 55,138 bytes —
-  Session 3 of docs/spike-a0-results.md.
+  tools/dmdbridge/patches/.
+- The infamous "55K download stall" was **not a stall**: 32ld sends only muxterm's
+  text+data (**50,324 B** per its COFF header; entry 0x71e85c), not the 144,603-B file —
+  the rest is symbol table. ~55K on the wire = complete download + idle mux desktop.
+  Measure protocol progress against *loadable* size, never `ls -l`.
+- The 5620 mouse registers (0x400000 y, 0x400002 x) are free-running counters; muxterm
+  integrates sample deltas with **y counting up the screen** from a (0,0) cursor. Feed
+  deltas, not absolute positions (see the bridge's mouse model).
 - V10's `/usr/include` is a 1997 reconstruction of a 1995 tree — expect header/source skew
   during Track B; log every reconciliation as a patch.
 - The Alhadis GitHub mirrors are incomplete (v10 mirror omits `630/`) — TUHS tarballs are
@@ -111,9 +117,11 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
 
 ## Status / next step
 
-Phase **A0** is largely complete — see [docs/spike-a0-results.md](docs/spike-a0-results.md):
-V8 boots under classic SIMH 3.12-5 in `work/`, DZ login and the mux `ESC [ c` handshake are
-proven. Remaining: the terminal-emulator leg (**no Homebrew on this machine** — build
-`dmd_core` headless with cargo, firmware 8;7;3) and definitive mux timing. After A0, Track A (iOS app) and
-Track B (V10 restoration) proceed in parallel; update the checkboxes in
+Phase **A0 is complete** — see [docs/spike-a0-results.md](docs/spike-a0-results.md):
+V8 boots under classic SIMH 3.12-5 in `work/`, and `mux` runs **end-to-end** on the
+headless dmdbridge (download → handshake → menu → layer sweep → shell in a window →
+keyboard round-trip; screenshots in `work/shots-final/`). Timing measured: 55,156 wire
+bytes, ~98 s at ÷8 turbo, ~6 min at the 1200-baud NVRAM default. Next: Track A (iOS app,
+starting A1 — open-simh as a library, with the deferred `set noasync` re-verification)
+and Track B (V10 restoration) proceed in parallel; update the checkboxes in
 [docs/roadmap.md](docs/roadmap.md) as phases complete.

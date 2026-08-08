@@ -43,13 +43,9 @@ manager), with a clear path forward.
 
 ## Remaining for A0
 
-- **Terminal emulator leg**: SDL2/GTK builds are out (no package manager), but **Rust/cargo
-  is installed** — the chosen route is `dmd_core` driven headless: a small cargo binary that
-  bridges the DZ socket to the emulated 5620 (firmware 8;7;3), answers the `ESC [ c` probe,
-  lets mux download muxterm, and dumps the 800×1024 framebuffer to image files for visual
-  proof. No GUI toolkit needed, and it prototypes exactly the embedding the iPad app does.
-- Definitive muxterm download timing (needs the above).
-- Re-verify the appliance under **open-simh + `set noasync`** (the app will ship open-simh).
+*(All resolved — Sessions 2–6 below. The terminal leg landed as the headless `dmdbridge`
+cargo binary; timing is measured; the one deferral is re-verifying under **open-simh +
+`set noasync`**, which moves to A1 where open-simh gets built as the app's library.)*
 
 ## Session 2 (2026-08-08, later): the headless dmd_core bridge
 
@@ -179,9 +175,75 @@ against this same SIMH via a pty↔telnet bridge to bisect transport vs. emulato
 added to the bridge (intermittent keystroke loss makes runs a coin flip — root cause still
 open in the kb path). Bridge run logs: `work/run*.log`.
 
+## Session 6 (2026-08-09): there was no stall — mux works end-to-end
+
+Candidate (1) — single-stepping the "stalled" second stage with `ir_debug()` — closed the
+case in one run, by revealing *intent* instead of another symptom. The spin at
+0x720af6–0x720b39 decodes to:
+
+```
+loop: ADDW2  $0x1154,%r8              ; next slot (0x1154 = sizeof slot)
+      MULW3  $0x1154,*$0x72cf64,%r0   ; end = base + nslots*size
+      ADDW2  $0x72cf68,%r0
+      CMPW   %r0,%r8 ; BLUB skip ; MOVW $base,%r8   ; ring wrap
+skip: ANDW3  $0x0401,0x50(%r8),%r0    ; poll slot flags
+      CMPW   &1,%r0 ; BNEB loop       ; until a slot is runnable
+```
+
+A 16-slot ring scanned for `(flags & 0x401) == 1` — with `MAXPCHAN 16`, that is
+**muxterm's idle scheduler loop looking for a runnable window process**. The "stall" was
+an idle desktop.
+
+Three ground truths converged (protocol sources read from `v8jerq.tap`, de-tapped and
+untarred locally into `work/v8src/` — no boot needed):
+
+- **The mpx packet protocol** (`jerq/src/mux/proto/`): header `0x80|cntl<<6|chan<<2|seq`,
+  SEQMOD 4, CRC-16 trailing. The captured host tail `80 03 04 02 03 01 3a` is a valid
+  seq-0 data packet; the terminal's `c0 02 06 03 de 61` is not a mystery message but —
+  per `Reply()` in precv.c, which reuses the received header with the control bit set —
+  **the ACK for it, piggybacked with control byte 03 = C_UNBLK**. The handshake had
+  *succeeded*.
+- **muxterm's COFF header** (`jerq/lib/muxterm` on the tape): tsize 47,820 + dsize 2,504
+  = **50,324 loadable bytes; entry 0x71e85c** — the exact address in the GO packet
+  captured on the wire (`ad 04 00 71 e8 5c`). The 144,603-byte *file* size that the
+  bridge's completion test used includes an 80 KB symbol table that 32ld never sends.
+- **Host-side `mux` idle in state I** with empty muxerr: normally waiting for terminal
+  input, like every mux since 1985.
+
+Every "suspicious" datum from Sessions 4–5 was normal operation: TX disabled at idle is
+muxterm's interrupt-driven output discipline (enable/…/disable per burst, the `04,08`
+command pairs); the `ad ad` double-ACK was a routine phase-1 retransmit; `isr=0x44` was
+the known stale self-test artifact. Two sessions of theories shared one wrong premise —
+"the transfer is incomplete" — planted by measuring against file size instead of text+data.
+
+**Fixes that finished A0:**
+
+- Bridge completion test: `burst > 50,324 && 8 s quiet` (was 70% of 144,603 — unreachable).
+- Mouse: the 5620's registers (0x400000 y, 0x400002 x) are free-running counters; muxterm
+  integrates sample deltas with **y counting up the screen**, cursor starting at (0,0).
+  The bridge now maintains a modeled cursor and injects counter values per-move. (The
+  observed cursor positions replayed through this model match pixel-for-pixel.)
+- Gesture script per source: `menuhit()` centers the previously-hit item (initially
+  item 0 = New) under the cursor, so press-release in place selects New; then sweep with
+  button 3.
+
+**Result (run 13):** button-3 menu renders (`New/Reshape/Move/Top/Bottom/Current/Memory/
+Delete` — `menutext[]` verbatim), sweep creates a layer, host mux forks a shell into it,
+and typed `date` + `cat /etc/motd` round-trip — the trolley-car motd rendered inside a
+mux window on the emulated 5620. Screenshots: `work/shots-final/`. **A0's exit criterion
+"mux usable end-to-end" is met.**
+
+**Definitive timing** (the spike's last open measurement): the wire burst is **55,156
+bytes** (50,324 payload + 32ld packet overhead + shell echo). At the DUART's ÷8 turbo
+(9600-baud-equivalent) the download takes **~98 s**; at the fresh-NVRAM 1200-baud default
+it computes to **~6 minutes** (156 B/s). The community's "15–17 minutes" lore is not
+reproduced by pure line arithmetic on this muxterm — likely later/larger terminal
+programs or host-side stalls; our numbers above are measured, not inherited.
+
 ## Session artifacts (all under gitignored `work/`)
 
 `simh312/sim/BIN/vax780` · `myv8/rp06v8` (the bootable V8 disk) · `myv8/setup.log` ·
 `myv8/boot.log` · `boot-hold.exp` · `dz-login.exp` · `dztalk.py` · `turbo-run.sh` ·
-`shots*/` (framebuffer PNG series from three bridge runs) · `dmd_core/`, `dmd_gtk/`
-(reference checkouts; dmd_core carries the experiment patches)
+`shots*/` (framebuffer PNG series; `shots-final/` = the end-to-end run) · `v8src/`
+(V8 distribution tapes de-tapped + untarred for local source reading) · `dmd_core/`,
+`dmd_gtk/` (reference checkouts; dmd_core carries the experiment patches)

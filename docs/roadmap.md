@@ -4,9 +4,11 @@
 research moonshot that lands into the same app shell. Update checkboxes and the status line
 as work completes.*
 
-**Current phase: A0 — in progress (2026-08-08).** SIMH built, V8 disk produced, multiuser
-boot + DZ login + mux handshake proven; remaining: terminal-emulator leg (headless dmd_core
-via cargo — no package manager on this machine) and definitive mux timing. See
+**Current phase: A0 — complete (2026-08-09).** SIMH built, V8 disk produced, multiuser
+boot + DZ login proven, and `mux` runs end-to-end on the headless dmd_core bridge:
+download, handshake, menu, layer sweep, shell in a window, keyboard round-trip. Remaining
+polish moved into A1/A2 (open-simh + `set noasync` re-verification ships with the app;
+serial pacing decision = in-process transport, per architecture.md). See
 [spike-a0-results.md](spike-a0-results.md).
 
 ## Phase A0 — desktop spike *(shared by both tracks; no iOS code)*
@@ -16,14 +18,13 @@ Runbook: [spike-a0.md](spike-a0.md)
 - [x] Build SIMH `vax780` on macOS (classic 3.12-5; zip unpacks into `sim/`; warnings only)
 - [x] Produce the V8 disk via myv8 (`rp06v8`, ~2.5 min; all media bundled in the repo)
 - [x] Boot V8 to multi-user login on the Mac (console `# ` → `^D` → DZ gettys)
-- [ ] Connect a terminal emulator and run `mux` — *one precise fix left: the 55K stall is
-      a deadlock on a BREAK that V8's mux sends and SIMH's DZ discards (`TDR_V_TBR` = NI).
-      Implement DZ transmit-break → telnet `IAC BRK` in the local SIMH; the bridge's
-      inbound break plumbing already delivers it to the terminal. Full diagnosis:
-      spike-a0-results.md Session 4 addendum*
-- [x] Measure `muxterm` download time — *answered: 144,603 B at 1200-baud default = ~15.5
-      min (the "17-minute" lore, explained); ÷8 turbo ≈ 2 min; pacing lives in dmd_core's
-      DUART, not SIMH*
+- [x] Connect a terminal emulator and run `mux` — *done (Session 6): the "55K stall" was
+      mux idling at its desktop — 32ld sends only text+data (50,324 B), not the 144,603-B
+      file. Menu → sweep → layer → shell → `date` + motd all round-trip; screenshots in
+      `work/shots-final/`. Full story: spike-a0-results.md Session 6*
+- [x] Measure `muxterm` download time — *definitive (Session 6): wire burst 55,156 B
+      (50,324 payload + protocol overhead); ~98 s at ÷8 turbo, ~6 min computed at the
+      1200-baud NVRAM default; pacing lives in dmd_core's DUART, not SIMH*
 - [x] Record findings in `docs/spike-a0-results.md`; runbook corrected (remaining VERIFY:
       aap/blit flags, socat bridge, open-simh re-verification)
 

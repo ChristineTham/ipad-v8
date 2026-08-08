@@ -83,6 +83,7 @@ enum Act {
     Down(u8),
     Up(u8),
     Shot(&'static str),
+    Type(&'static str),
 }
 
 fn dump_png(dir: &str, n: u32, label: &str, secs: f64, fb: &[u8]) {
@@ -173,23 +174,32 @@ fn main() {
 
     // Mouse gesture script: open the button-3 menu, select an item, then
     // sweep a rectangle with button 3 (the classic "New layer" flow).
+    // menuhit() pops the menu with the previously-selected item (initially
+    // item 0 = "New") centered under the cursor, so releasing in place picks
+    // New. The sweep that follows also uses button 3 (mux convention).
     let gestures: Vec<(u64, Act)> = vec![
         (0, Act::Move(400, 524)),
         (300, Act::Down(2)),
-        (900, Act::Move(400, 564)),
-        (1500, Act::Shot("menu")),
-        (1800, Act::Up(2)),
-        (2600, Act::Shot("aftermenu")),
-        (3000, Act::Move(180, 764)),
-        (3300, Act::Down(2)),
-        (3700, Act::Move(340, 594)),
-        (4100, Act::Move(500, 414)),
-        (4500, Act::Move(620, 204)),
-        (4900, Act::Up(2)),
-        (7000, Act::Shot("layer")),
+        (1200, Act::Shot("menu")),
+        (1500, Act::Up(2)),
+        (2300, Act::Shot("aftermenu")),
+        (2700, Act::Move(180, 764)),
+        (3000, Act::Down(2)),
+        (3400, Act::Move(340, 594)),
+        (3800, Act::Move(500, 414)),
+        (4200, Act::Move(620, 204)),
+        (4600, Act::Up(2)),
+        (8000, Act::Shot("layer")),
+        (8300, Act::Type("date\r")),
+        (11500, Act::Type("cat /etc/motd\r")),
+        (16000, Act::Shot("layer2")),
     ];
     let mut gest_i = 0usize;
     let mut gest_t0: Option<Instant> = None;
+    // Mouse model: screen position the cursor is at, and the raw counter
+    // values last injected (see Act::Move handling).
+    let (mut cur_sx, mut cur_sy) = (0i32, 0i32);
+    let (mut ctr_x, mut ctr_y) = (0u16, 0u16);
 
     let mut iter: u64 = 0;
     let mut kb_gap: u64 = 0;
@@ -198,8 +208,14 @@ fn main() {
     let mut last_progress = Instant::now();
     let mut stall_reported = false;
     let mut tx_ring: VecDeque<u8> = VecDeque::new();
+    let mut rx_ring: VecDeque<u8> = VecDeque::new(); // raw host->terminal bytes (scan strips bit 7)
     let mut tx_since_mux: u64 = 0;
-    const MUXTERM_SIZE: u64 = 144_603; // ls -l /usr/jerq/lib/muxterm on the V8 image
+    // muxterm's COFF header: tsize 47820 + dsize 2504 = 50324 loadable bytes,
+    // entry 0x71e85c. The 144,603-byte file size includes the symbol table,
+    // which 32ld never downloads — the wire burst is ~55K (payload + packet
+    // overhead + shell echo), NOT 144K. Session 6 finding.
+    const MUXTERM_TEXTDATA: u64 = 50_324;
+    const BURST_ESTIMATE: u64 = 55_000; // typical total burst incl. overhead
 
     // Pace the emulated CPU to ~10 MHz of wall time. The DUART is a
     // wall-clock state machine (like real hardware); a flat-out CPU races
@@ -228,6 +244,12 @@ fn main() {
                     let b = v as u8;
                     dmd.rs232_rx(b);
                     scan.push(b & 0x7f);
+                    if mux_t.is_some() {
+                        rx_ring.push_back(b);
+                        if rx_ring.len() > 96 {
+                            rx_ring.pop_front();
+                        }
+                    }
                 }
                 if scan.len() > 8192 {
                     scan.drain(..4096);
@@ -349,12 +371,12 @@ fn main() {
                         last_progress = now;
                         let el = now.duration_since(mt).as_secs_f64();
                         let rate = burst_bytes as f64 / el.max(0.001);
-                        let eta = (MUXTERM_SIZE.saturating_sub(burst_bytes)) as f64 / rate.max(1.0);
+                        let eta = (BURST_ESTIMATE.saturating_sub(burst_bytes)) as f64 / rate.max(1.0);
                         println!(
                             "[{:7.2}s] download progress: {} bytes ({:.0}% of muxterm), {:.0} B/s, ~{:.0}s to go",
                             secs(now),
                             burst_bytes,
-                            100.0 * burst_bytes as f64 / MUXTERM_SIZE as f64,
+                            (100.0 * burst_bytes as f64 / BURST_ESTIMATE as f64).min(100.0),
                             rate,
                             eta
                         );
@@ -394,8 +416,45 @@ fn main() {
                             secs(now), burst_bytes, pcs, kbq.len(), txbuf.len(),
                             String::from_utf8_lossy(&tail)
                         );
+                        // Raw host->terminal bytes: what did the host last send us?
+                        let rxv: Vec<u8> = rx_ring.iter().cloned().collect();
+                        println!("[{:7.2}s] STALL last raw rx bytes ({}): {:02x?}",
+                            secs(now), rxv.len(), rxv);
+                        // Dump the code around the spin loop so it can be
+                        // disassembled offline (range follows the sampled PCs).
+                        let lo = (*pcs.iter().min().unwrap() as usize & !3).saturating_sub(0x40);
+                        let hi = (*pcs.iter().max().unwrap() as usize & !3) + 0x44;
+                        let mut words = Vec::new();
+                        let mut a = lo;
+                        while a < hi {
+                            words.push(match dmd.read_word(a) {
+                                Some(w) => format!("{:08x}", w),
+                                None => "????????".into(),
+                            });
+                            a += 4;
+                        }
+                        println!("[{:7.2}s] STALL code dump {:06x}..{:06x}: {}",
+                            secs(now), lo, hi, words.join(" "));
+                        // Session-5 candidate (1): single-step the spin loop and
+                        // name exactly what it polls. ir_debug() decodes the
+                        // instruction just executed; registers printed alongside.
+                        println!("[{:7.2}s] STALL single-step trace (260 steps):", secs(now));
+                        for i in 0..260 {
+                            dmd.step();
+                            let regs: Vec<String> = (0..13)
+                                .map(|r| format!("{:x}", dmd.get_register(r)))
+                                .collect();
+                            println!("  step {:3} pc={:06x} ir={} r0..r12=[{}]",
+                                i, dmd.get_pc(), dmd.ir_debug(), regs.join(","));
+                        }
+                        println!("[{:7.2}s] STALL trace done; duart now: {}",
+                            secs(now), dmd.duart_debug());
                     }
-                    if burst_bytes > MUXTERM_SIZE * 7 / 10
+                    // Complete when the loadable image (50,324 B) has certainly
+                    // passed and the line has gone quiet: the post-download
+                    // mpx-protocol handshake finishes within a second, after
+                    // which mux idles at the desktop awaiting mouse input.
+                    if burst_bytes > MUXTERM_TEXTDATA
                         && now.duration_since(last_rx_at) > Duration::from_secs(8)
                     {
                         let dl = last_rx_at.duration_since(mt).as_secs_f64();
@@ -421,9 +480,24 @@ fn main() {
                         let (off, act) = &gestures[gest_i];
                         if now.duration_since(g0).as_millis() as u64 >= *off {
                             match act {
-                                Act::Move(x, y) => dmd.mouse_move(*x, *y),
+                                // The 5620 mouse registers are free-running
+                                // quadrature counters: muxterm integrates
+                                // sample deltas, with the y counter counting
+                                // UP the screen, cursor starting at (0,0).
+                                // Convert target screen coords to counter
+                                // values whose deltas move the cursor there.
+                                Act::Move(x, y) => {
+                                    let dx = *x as i32 - cur_sx;
+                                    let dy = *y as i32 - cur_sy;
+                                    ctr_x = ctr_x.wrapping_add(dx as u16);
+                                    ctr_y = ctr_y.wrapping_sub(dy as u16);
+                                    cur_sx = *x as i32;
+                                    cur_sy = *y as i32;
+                                    dmd.mouse_move(ctr_x, ctr_y);
+                                }
                                 Act::Down(b) => dmd.mouse_down(*b),
                                 Act::Up(b) => dmd.mouse_up(*b),
+                                Act::Type(s) => kbq.extend(s.as_bytes()),
                                 Act::Shot(label) => {
                                     let vram = dmd.video_ram();
                                     let n = FB_BYTES.min(vram.len());
@@ -454,7 +528,7 @@ fn main() {
             let h = fb_hash(&fbbuf);
             if h != last_hash {
                 last_hash = h;
-                if now.duration_since(last_shot) > Duration::from_millis(1200) && shot_n < 40 {
+                if now.duration_since(last_shot) > Duration::from_millis(1200) && shot_n < 300 {
                     shot_n += 1;
                     dump_png(&shots_dir, shot_n, "fb", secs(now), &fbbuf);
                     last_shot = now;
