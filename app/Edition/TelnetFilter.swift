@@ -1,10 +1,13 @@
 import Foundation
 
-/// Minimal telnet-protocol filter for SIMH's tmxr console: strips IAC
+/// Minimal telnet-protocol filter for SIMH's tmxr sockets: strips IAC
 /// sequences from the byte stream (they may split across reads, hence the
-/// explicit state machine) and refuses every option the server proposes —
-/// DO → WONT, WILL → DONT — which leaves the session in the plain
-/// character-at-a-time mode the desktop probes proved out.
+/// explicit state machine). With `sendRefusals` it also refuses every
+/// option the server proposes — DO → WONT, WILL → DONT — the correct
+/// behavior for the V8 console socket. The SIMH *remote console* cannot
+/// tolerate client IAC replies at all (they desync its command reader and
+/// the session goes permanently silent — desktop-bisected), so the control
+/// link constructs this filter with `sendRefusals: false`.
 struct TelnetFilter {
     private enum State {
         case data
@@ -13,6 +16,11 @@ struct TelnetFilter {
     }
 
     private var state: State = .data
+    private let sendRefusals: Bool
+
+    init(sendRefusals: Bool = true) {
+        self.sendRefusals = sendRefusals
+    }
 
     private static let IAC: UInt8 = 255
     private static let DONT: UInt8 = 254
@@ -40,10 +48,12 @@ struct TelnetFilter {
                     state = .data
                 }
             case .option(let verb):
-                if verb == Self.DO {
-                    reply.append(contentsOf: [Self.IAC, Self.WONT, b])
-                } else if verb == Self.WILL {
-                    reply.append(contentsOf: [Self.IAC, Self.DONT, b])
+                if sendRefusals {
+                    if verb == Self.DO {
+                        reply.append(contentsOf: [Self.IAC, Self.WONT, b])
+                    } else if verb == Self.WILL {
+                        reply.append(contentsOf: [Self.IAC, Self.DONT, b])
+                    }
                 }
                 state = .data
             }

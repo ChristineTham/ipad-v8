@@ -4,12 +4,11 @@
 research moonshot that lands into the same app shell. Update checkboxes and the status line
 as work completes.*
 
-**Current phase: A0 — complete (2026-08-09).** SIMH built, V8 disk produced, multiuser
-boot + DZ login proven, and `mux` runs end-to-end on the headless dmd_core bridge:
-download, handshake, menu, layer sweep, shell in a window, keyboard round-trip. Remaining
-polish moved into A1/A2 (open-simh + `set noasync` re-verification ships with the app;
-serial pacing decision = in-process transport, per architecture.md). See
-[spike-a0-results.md](spike-a0-results.md).
+**Current phase: A1 — complete (2026-08-09); A2 is next.** A0 proved the machinery on
+the desktop ([spike-a0-results.md](spike-a0-results.md)); A1 shipped it into an iPad
+app: open-simh as a static library, the Edition app booting V8 to `login:` in a
+SwiftTerm console in ~25–30 s, and instant-on via SIMH save/restore. Implementation
+record and hard-won channel semantics: [a1-notes.md](a1-notes.md).
 
 ## Phase A0 — desktop spike *(shared by both tracks; no iOS code)*
 
@@ -32,10 +31,20 @@ Runbook: [spike-a0.md](spike-a0.md)
 
 ## Track A — the product (V8 inside)
 
-### A1 — text mode on iPad
-- [ ] open-simh built as an arm64 static library (CMake → xcframework)
-- [ ] App boots bundled `v8.disk` to `login:` in a SwiftTerm console view
-- [ ] Background/foreground survival (SIMH save/restore)
+### A1 — text mode on iPad *(complete 2026-08-09; see [a1-notes.md](a1-notes.md))*
+- [x] open-simh built as an arm64 static library (CMake → xcframework) — *`libsimh/`,
+      pinned `a1f57fa`, synchronous I/O compiled in (the V8-safe mode, permanently);
+      device + simulator slices, plus a macOS `vax780cli` harness that desktop-proved
+      the whole app protocol before any Swift ran*
+- [x] App boots bundled `v8.disk` to `login:` in a SwiftTerm console view — *the
+      Edition app (working title; team RPL5R637DS): autoboot with self-healing fsck
+      reaches `login:` in ~25–30 s on the iPad Pro simulator; evidence in
+      `work/shots-a1-final/`*
+- [x] Background/foreground survival (SIMH save/restore) — *suspend + `save` via the
+      SIMH remote console on background (zero CPU while paused), `continue` on
+      foreground, `restore` on cold relaunch — 3/3 terminate→relaunch cycles with a
+      live console after restore; snapshots are consumed the moment the machine runs
+      again, so unclean kills cold-boot and fsck heals*
 
 ### A2 — the Blit experience
 - [ ] dmd_core built for `aarch64-apple-ios` (C FFI staticlib), firmware 8;7;3

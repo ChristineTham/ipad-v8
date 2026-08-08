@@ -20,16 +20,26 @@ this document holds the current design. Update it as code lands.*
 |---|---|---|---|
 | VAX emulator | [open-simh](https://github.com/open-simh/simh) `vax780` | C, MIT | Boots the Research Unix disk image; console + DZ11 serial mux; no SDL/network deps needed |
 | Terminal emulator | [dmd_core](https://github.com/dmdmtg/dmd_core) | Rust (C FFI), MIT | DMD 5620: WE32100 CPU, DUART, 8 KB NVRAM, 800×1024×1 framebuffer; firmware **8;7;3** embedded |
-| Console UI | [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) (candidate) | Swift, MIT | VT100 view on the SIMH console line — boot diagnostics, single-user work, pre-graphics milestone |
+| Console UI | [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) (in use since A1) | Swift, MIT | VT100 view on the SIMH console line — boot diagnostics, login, pre-graphics milestone |
 | App shell | this repo (to be written) | Swift/SwiftUI + Metal | Framebuffer view, input mapping, machine lifecycle, settings, persistence |
 
 ## Process model
 
-One iOS process. Planned threads:
+One iOS process. Threads (simh thread real since A1; dmd thread lands in A2):
 
-- **simh thread** — runs the SIMH main loop (`set noasync`; synchronous I/O confined here).
+- **simh thread** — runs the SIMH main loop via `simh_vax780_run()`
+  (`libsimh/`; compiled **without** `SIM_ASYNCH_IO`, so the V8-critical
+  synchronous mode is a build-time guarantee, not a config line).
 - **dmd thread** — steps the WE32100 core; exchanges bytes with the serial transport.
-- **main thread** — SwiftUI/Metal; presents the framebuffer at 60 Hz; feeds input events.
+- **main thread** — SwiftUI (Metal from A2); feeds input events.
+
+Control plane (A1, desktop-proven): the app talks to the embedded SIMH over
+two localhost sockets — the **telnet console** (127.0.0.1:42323, a pure V8
+byte pipe feeding SwiftTerm) and the **SIMH remote console**
+(127.0.0.1:42324), where ^E suspends the simulator into command mode for
+`save`/`continue`. The channel dialects differ sharply (WRU handling, IAC
+tolerance, prompt behavior) — see the table in [a1-notes.md](a1-notes.md)
+before touching this plumbing.
 
 ## Serial transport
 
@@ -62,10 +72,16 @@ almost exactly.
 
 ## Persistence
 
-- **Disk image**: bundled pristine copy; working copy in the app container; Files-app
-  import/export for power users (UTM SE / iDOS 3 pattern).
+- **Disk image**: bundled pristine copy; working copy in the app container
+  (backup-excluded); Files-app import/export for power users (UTM SE /
+  iDOS 3 pattern).
 - **5620 NVRAM** (8 KB): file in the app container — terminal settings survive relaunch.
-- **Instant-on**: SIMH save/restore snapshots on background/foreground.
+- **Instant-on** (real since A1): on background the machine suspends via the
+  remote console and `save state.sav` (zero CPU while paused — the 97 %
+  idle burn stops); foreground sends `continue`; a cold relaunch replays
+  the snapshot via `restore`. A snapshot is deleted the moment the machine
+  runs again — it is only disk-consistent while paused — so unclean kills
+  cold-boot and V8's autoboot fsck self-heals.
 
 ## Machine matrix
 

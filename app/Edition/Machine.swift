@@ -36,9 +36,21 @@ final class Machine: ObservableObject {
     var onOutput: (([UInt8]) -> Void)?
 
     private let console = ConsoleLink()
-    private let control = ConsoleLink()
-    private let consolePort: UInt16 = 2323
-    private let controlPort: UInt16 = 2324
+    private let control = ConsoleLink(replyToIAC: false)   // see ConsoleLink
+
+    // Ports rotate per launch (pid-derived): a quick relaunch's listeners
+    // would otherwise hit "bind error 48" against the previous
+    // incarnation's TIME_WAIT pairs (tmxr binds without SO_REUSEADDR) and
+    // scp then runs with NO listeners — the app collides with its own
+    // ghost. Also distinct from the desktop harness's 2323/2324/8888,
+    // since Mac and simulator share one localhost.
+    private let portBase: UInt16 = {
+        let pid = UInt32(bitPattern: getpid())
+        return 42000 + UInt16((pid &* 2_654_435_761) % 8_997)
+    }()
+    private var consolePort: UInt16 { portBase }
+    private var controlPort: UInt16 { portBase + 1 }
+    private var dzPort: UInt16 { portBase + 2 }
     private var simThread: Thread?
     private var restartedAfterFailedRestore = false
 
@@ -54,34 +66,44 @@ final class Machine: ObservableObject {
     }
 
     // MARK: - Config templates
-    // `set noasynch` is defensive documentation: the library is compiled
-    // without SIM_ASYNCH_IO, so synchronous I/O (the V8-safe mode, simh
-    // issue #425) is already guaranteed at build time. remote timeout=600
-    // keeps the paused state deterministic if iOS delays freezing us.
+    // No `set noasynch` needed (and it errors "Command not allowed" here):
+    // the library is compiled without SIM_ASYNCH_IO, so synchronous I/O
+    // (the V8-safe mode, simh issue #425) is guaranteed at build time.
+    // remote timeout=600 keeps the paused state deterministic if iOS
+    // delays freezing us.
 
-    private static let bootConf = """
-    set noasynch
-    set console telnet=127.0.0.1:2323
-    set remote telnet=127.0.0.1:2324
+    private var bootConf: String { """
+    set console telnet=127.0.0.1:\(consolePort)
+    set remote telnet=127.0.0.1:\(controlPort)
     set remote timeout=600
     set tto 7b
     set dz lines=8
-    att dz -m 127.0.0.1:8888
+    att dz -m 127.0.0.1:\(dzPort)
     set rp0 rp06
     at rp0 v8.disk
     set tu0 te16
     load -o bootV8 0
     run 2
-    """
+    """ }
 
-    private static let resumeConf = """
-    set noasynch
-    set console telnet=127.0.0.1:2323
-    set remote telnet=127.0.0.1:2324
+    // Restore-path subtleties, all desktop/simulator-bisected:
+    // - The snapshot records the PREVIOUS launch's ports; both the console
+    //   and the DZ must be re-attached on this launch's ports, and those
+    //   binds must SUCCEED: tmxr_detach NULLs the VAX TTI/TTO units' tmxr
+    //   backpointers, and a successful tmxr_attach is what re-links them
+    //   (its ldsc[].uptr chain) — with a failed bind, `cont` segfaults in
+    //   _tmxr_activate_delay. Per-launch port rotation is what guarantees
+    //   the bind. Do NOT "fix" this with `reset tti` — that zeroes the
+    //   CSR the guest kernel configured (interrupt enable included) and
+    //   V8 stops noticing console input entirely.
+    private var resumeConf: String { """
+    set remote telnet=127.0.0.1:\(controlPort)
     set remote timeout=600
     restore state.sav
+    set console telnet=127.0.0.1:\(consolePort)
+    att dz -m 127.0.0.1:\(dzPort)
     cont
-    """
+    """ }
 
     // MARK: - Lifecycle
 
@@ -113,11 +135,11 @@ final class Machine: ObservableObject {
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
                 console.send([0x0d])
                 guard await console.waitForAnyOutput(timeout: 10) else {
-                    try? FileManager.default.removeItem(
-                        at: supportDir.appendingPathComponent("state.sav"))
+                    consumeSnapshot()
                     phase = .failed("saved session did not restore — relaunch to boot fresh")
                     return
                 }
+                consumeSnapshot()   // machine is running again: sav now stale
                 phase = .up
             } else {
                 phase = .booting
@@ -163,16 +185,31 @@ final class Machine: ObservableObject {
             try fm.copyItem(at: bundled, to: boot)
         }
 
-        try Self.bootConf.write(to: supportDir.appendingPathComponent("boot.conf"),
-                                atomically: true, encoding: .utf8)
-        try Self.resumeConf.write(to: supportDir.appendingPathComponent("resume.conf"),
-                                  atomically: true, encoding: .utf8)
+        try bootConf.write(to: supportDir.appendingPathComponent("boot.conf"),
+                           atomically: true, encoding: .utf8)
+        try resumeConf.write(to: supportDir.appendingPathComponent("resume.conf"),
+                             atomically: true, encoding: .utf8)
 
         // simh resolves attach/save/restore paths against cwd; relative paths
         // keep state.sav valid across app-container relocations.
         FileManager.default.changeCurrentDirectoryPath(supportDir.path)
 
-        return fm.fileExists(atPath: supportDir.appendingPathComponent("state.sav").path)
+        // One-shot restore attempts: if a previous launch died mid-restore
+        // (marker still present), drop the snapshot and cold-boot rather
+        // than crash-looping on it.
+        let sav = supportDir.appendingPathComponent("state.sav")
+        let marker = supportDir.appendingPathComponent("restore.attempt")
+        guard fm.fileExists(atPath: sav.path) else {
+            try? fm.removeItem(at: marker)
+            return false
+        }
+        if fm.fileExists(atPath: marker.path) {
+            try? fm.removeItem(at: sav)
+            try? fm.removeItem(at: marker)
+            return false
+        }
+        fm.createFile(atPath: marker.path, contents: nil)
+        return true
     }
 
     private func launchSimhThread(config: String) {
@@ -197,7 +234,7 @@ final class Machine: ObservableObject {
            FileManager.default.fileExists(atPath: sav.path) {
             // Snapshot didn't restore and scp died: drop it, cold-boot once.
             restartedAfterFailedRestore = true
-            try? FileManager.default.removeItem(at: sav)
+            consumeSnapshot()
             phase = .idle
             start()
             return
@@ -231,18 +268,19 @@ final class Machine: ObservableObject {
             phase = .up
             return
         }
-        // Remote-console protocol (desktop-verified, attempt-3 transcript):
-        // sim> prints lazily; a bare \r line ending loses the next byte, so
-        // commands end \r\n; the completion marker matches "\nSAVED" because
-        // the input echo never has a newline before the word — only real
-        // echo OUTPUT does.
-        control.send("save state.sav\r\n")
-        control.send("echo SAVED\r\n")
+        // Remote-console protocol (desktop-verified): sim> prints lazily,
+        // and in multi-command mode a double tmxr_getc_ln swallows the
+        // first byte of typeahead — hence the sacrificial leading space on
+        // every command (scp trims it when it survives). The completion
+        // marker matches "\nSAVED" because the input echo never has a
+        // newline before the word — only real echo OUTPUT does.
+        control.send(" save state.sav\r\n")
+        control.send(" echo SAVED\r\n")
         let saved = await control.waitFor("\nSAVED", timeout: 30)
         if saved {
             phase = .paused
         } else {
-            control.send("continue\r\n")                   // never leave it stopped
+            control.send(" continue\r\n")                  // never leave it stopped
             phase = .up
         }
     }
@@ -250,15 +288,28 @@ final class Machine: ObservableObject {
     func foreground() {
         guard phase == .paused else { return }
         Task { @MainActor in
-            self.control.send("continue\r\n")
+            self.control.send(" continue\r\n")
             let resumed = await self.control.waitFor("Simulator Running", timeout: 8)
             if !resumed {
-                self.control.send("continue\r\n")          // one retry, then trust it
+                self.control.send(" continue\r\n")         // one retry, then trust it
             }
+            self.consumeSnapshot()   // machine is running again: sav now stale
             self.phase = .up
             try? await Task.sleep(nanoseconds: 400_000_000)
             self.console.send([0x0d])                      // nudge a fresh prompt
         }
+    }
+
+    /// A snapshot is only consistent with the disk while the machine stays
+    /// paused. The moment it runs again the disk mutates underneath the
+    /// saved kernel state, so restoring it later could corrupt the
+    /// filesystem — delete it and let an unclean kill cold-boot instead
+    /// (V8's autoboot fsck self-heals, the authentic behavior).
+    private func consumeSnapshot() {
+        try? FileManager.default.removeItem(
+            at: supportDir.appendingPathComponent("state.sav"))
+        try? FileManager.default.removeItem(
+            at: supportDir.appendingPathComponent("restore.attempt"))
     }
 }
 

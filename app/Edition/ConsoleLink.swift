@@ -13,7 +13,13 @@ final class ConsoleLink {
     var onBytes: (([UInt8]) -> Void)?
 
     private var conn: NWConnection?
-    private var telnet = TelnetFilter()
+    private var telnet: TelnetFilter
+
+    /// `replyToIAC: false` is REQUIRED for the SIMH remote-console control
+    /// channel — client IAC replies permanently silence that session.
+    init(replyToIAC: Bool = true) {
+        telnet = TelnetFilter(sendRefusals: replyToIAC)
+    }
     private var matchBuf = [UInt8]()
     private var pending: (pattern: [UInt8], continuation: CheckedContinuation<Bool, Never>)?
     private var pendingAny: CheckedContinuation<Bool, Never>?
@@ -97,6 +103,13 @@ final class ConsoleLink {
                 case .ready:
                     if !once.done { once.done = true; cont.resume(returning: c) }
                 case .failed, .cancelled:
+                    if !once.done { once.done = true; c.cancel(); cont.resume(returning: nil) }
+                case .waiting:
+                    // On loopback, .waiting(ECONNREFUSED) never self-resolves
+                    // (no reachability change is coming). Fail this attempt
+                    // fast; the caller's retry loop dials a fresh connection.
+                    // This bit: the app raced its own simh listener by ~½ s
+                    // and then hung here forever.
                     if !once.done { once.done = true; c.cancel(); cont.resume(returning: nil) }
                 default:
                     break

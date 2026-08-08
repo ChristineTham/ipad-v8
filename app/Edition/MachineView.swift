@@ -40,7 +40,7 @@ struct MachineView: View {
         case .provisioning:
             return "First launch: installing the V8 disk…"
         case .booting:
-            return "Booting Research Unix — about three minutes…"
+            return "Booting Research Unix…"
         case .restoring:
             return "Restoring session…"
         case .pausing:
