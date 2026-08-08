@@ -1,0 +1,31 @@
+--- a/src/dmd.rs
++++ b/src/dmd.rs
+@@ -385,6 +385,28 @@
+     match DMD.lock() {
+         Ok(dmd) => {
+             nvram.clone_from_slice(dmd.get_nvram());
++            SUCCESS
++        }
++        Err(_) => ERROR,
++    }
++}
++
++#[no_mangle]
++fn dmd_rs232_break() -> c_int {
++    match DMD.lock() {
++        Ok(mut dmd) => {
++            dmd.rs232_break();
++            SUCCESS
++        }
++        Err(_) => ERROR,
++    }
++}
++
++#[no_mangle]
++fn dmd_rs232_tx_break(flag: &mut u8) -> c_int {
++    match DMD.lock() {
++        Ok(mut dmd) => {
++            *flag = dmd.rs232_tx_break() as u8;
+             SUCCESS
+         }
+         Err(_) => ERROR,

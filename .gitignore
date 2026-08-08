@@ -15,6 +15,8 @@ target/
 # Local work areas (spike outputs, emulator checkouts, scratch)
 work/
 libsimh/dist/
+libdmd/dist/
+libdmd/build-smoke
 tools/vendor/
 tools/dmdbridge/.cargo/
 
@@ -29,3 +31,4 @@ tools/dmdbridge/.cargo/
 *.cpio
 *.iso
 app/*.log
+libdmd/build-*.log
