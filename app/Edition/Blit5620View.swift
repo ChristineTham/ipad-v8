@@ -16,13 +16,15 @@ import UIKit
 /// hardware always assumed (mux's layer menu lives on button 3).
 struct Blit5620View: View {
     @ObservedObject var terminal: Terminal5620
+    @ObservedObject var settings: Settings
+    @Environment(\.displayScale) private var displayScale
     @State private var latchedButton: UInt8 = 0     // 0/1/2 = 5620 buttons 1/2/3
 
     var body: some View {
         VStack(spacing: 0) {
             toolbar
             GeometryReader { geo in
-                let fitted = fittedRect(in: geo.size)
+                let fitted = settings.screenSize(fitting: geo.size, displayScale: displayScale)
                 let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
                 ZStack {
                     Color.black
@@ -65,15 +67,15 @@ struct Blit5620View: View {
     private func screen(fitted: CGSize, center: CGPoint) -> some View {
         #if os(macOS)
         ZStack {
-            FramebufferView(frames: terminal.frames)
+            FramebufferView(frames: terminal.frames, phosphor: settings.phosphor.tint)
             // Transparent event surface over the Metal view: AppKit gives us
             // real button and pointer events, including hover.
-            MacInputView(terminal: terminal, pixelScale: 800.0 / max(fitted.width, 1))
+            MacInputView(terminal: terminal, pixelScale: pixelScale(fitted))
         }
         .frame(width: fitted.width, height: fitted.height)
         .position(center)
         #else
-        FramebufferView(frames: terminal.frames)
+        FramebufferView(frames: terminal.frames, phosphor: settings.phosphor.tint)
             .frame(width: fitted.width, height: fitted.height)
             .position(center)
             .contentShape(Rectangle())
@@ -83,11 +85,9 @@ struct Blit5620View: View {
         #endif
     }
 
-    private func fittedRect(in size: CGSize) -> CGSize {
-        let aspect: CGFloat = 800.0 / 1024.0
-        let byWidth = CGSize(width: size.width, height: size.width / aspect)
-        if byWidth.height <= size.height { return byWidth }
-        return CGSize(width: size.height * aspect, height: size.height)
+    /// Screen points -> 5620 pixels, with the user's pointer speed folded in.
+    private func pixelScale(_ fitted: CGSize) -> CGFloat {
+        800.0 / max(fitted.width, 1) * settings.mouseSensitivity
     }
 
     #if !os(macOS)
@@ -96,7 +96,7 @@ struct Blit5620View: View {
     private func mouseDrag(fitted: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
-                let scale = 800.0 / fitted.width
+                let scale = pixelScale(fitted)
                 if let last = lastPoint {
                     let dx = Int16((value.location.x - last.x) * scale)
                     let dy = Int16((value.location.y - last.y) * scale)

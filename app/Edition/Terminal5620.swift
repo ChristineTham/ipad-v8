@@ -38,12 +38,16 @@ final class Terminal5620: ObservableObject {
 
     /// Start the 5620 against SIMH's DZ listener. Call once, when the
     /// machine is up (the getty raises carrier on connect).
-    func start(dzPort: UInt16) {
+    ///
+    /// `nvram` is the 8 KB NVRAM file: the terminal's own settings (baud,
+    /// screen preferences) live there, so restoring it is what makes the
+    /// terminal feel like the same physical unit across launches.
+    func start(dzPort: UInt16, nvram: URL? = nil) {
         guard state == .idle else { return }
         state = .running
         stopFlag.clear()
         let t = Thread { [rxq, kbq, mouseq, frames, stopFlag] in
-            Terminal5620.threadMain(dzPort: dzPort, rxq: rxq, kbq: kbq,
+            Terminal5620.threadMain(dzPort: dzPort, nvram: nvram, rxq: rxq, kbq: kbq,
                                     mouseq: mouseq, frames: frames, stop: stopFlag)
             Task { @MainActor in
                 // Only report unexpected exits; deliberate stops go .idle.
@@ -60,6 +64,29 @@ final class Terminal5620: ObservableObject {
     func stop() {
         stopFlag.set()
         state = .idle
+    }
+
+    /// Power-cycle the terminal: fresh firmware, and — because the DZ line
+    /// carries modem control — a dropped carrier that makes V8 hang up
+    /// whatever was on the line. That is the cure for the one mismatch
+    /// save/restore can produce: the host's mux session survives in the
+    /// snapshot while the terminal comes back without muxterm loaded, so the
+    /// two ends are talking different protocols. Hanging up lets getty start
+    /// over.
+    func restart(dzPort: UInt16, nvram: URL? = nil) {
+        guard state == .running else {
+            start(dzPort: dzPort, nvram: nvram)
+            return
+        }
+        stopFlag.set()
+        Task { @MainActor in
+            // The dmd thread tests the flag every 500 steps; this is orders of
+            // magnitude longer than it needs, and dmd_core is a process-wide
+            // singleton that must not be re-initialised under the old thread.
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            self.state = .idle
+            self.start(dzPort: dzPort, nvram: nvram)
+        }
     }
 
     // MARK: - Input (called from the UI)
@@ -79,10 +106,13 @@ final class Terminal5620: ObservableObject {
 
     // MARK: - The dmd thread
 
-    nonisolated private static func threadMain(dzPort: UInt16, rxq: EventQueue<UInt16>,
+    nonisolated private static func threadMain(dzPort: UInt16, nvram: URL?,
+                                               rxq: EventQueue<UInt16>,
                                                kbq: EventQueue<UInt8>, mouseq: EventQueue<MouseEvent>,
                                                frames: FrameStore, stop: AtomicFlag) {
         guard dmd_init(1) == DMD_SUCCESS else { return }   // firmware 8;7;3
+        loadNVRAM(from: nvram)
+        defer { saveNVRAM(to: nvram) }
 
         let fd = dialLoopback(port: dzPort, deadline: Date().addingTimeInterval(30))
         guard fd >= 0 else { return }
@@ -182,7 +212,26 @@ final class Terminal5620: ObservableObject {
             if iter % 600 == 0, dmd_video_ram_dirty() == 1, let vram = dmd_video_ram() {
                 frames.publish(vram)
             }
+
+            // NVRAM every ~30 s of virtual time: the app can be killed
+            // without warning, and the deferred save above would not run.
+            if iter % 600_000 == 0 { saveNVRAM(to: nvram) }
         }
+    }
+
+    // MARK: - NVRAM (8 KB of terminal settings)
+
+    nonisolated private static func loadNVRAM(from url: URL?) {
+        guard let url, let data = try? Data(contentsOf: url), data.count == 8192 else { return }
+        var bytes = [UInt8](data)
+        _ = dmd_set_nvram(&bytes)
+    }
+
+    nonisolated private static func saveNVRAM(to url: URL?) {
+        guard let url else { return }
+        var bytes = [UInt8](repeating: 0, count: 8192)
+        guard dmd_get_nvram(&bytes) == DMD_SUCCESS else { return }
+        try? Data(bytes).write(to: url, options: .atomic)
     }
 
     // MARK: - Socket helpers (BSD; the thread owns the fd, blocking-free)

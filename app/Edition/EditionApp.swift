@@ -19,6 +19,7 @@ import UIKit
 struct EditionApp: App {
     @StateObject private var machine = Machine()
     @StateObject private var terminal = Terminal5620()
+    @StateObject private var settings = Settings()
 
     #if os(macOS)
     @NSApplicationDelegateAdaptor(MacAppDelegate.self) private var appDelegate
@@ -29,7 +30,7 @@ struct EditionApp: App {
     var body: some Scene {
         #if os(macOS)
         WindowGroup {
-            MachineView(machine: machine, terminal: terminal)
+            MachineView(machine: machine, terminal: terminal, settings: settings)
                 .onAppear {
                     machine.start()
                     appDelegate.machine = machine
@@ -42,11 +43,22 @@ struct EditionApp: App {
                     .keyboardShortcut(".", modifiers: [.command])
                 Button("Resume") { machine.foreground() }
                     .keyboardShortcut("r", modifiers: [.command, .shift])
+                Divider()
+                Button("Restart Terminal") {
+                    terminal.restart(dzPort: machine.dzPort,
+                                     nvram: settings.persistNVRAM ? machine.nvramURL : nil)
+                }
             }
+        }
+        // Qualified: our own preferences type is also called Settings, and the
+        // scene builder would otherwise resolve to its initialiser.
+        SwiftUI.Settings {
+            SettingsView(settings: settings, machine: machine, terminal: terminal)
+                .frame(width: 520, height: 620)
         }
         #else
         WindowGroup {
-            MachineView(machine: machine, terminal: terminal)
+            MachineView(machine: machine, terminal: terminal, settings: settings)
                 .onAppear { machine.start() }
         }
         .onChange(of: scenePhase) { _, newPhase in

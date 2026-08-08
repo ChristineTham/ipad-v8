@@ -6,6 +6,7 @@ import SwiftUI
 /// the fragment shader expand bits with the phosphor tint.
 struct FramebufferView: PlatformViewRepresentable {
     let frames: FrameStore
+    var phosphor: SIMD3<Float> = SIMD3(0.45, 1.0, 0.60)
 
     func makePlatformView(context: Context) -> MTKView {
         let view = MTKView(frame: .zero, device: MTLCreateSystemDefaultDevice())
@@ -22,9 +23,11 @@ struct FramebufferView: PlatformViewRepresentable {
         return view
     }
 
-    func updatePlatformView(_ view: MTKView, context: Context) {}
+    func updatePlatformView(_ view: MTKView, context: Context) {
+        context.coordinator.phosphor = phosphor
+    }
 
-    func makeCoordinator() -> Renderer { Renderer(frames: frames) }
+    func makeCoordinator() -> Renderer { Renderer(frames: frames, phosphor: phosphor) }
 
     final class Renderer: NSObject, MTKViewDelegate {
         private let frames: FrameStore
@@ -33,11 +36,12 @@ struct FramebufferView: PlatformViewRepresentable {
         private var texture: MTLTexture?
         private var staging = [UInt8](repeating: 0, count: 102_400)
         private var seenGeneration: UInt64 = .max   // force first upload
-        // DMD 5620 green phosphor
-        private let phosphor = SIMD3<Float>(0.45, 1.0, 0.60)
+        /// Colour of a lit pixel; the user picks it in Settings.
+        var phosphor: SIMD3<Float>
 
-        init(frames: FrameStore) {
+        init(frames: FrameStore, phosphor: SIMD3<Float>) {
             self.frames = frames
+            self.phosphor = phosphor
         }
 
         func configure(for view: MTKView) {

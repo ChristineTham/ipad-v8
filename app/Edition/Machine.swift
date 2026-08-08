@@ -69,6 +69,16 @@ final class Machine: ObservableObject {
             .appendingPathComponent("v8", isDirectory: true)
     }
 
+    /// The live working disk — what the user exports.
+    var workingDiskURL: URL { supportDir.appendingPathComponent("v8.disk") }
+    /// The 5620's 8 KB NVRAM, kept beside the machine it belongs to.
+    var nvramURL: URL { supportDir.appendingPathComponent("nvram.bin") }
+
+    private var snapshotURL: URL { supportDir.appendingPathComponent("state.sav") }
+    private var attemptURL: URL { supportDir.appendingPathComponent("restore.attempt") }
+    private var pendingDiskURL: URL { supportDir.appendingPathComponent("v8.disk.pending") }
+    private var resetMarkerURL: URL { supportDir.appendingPathComponent("reset.pending") }
+
     // MARK: - Config templates
     // No `set noasynch` needed (and it errors "Command not allowed" here):
     // the library is compiled without SIM_ASYNCH_IO, so synchronous I/O
@@ -173,7 +183,19 @@ final class Machine: ObservableObject {
         noBackup.isExcludedFromBackup = true          // 174 MB of rebuildable state
         try? dir.setResourceValues(noBackup)
 
-        let disk = supportDir.appendingPathComponent("v8.disk")
+        let disk = workingDiskURL
+
+        // Media changes the user asked for are applied HERE, at launch, while
+        // nothing is mounted — swapping a disk under a running VAX (or worse,
+        // under a snapshot taken against the old one) corrupts filesystems.
+        if fm.fileExists(atPath: resetMarkerURL.path) {
+            try? fm.removeItem(at: disk)
+            try? fm.removeItem(at: resetMarkerURL)
+        }
+        if fm.fileExists(atPath: pendingDiskURL.path) {
+            try? fm.removeItem(at: disk)
+            try? fm.moveItem(at: pendingDiskURL, to: disk)
+        }
         if !fm.fileExists(atPath: disk.path) {
             guard let bundled = Bundle.main.url(forResource: "v8", withExtension: "disk") else {
                 throw MachineError.mediaMissing
@@ -203,20 +225,65 @@ final class Machine: ObservableObject {
         // One-shot restore attempts: if a previous launch died mid-restore
         // (marker still present), drop the snapshot and cold-boot rather
         // than crash-looping on it.
-        let sav = supportDir.appendingPathComponent("state.sav")
-        let marker = supportDir.appendingPathComponent("restore.attempt")
-        guard fm.fileExists(atPath: sav.path) else {
-            try? fm.removeItem(at: marker)
+        guard fm.fileExists(atPath: snapshotURL.path) else {
+            try? fm.removeItem(at: attemptURL)
             return false
         }
-        if fm.fileExists(atPath: marker.path) {
-            try? fm.removeItem(at: sav)
-            try? fm.removeItem(at: marker)
+        if fm.fileExists(atPath: attemptURL.path) {
+            try? fm.removeItem(at: snapshotURL)
+            try? fm.removeItem(at: attemptURL)
             return false
         }
-        fm.createFile(atPath: marker.path, contents: nil)
+        fm.createFile(atPath: attemptURL.path, contents: nil)
         return true
     }
+
+    // MARK: - Media (all changes staged for the next launch)
+
+    struct SnapshotInfo {
+        let bytes: Int
+        let saved: Date
+    }
+
+    /// A saved session waiting to be resumed, if any. Present only while the
+    /// machine is paused or between launches.
+    var snapshot: SnapshotInfo? {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: snapshotURL.path),
+              let bytes = attrs[.size] as? Int,
+              let saved = attrs[.modificationDate] as? Date else { return nil }
+        return SnapshotInfo(bytes: bytes, saved: saved)
+    }
+
+    var hasStagedDisk: Bool { FileManager.default.fileExists(atPath: pendingDiskURL.path) }
+    var hasStagedReset: Bool { FileManager.default.fileExists(atPath: resetMarkerURL.path) }
+
+    /// Copy a user-chosen image into place for the next launch. The snapshot
+    /// goes with it: saved kernel state describes the *old* disk, and
+    /// restoring it over a different one would corrupt the filesystem.
+    func stageImport(from url: URL) throws {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        let fm = FileManager.default
+        try fm.createDirectory(at: supportDir, withIntermediateDirectories: true)
+        try? fm.removeItem(at: pendingDiskURL)
+        try fm.copyItem(at: url, to: pendingDiskURL)
+        try? fm.removeItem(at: resetMarkerURL)
+        discardSnapshot()
+    }
+
+    /// Throw the working disk away and re-copy the pristine bundled one.
+    func stageReset() {
+        try? FileManager.default.removeItem(at: pendingDiskURL)
+        FileManager.default.createFile(atPath: resetMarkerURL.path, contents: nil)
+        discardSnapshot()
+    }
+
+    func cancelStagedChanges() {
+        try? FileManager.default.removeItem(at: pendingDiskURL)
+        try? FileManager.default.removeItem(at: resetMarkerURL)
+    }
+
+    func discardSnapshot() { consumeSnapshot() }
 
     private func launchSimhThread(config: String) {
         let path = supportDir.appendingPathComponent(config).path
@@ -234,10 +301,9 @@ final class Machine: ObservableObject {
     private func simhExited(rc: Int32) {
         console.close()
         control.close()
-        let sav = supportDir.appendingPathComponent("state.sav")
         if (phase == .restoring || phase == .starting),
            !restartedAfterFailedRestore,
-           FileManager.default.fileExists(atPath: sav.path) {
+           FileManager.default.fileExists(atPath: snapshotURL.path) {
             // Snapshot didn't restore and scp died: drop it, cold-boot once.
             restartedAfterFailedRestore = true
             consumeSnapshot()
@@ -312,10 +378,8 @@ final class Machine: ObservableObject {
     /// filesystem — delete it and let an unclean kill cold-boot instead
     /// (V8's autoboot fsck self-heals, the authentic behavior).
     private func consumeSnapshot() {
-        try? FileManager.default.removeItem(
-            at: supportDir.appendingPathComponent("state.sav"))
-        try? FileManager.default.removeItem(
-            at: supportDir.appendingPathComponent("restore.attempt"))
+        try? FileManager.default.removeItem(at: snapshotURL)
+        try? FileManager.default.removeItem(at: attemptURL)
     }
 }
 

@@ -8,8 +8,10 @@ import SwiftTerm
 struct MachineView: View {
     @ObservedObject var machine: Machine
     @ObservedObject var terminal: Terminal5620
+    @ObservedObject var settings: Settings
     @State private var showBlit = false
     @State private var autoSwitched = false
+    @State private var showSettings = false
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -18,7 +20,7 @@ struct MachineView: View {
                 .padding(.horizontal, 4)
                 .opacity(showBlit ? 0 : 1)
                 .allowsHitTesting(!showBlit)
-            Blit5620View(terminal: terminal)
+            Blit5620View(terminal: terminal, settings: settings)
                 .opacity(showBlit ? 1 : 0)
                 .allowsHitTesting(showBlit)
             if let status = statusText {
@@ -36,18 +38,45 @@ struct MachineView: View {
             }
         }
         .overlay(alignment: .bottomTrailing) {
-            Button(showBlit ? "Console" : "5620") {
-                showBlit.toggle()
+            HStack(spacing: 8) {
+                #if !os(macOS)
+                // macOS gets the standard Settings scene on Cmd-, instead.
+                Button {
+                    showSettings = true
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+                .buttonStyle(.bordered)
+                .tint(.green)
+                #endif
+                Button(showBlit ? "Console" : "5620") {
+                    showBlit.toggle()
+                }
+                .buttonStyle(.bordered)
+                .tint(.green)
+                .font(.system(.caption, design: .monospaced))
             }
-            .buttonStyle(.bordered)
-            .tint(.green)
-            .font(.system(.caption, design: .monospaced))
             .padding(14)
         }
+        #if !os(macOS)
+        .sheet(isPresented: $showSettings) {
+            NavigationStack {
+                SettingsView(settings: settings, machine: machine, terminal: terminal)
+                    .navigationTitle("Settings")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showSettings = false }
+                        }
+                    }
+            }
+        }
+        #endif
         .onReceive(machine.$phase) { phase in
             guard phase == .up else { return }
             if terminal.state == .idle {
-                terminal.start(dzPort: machine.dzPort)
+                terminal.start(dzPort: machine.dzPort,
+                               nvram: settings.persistNVRAM ? machine.nvramURL : nil)
             }
             if !autoSwitched {
                 autoSwitched = true
