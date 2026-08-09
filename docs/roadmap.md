@@ -40,7 +40,7 @@ Runbook: [spike-a0.md](spike-a0.md)
       device + simulator slices, plus a macOS `vax780cli` harness that desktop-proved
       the whole app protocol before any Swift ran*
 - [x] App boots bundled `v8.disk` to `login:` in a SwiftTerm console view — *the
-      Edition app (working title; team RPL5R637DS): autoboot with self-healing fsck
+      ipnx app (team RPL5R637DS): autoboot with self-healing fsck
       reaches `login:` in ~25–30 s on the iPad Pro simulator; evidence in
       `work/shots-a1-final/`*
 - [x] Background/foreground survival (SIMH save/restore) — *suspend + `save` via the

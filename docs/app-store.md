@@ -1,4 +1,4 @@
-# Shipping Edition
+# Shipping ipnx
 
 *What the repository already does, and what still needs a human with the Hello
 Tham account. Licensing constraints that drive several of these choices are in
@@ -21,13 +21,12 @@ Tham account. Licensing constraints that drive several of these choices are in
 
 ## Still needs a person
 
-1. **Decide the final name.** The build ships the working title *Edition*. App
-   Store names must be unique, and this one is short enough to be taken. It
-   **must not contain "UNIX"** — that is a trademark constraint, not a style
-   preference. Safe vocabulary: *Edition 8*, *Research Edition*, *Blit*,
-   *5620*, *V8*. Changing it means `INFOPLIST_KEY_CFBundleDisplayName` and the
-   App Store Connect record, not the target names.
-2. **Register the bundle ID** `com.hellotham.edition` under team RPL5R637DS.
+1. **Check the name is free.** The app is **ipnx** ("iPad is not Unix", a
+   recursive joke in the GNU tradition). The name carries no trademark, which
+   is the binding constraint — but App Store names must also be *unique*, so
+   confirm it is available. Keep "UNIX" out of the app name and branding; using
+   the expansion as a tagline is descriptive use and a separate judgement call.
+2. **Register the bundle ID** `com.hellotham.ipnx` under team RPL5R637DS.
    Both targets deliberately share it, so enable **universal purchase** if the
    iPad and Mac apps should be one product.
 3. **Bundle the 2017 statement PDF.** [licensing.md](licensing.md) commits to

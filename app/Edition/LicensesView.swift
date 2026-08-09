@@ -58,7 +58,7 @@ struct LicensesView: View {
 
                 section("This app") {
                     Text("""
-                    Edition is open source under the MIT licence. It bundles no \
+                    ipnx is open source under the MIT licence. It bundles no \
                     documentation scans and no Blit ROMs — neither has a permission \
                     statement covering redistribution.
                     """)

@@ -6,7 +6,9 @@ import AppKit
 import UIKit
 #endif
 
-/// "Edition" (working title — must never contain "UNIX", see docs/licensing.md).
+/// "ipnx" — iPad is not Unix. The name itself carries no trademark, which is
+/// the binding constraint (see docs/licensing.md); the expansion is a joke in
+/// the GNU tradition and stays out of the app's name and branding.
 /// Boots the bundled V8 disk, shows it on the operator console and the DMD 5620,
 /// and keeps the machine alive across app lifecycle via SIMH save/restore.
 ///

@@ -13,7 +13,7 @@ interpreters (App Store-legal per UTM SE / iAltair precedent).
 
 **Current state: Track A complete (A1–A3), on iPad *and* Mac.** `libsimh/` and
 `libdmd/` package both emulator cores as xcframeworks (ios, ios-simulator,
-macos slices); `app/` is the Edition app, one source folder built by two targets:
+macos slices); `app/` is the ipnx app, one source folder built by two targets:
 V8 boots to `login:` in ~25–30 s with save/restore instant-on
 ([docs/a1-notes.md](docs/a1-notes.md)); the DMD 5620 runs as a Metal phosphor
 screen — `mux` and `jim` work end-to-end on iPad
@@ -40,12 +40,12 @@ libdmd/build-xcframework.sh
 ```
 
 ```bash
-# Build the Edition iPad app for the simulator
+# Build the ipnx iPad app for the simulator
 cd app && xcodebuild -project Edition.xcodeproj -scheme Edition -destination 'platform=iOS Simulator,name=iPad Pro 13-inch (M5)' build
 ```
 
 ```bash
-# Build the Edition Mac app (same sources, second target)
+# Build the ipnx Mac app (same sources, second target)
 cd app && xcodebuild -project Edition.xcodeproj -scheme EditionMac -destination 'platform=macOS,arch=arm64' build
 ```
 
@@ -110,7 +110,8 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
 - End goal is V10, staged through V8. **V9 is skipped** (surviving V9 = Sun-3 port, no VAX
   kernel code).
 - Free app, self-contained, no ads/IAP — required by the 2017 non-commercial covenant;
-  **"UNIX" must not appear in the app name** (Open Group trademark). Binding rules:
+  **"UNIX" must not appear in the app name** (Open Group trademark) — the app is
+  **ipnx** ("iPad is not Unix"; the name itself carries no mark). Binding rules:
   [docs/licensing.md](docs/licensing.md).
 
 ## Gotchas (each cost the community real debugging time)
