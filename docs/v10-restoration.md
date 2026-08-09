@@ -33,11 +33,22 @@ Note: the [Alhadis GitHub mirror](https://github.com/Alhadis/Research-Unix-v10) 
 
 ```
 4.1BSD ──(myv8, proven)──▶ V8 on SIMH vax780
-  V8 cc builds ──▶ V10 toolchain (pcc2, as, ld)
-  pcc2 builds  ──▶ V10 libc + userland      ← reconcile /usr/include skew here
-  pcc2 builds  ──▶ V10 kernel + boot block  ← lsys/boot constraints (below)
+  V8 cc builds ──▶ V10 toolchain (ccom, as, c2)
+  ccom builds  ──▶ V10 libc + userland      ← reconcile /usr/include skew here
+  ccom builds  ──▶ V10 kernel + boot block  ← lsys/boot constraints (below)
   mkfs + dd    ──▶ v10.disk ──▶ first boot attempt
 ```
+
+**Toolchain names, corrected against the actual tree (2026-08-09).** Earlier
+drafts of this plan said "pcc2". The tarball has no `pcc2`: the compiler is
+**`cmd/ccom`** (1.66 MB, 127 files, with `common/` and a `vax/` code
+generator), alongside an older **`cmd/pcc1/pcc`**, the peephole optimiser
+**`cmd/c2`**, the assembler **`cmd/as`**, and `libcc`. **No system linker is
+present under `cmd/`** — the only `ld` source in the tree is `630/src/630ld.c`,
+which belongs to the terminal. Whether V10 expects the host's `ld` (the a.out
+format is shared with V8) or the loader is simply absent from this snapshot —
+as `rc`'s source is — is the first thing B1 has to settle, because it decides
+whether V8's own `ld` can close the loop.
 
 Why through V8: the toolchain is written to be built *on a Research Unix system*, and V8
 under SIMH is the only bootable one in existence. The community assumed this route in 2017

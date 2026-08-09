@@ -94,9 +94,10 @@ Two interpreters and a wire, mirroring the real 1985 topology (smart terminal �
   (`set noasync` mandatory).
 - **dmd thread** runs the WE32100 terminal; its DUART port A is the wire's other end;
   its 800×1024×1 framebuffer is what the user sees.
-- **Serial transport** starts as a localhost telnet loopback (zero-patch, proven shape) and
-  must evolve into an unthrottled in-process byte queue — realistic serial pacing makes the
-  `mux` download take ~17 minutes, the project's #1 UX risk.
+- **Serial transport** is a localhost telnet loopback (zero-patch, proven shape). An
+  in-process byte queue was planned but proved unnecessary: the throttles were the DUART
+  divisor and SIMH's guest-speed-controlled DZ, both raised by config/patch, so the
+  transport was never the bottleneck. `mux` downloads in ~15 s.
 - The shell is **edition-agnostic**: machines = SIMH simulator + disk image + wiring. V10
   arrives later as just another image (Track B builds it *inside* the running V8 — V10 has
   never been booted by anyone; that restoration is half the project).
@@ -130,9 +131,10 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   constraint for the iPad app, and worth killing the simulator when not in use.
 - dmd_core's GitHub HEAD embeds only the **8;7;5** ROM, which V8's `32ld` download crashes
   (unimplemented `MOVTRW` + unaligned access in the WE32100 core, ~30 KB in) — this is the
-  mechanism behind the documented "use firmware 8;7;3" requirement. Serial pacing lives in
-  dmd_core's DUART (wall-clock per-char at programmed baud; fresh NVRAM = 1200 baud), not
-  in SIMH. Details: docs/spike-a0-results.md, Session 2.
+  mechanism behind the documented "use firmware 8;7;3" requirement. dmd_core's DUART is
+  *one* serial pacer (wall-clock per-char at programmed baud; fresh NVRAM = 1200 baud) —
+  A2 wrongly concluded it was the only one; see the DZ-throttle bullet below.
+  Details: docs/spike-a0-results.md, Session 2.
 - The **canonical** dmd repos are on git.loomcom.com (Gitea; HTML bot-walled, `git clone` +
   API work) — GitHub mirrors are stale. Canonical dmd_core 0.7.1: `reset(1)` = 8;7;3.
   Three emulator gotchas cost this project a day: the 8;7;3 self-test needs BREAK delivered
@@ -253,7 +255,7 @@ carried back out. The golden image's missing `lost+found` was fixed at the same 
 
 Next: **submit** — the remaining steps need the Apple account and a final name
 decision, all listed in [docs/app-store.md](docs/app-store.md) — and **Track B**,
-whose immediate blocker is fetching the TUHS V10 tarballs (nothing downloaded yet).
+whose ingest path and source are both now in place — the TUHS tarballs are in `work/`, and B1 needs only 14.87 MB of the 243 MB tree.
 Not yet exercised: `mux`/`jim` driven by the Mac's real mouse, and "Crisp" scaling
 compared visually. Update the checkboxes in [docs/roadmap.md](docs/roadmap.md)
 as phases complete.

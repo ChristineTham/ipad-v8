@@ -97,10 +97,13 @@ Runbook: [spike-a0.md](spike-a0.md)
       driven by `tools/tapeio.py`. Proven end to end by `work/mediatest.sh`, including a
       VAX binary compiled inside V8 and carried back to the host
 - [x] Repair the golden image's missing `lost+found` (autoboot `fsck` could not self-heal)
-- [ ] **Download the TUHS tarballs** — needs a decision on `v10src.tar.bz2` (71 MB) and
-      `v10blit.tar.bz2` (2.5 MB); nothing is fetched yet
-- [ ] Size the expanded tree against `/usr`'s ~88 MB free, and decide selective ingest vs.
-      an MSCP work disk
+- [x] Download the TUHS tarballs — `v10src.tar.bz2` (74.9 MB) and `v10blit.tar.bz2`
+      (2.6 MB) in `work/`, both `bzip2 -t` clean
+- [x] Size the expanded tree: **243.3 MB / 23,977 files**, so the whole tree does *not*
+      fit `/usr`'s ~88 MB and selective ingest is mandatory, not merely preferable. The
+      B1 set (sys, lsys, libc, ccom, pcc1, as, c2, libcc) is **14.87 MB / 2,127 files** —
+      two courier loads. Longest stored path is 51 bytes, so V7 tar's 100-byte name
+      field is a non-issue
 
 ### B1 — toolchain
 - [ ] Import `v10src` + `v10blit` into the running V8

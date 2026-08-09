@@ -237,24 +237,43 @@ that does not test the tail tests nothing.
 
 ## Capacity planning for Track B
 
+Measured 2026-08-09 from the TUHS tarballs, now in `work/`:
+
+| Archive | Compressed | Expanded | Files |
+|---|---|---|---|
+| `v10src.tar.bz2` | 74.9 MB | **243.3 MB** | 23,977 in 1,100 dirs |
+| `v10blit.tar.bz2` | 2.6 MB | 8.6 MB | 1,373 in 100 dirs |
+
 The work area is `/usr`, with about **88 MB free**, and one courier load is
-**8.1 MB** (25 MB if partition `b` is used too). The V10 source is 71 MB
-*compressed*, and V8 has no `bzip2`, `gzip` or `compress`, so it must arrive
-already expanded — which means many courier loads and quite possibly more room
-than `/usr` has.
+**8.1 MB** (25 MB using partition `b` as well). V8 has no `bzip2`, `gzip` or
+`compress`, so everything arrives expanded.
 
-Two ways out, in order of preference:
+**The whole tree does not fit** — 243 MB against 88 MB, and it would not fit a
+149 MB RP06 partition either. `cmd/` alone is 125.5 MB across 14,642 files.
+So selective ingest is not a preference, it is a requirement:
 
-1. **Ingest selectively.** The success ladder in
-   [v10-restoration.md](v10-restoration.md) starts with the toolchain
-   (`pcc2`, `as`, `ld`) and one command — not the whole tree. Most of the 378
-   commands are not needed until step 4. This is the right answer regardless
-   of capacity: it fails fast on the toolchain, which is where the risk is.
-2. **Give the work filesystem its own controller.** `RQ` is already configured
-   as `uda1` and `ra1`/`ra3`/`ra5` attach at boot, so an MSCP disk is a
-   different controller from `hp` entirely — which is exactly what the
-   one-role-per-unit rule wants. Untested; V8's 1985 `uda` driver predates
-   SIMH's default RD54, so the drive type needs setting explicitly (V8 knows
-   the RA81 at 456 MB).
+| B1 subtree | MB | Files |
+|---|---|---|
+| `sys` (kernel) | 6.38 | 756 |
+| `lsys` (boot, standalone) | 4.91 | 763 |
+| `cmd/ccom` (the C compiler) | 1.66 | 127 |
+| `libc` | 0.93 | 375 |
+| `cmd/pcc1` | 0.51 | 56 |
+| `cmd/as` | 0.40 | 33 |
+| `cmd/c2` | 0.06 | 6 |
+| `libcc` | 0.01 | 11 |
+| **total** | **14.87** | **2,127** |
 
-Sizing this properly needs the actual tarball, which has not been downloaded.
+Two courier loads, and it fits `/usr` with room to build in. That is the whole
+of steps 1–5 of the success ladder, which is where the risk lives anyway.
+
+**One good surprise:** the longest stored path in `v10src` is **51 bytes** and
+in `v10blit` **35** — nothing anywhere near V7 tar's 100-byte name field. The
+truncation risk that `tapeio.py` guards against does not materialise for V10.
+
+If the full tree is ever wanted in one place, give the work filesystem its own
+controller: `RQ` is already configured as `uda1` with `ra1`/`ra3`/`ra5`
+attaching at boot, so an MSCP disk is a different controller from `hp`
+entirely — exactly what the one-role-per-unit rule wants. Untested; V8's 1985
+`uda` driver predates SIMH's default RD54, so the drive type would need setting
+explicitly (V8 knows the RA81 at 456 MB).
