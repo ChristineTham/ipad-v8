@@ -106,8 +106,20 @@ writes the line parameter register SIMH rate-limits the socket to the guest's
 baud. V8 asks for 9600 and gets it. No patch is needed: tmxr keeps a bps
 *factor* that survives LPR reprogramming, and the attach parser deliberately
 permits a bare factor for guest-controlled devices, so both configs now attach
-the DZ as `Speed=*32,127.0.0.1:PORT`. Measured: rx 950 -> **4805 B/s**, the mux
-download **~100 s -> ~5 s**, desktop painting cleanly with no corruption.
+the DZ as `Speed=*32,127.0.0.1:PORT`.
+
+Measured properly — cumulative bytes and elapsed time in the stats line, rather
+than duration inferred from rates: sustained rx **950 -> ~4,300 B/s**, and
+55,473 B crossing the wire between t=81.3 s and t=95.5 s. That is a **~15 s**
+download against A2's ~100 s, so **~4.5× on the rate and ~6–7× end to end**.
+The byte total matching the documented 55,156 B muxterm payload plus protocol
+overhead is what confirms the transfer is complete rather than truncated at
+speed, and the desktop paints cleanly.
+
+A first pass claimed "~5 s" from two stats samples showing high rates and then
+zero. Those samples accounted for only ~15 KB of a 55 KB transfer, which should
+have been the tell: rates alone cannot time a transfer, so log the cumulative
+total.
 
 This corrects A2's conclusion that "pacing lives in dmd_core's DUART". At ÷8 the
 DUART was 9600-equivalent — exactly SIMH's cap — so the two throttles were

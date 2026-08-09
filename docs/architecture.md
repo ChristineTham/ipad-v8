@@ -60,7 +60,8 @@ The DZ11's line 0 connects to the 5620's DUART port A.
   — the bottleneck was upstream: `pdp11_dz.c` declares `tmxr_set_port_speed_control`, so
   SIMH throttles the socket to the 9600 baud V8's tty driver programs. Two 9600 throttles
   were in series. Attaching with `Speed=*32` multiplies the guest's rate without lying to
-  it, and the `mux` download drops to **~5 s**. The transport itself was never the
+  it: sustained rx goes 950 -> ~4,300 B/s and the `mux` download ~100 s ->
+  **~15 s**. The transport itself was never the
   problem, so an in-process queue would not have helped.
 
 ## Display
