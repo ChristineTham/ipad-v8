@@ -1,0 +1,102 @@
+#!/usr/bin/env expect
+#
+# Read-only reconnaissance for a "light session" mode: could the app offer a
+# plain SwiftTerm glass tty beside the 5620, and what would it have to claim to
+# be?
+#
+# Three questions decide the whole design, and none of them can be answered
+# from the host side:
+#
+#   1. /etc/ttys -- does V8 already run a getty on DZ lines other than 0? SIMH's
+#      tmxr hands each new connection to the first free line, so if getty is
+#      enabled on tty01.. then extra sessions cost nothing but a socket. If it
+#      is not, every extra session needs an /etc/ttys change first.
+#
+#   2. What terminal types does /etc/termcap actually know? SwiftTerm is an
+#      xterm-class emulator and 1985 has never heard of xterm; the question is
+#      whether there is a vt100 (or ansi, or the dt80 Datamedia entry) good
+#      enough for vi. Without a usable TERM a light session is a glass tty and
+#      nothing more.
+#
+#   3. Does this kernel have a window size at all? TIOCGWINSZ arrived in 4.3BSD
+#      and V8 is 4.1BSD-derived, so the terminal's size may well be whatever
+#      termcap says it is -- which would make "80x24" a real constraint rather
+#      than a preset.
+#
+# Operates on a scratch copy, never the golden image.
+#   tools/run-v8exp.sh v8-ttys 900
+
+set timeout 300
+log_file -a v8-ttys.log
+proc sendline {x} { send "$x\r" }
+
+proc must {pat {t 0}} {
+    global timeout
+    set use [expr {$t > 0 ? $t : $timeout}]
+    expect -timeout $use "$pat" {
+    } timeout {
+        send_user "\n*** FAILED: never saw '$pat' after ${use}s ***\n"; exit 3
+    } eof {
+        send_user "\n*** FAILED: simulator exited waiting for '$pat' ***\n"; exit 4
+    }
+}
+proc sh   {cmd {t 0}} { must "# "   $t; sendline $cmd }
+proc simh {cmd {t 0}} { must "sim>" $t; sendline $cmd }
+
+# Never touch the golden image: APFS clone if we can, plain copy otherwise.
+catch {exec cp -c rp06v8.golden ttysprobe.disk} err
+if {![file exists ttysprobe.disk]} { exec cp rp06v8.golden ttysprobe.disk }
+
+spawn vax780
+# The desktop vax780 is built WITH async I/O; without this, two overlapping
+# transfers corrupt RP06 I/O and it looks like a hardware fault (CLAUDE.md).
+simh "set noasynch"
+simh "set tto 7b"
+simh "set rp0 rp06"
+simh "at rp0 ttysprobe.disk"
+simh "load -o bootV8 0"
+simh "run 2"
+must "login:" 300
+sendline "root"
+sh "echo TTYS-boot-ok"
+sendline "PATH=:/bin:/usr/bin; export PATH"
+
+sh "echo ---TTYS---"
+sh "cat /etc/ttys"
+sh "echo ---TTYFILES---"
+sh "ls -l /etc/ttys /etc/ttytype /etc/gettytab 2>&1"
+sh "echo ---DZDEVICES---"
+sh "ls -l /dev/tty0* /dev/console 2>&1"
+
+sh "echo ---VT100---"
+sh "grep -n vt100 /etc/termcap"
+sh "echo ---ANSI---"
+sh "grep -n ansi /etc/termcap | sed -n '1,10p'"
+sh "echo ---XTERM---"
+sh "grep -c xterm /etc/termcap"
+sh "echo ---DT80---"
+sh "grep -n dt80 /etc/termcap | sed -n '1,4p'"
+sh "echo ---ENTRYCOUNT---"
+sh "grep -c . /etc/termcap"
+
+sh "echo ---WINSIZE---"
+sh "grep -n -i winsize /usr/include/sys/ioctl.h"
+sh "echo ---TIOCG---"
+sh "grep -n TIOCGWINSZ /usr/include/sys/ioctl.h /usr/include/sgtty.h 2>&1"
+sh "echo ---SGTTYB---"
+sh "grep -n -i 'struct sgttyb' /usr/include/sgtty.h /usr/include/sys/ioctl.h 2>&1"
+
+sh "echo ---WHO---"
+sh "who"
+sh "echo ---TTYNOW---"
+sh "tty"
+sh "echo ---STTY---"
+sh "stty everything 2>&1 | sed -n '1,6p'"
+
+sh "echo TTYS-done"
+sh "cd /; sync; sync; sync"
+sh "/etc/halt"
+simh "quit" 60
+expect eof
+wait
+send_user "\n=== tty reconnaissance complete ===\n"
