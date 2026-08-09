@@ -89,6 +89,32 @@ talk over loopback and nothing leaves the machine.
   `ITSAppUsesNonExemptEncryption` lands as a real boolean, which is worth
   verifying in the built plist rather than assuming.
 
+## The serial bottleneck (and how A2 got it wrong)
+
+Playing with the Mac app produced "speed doesn't seem any faster" twice, which
+was correct and worth chasing. Raising dmd_core's DUART turbo from ÷8 to ÷32
+gave only ~1.7x (100 s -> 60 s), so the wire was not the whole story.
+
+Guessing stopped being useful, so the dmd thread now logs throughput to
+`term-stats.log` in the container: achieved MHz, rx bytes/s, and **inbound queue
+depth**. The queue depth was decisive — ~950 B/s with a **permanently empty
+backlog** means the injector is never behind and the bottleneck must be
+upstream. 950 B/s x 10 bits/char is 9600 baud exactly.
+
+`pdp11_dz.c` calls `tmxr_set_port_speed_control`, so each time V8's tty driver
+writes the line parameter register SIMH rate-limits the socket to the guest's
+baud. V8 asks for 9600 and gets it. No patch is needed: tmxr keeps a bps
+*factor* that survives LPR reprogramming, and the attach parser deliberately
+permits a bare factor for guest-controlled devices, so both configs now attach
+the DZ as `Speed=*32,127.0.0.1:PORT`. Measured: rx 950 -> **4805 B/s**, the mux
+download **~100 s -> ~5 s**, desktop painting cleanly with no corruption.
+
+This corrects A2's conclusion that "pacing lives in dmd_core's DUART". At ÷8 the
+DUART was 9600-equivalent — exactly SIMH's cap — so the two throttles were
+indistinguishable, and A2's experiment (change the DUART, watch the timing
+change) proved only that the DUART was *a* limiter, never the only one. The
+generalisable lesson: measure queue depth, not just throughput.
+
 ## Verification
 
 **macOS**: V8 autoboots to `login:` on the 5620 in a native window in ~25 s

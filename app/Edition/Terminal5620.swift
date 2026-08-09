@@ -44,12 +44,13 @@ final class Terminal5620: ObservableObject {
     /// `nvram` is the 8 KB NVRAM file: the terminal's own settings (baud,
     /// screen preferences) live there, so restoring it is what makes the
     /// terminal feel like the same physical unit across launches.
-    func start(dzPort: UInt16, nvram: URL? = nil) {
+    func start(dzPort: UInt16, nvram: URL? = nil, stats: URL? = nil) {
         guard state == .idle else { return }
         state = .running
         stopFlag.clear()
         let t = Thread { [rxq, kbq, mouseq, frames, stopFlag, speed] in
-            Terminal5620.threadMain(dzPort: dzPort, nvram: nvram, rxq: rxq, kbq: kbq,
+            Terminal5620.threadMain(dzPort: dzPort, nvram: nvram, stats: stats,
+                                    rxq: rxq, kbq: kbq,
                                     mouseq: mouseq, frames: frames, stop: stopFlag,
                                     speed: speed)
             Task { @MainActor in
@@ -76,9 +77,9 @@ final class Terminal5620: ObservableObject {
     /// snapshot while the terminal comes back without muxterm loaded, so the
     /// two ends are talking different protocols. Hanging up lets getty start
     /// over.
-    func restart(dzPort: UInt16, nvram: URL? = nil) {
+    func restart(dzPort: UInt16, nvram: URL? = nil, stats: URL? = nil) {
         guard state == .running else {
-            start(dzPort: dzPort, nvram: nvram)
+            start(dzPort: dzPort, nvram: nvram, stats: stats)
             return
         }
         stopFlag.set()
@@ -88,7 +89,7 @@ final class Terminal5620: ObservableObject {
             // singleton that must not be re-initialised under the old thread.
             try? await Task.sleep(nanoseconds: 500_000_000)
             self.state = .idle
-            self.start(dzPort: dzPort, nvram: nvram)
+            self.start(dzPort: dzPort, nvram: nvram, stats: stats)
         }
     }
 
@@ -109,7 +110,7 @@ final class Terminal5620: ObservableObject {
 
     // MARK: - The dmd thread
 
-    nonisolated private static func threadMain(dzPort: UInt16, nvram: URL?,
+    nonisolated private static func threadMain(dzPort: UInt16, nvram: URL?, stats: URL?,
                                                rxq: EventQueue<UInt16>,
                                                kbq: EventQueue<UInt8>, mouseq: EventQueue<MouseEvent>,
                                                frames: FrameStore, stop: AtomicFlag,
@@ -135,6 +136,13 @@ final class Terminal5620: ObservableObject {
         var t0 = DispatchTime.now()
         var hz = 10_000_000.0 * speed.value
 
+        // Throughput instrumentation: which stage is actually the bottleneck is
+        // not guessable from the outside, so measure it.
+        var rxBytes: UInt64 = 0
+        var lastStats = DispatchTime.now()
+        var lastRxBytes: UInt64 = 0
+        var lastSteps: UInt64 = 0
+
         while !stop.isSet {
             dmd_step_loop(500)
             steps &+= 500
@@ -157,12 +165,19 @@ final class Terminal5620: ObservableObject {
                 }
             }
 
-            // Paced host->terminal injection: ~1 byte per 1000 steps.
-            if iter % 2 == 0, let v = rxq.pop() {
+            // Host -> terminal, unthrottled. dmd_core's rx_deque is an
+            // unbounded VecDeque drained by the DUART at its own wall-clock
+            // char rate (push_front/pop_back, so order is preserved), which
+            // means handing it everything cannot overrun the terminal — and
+            // the A0 bridge's "one byte per 1000 steps" was an arbitrary cap
+            // that silently limited the wire to ~10 KB/s at 10 MHz, below what
+            // the turbo DUART can now carry.
+            while let v = rxq.pop() {
                 if v == 256 {
                     dmd_rs232_break()
                 } else {
                     dmd_rs232_rx(UInt8(truncatingIfNeeded: v))
+                    rxBytes &+= 1
                 }
             }
 
@@ -229,10 +244,38 @@ final class Terminal5620: ObservableObject {
             // NVRAM every ~30 s of virtual time: the app can be killed
             // without warning, and the deferred save above would not run.
             if iter % 600_000 == 0 { saveNVRAM(to: nvram) }
+
+            // Stats every ~2 s of wall clock.
+            if iter % 2000 == 0, let stats {
+                let now = DispatchTime.now()
+                let dt = Double(now.uptimeNanoseconds - lastStats.uptimeNanoseconds) / 1e9
+                if dt >= 2.0 {
+                    let mhz = Double(steps - lastSteps) / dt / 1e6
+                    let rxRate = Double(rxBytes - lastRxBytes) / dt
+                    let line = String(
+                        format: "%.1f MHz achieved (target %.0f)  rx %.0f B/s  backlog %d bytes\n",
+                        mhz, hz / 1e6, rxRate, rxq.count)
+                    appendStats(line, to: stats)
+                    lastStats = now
+                    lastRxBytes = rxBytes
+                    lastSteps = steps
+                }
+            }
         }
     }
 
     // MARK: - NVRAM (8 KB of terminal settings)
+
+    nonisolated private static func appendStats(_ line: String, to url: URL) {
+        guard let data = line.data(using: .utf8) else { return }
+        if let handle = try? FileHandle(forWritingTo: url) {
+            defer { try? handle.close() }
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: data)
+        } else {
+            try? data.write(to: url)
+        }
+    }
 
     nonisolated private static func loadNVRAM(from url: URL?) {
         guard let url, let data = try? Data(contentsOf: url), data.count == 8192 else { return }
@@ -335,6 +378,11 @@ final class EventQueue<T>: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return items.isEmpty ? nil : items.removeFirst()
+    }
+
+    var count: Int {
+        lock.lock(); defer { lock.unlock() }
+        return items.count
     }
 }
 

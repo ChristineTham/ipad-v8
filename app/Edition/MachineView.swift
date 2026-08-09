@@ -86,7 +86,8 @@ struct MachineView: View {
             if terminal.state == .idle {
                 terminal.speed.set(settings.speed.multiplier)
                 terminal.start(dzPort: machine.dzPort,
-                               nvram: settings.persistNVRAM ? machine.nvramURL : nil)
+                               nvram: settings.persistNVRAM ? machine.nvramURL : nil,
+                               stats: machine.termStatsURL)
             }
             if !autoSwitched {
                 autoSwitched = true

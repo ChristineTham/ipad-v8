@@ -139,6 +139,17 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   as a 0x00 byte (patched); the kb FIFO drops keys typed faster than ~ms (type at 100 ms);
   the DUART needs a ~real-time-paced CPU (~10 MHz), never flat-out. Patches:
   tools/dmdbridge/patches/.
+- **The DZ line is throttled to the guest's baud rate.** `pdp11_dz.c` calls
+  `tmxr_set_port_speed_control`, so every LPR write by V8's tty driver makes SIMH
+  rate-limit the socket to whatever V8 asks for — 9600, measured as ~950 B/s with an
+  empty injector backlog. Fix without patching: `att dz -m Speed=*32,127.0.0.1:PORT`.
+  tmxr keeps the bps *factor* separately (only reset for real serial ports) so it
+  survives reprogramming, and its attach parser deliberately allows a bare factor for
+  guest-speed-controlled devices. The mux download went ~100 s -> ~5 s. This **corrects
+  A2**: pacing was never "in the DUART" alone — there were two 9600 throttles in series
+  (DUART at ÷8 = 9600-equivalent, and this), which is why changing only one gave 1.7x.
+  Diagnose with queue depth, not throughput: a permanently empty inbound queue means the
+  bottleneck is upstream, and no downstream tuning can help.
 - The infamous "55K download stall" was **not a stall**: 32ld sends only muxterm's
   text+data (**50,324 B** per its COFF header; entry 0x71e85c), not the 144,603-B file —
   the rest is symbol table. ~55K on the wire = complete download + idle mux desktop.

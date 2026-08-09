@@ -73,6 +73,9 @@ final class Machine: ObservableObject {
     var workingDiskURL: URL { supportDir.appendingPathComponent("v8.disk") }
     /// The 5620's 8 KB NVRAM, kept beside the machine it belongs to.
     var nvramURL: URL { supportDir.appendingPathComponent("nvram.bin") }
+    /// Terminal throughput log — which stage limits the wire is not guessable
+    /// from the outside, so the dmd thread records it.
+    var termStatsURL: URL { supportDir.appendingPathComponent("term-stats.log") }
 
     private var snapshotURL: URL { supportDir.appendingPathComponent("state.sav") }
     private var attemptURL: URL { supportDir.appendingPathComponent("restore.attempt") }
@@ -80,6 +83,16 @@ final class Machine: ObservableObject {
     private var resetMarkerURL: URL { supportDir.appendingPathComponent("reset.pending") }
 
     // MARK: - Config templates
+    //
+    // `Speed=*32` on the DZ attach is the fix for the download being slow.
+    // pdp11_dz.c declares tmxr_set_port_speed_control, so every time V8's tty
+    // driver programs the line parameter register SIMH faithfully throttles
+    // the socket to the guest's baud rate — 9600, measured as ~950 B/s with an
+    // empty injector backlog. tmxr keeps a separate bps *factor* that survives
+    // those reprogrammings (it is only reset for real serial ports), and its
+    // attach parser deliberately allows a bare factor even for devices that
+    // control their own speed. So this multiplies whatever V8 asks for by 32
+    // without lying to the guest about its line settings.
     // No `set noasynch` needed (and it errors "Command not allowed" here):
     // the library is compiled without SIM_ASYNCH_IO, so synchronous I/O
     // (the V8-safe mode, simh issue #425) is guaranteed at build time.
@@ -92,7 +105,7 @@ final class Machine: ObservableObject {
     set remote timeout=600
     set tto 7b
     set dz lines=8
-    att dz -m 127.0.0.1:\(dzPort)
+    att dz -m Speed=*32,127.0.0.1:\(dzPort)
     set rp0 rp06
     at rp0 v8.disk
     set tu0 te16
@@ -117,7 +130,7 @@ final class Machine: ObservableObject {
     set remote timeout=600
     restore state.sav
     set console telnet=127.0.0.1:\(consolePort)
-    att dz -m 127.0.0.1:\(dzPort)
+    att dz -m Speed=*32,127.0.0.1:\(dzPort)
     cont
     """ }
 

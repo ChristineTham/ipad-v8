@@ -54,11 +54,14 @@ The DZ11's line 0 connects to the 5620's DUART port A.
   (`set dz lines=8` / `att dz -m 8888`); a shim socket pumps bytes into dmd_core's RX queue
   and drains its TX queue, stripping telnet IAC minimally. This is exactly how the proven
   desktop setups work; localhost sockets inside one app are fine on iOS.
-- **v2 (the pacing fix):** patch `sim_tmxr` to expose one line as an in-process byte-queue
-  pair and run it unthrottled. **Deferred indefinitely by evidence** (A0/A2): serial
-  pacing lives in dmd_core's DUART, not the transport — with the ÷8 turbo patch the
-  `mux` download measures ~100 s on the iPad over the v1 socket, and an unthrottled
-  transport would not change that floor.
+- **v2 (the pacing fix):** still not needed, but for a better reason than A2 gave.
+  A2 deferred it believing dmd_core's DUART was the floor. Instrumenting the injector
+  (rx rate plus **queue depth**) showed the inbound queue permanently empty at ~950 B/s
+  — the bottleneck was upstream: `pdp11_dz.c` declares `tmxr_set_port_speed_control`, so
+  SIMH throttles the socket to the 9600 baud V8's tty driver programs. Two 9600 throttles
+  were in series. Attaching with `Speed=*32` multiplies the guest's rate without lying to
+  it, and the `mux` download drops to **~5 s**. The transport itself was never the
+  problem, so an in-process queue would not have helped.
 
 ## Display
 

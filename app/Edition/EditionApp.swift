@@ -60,7 +60,8 @@ struct EditionApp: App {
                 Divider()
                 Button("Restart Terminal") {
                     terminal.restart(dzPort: machine.dzPort,
-                                     nvram: settings.persistNVRAM ? machine.nvramURL : nil)
+                                     nvram: settings.persistNVRAM ? machine.nvramURL : nil,
+                                     stats: machine.termStatsURL)
                 }
             }
         }
