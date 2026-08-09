@@ -187,6 +187,36 @@ int main(int argc, char **argv)
                100.0 * pc_cnt[best] / pc_samples);
         pc_cnt[best] = 0;
     }
+    /* Feed a line longer than the old 100-column screen and let the ROM's own
+       terminal emulator lay it out. Where it wraps says whether the firmware
+       has really taken the new geometry, or is just not crashing. */
+    for (int i = 0; i < 240; i++)
+        dmd_rs232_rx((uint8_t)('A' + (i % 26)));
+    double until = now_s() + 3.0;
+    while (now_s() < until) {
+        dmd_step_loop(500);
+        steps += 500;
+        if (++iter % 100 == 0) {
+            double virt = (double)steps / hz, real = now_s() - t0;
+            if (virt > real + 0.002)
+                usleep((useconds_t)((virt - real) * 1e6));
+        }
+    }
+    {
+        const uint8_t *fb = dmd_video_ram();
+        int rightmost = -1, rows = 0;
+        for (uint32_t y = 0; y < sh; y++) {
+            int any = 0;
+            for (uint32_t x = 0; x < sw; x++)
+                if (fb[(y * (sw / 8)) + (x / 8)] & (0x80 >> (x % 8))) {
+                    any = 1;
+                    if ((int)x > rightmost) rightmost = (int)x;
+                }
+            rows += any;
+        }
+        printf("\n# after 240 chars: rightmost lit pixel = %d (screen is %u wide),"
+               " %d rows have ink\n", rightmost, sw, rows);
+    }
     dump_pgm("idle-scope.pgm", sw, sh);
     return 0;
 }

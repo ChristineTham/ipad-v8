@@ -78,7 +78,7 @@ index dd3c8c8..2976872 100644
          self.r[R_AP]
      }
 diff --git a/src/dmd.rs b/src/dmd.rs
-index 9576473..d948c57 100644
+index 9576473..14b0b4b 100644
 --- a/src/dmd.rs
 +++ b/src/dmd.rs
 @@ -3,7 +3,9 @@
@@ -95,16 +95,16 @@ index 9576473..d948c57 100644
              1 => {
                  self.bus.load(0, &LO_ROM_V1)?;
                  self.bus.load(LO_ROM_V1_LEN, &HI_ROM_V1)?;
-+                self.patch_screen_bitmap(0x9ca8)?;
++                self.patch_screen_bitmap(0x9ca8, LO_ROM_V1_LEN + HI_ROM_V1.len())?;
              }
              _ => {
                  self.bus.load(0, &LO_ROM_V2)?;
                  self.bus.load(LO_ROM_V2_LEN, &HI_ROM_V2)?;
-+                self.patch_screen_bitmap(0xd8c8)?;
++                self.patch_screen_bitmap(0xd8c8, LO_ROM_V2_LEN + HI_ROM_V2.len())?;
              }
          }
  
-@@ -64,6 +68,38 @@ impl Dmd {
+@@ -64,6 +68,65 @@ impl Dmd {
          Ok(())
      }
  
@@ -127,7 +127,7 @@ index 9576473..d948c57 100644
 +    /// Everything the ROM draws with goes through a Bitmap*, so rewriting this
 +    /// one retargets the firmware's own output. Nothing is touched at the
 +    /// default 800x1024, so the stock terminal is bit-for-bit unchanged.
-+    fn patch_screen_bitmap(&mut self, at: usize) -> Result<(), BusError> {
++    fn patch_screen_bitmap(&mut self, at: usize, rom_len: usize) -> Result<(), BusError> {
 +        let w = SCREEN_W.load(Ordering::Relaxed);
 +        let h = SCREEN_H.load(Ordering::Relaxed);
 +        if w == 800 && h == 1024 {
@@ -137,13 +137,40 @@ index 9576473..d948c57 100644
 +        self.bus.load(at + 4, &words.to_be_bytes())?;
 +        self.bus.load(at + 12, &(w as u16).to_be_bytes())?;
 +        self.bus.load(at + 14, &(h as u16).to_be_bytes())?;
-+        Ok(())
++        self.repair_rom_checksum(rom_len)
++    }
++
++    /// Re-stamp the ROM's self-test checksum after editing the image.
++    ///
++    /// The firmware's ROM TEST is the first thing it runs, and it halts the
++    /// machine on failure -- so without this, changing a single ROM byte, even
++    /// one that only alters the screen *height*, bricks the terminal.
++    ///
++    /// The algorithm is from AT&T's own published firmware source, which Dave
++    /// Dykstra released under the GPL in March 1994 (5620rom/src/term/
++    /// selftest.c, rom()): add each byte into a 16-bit accumulator and rotate
++    /// it left one bit, over every byte but the last two, then ones-complement.
++    /// The two check bytes live at the very end of the image, low byte first.
++    /// The routine tries the first 32K bank, and on mismatch carries the
++    /// running sum on to larger banks -- "there might be a 2nd bank of rom" --
++    /// which is the path both shipped images actually take: 8;7;3 checksums
++    /// over 0x0000-0xFFFD to 0xb425, stored at 0xFFFE, and 8;7;5 over
++    /// 0x0000-0x1FFFD to 0xb1ef.
++    fn repair_rom_checksum(&mut self, rom_len: usize) -> Result<(), BusError> {
++        let mut c: u16 = 0;
++        for a in 0..(rom_len - 2) {
++            c = c.wrapping_add(u16::from(self.bus.read_byte(a, AccessCode::AddressFetch)?));
++            c = if c & 0x8000 != 0 { (c << 1) | 1 } else { c << 1 };
++        }
++        let ck = !c;
++        self.bus
++            .load(rom_len - 2, &[(ck & 0xff) as u8, (ck >> 8) as u8])
 +    }
 +
      pub fn video_ram(&mut self) -> &[u8] {
          self.bus.video_ram()
      }
-@@ -76,6 +112,10 @@ impl Dmd {
+@@ -76,6 +139,10 @@ impl Dmd {
          self.cpu.get_pc()
      }
  
@@ -154,7 +181,7 @@ index 9576473..d948c57 100644
      pub fn get_ap(&self) -> u32 {
          self.cpu.get_ap()
      }
-@@ -124,6 +164,18 @@ impl Dmd {
+@@ -124,6 +191,18 @@ impl Dmd {
          self.bus.rs232_rx(c);
      }
  
@@ -173,7 +200,7 @@ index 9576473..d948c57 100644
      pub fn keyboard_rx(&mut self, keycode: u8) {
          self.bus.keyboard_rx(keycode);
      }
-@@ -157,6 +209,33 @@ impl Dmd {
+@@ -157,6 +236,33 @@ impl Dmd {
  // Provide a C interface
  //
  
@@ -207,7 +234,7 @@ index 9576473..d948c57 100644
  #[no_mangle]
  fn dmd_init(version: u8) -> c_int {
      match DMD.lock() {
-@@ -375,6 +454,28 @@ fn dmd_get_nvram(nvram: &mut [u8; 8192]) -> c_int {
+@@ -375,6 +481,28 @@ fn dmd_get_nvram(nvram: &mut [u8; 8192]) -> c_int {
      }
  }
  
