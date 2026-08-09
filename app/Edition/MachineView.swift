@@ -87,7 +87,7 @@ struct MachineView: View {
                 terminal.speed.set(settings.speed.multiplier)
                 terminal.start(dzPort: machine.dzPort,
                                nvram: settings.persistNVRAM ? machine.nvramURL : nil,
-                               stats: machine.termStatsURL)
+                               stats: settings.statsURL(machine))
             }
             if !autoSwitched {
                 autoSwitched = true

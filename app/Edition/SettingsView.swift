@@ -107,9 +107,13 @@ struct SettingsView: View {
             Button("Restart terminal") {
                 terminal.restart(dzPort: machine.dzPort,
                                  nvram: settings.persistNVRAM ? machine.nvramURL : nil,
-                                 stats: machine.termStatsURL)
+                                 stats: settings.statsURL(machine))
             }
             Text("Power-cycles the 5620 and hangs up the line. Use this if a restored session left mux running on the host with no muxterm in the terminal.")
+                .font(.caption).foregroundStyle(.secondary)
+
+            Toggle("Log wire diagnostics", isOn: $settings.logTerminalStats)
+            Text("Appends serial throughput and queue depth to term-stats.log in the app's container. Off by default; takes effect when the terminal next starts, so use Restart terminal above.")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }

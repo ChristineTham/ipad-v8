@@ -26,9 +26,12 @@ Runbook: [spike-a0.md](spike-a0.md)
       `work/shots-final/`. Full story: spike-a0-results.md Session 6*
 - [x] Measure `muxterm` download time — *definitive (Session 6): wire burst 55,156 B
       (50,324 payload + protocol overhead); ~98 s at ÷8 turbo, ~6 min computed at the
-      1200-baud NVRAM default; pacing lives in dmd_core's DUART, not SIMH*
-- [x] Record findings in `docs/spike-a0-results.md`; runbook corrected (remaining VERIFY:
-      aap/blit flags, socat bridge, open-simh re-verification)
+      1200-baud NVRAM default. **A0/A2 concluded pacing lived in dmd_core's DUART alone;
+      A3 corrected that** — SIMH's DZ was throttling to the guest's programmed 9600 in
+      series with it, and ÷8 happened to be 9600-equivalent, making the two
+      indistinguishable. See [a3-notes.md](a3-notes.md)*
+- [x] Record findings in `docs/spike-a0-results.md`; runbook corrected — all VERIFY markers
+      resolved 2026-08-09 (aap/blit and the socat bridge were superseded, not executed)
 
 *Exit criteria: `mux` usable end-to-end; serial-pacing fix chosen (config vs. patch).*
 
@@ -86,6 +89,18 @@ Runbook: [spike-a0.md](spike-a0.md)
       menu); snapshot on quit, never on hide*
 
 ## Track B — the V10 restoration *(desktop SIMH until it boots; see [v10-restoration.md](v10-restoration.md))*
+
+### B0 — the ingest path *(done 2026-08-09, before any V10 source exists)*
+- [x] Establish how files cross between host and V8 — [media-exchange.md](media-exchange.md).
+      Tape is unusable (V8's `ht` panics SIMH's Massbus adapter); the working path is a
+      raw-only courier disk on `rp1` with the work area on `/usr`, 512-byte transfers,
+      driven by `tools/tapeio.py`. Proven end to end by `work/mediatest.sh`, including a
+      VAX binary compiled inside V8 and carried back to the host
+- [x] Repair the golden image's missing `lost+found` (autoboot `fsck` could not self-heal)
+- [ ] **Download the TUHS tarballs** — needs a decision on `v10src.tar.bz2` (71 MB) and
+      `v10blit.tar.bz2` (2.5 MB); nothing is fetched yet
+- [ ] Size the expanded tree against `/usr`'s ~88 MB free, and decide selective ingest vs.
+      an MSCP work disk
 
 ### B1 — toolchain
 - [ ] Import `v10src` + `v10blit` into the running V8

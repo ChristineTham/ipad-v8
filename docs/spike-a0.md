@@ -5,8 +5,11 @@ terminal connects, `mux` runs** — and measure the serial-pacing problem, befor
 iOS code. Everything here has been done by others; our job is to reproduce it and take
 numbers.*
 
-*Steps marked **VERIFY** are assembled from research, not yet executed here — confirm them
-during the spike and correct this document (that's a spike deliverable).*
+*No **VERIFY** markers remain. The last four were resolved on 2026-08-09: the two `mux`
+paths in §4 are confirmed present in the image, and the two third-party 5620 frontends were
+superseded by driving `dmd_core`'s C FFI directly, so their flag syntax is moot. Where a step
+was never executed, this document now says so rather than leaving a marker that implies it
+still might be.*
 
 ## 0. Workspace and prerequisites
 
@@ -92,34 +95,28 @@ parity bit set** (mark parity — strip bit 7 until after login), and running
 query) and wait — the terminal-identification handshake that a 5620 with 8;7;3 firmware
 answers. The host side of the protocol is proven.
 
-**Option A — 68K Blit (fastest visual win; telnet built in):**
+**Option A — 68K Blit: not taken.** The original 68000 Blit is an explicit non-goal (ROM
+permissions unresolved — [licensing.md](licensing.md), [architecture.md](architecture.md)),
+so `aap/blit` was never built and its flag syntax was never established. The *path* question
+in this option is settled though, and it is worth recording because the naming trap is easy
+to fall into: **both** `mux` binaries really do ship in the V8 image —
+`/usr/blit/bin/mux` (68000, `mpx`-era, alongside `mpx`/`ismpx`/`jterm`) and
+`/usr/jerq/bin/mux` (the 5620, alongside `32ld`/`jim`). Confirmed by listing the extracted
+`v8jerq` tape in `work/v8src/{blit,jerq}/bin`. The 5620 is the one this project wants.
 
-```bash
-git clone https://github.com/aap/blit && cd blit
-# build per its README (SDL2), then:
-./blit -t 'tcp!127.0.0.1!8888'          # VERIFY exact flag syntax from README
-```
+**Option B — DMD 5620: superseded before it was needed.** The plan here was a third-party
+frontend (`dmd_gtk`, or the SDL one) plus a `socat` pty↔tcp bridge. What actually happened in
+session 2 was better: `dmd_core` was driven directly through its **built-in C FFI**
+(`tools/dmdbridge/`), which is also what the app does, so there is one terminal
+implementation rather than two. `work/dmd_gtk` and `work/dmd_sdl` remain as reference
+checkouts only — no frontend flag syntax (`-F 8:7:3 -d …`) or socat IAC behaviour was ever
+verified, and none is needed now.
 
-Log in inside the Blit window, then run `/usr/blit/bin/mux` (**VERIFY path**; this is the
-68000 route — `mpx`-era software, dusty but proven by timnewsham with screenshots).
-
-**Option B — DMD 5620 (the product path; needs a pty↔tcp bridge since dmd5620 1.3 dropped
-telnet):**
-
-```bash
-git clone https://github.com/dmdmtg/dmd_gtk && cd dmd_gtk
-# build per its README (GTK3); alternatively try the experimental SDL frontend.
-socat pty,link="$PWD/dz0",raw,echo=0 tcp:127.0.0.1:8888 &   # VERIFY: telnet IAC bytes may
-                                                            # need socat to strip; if garbage
-                                                            # appears, attach SIMH's DZ with
-                                                            # a raw (non-telnet) mode instead
-./dmd5620 -F 8:7:3 -d ./dz0                                  # VERIFY flag names: firmware
-                                                            # 8;7;3 selection + tty device
-```
-
-Log in inside the 5620 window, then run `mux` (host side lives in `/usr/jerq/bin` —
-resolved: it is **not** on root's PATH — invoke `/usr/jerq/bin/mux`). `mux` downloads `muxterm` into the terminal
-via `32ld`; layers should appear, button 3 opens the menu. Try `jim`.
+The substantive findings that this option was meant to produce were obtained anyway, and are
+in [spike-a0-results.md](spike-a0-results.md): firmware 8;7;3 selection (canonical dmd_core
+`reset(1)`), the BREAK-as-0x00 patch, the keyboard FIFO's ~ms drop rate, and the DUART's
+need for real-time CPU pacing. `mux` downloading `muxterm` via `32ld`, layers, the button-3
+menu and `jim` were all proven on the real thing in A2 ([a2-notes.md](a2-notes.md)).
 
 ## 5. Measure (the actual point of the spike)
 

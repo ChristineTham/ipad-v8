@@ -143,14 +143,50 @@ fragment shader; the licences screen renders in full; version reads 1.0 (1).
 Evidence in `work/shots-a3/`: `mac-boot-t60.png`, `ipad-amber-phosphor.png`,
 `ipad-licences.png`.
 
+**Restore-on-relaunch on macOS** — verified 2026-08-09, closing the last
+lifecycle gap. Launching with a snapshot present took the resume path rather
+than a cold boot:
+
+```
+resume.conf-3> restore state.sav
+resume.conf-5> att dz -m Speed=*32,127.0.0.1:45070
+resume.conf-6> cont
+%SIM-INFO: Running
+```
+
+`state.sav` was deleted the moment the machine ran (the disk-consistency
+invariant), listeners bound on freshly rotated ports, and no `cont` segfault —
+so the [#576](https://github.com/open-simh/simh/issues/576) failure mode did
+not trigger. Quitting then wrote a new 1,922,583-byte snapshot through the
+terminate-later path, which also proves the *restored* machine was alive and
+suspendable. `term-stats.log` stayed frozen, confirming the new gating.
+
 Not verified yet:
 
 - **`mux` and `jim` on macOS with the real mouse.** Everything but the input
   layer is shared with the iPad, where both work (A2), but the Mac's button
   mapping has never been pointed at mux's B3 menu. Driving the Mac app needs
   event-injection permission this session did not have.
-- **Restore-on-relaunch on macOS.** The snapshot is written correctly on
-  quit; consuming it on the next launch uses the same code as iOS, which
-  passed 3/3 cycles in A1, but the Mac path has not been run.
 - **"Crisp" scaling visually.** The arithmetic is checked (including the
-  overflow case), but no screenshot yet compares it against the moiré.
+  overflow case) and settings are known to reach the Metal shader, since
+  switching the phosphor repaints the live screen. No screenshot yet compares
+  the stipple side by side.
+
+## Track B media exchange
+
+Testing how to get the V10 source into V8 turned up two defects and one dead
+end, all recorded in [media-exchange.md](media-exchange.md):
+
+- The **tape route is unusable**: V8's `ht` driver panics the kernel against
+  SIMH's Massbus adapter. The disk courier replaces it.
+- Raw disk transfers **must be 512 bytes**, and `tar` conceals violations —
+  its blocking-20 write path drops everything past the first record and still
+  exits 0.
+- The golden image had **no `lost+found`**, so autoboot `fsck` could not
+  self-heal an orphaned inode and dropped to a single-user shell instead of
+  `login:`. That is a crash-resilience hole in the shipped app, since `cc`
+  leaves temp files in `/usr/tmp`. Fixed in the image; `work/fix-lostfound.exp`
+  reapplies it.
+
+`work/mediatest.sh` proves the whole path end to end, including a VAX binary
+compiled inside V8 and carried back out to the host.

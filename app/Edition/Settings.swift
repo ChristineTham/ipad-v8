@@ -91,6 +91,13 @@ final class Settings: ObservableObject {
     @Published var persistNVRAM: Bool { didSet { store.set(persistNVRAM, forKey: Key.nvram) } }
     @Published var speed: Speed { didSet { store.set(speed.rawValue, forKey: Key.speed) } }
 
+    /// Throughput instrumentation for the serial wire. Off by default: it is a
+    /// diagnostic that appends to a file in the container forever, which has no
+    /// business running in a shipped build. It stays available because finding
+    /// the real serial bottleneck needed queue depth, not guesswork, and the
+    /// next such question will need it again.
+    @Published var logTerminalStats: Bool { didSet { store.set(logTerminalStats, forKey: Key.stats) } }
+
     private let store: UserDefaults
 
     private enum Key {
@@ -99,6 +106,7 @@ final class Settings: ObservableObject {
         static let mouse = "input.mouseSensitivity"
         static let nvram = "terminal.persistNVRAM"
         static let speed = "terminal.speed"
+        static let stats = "terminal.logStats"
     }
 
     init(store: UserDefaults = .standard) {
@@ -109,6 +117,13 @@ final class Settings: ObservableObject {
         mouseSensitivity = sensitivity == 0 ? 1.0 : sensitivity      // 0 == never set
         persistNVRAM = store.object(forKey: Key.nvram) as? Bool ?? true
         speed = Speed(rawValue: store.string(forKey: Key.speed) ?? "") ?? .fast
+        logTerminalStats = store.bool(forKey: Key.stats)          // absent == false
+    }
+
+    /// Where the terminal thread should write throughput stats, or nil to keep
+    /// it silent. Centralised so no call site can accidentally re-enable it.
+    func statsURL(_ machine: Machine) -> URL? {
+        logTerminalStats ? machine.termStatsURL : nil
     }
 
     /// Largest size not exceeding `available` that shows the 800x1024 screen

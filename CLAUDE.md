@@ -200,14 +200,32 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
 - Integer ("Crisp") screen scaling must be allowed to fail: forcing a minimum factor of
   1 makes small windows request a screen *larger* than the space available. Below 1:1
   there is no integral scale — fall back to filling.
+- **Host↔guest file transfer (Track B): one role per disk unit, 512-byte raw transfers.**
+  Full recipe in [docs/media-exchange.md](docs/media-exchange.md). SIMH has no
+  host-directory passthrough of any kind, so everything goes through emulated media.
+  The **tape route is dead**: V8's `ht` driver does a 16-bit read of a Massbus register
+  that `mba_rdreg` rejects (tolerated only in SIMH's VAX-750 build), panicking the
+  kernel with `panic: mchk`; classic 3.12-5 has the same guard, and `installV8` only
+  avoids it by running under 4.1BSD. Use `rp1` as a **raw-only courier**
+  (`/dev/rrp1a` = `c 4 8`) with the work area on `/usr` — mixing raw and buffered I/O
+  on one `hp` unit corrupts the filesystem *after* everything appears to work. Raw
+  transfers **must be 512 bytes**: 4 KB+ writes fail with `er1=5<RMR,ILF>` after one
+  record, and `tar`'s own blocking-20 write path silently drops everything past the
+  first 10,240 bytes while still exiting 0.
+- The golden image shipped **no `lost+found` on either filesystem**, so an autoboot
+  `fsck` needing to reconnect an orphaned inode aborted to a single-user shell instead
+  of `login:` ("Automatic reboot failed... help!") — reachable in the app whenever a
+  hard kill interrupts a compile. Fixed 2026-08-09 via `/etc/mklost+found` on `/` and
+  `/usr`; `work/fix-lostfound.exp` reapplies it if the image is ever rebuilt.
 
 ## Conventions
 
 - Big binaries (disk images, tapes, tarballs) never enter git — rebuild locally per the
   runbook (gitignored: `*.disk`, `*.tap`, `work/`).
-- [docs/spike-a0.md](docs/spike-a0.md) contains **VERIFY** markers on steps assembled from
-  research but not yet executed — executing them, then correcting the doc and dropping the
-  marker, is part of the spike's deliverable.
+- **VERIFY** marks a documented step assembled from research but not yet executed here.
+  Resolving one means executing it and correcting the doc, *or* recording that the step was
+  superseded — never silently deleting the marker. None remain open
+  ([docs/spike-a0.md](docs/spike-a0.md)'s last four were closed 2026-08-09).
 - Track B keeps pristine upstream sources separate from our patches; every fix is a logged
   patch with a rationale, plus a dated lab-notebook entry (`docs/v10-log/`).
 - Cite primary sources (TUHS preferred) for factual claims in docs.
@@ -228,9 +246,14 @@ session with no muxterm), staged disk import/export/reset, a licences screen and
 Store prep — plus a **native Mac app** sharing every line of app code. Evidence:
 `work/shots-a1-final/`, `work/shots-a2/`, `work/shots-a3/`.
 
+**Track B's ingest path is also settled** (2026-08-09, phase B0): host↔guest file
+transfer is proven end to end — [docs/media-exchange.md](docs/media-exchange.md),
+`tools/tapeio.py`, `work/mediatest.sh` — including a VAX binary compiled inside V8 and
+carried back out. The golden image's missing `lost+found` was fixed at the same time.
+
 Next: **submit** — the remaining steps need the Apple account and a final name
-decision, all listed in [docs/app-store.md](docs/app-store.md) — and **Track B**
-(V10 restoration, desktop SIMH first). Not yet exercised: `mux`/`jim` driven by the
-Mac's real mouse, and restore-on-relaunch on macOS (both share all non-input code with
-the verified iPad paths). Update the checkboxes in [docs/roadmap.md](docs/roadmap.md)
+decision, all listed in [docs/app-store.md](docs/app-store.md) — and **Track B**,
+whose immediate blocker is fetching the TUHS V10 tarballs (nothing downloaded yet).
+Not yet exercised: `mux`/`jim` driven by the Mac's real mouse, and "Crisp" scaling
+compared visually. Update the checkboxes in [docs/roadmap.md](docs/roadmap.md)
 as phases complete.
