@@ -1,5 +1,5 @@
 diff --git a/src/bus.rs b/src/bus.rs
-index 342e723..7fecd00 100644
+index 186b156..4348b2d 100644
 --- a/src/bus.rs
 +++ b/src/bus.rs
 @@ -1,5 +1,6 @@
@@ -9,7 +9,7 @@ index 342e723..7fecd00 100644
  use crate::duart::Duart;
  use crate::err::BusError;
  use crate::mem::Mem;
-@@ -56,6 +57,64 @@ pub trait Device: Send + Sync + Debug {
+@@ -56,6 +57,77 @@ pub trait Device: Send + Sync + Debug {
  //  0x700000..0x7fffff     RAM (256K or 1M)
  //
  
@@ -46,20 +46,33 @@ index 342e723..7fecd00 100644
 +/// bss and stacks. It has to move somewhere the firmware has no plans for.
 +///
 +/// So a custom screen is placed immediately above the 1 MB the terminal
-+/// believes it has. The ROM sizes memory from VALMAXADDR in NVRAM and its
-+/// allocator never looks past 0x7FFFFF, so this space is invisible to it --
-+/// every documented structure keeps its documented address, and Free_RAM keeps
-+/// its full extent. Only the screen Bitmap's base, patched in Dmd::reset,
-+/// points into it.
++/// believes it has. That ceiling is not a guess: the ROM's `maxaddr` table
++/// (0xa37c in 8;7;3) has exactly two entries -- 0x00740000 for a 256 KB
++/// machine and 0x00800000 for a 1 MB one -- and bootrom.s indexes it with a
++/// memory-size index the self-test can only ever set to 0 or 1. The firmware
++/// is structurally incapable of handing out an address above 0x7FFFFF, so
++/// every documented structure keeps its documented address, Free_RAM keeps its
++/// full extent, and nothing can ever be allocated on top of the screen.
++/// Only the screen Bitmap's base, patched in Dmd::set_screen, points up there.
 +pub const RAM_BASE: usize = 0x700000;
 +pub const RAM_STOCK: usize = 0x100000;
 +
++/// The largest screen we will ever hand out, and the reserve that makes a
++/// resize of a *running* terminal safe.
++///
++/// RAM is allocated once, when the Bus is built, and a running WE32100 cannot
++/// have its memory reallocated underneath it. So rather than size RAM to the
++/// screen, we always carry the worst case: 1 MB for the firmware plus enough
++/// for the biggest framebuffer. 2048x2048x1 is 512 KB, which makes the
++/// emulated machine 1.5 MB -- irrelevant on any host that can run this at all,
++/// and it buys the property that matters: changing screen size never allocates.
++/// Resizing is then just twenty bytes of descriptor and a new slice length.
++pub const MAX_SCREEN_W: usize = 2048;
++pub const MAX_SCREEN_H: usize = 2048;
++pub const RAM_EXTRA: usize = (MAX_SCREEN_W / 8) * MAX_SCREEN_H;
++
 +pub fn ram_len() -> usize {
-+    if screen_is_custom() {
-+        RAM_STOCK + screen_bytes()
-+    } else {
-+        RAM_STOCK
-+    }
++    RAM_STOCK + RAM_EXTRA
 +}
 +
 +/// Where the framebuffer lives, as an offset into that RAM region.
@@ -74,7 +87,7 @@ index 342e723..7fecd00 100644
  pub struct Bus {
      rom: Mem,
      duart: Duart,
-@@ -74,7 +133,7 @@ impl Bus {
+@@ -74,7 +146,7 @@ impl Bus {
              mouse: Mouse::new(),
              vid: Mem::new(0x500000, 0x2, false),
              bbram: Mem::new(0x600000, 0x2000, false),
@@ -83,7 +96,7 @@ index 342e723..7fecd00 100644
              video_ram_dirty: false,
          }
      }
-@@ -100,7 +159,7 @@ impl Bus {
+@@ -100,7 +172,7 @@ impl Bus {
              return Ok(&mut self.bbram);
          }
  
@@ -92,7 +105,7 @@ index 342e723..7fecd00 100644
              return Ok(&mut self.ram);
          }
  
-@@ -108,15 +167,20 @@ impl Bus {
+@@ -108,15 +180,20 @@ impl Bus {
      }
  
      fn video_ram_range(&self) -> Range<usize> {
@@ -119,55 +132,33 @@ index 342e723..7fecd00 100644
      }
  
      pub fn read_byte(&mut self, address: usize, access: AccessCode) -> Result<u8, BusError> {
-@@ -227,6 +291,18 @@ impl Bus {
-         self.duart.rs232_rx(c);
-     }
- 
-+    pub fn duart_debug(&self) -> String {
-+        self.duart.debug_state()
-+    }
-+
-+    pub fn rs232_tx_break(&mut self) -> bool {
-+        self.duart.rs232_tx_break()
-+    }
-+
-+    pub fn rs232_break(&mut self) {
-+        self.duart.rs232_break();
-+    }
-+
-     pub fn keyboard_rx(&mut self, keycode: u8) {
-         self.duart.keyboard_rx(keycode);
-     }
-diff --git a/src/cpu.rs b/src/cpu.rs
-index dd3c8c8..2976872 100644
---- a/src/cpu.rs
-+++ b/src/cpu.rs
-@@ -2630,6 +2630,10 @@ impl Cpu {
-         self.r[R_PC]
-     }
- 
-+    pub fn ir_debug(&self) -> String {
-+        format!("{:?}", self.ir)
-+    }
-+
-     pub fn get_ap(&self) -> u32 {
-         self.r[R_AP]
-     }
 diff --git a/src/dmd.rs b/src/dmd.rs
-index 9576473..15e79e1 100644
+index 01f7871..4a1d60d 100644
 --- a/src/dmd.rs
 +++ b/src/dmd.rs
-@@ -3,7 +3,9 @@
+@@ -3,7 +3,11 @@
  use crate::bus::{AccessCode, Bus};
  use crate::cpu::Cpu;
  use crate::err::BusError;
-+use crate::bus::{ram_len, screen_offset, RAM_BASE, SCREEN_H, SCREEN_W};
++use crate::bus::{
++    ram_len, screen_offset, MAX_SCREEN_H, MAX_SCREEN_W, RAM_BASE, SCREEN_H, SCREEN_W,
++};
  use crate::rom_hi::{HI_ROM_V1, HI_ROM_V2};
 +use std::sync::atomic::Ordering;
  use crate::rom_lo::{LO_ROM_V1, LO_ROM_V1_LEN, LO_ROM_V2, LO_ROM_V2_LEN};
  
  use libc::*;
-@@ -40,7 +42,7 @@ impl Dmd {
+@@ -24,6 +28,9 @@ static INIT: Once = Once::new();
+ pub struct Dmd {
+     cpu: Cpu,
+     bus: Bus,
++    /// Which ROM is loaded, so a later resize knows where its screen
++    /// descriptor lives (0x9ca8 in 8;7;3, 0xd8c8 in 8;7;5).
++    version: u8,
+ }
+ 
+ impl Default for Dmd {
+@@ -40,14 +47,16 @@ impl Dmd {
          });
  
          let cpu = Cpu::new();
@@ -176,23 +167,56 @@ index 9576473..15e79e1 100644
          Dmd {
              cpu,
              bus,
-@@ -52,10 +54,12 @@ impl Dmd {
++            version: 1,
+         }
+     }
+ 
+     pub fn reset(&mut self, version: u8) -> Result<(), BusError> {
++        self.version = version;
+         match version {
              1 => {
                  self.bus.load(0, &LO_ROM_V1)?;
-                 self.bus.load(LO_ROM_V1_LEN, &HI_ROM_V1)?;
-+                self.patch_screen_bitmap(0x9ca8, LO_ROM_V1_LEN + HI_ROM_V1.len())?;
-             }
-             _ => {
-                 self.bus.load(0, &LO_ROM_V2)?;
+@@ -58,12 +67,110 @@ impl Dmd {
                  self.bus.load(LO_ROM_V2_LEN, &HI_ROM_V2)?;
-+                self.patch_screen_bitmap(0xd8c8, LO_ROM_V2_LEN + HI_ROM_V2.len())?;
              }
          }
++        self.patch_screen_bitmap()?;
  
-@@ -64,6 +68,67 @@ impl Dmd {
+         self.cpu.reset(&mut self.bus)?;
+ 
          Ok(())
      }
  
++    /// Where this ROM keeps its screen `Bitmap`, and how long the image is.
++    fn rom_layout(&self) -> (usize, usize) {
++        match self.version {
++            1 => (0x9ca8, LO_ROM_V1_LEN + HI_ROM_V1.len()),
++            _ => (0xd8c8, LO_ROM_V2_LEN + HI_ROM_V2.len()),
++        }
++    }
++
++    /// Retarget a *running* terminal's screen.
++    ///
++    /// This is the whole point of keeping the geometry in a descriptor rather
++    /// than rebuilding the machine: the firmware reads `display` every time it
++    /// draws, so rewriting those twenty bytes changes where and how wide the
++    /// next blit lands, with the CPU still executing. Nothing is allocated --
++    /// the reserve above the firmware's 1 MB was claimed when the Bus was
++    /// built -- and nothing is reset, so the terminal keeps its DUART state,
++    /// its NVRAM and its host connection across the change.
++    ///
++    /// The new framebuffer window is cleared first, because it is either
++    /// untouched reserve (garbage) or the previous screen at a different
++    /// stride (visually scrambled), and the firmware will only repaint the
++    /// parts of it that something writes to.
++    pub fn set_screen(&mut self, w: usize, h: usize) -> Result<(), BusError> {
++        SCREEN_W.store(w, Ordering::Relaxed);
++        SCREEN_H.store(h, Ordering::Relaxed);
++        let base = RAM_BASE + screen_offset();
++        self.bus.load(base, &vec![0u8; (w / 8) * h])?;
++        self.patch_screen_bitmap()
++    }
++
 +
 +    /// Retarget the screen `Bitmap` the ROM carries in its own image.
 +    ///
@@ -210,14 +234,20 @@ index 9576473..15e79e1 100644
 +    /// screen size reachable at all: the geometry is data, not code.
 +    ///
 +    /// Everything the ROM draws with goes through a Bitmap*, so rewriting this
-+    /// one retargets the firmware's own output. Nothing is touched at the
-+    /// default 800x1024, so the stock terminal is bit-for-bit unchanged.
-+    fn patch_screen_bitmap(&mut self, at: usize, rom_len: usize) -> Result<(), BusError> {
++    /// one retargets the firmware's own output.
++    ///
++    /// AT&T's bootrom.s declares it in as many words, under the comment "The
++    /// display bitmap in rom at last!" -- it is `.data`, and on this machine
++    /// `.data` is linked into ROM and never copied down, so this *is* the live
++    /// structure. There is no RAM shadow to chase.
++    ///
++    /// At the stock 800x1024 every field written here is the value already in
++    /// the image, so a default boot re-stamps the ROM with itself: identical
++    /// bytes, identical checksum, bit-for-bit the shipped firmware.
++    fn patch_screen_bitmap(&mut self) -> Result<(), BusError> {
++        let (at, rom_len) = self.rom_layout();
 +        let w = SCREEN_W.load(Ordering::Relaxed);
 +        let h = SCREEN_H.load(Ordering::Relaxed);
-+        if w == 800 && h == 1024 {
-+            return Ok(());
-+        }
 +        let base = (RAM_BASE + screen_offset()) as u32;
 +        let words = (w / 32) as u32;
 +        self.bus.load(at, &base.to_be_bytes())?;
@@ -257,52 +287,54 @@ index 9576473..15e79e1 100644
      pub fn video_ram(&mut self) -> &[u8] {
          self.bus.video_ram()
      }
-@@ -76,6 +141,10 @@ impl Dmd {
-         self.cpu.get_pc()
-     }
- 
-+    pub fn ir_debug(&self) -> String {
-+        self.cpu.ir_debug()
-+    }
-+
-     pub fn get_ap(&self) -> u32 {
-         self.cpu.get_ap()
-     }
-@@ -124,6 +193,18 @@ impl Dmd {
-         self.bus.rs232_rx(c);
-     }
- 
-+    pub fn duart_debug(&self) -> String {
-+        self.bus.duart_debug()
-+    }
-+
-+    pub fn rs232_tx_break(&mut self) -> bool {
-+        self.bus.rs232_tx_break()
-+    }
-+
-+    pub fn rs232_break(&mut self) {
-+        self.bus.rs232_break();
-+    }
-+
-     pub fn keyboard_rx(&mut self, keycode: u8) {
-         self.bus.keyboard_rx(keycode);
-     }
-@@ -157,6 +238,33 @@ impl Dmd {
+@@ -173,6 +280,65 @@ impl Dmd {
  // Provide a C interface
  //
  
-+/// Set the emulated CRT's geometry. Must be called before dmd_init(); width
-+/// must be a multiple of 32. Returns DMD_SUCCESS, or DMD_FAILURE if the
-+/// framebuffer would not fit the 5620's 1 MB of RAM.
++/// Is this a geometry the emulated CRT can take?
++///
++/// Width must be a multiple of 32 -- a Bitmap's stride is counted in 32-bit
++/// Words and the ROM's blit routines work a Word at a time -- and the
++/// framebuffer must fit the reserve claimed above the firmware's 1 MB.
++fn screen_ok(w: usize, h: usize) -> bool {
++    w != 0 && h != 0 && w % 32 == 0 && w <= MAX_SCREEN_W && h <= MAX_SCREEN_H
++}
++
++/// Set the emulated CRT's geometry before dmd_init(). Returns DMD_SUCCESS, or
++/// DMD_FAILURE if the geometry is one the terminal cannot take.
++///
++/// Prefer dmd_resize_screen(): booting stock and resizing afterwards runs the
++/// power-on self-test against the pristine ROM.
 +#[no_mangle]
 +pub extern "C" fn dmd_set_screen(width: u32, height: u32) -> c_int {
 +    let (w, h) = (width as usize, height as usize);
-+    if w == 0 || h == 0 || w % 32 != 0 || (w / 8) * h > 0x100000 {
++    if !screen_ok(w, h) {
 +        return ERROR;
 +    }
 +    SCREEN_W.store(w, Ordering::Relaxed);
 +    SCREEN_H.store(h, Ordering::Relaxed);
 +    SUCCESS
++}
++
++/// Resize a terminal that is already running, without resetting it.
++///
++/// Safe to call at any time after dmd_init(): no memory is allocated, the CPU
++/// is not reset, and the DUART, NVRAM and host connection are untouched. The
++/// caller must re-read dmd_video_ram() afterwards -- both the pointer and the
++/// length change -- and should expect the screen to come back cleared.
++#[no_mangle]
++pub extern "C" fn dmd_resize_screen(width: u32, height: u32) -> c_int {
++    let (w, h) = (width as usize, height as usize);
++    if !screen_ok(w, h) {
++        return ERROR;
++    }
++    match DMD.lock() {
++        Ok(mut dmd) => match dmd.set_screen(w, h) {
++            Ok(()) => SUCCESS,
++            Err(_) => ERROR,
++        },
++        Err(_) => ERROR,
++    }
 +}
 +
 +/// Report it back, so a host that did not set it still knows what to draw.
@@ -321,146 +353,3 @@ index 9576473..15e79e1 100644
  #[no_mangle]
  fn dmd_init(version: u8) -> c_int {
      match DMD.lock() {
-@@ -375,6 +483,28 @@ fn dmd_get_nvram(nvram: &mut [u8; 8192]) -> c_int {
-     }
- }
- 
-+#[no_mangle]
-+fn dmd_rs232_break() -> c_int {
-+    match DMD.lock() {
-+        Ok(mut dmd) => {
-+            dmd.rs232_break();
-+            SUCCESS
-+        }
-+        Err(_) => ERROR,
-+    }
-+}
-+
-+#[no_mangle]
-+fn dmd_rs232_tx_break(flag: &mut u8) -> c_int {
-+    match DMD.lock() {
-+        Ok(mut dmd) => {
-+            *flag = dmd.rs232_tx_break() as u8;
-+            SUCCESS
-+        }
-+        Err(_) => ERROR,
-+    }
-+}
-+
- #[cfg(test)]
- mod tests {
-     use crate::dmd::Dmd;
-diff --git a/src/duart.rs b/src/duart.rs
-index ed7eea0..ccd09c5 100644
---- a/src/duart.rs
-+++ b/src/duart.rs
-@@ -347,6 +347,8 @@ impl Port {
- 
- pub struct Duart {
-     ports: [Port; 2],
-+    tx_break_pending: bool,
-+    cmd_log: std::collections::VecDeque<(usize, u8)>,
-     acr: u8,
-     ipcr: u8,
-     inprt: u8,
-@@ -378,13 +380,19 @@ fn delay_rate(csr_bits: u8, acr_bits: u8) -> Duration {
-         BAUD_RATES_B[baud_bits]
-     };
- 
--    Duration::new(0, NS_PER_SEC / (baud_rate / BITS_PER_CHAR))
-+    // ipad-v8 spike TURBO patch: run the wire 8x the programmed baud
-+    // (9600-equivalent at the 1200-baud NVRAM default) — the speed real
-+    // 5620 hardware supported. The 32ld protocol is block-acked and
-+    // self-paces safely at this rate.
-+    Duration::new(0, (NS_PER_SEC / (baud_rate / BITS_PER_CHAR)) / 32)
- }
- 
- impl Duart {
-     pub fn new() -> Duart {
-         Duart {
-             ports: [Port::new(), Port::new()],
-+            tx_break_pending: false,
-+            cmd_log: std::collections::VecDeque::new(),
-             acr: 0,
-             ipcr: 0x40,
-             inprt: 0xb,
-@@ -457,6 +465,34 @@ impl Duart {
-         self.ports[PORT_0].rx_deque.push_front(c);
-     }
- 
-+    /// Deliver a BREAK condition on the RS232 (host) line: error flags plus
-+    /// the 0x00 data byte a real UART receives. (ipad-v8 spike patch.)
-+    /// Debug dump of both ports' live state (ipad-v8 spike diagnostics).
-+    pub fn debug_state(&self) -> String {
-+        let p = |i: usize| {
-+            let port = &self.ports[i];
-+            format!(
-+                "port{}: conf={:02x} stat={:02x} hold={:02x?} shift={:02x?} rxfifo={} txdq={} rxdq={} delay={:?}",
-+                i, port.conf, port.stat, port.tx_holding_reg, port.tx_shift_reg,
-+                port.rx_fifo.len(), port.tx_deque.len(), port.rx_deque.len(), port.char_delay
-+            )
-+        };
-+        format!("{} | {} | isr={:02x} imr={:02x} ivec={:02x} | cmds={:02x?}", p(0), p(1), self.isr, self.imr, self.ivec, self.cmd_log)
-+    }
-+
-+    /// Poll-and-clear: has the terminal started a BREAK toward the host?
-+    pub fn rs232_tx_break(&mut self) -> bool {
-+        let b = self.tx_break_pending;
-+        self.tx_break_pending = false;
-+        b
-+    }
-+
-+    pub fn rs232_break(&mut self) {
-+        let port = &mut self.ports[PORT_0];
-+        port.stat |= STS_RXB | STS_PER;
-+        port.rx_char(0);
-+    }
-+
-     /// Queue a single character for processing by the keyboard port
-     pub fn keyboard_rx(&mut self, c: u8) {
-         self.ports[PORT_1].rx_deque.push_front(c);
-@@ -512,6 +548,10 @@ impl Duart {
-     }
- 
-     fn handle_command(&mut self, cmd: u8, port_no: usize) {
-+        self.cmd_log.push_back((port_no, cmd));
-+        if self.cmd_log.len() > 48 {
-+            self.cmd_log.pop_front();
-+        }
-         let port = &mut self.ports[port_no];
- 
-         let (tx_ists, rx_ists, dbk_ists) = match port_no {
-@@ -588,6 +628,11 @@ impl Duart {
-             }
-             CR_START_BRK => {
-                 debug!("PORT{}: Start Break.", port_no);
-+                if !port.loopback() && port_no == PORT_0 {
-+                    // ipad-v8 spike patch: expose the outgoing BREAK (the
-+                    // in-code TODO) — 32ld's download handshake needs it.
-+                    self.tx_break_pending = true;
-+                }
-                 if port.loopback() {
-                     // We only care about a BREAK condition if it's
-                     // looping back to te receiver.
-@@ -595,6 +640,11 @@ impl Duart {
-                     // TODO: We may want to expose a BREAK condition
-                     // to the outside world at some point.
-                     port.stat |= STS_RXB | STS_PER;
-+                    // ipad-v8 spike patch: a real UART receives a BREAK as a
-+                    // 0x00 data byte alongside the error flags. The 8;7;3
-+                    // ROM's loopback self-test waits for that byte to end its
-+                    // walking-bit sequence.
-+                    port.rx_char(0);
-                     // Set "Delta Break"
-                     self.isr |= dbk_ists;
-                 }
-diff --git a/src/lib.rs b/src/lib.rs
-index b9aaf30..6016950 100644
---- a/src/lib.rs
-+++ b/src/lib.rs
-@@ -19,3 +19,5 @@ mod utils;
- extern crate lazy_static;
- extern crate libc;
- extern crate log;
-+
-+pub use crate::dmd::Dmd;

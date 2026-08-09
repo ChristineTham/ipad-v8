@@ -30,11 +30,19 @@ extern "C" {
 /* version 1 = firmware 8;7;3 (required by Research Unix mux). */
 int32_t dmd_init(uint8_t version);
 
-/* Emulated CRT geometry (ipnx patch). Call dmd_set_screen BEFORE dmd_init;
- * width must be a multiple of 32 (a Bitmap's stride is counted in 32-bit
- * Words). Defaults to the real 5620's 800x1024, in which case nothing in the
- * firmware is touched. */
+/* Emulated CRT geometry (ipnx patch). Width must be a multiple of 32 (a
+ * Bitmap's stride is counted in 32-bit Words) and at most 2048x2048.
+ *
+ * dmd_set_screen applies before dmd_init. dmd_resize_screen retargets a
+ * terminal that is already running: nothing is allocated and the CPU is not
+ * reset, so the DUART, NVRAM and host connection all survive. Prefer it --
+ * booting at the stock 800x1024 and resizing afterwards means the power-on
+ * self-test runs against the pristine ROM.
+ *
+ * After a resize the caller must re-read dmd_video_ram(): both the pointer and
+ * the length change, and the new screen comes back cleared. */
 int32_t dmd_set_screen(uint32_t width, uint32_t height);
+int32_t dmd_resize_screen(uint32_t width, uint32_t height);
 int32_t dmd_get_screen(uint32_t *width, uint32_t *height);
 
 int32_t dmd_step(void);

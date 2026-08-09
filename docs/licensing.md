@@ -73,6 +73,17 @@ boundary matters, so it is written down precisely:
   method, the expression is ours, and nothing GPL-licensed is copied, linked or
   distributed. But it *was* learned from GPL source, so it is disclosed here rather
   than quietly absorbed.
+- **The exposure shrank again on 2026-08-10.** The terminal now boots at the stock
+  800×1024 and is resized while running ([screen-size.md](screen-size.md)), so the
+  power-on self-test runs against the **pristine** ROM and the checksum is no longer
+  on the boot path at all. At the default size every byte the resize code writes is
+  the byte already in the image — a default boot re-stamps the firmware with itself.
+- We also read `bootrom.s`, `setup.h`, `vitty.c`, `windowproc.c`, the linker script
+  and `doc/memmap/map3` to locate the geometry, and the namelist
+  `lsys.nm.1.1` for ROM symbol addresses. Nothing was copied: what the code uses from
+  all of that is four addresses and two integers — `display` at `0x9ca8`, `maxaddr`
+  at `0xa37c`, and the constants 800 and 1024 — every one of which is also directly
+  observable in the ROM binary we already ship, and each was verified against it.
 
 **The line not to cross without deciding first:** building a modified 5620 ROM from
 that tree — which is the obvious way to get a natively wide-screen terminal — makes

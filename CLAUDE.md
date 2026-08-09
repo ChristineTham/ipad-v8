@@ -155,6 +155,25 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   as a 0x00 byte (patched); the kb FIFO drops keys typed faster than ~ms (type at 100 ms);
   the DUART needs a ~real-time-paced CPU (~10 MHz), never flat-out. Patches:
   tools/dmdbridge/patches/.
+- **5620 screen size: widen freely, never shorten below 983 px.** Boot stock and call
+  `dmd_resize_screen()` on the running terminal — it rewrites the one 20-byte `Bitmap`
+  (`display`, ROM `0x9ca8`, AT&T's own `bootrom.s`: *"The display bitmap in rom at
+  last!"*) — it is `.data` linked into ROM and never copied down, so **there is no RAM
+  shadow to chase**. RAM is never reallocated: the emulator always carries 1 MB + a
+  512 KB reserve at `0x800000`, which the firmware structurally cannot reach (its
+  `maxaddr` table at `0xa37c` has exactly two entries, ceiling `0x00800000`). But the
+  text grid is *compile-time* — `XCMAX`/`YCMAX` from `setup.h` fold to 87/69 — so the
+  pre-`mux` terminal keeps 88 columns at any size (the short `800` appears only 3 times
+  in the whole 64 KB ROM), and it scrolls at pixel row 969, so a screen under 983 tall
+  silently collapses its text. `mux` layers are exempt: `windowproc.c` recomputes the
+  grid per layer from the layer rect. Full evidence and the measurements:
+  [docs/screen-size.md](docs/screen-size.md); harness `libdmd/test/resize-scope.c`.
+- AT&T published the 5620 ROM **source** (GPL, Dave Dykstra, 1994 —
+  [dmdmtg/5620rom](https://github.com/dmdmtg/5620rom); its README names `lsys.8;7;3`,
+  the firmware we run). It answers firmware questions faster than any experiment:
+  `src/xt/layersys/rdpatch/lsys.nm.1.1` is the **symbol table for `lsym.8;7;3`** with
+  ROM addresses. Read it, don't link it — the boundary is in
+  [docs/licensing.md](docs/licensing.md).
 - **The DZ line is throttled to the guest's baud rate.** `pdp11_dz.c` calls
   `tmxr_set_port_speed_control`, so every LPR write by V8's tty driver makes SIMH
   rate-limit the socket to whatever V8 asks for — 9600, measured as ~950 B/s with an

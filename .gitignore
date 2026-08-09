@@ -18,6 +18,7 @@ libsimh/dist/
 libdmd/dist/
 libdmd/build-smoke
 libdmd/build-idle-scope
+libdmd/build-resize-scope
 tools/vendor/
 tools/dmdbridge/.cargo/
 
@@ -34,4 +35,5 @@ tools/dmdbridge/.cargo/
 app/*.log
 libdmd/build-*.log
 libdmd/*.pgm
+libdmd/*.png
 __pycache__/
