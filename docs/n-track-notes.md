@@ -216,6 +216,49 @@ CH11 at 0164140, which appears there as `04140`.
 nothing else, so `ENIOADDR` returning `02:07:01:00:00:01` is the end-to-end
 check that a 66-byte DMA landed exactly where the UNIBUS map said it would.
 
+### What is *not* done: IP above the driver
+
+Raw Ethernet works in both directions. **IP does not yet reach the wire.**
+`tools/n3-internet.exp` sets the interface up exactly as the CSRC's own
+`usr/src/cmd/inet/READ_ME` prescribes and then asks SLiRP's DNS forwarder to
+resolve a name (`tools/v8/dnsq.c`, built on `udp_connect(3)` because V8
+predates every resolver library). Everything reports success and nothing
+happens:
+
+- `ipconfig /dev/il0 v8 slirp-net /dev/il1 &` and `udpconfig /dev/ip17 &` both
+  run with no diagnostic; `ps` shows both alive
+- `route add '*' gateway` returns 0
+- `udp_connect` returns a descriptor and the `write` reports the full length
+- …and the reply never comes
+
+The SIMH-side trace says where the break is. Over a whole session
+`set il debug=CMD` records exactly five commands — `ILC_OFFLINE` (the probe),
+`ILC_RESET`, `ILC_STAT`, `ILC_ONLINE` (attach), and a single `ILC_RCV` — and
+**no `ILC_LDXMIT` or `ILC_XMIT` at all**. V8's IP layer never hands the driver
+a packet, so this is above the device model and above SLiRP; it is V8's own
+streams configuration.
+
+Things already ruled out or established, for whoever picks this up:
+
+- `route(8)` talks to the IP layer through **`/dev/ip0`** specifically, which
+  is easy to miss — the minor number of a `/dev/ip*` node is the IP protocol
+  number (hence `ip6` = TCP, `ip17` = UDP), and 0 is used as a control channel.
+  Creating it changed `route` from silent failure to `rc=0`, but not the
+  outcome.
+- The image's kernel config has `pseudo-device uarp 1` but **no `arp`**, so
+  `NARP` is 0 and `NUARP` is 1. That is the intended arrangement — `ipconfig`
+  *is* the ARP daemon — and `ip_arp.c` compiles under
+  `#if NUARP > 0 && NINET > 0`. But `ip_ld.c`'s `IPIOARP` case is guarded by
+  `#if NARP > 0` and still sets `IFF_ARP` and ACKs when that is false, so a
+  half-configured interface would look healthy. Worth checking whether
+  `ifp->queue` (the user-ARP path in `arp_resolve`) is ever bound.
+- `ipdstate[]` is `[256]`, so minor 17 is in bounds — `pseudo-device inet 6`
+  bounds the *interface* array `ipif[]`, not the protocol table.
+- Receive-side type matching is fine: the driver compares `icp->type` against
+  a `u_short` read straight out of DMA'd frame bytes, and `htons(0x0800)` on a
+  little-endian VAX gives exactly the 08 00 that appears on the wire. The ARP
+  test relies on the same path and works.
+
 ### Odds and ends
 
 - **`attach il nat:` is flaky immediately after a previous NAT session** —

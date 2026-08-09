@@ -123,10 +123,13 @@ The courier is too small and too manual to build V10 on: 8.1 MB a load against a
 - [x] **N2** `pdp11_il.c` — *done 2026-08-09: the Interlan NI1010 modelled against
       `sim_ether`, in `libsimh/patches/`. Note the plan named the wrong driver —
       `conf/files` builds `dev/ill.c`, not `dev/il.c`*
-- [x] **N3** V8 kernel rebuilt with `il0` — *done 2026-08-09:
+- [~] **N3** V8 kernel rebuilt with `il0` — *2026-08-09:
       `il0 at uba0 csr 164040 vec 0340 ipl x14`, and ARP round-trips to SLiRP
-      (`ARP ROUND TRIP OK`, 0 errors). Reaching the wider Internet over TCP is still
-      open*
+      (`ARP ROUND TRIP OK`, 0 errors), so raw Ethernet works both ways. **IP above
+      the driver does not**: ipconfig/udpconfig/route all report success but the
+      device model logs no transmit command at all, so V8's streams IP never hands
+      the driver a packet. Diagnosis and what has been ruled out:
+      [n-track-notes.md](n-track-notes.md)*
 - [ ] **N4** Derive and document the netfs wire format → `docs/netfs-protocol.md`
 - [ ] **N5** Host netfs server over TCP, read-only first
 - [ ] **N6** Guest client (~50 lines: socket, handshake, `gmount`)
