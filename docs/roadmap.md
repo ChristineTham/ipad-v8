@@ -111,16 +111,22 @@ The courier is too small and too manual to build V10 on: 8.1 MB a load against a
 243 MB tree. Three changes, the last of which the iPad app needs anyway.
 
 - [x] **N0** RP07 disk (516 MB; `/usr` on partition `f`) + migration + `lost+found` —
-      *done 2026-08-09: `work/rp07mig.sh` produces `rp07v8.golden`, which boots on its
+      *done 2026-08-09: `tools/rp07mig.sh` produces `rp07v8.golden`, which boots on its
       own with `/usr` at **459,905 KB, 408,364 free** (was 141,578/90,035). Root needed
       no filesystem copy — partition `a` is the same 15,884 sectors at cylinder 0 on
       both drive types, so a host byte copy suffices. Notes and gotchas:
       [n-track-notes.md](n-track-notes.md)*
-- [ ] **N1** 4.3BSD under SIMH with `XU` + `nat:` reaching the Internet — a control
-      experiment proving the NAT plumbing before we build on it
-- [ ] **N2** `pdp11_il.c` — model the Interlan NI1010 (3 registers) against `sim_ether`.
-      V8 has `il`/`ec` drivers; SIMH has only DEUNA; this closes the gap. Highest risk
-- [ ] **N3** Rebuild the V8 kernel with `il0`; ping the outside world
+- [x] **N1** SLiRP NAT plumbing — *reduced 2026-08-09: `attach xu nat:` initialises
+      10.0.2.0/24 (gateway 10.0.2.2, DNS 10.0.2.3) and passes frames. The 4.3BSD half
+      was dropped — no ready-made SIMH image exists at TUHS, and `dev/ill.c` is a
+      better conformance test than a second driver would have been*
+- [x] **N2** `pdp11_il.c` — *done 2026-08-09: the Interlan NI1010 modelled against
+      `sim_ether`, in `libsimh/patches/`. Note the plan named the wrong driver —
+      `conf/files` builds `dev/ill.c`, not `dev/il.c`*
+- [x] **N3** V8 kernel rebuilt with `il0` — *done 2026-08-09:
+      `il0 at uba0 csr 164040 vec 0340 ipl x14`, and ARP round-trips to SLiRP
+      (`ARP ROUND TRIP OK`, 0 errors). Reaching the wider Internet over TCP is still
+      open*
 - [ ] **N4** Derive and document the netfs wire format → `docs/netfs-protocol.md`
 - [ ] **N5** Host netfs server over TCP, read-only first
 - [ ] **N6** Guest client (~50 lines: socket, handshake, `gmount`)

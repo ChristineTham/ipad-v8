@@ -17,6 +17,11 @@ fi
 ACTUAL=$(git -C "$SIMH_DIR" rev-parse HEAD)
 [ "$ACTUAL" = "$SIMH_REV" ] || echo "warning: open-simh at $ACTUAL, not pinned $SIMH_REV" >&2
 
+# Our additions to upstream: the Interlan NI1010 device V8 can actually drive,
+# and UNIT_IDLE on the telnet console poll unit so idling works at all. Both
+# are idempotent, so this is safe on an already-patched tree.
+patches/apply.sh "$SIMH_DIR"
+
 slice() {  # <slug> [extra cmake args...]
   local slug=$1; shift
   cmake -S . -B "build/$slug" -DCMAKE_BUILD_TYPE=Release "$@" > "build/cmake-$slug.log" 2>&1

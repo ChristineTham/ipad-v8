@@ -21,7 +21,10 @@ set(PDP11_SOURCES
   PDP11/pdp11_lp.c PDP11/pdp11_tq.c PDP11/pdp11_xu.c PDP11/pdp11_ry.c
   PDP11/pdp11_cr.c PDP11/pdp11_rp.c PDP11/pdp11_tu.c PDP11/pdp11_hk.c
   PDP11/pdp11_vh.c PDP11/pdp11_dmc.c PDP11/pdp11_dup.c PDP11/pdp11_td.c
-  PDP11/pdp11_tc.c PDP11/pdp11_rk.c PDP11/pdp11_io_lib.c PDP11/pdp11_ch.c)
+  PDP11/pdp11_tc.c PDP11/pdp11_rk.c PDP11/pdp11_io_lib.c PDP11/pdp11_ch.c
+  # Our Interlan NI1010 (libsimh/patches/); vax780_syslist.c references it
+  # unconditionally once the patch is applied, so it must be compiled here too.
+  PDP11/pdp11_il.c)
 
 set(SIM_SOURCES
   scp.c sim_console.c sim_fio.c sim_timer.c sim_sock.c sim_tmxr.c

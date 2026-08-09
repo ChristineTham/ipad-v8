@@ -1,0 +1,92 @@
+#!/usr/bin/env expect
+#
+# N3 stage 4: put a frame on the wire and get one back.
+#
+# telnet was the wrong instrument -- it is interactive, and in a scripted
+# session it sits in its command loop printing prompts forever. ARP is a
+# better test anyway: it needs none of the IP stack, so a failure points at
+# the device model rather than at 1985 TCP.
+#
+# Also turns on SIMH's 4.1BSD idle detection, since V8's scheduler idles in
+# exactly the loop that pattern was written for.
+
+set timeout 300
+log_file -a n3-arp.log
+proc sendline {x} { send "$x\r" }
+
+proc must {pat {t 0}} {
+    global timeout
+    set use [expr {$t > 0 ? $t : $timeout}]
+    expect -timeout $use "$pat" {
+    } timeout {
+        send_user "\n*** FAILED: never saw '$pat' after ${use}s ***\n"; exit 3
+    } eof {
+        send_user "\n*** FAILED: simulator exited waiting for '$pat' ***\n"; exit 4
+    }
+}
+proc sh   {cmd {t 0}} { must "# "   $t; sendline $cmd }
+proc simh {cmd {t 0}} { must "sim>" $t; sendline $cmd }
+
+# Push a host file into the guest through the console.
+proc catfile {src dst} {
+    sh "cat > $dst"
+    set f [open $src r]
+    while {[gets $f line] >= 0} { sendline $line }
+    close $f
+    send "\x04"
+}
+
+spawn vax780
+simh "set noasynch"
+simh "set tto 7b"
+simh "set rp0 rp07"
+simh "at rp0 rp07v8.net"
+simh "set il enable"
+simh "attach il nat:"
+simh "set debug -n n3-arp.dbg"
+simh "set il debug=CMD;INT;PKT;DAT"
+simh "load -o bootV8 0"
+simh "run 2"
+must "login:" 300
+sendline "root"
+sh "echo N3D-boot-ok"
+
+send_user "\n=== 1. make sure the devices and config are there ===\n"
+# Idempotent: the previous stage may or may not have got this far before its
+# filesystem was synced.
+sh "/etc/mknod /dev/il0 c 44 0"
+sh "/etc/mknod /dev/il1 c 44 1"
+sh "/etc/mknod /dev/ip6  c 42 6"
+sh "/etc/mknod /dev/ip17 c 42 17"
+sh "mkdir /usr/inet/lib"
+sh "echo '10.0.2.15\tv8' > /usr/inet/lib/hosts"
+sh "echo '10.0.2.2\tgateway' >> /usr/inet/lib/hosts"
+sh "echo '10.0.2.3\tnameserver' >> /usr/inet/lib/hosts"
+sh "echo '10.0.2.0\tslirp-net' > /usr/inet/lib/networks"
+sh "cat /usr/inet/lib/hosts"
+sh "echo N3D-configured"
+
+send_user "\n=== 2. build arping ===\n"
+catfile "../../tools/v8/arping.c" "/tmp/arping.c"
+sh "cd /tmp; cc -o arping arping.c -lin" 300
+sh "ls -l /tmp/arping"
+sh "echo N3D-arping-built"
+
+send_user "\n=== 3. one ARP request to the SLiRP gateway ===\n"
+sh "/usr/src/cmd/inet/bin/ilstat"
+sh "/tmp/arping 10.0.2.2" 60
+sh "echo N3D-arp-attempted"
+sh "/usr/src/cmd/inet/bin/ilstat"
+
+send_user "\n=== 4. and one to the SLiRP nameserver ===\n"
+sh "/tmp/arping 10.0.2.3" 60
+sh "/usr/src/cmd/inet/bin/ilstat"
+sh "echo N3D-DONE"
+
+sh "cd /; sync; sync; sync"
+sh "/etc/halt"
+simh "quit" 60
+expect eof
+wait
+
+send_user "\n=== N3 STAGE 4 DONE ===\n"

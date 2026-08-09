@@ -1,0 +1,65 @@
+#!/usr/bin/env expect
+#
+# N3 stage 2: boot the il0 kernel and find out whether the SIMH NI1010 model
+# actually satisfies V8's driver.
+#
+# The decisive line is in the autoconfiguration output.  For "il0 at uba0" to
+# appear, all of this has to have worked:
+#
+#   ilprobe   wrote ILC_OFFLINE|IL_CIE and got a command interrupt back, at a
+#             vector 4 above the one it wants
+#   ilattach  ILC_RESET completed with a zero status, ILC_STAT DMA'd a
+#             statistics record into UNIBUS-mapped memory, and ILC_ONLINE
+#             completed
+#
+# and the address the driver read out of that record is the controller's MAC,
+# which ilstat prints.  So this one boot exercises the command path, the
+# interrupt path, the vector arithmetic and DMA to the host.
+
+set timeout 300
+log_file -a n3-ilboot.log
+proc sendline {x} { send "$x\r" }
+
+proc must {pat {t 0}} {
+    global timeout
+    set use [expr {$t > 0 ? $t : $timeout}]
+    expect -timeout $use "$pat" {
+    } timeout {
+        send_user "\n*** FAILED: never saw '$pat' after ${use}s ***\n"; exit 3
+    } eof {
+        send_user "\n*** FAILED: simulator exited waiting for '$pat' ***\n"; exit 4
+    }
+}
+proc sh   {cmd {t 0}} { must "# "   $t; sendline $cmd }
+proc simh {cmd {t 0}} { must "sim>" $t; sendline $cmd }
+
+spawn vax780
+simh "set noasynch"
+simh "set tto 7b"
+simh "set rp0 rp07"
+simh "at rp0 rp07v8.net"
+simh "set il enable"
+simh "attach il nat:"
+simh "set debug -n n3-il.dbg"
+simh "set il debug=CMD;INT;PKT"
+simh "show il"
+simh "load -o bootV8 0"
+simh "run 2"
+must "login:" 300
+sendline "root"
+sh "echo N3B-boot-ok"
+
+send_user "\n=== did the driver find the board? ===\n"
+sh "/etc/dmesg"
+sh "ls -l /dev/il0 /dev/il1 /dev/kmem"
+sh "cd /usr/src/cmd/inet/bin; make ilstat" 600
+sh "cd /usr/src/cmd/inet/bin; ./ilstat"
+sh "echo N3B-ilstat-done"
+
+sh "cd /; sync; sync; sync"
+sh "/etc/halt"
+simh "quit" 60
+expect eof
+wait
+
+send_user "\n=== N3 STAGE 2 DONE ===\n"

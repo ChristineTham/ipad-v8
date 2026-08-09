@@ -99,10 +99,24 @@ final class Machine: ObservableObject {
     // remote timeout=600 keeps the paused state deterministic if iOS
     // delays freezing us.
 
+    // `set cpu idle=4.1BSD` is worth far more than it looks. SIMH watches for
+    // an FFS that finds nothing, at IPL 0, low in system space — which is
+    // exactly V8's scheduler:
+    //
+    //     sw1:  ffs  $0,$32,_whichqs,r0   # look for non-empty queue
+    //           bneq sw1a
+    //           mtpr $0,$IPL              # must allow interrupts here
+    //           brw  sw1                  # this is an idle loop!
+    //
+    // V8's kernel is 4.1BSD-derived, so the pattern SIMH already ships for
+    // 4.1BSD matches with no kernel change at all. Measured at the `login:`
+    // prompt: ~97% of a core before, ~18% after.
+
     private var bootConf: String { """
     set console telnet=127.0.0.1:\(consolePort)
     set remote telnet=127.0.0.1:\(controlPort)
     set remote timeout=600
+    set cpu idle=4.1BSD
     set tto 7b
     set dz lines=8
     att dz -m Speed=*32,127.0.0.1:\(dzPort)
@@ -125,10 +139,16 @@ final class Machine: ObservableObject {
     //   guarantees the bind. Do NOT "fix" this with `reset tti` — that
     //   zeroes the CSR the guest kernel configured (interrupt enable
     //   included) and V8 stops noticing console input entirely.
+    // - Idling must be re-established AFTER the restore. `save` records
+    //   sim_idle_enab and cpu_idle_type (both are REGs) but not
+    //   cpu_idle_mask, and the mask is what the FFS test actually reads —
+    //   so a restored machine would come back looking idle-enabled while
+    //   matching VMS's pattern instead of 4.1BSD's, and quietly spin.
     private var resumeConf: String { """
     set remote telnet=127.0.0.1:\(controlPort)
     set remote timeout=600
     restore state.sav
+    set cpu idle=4.1BSD
     set console telnet=127.0.0.1:\(consolePort)
     att dz -m Speed=*32,127.0.0.1:\(dzPort)
     cont

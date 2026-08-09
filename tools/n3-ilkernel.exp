@@ -1,0 +1,95 @@
+#!/usr/bin/env expect
+#
+# N3 stage 1: rebuild the V8 kernel with an Interlan NI1010 configured, and
+# build the userspace that brings IP up over it.
+#
+# The kernel has never had an Ethernet device configured in this project, so
+# this is the first time dev/ill.c is compiled at all.  The software side was
+# already there -- installV8 added inet/uarp/tcp/udp pseudo-devices when the
+# image was built -- so the only missing piece is the hardware line.
+#
+# Runs against rp07v8.net, a copy; rp07v8.golden is never the thing booted.
+
+set timeout 300
+log_file -a n3-ilkernel.log
+proc sendline {x} { send "$x\r" }
+
+proc must {pat {t 0}} {
+    global timeout
+    set use [expr {$t > 0 ? $t : $timeout}]
+    expect -timeout $use "$pat" {
+    } timeout {
+        send_user "\n*** FAILED: never saw '$pat' after ${use}s ***\n"; exit 3
+    } eof {
+        send_user "\n*** FAILED: simulator exited waiting for '$pat' ***\n"; exit 4
+    }
+}
+proc sh   {cmd {t 0}} { must "# "   $t; sendline $cmd }
+proc simh {cmd {t 0}} { must "sim>" $t; sendline $cmd }
+
+spawn vax780
+simh "set noasynch"
+simh "set tto 7b"
+simh "set rp0 rp07"
+simh "at rp0 rp07v8.net"
+simh "set il enable"
+simh "show il"
+simh "load -o bootV8 0"
+simh "run 2"
+must "login:" 300
+sendline "root"
+sh "echo N3-boot-ok"
+
+send_user "\n=== 1. what we have to work with ===\n"
+sh "ls /usr/sys/alice"
+sh "grep -n il /usr/sys/conf/devices"
+sh "ls -l /usr/lib/libin.a"
+sh "ls /usr/src/cmd/inet/etc"
+sh "df"
+
+send_user "\n=== 2. configure the NI1010 into the kernel ===\n"
+sh "cd /usr/sys/alice; cp conf conf.orig"
+# csr 0164040 is the board's standard address (dev/il.c records it in ilstd[]);
+# the vector names are ill.c's two interrupt routines, receive first, because
+# ilprobe discovers the command vector and subtracts 4 to get the base.
+sh "cd /usr/sys/alice; echo 'device\til0\tat uba? csr 0164040 vector ilrint ilcint' >> conf"
+sh "tail -3 /usr/sys/alice/conf"
+sh "cd /usr/sys/alice; /etc/config" 300
+sh "ls -l /usr/sys/alice/il.h /usr/sys/alice/makefile"
+sh "cat /usr/sys/alice/il.h"
+# config's generated makefile removes locore unconditionally; without -f the
+# first build in a clean tree fails on it. installV8 patched this by hand.
+sh "cd /usr/sys/alice; sed 's/rm locore/rm -f locore/' makefile > /tmp/mk"
+sh "cd /usr/sys/alice; cp /tmp/mk makefile"
+sh "grep 'rm .*locore' /usr/sys/alice/makefile"
+sh "echo N3-configured"
+
+send_user "\n=== 3. build it (this is the long one) ===\n"
+sh "cd /usr/sys/alice; make" 3000
+sh "ls -l /usr/sys/alice/unix"
+sh "echo N3-kernel-built"
+
+send_user "\n=== 4. install, keeping the old kernel ===\n"
+sh "cp /unix /ounix"
+sh "cp /usr/sys/alice/unix /unix"
+sh "ls -l /unix /ounix"
+# minor = channel; ilopen maps minor/8 to the unit, so 0 and 1 are two streams
+# on the same controller -- ipconfig wants one for IP and one for ARP.
+sh "/etc/mknod /dev/il0 c 44 0"
+sh "/etc/mknod /dev/il1 c 44 1"
+sh "ls -l /dev/il0 /dev/il1"
+sh "echo N3-installed"
+
+send_user "\n=== 5. build the userspace that brings IP up ===\n"
+sh "cd /usr/src/cmd/inet/etc; make ipconfig" 900
+sh "cd /usr/src/cmd/inet/etc; make tcpconfig udpconfig route" 900
+sh "ls -l /usr/src/cmd/inet/etc/ipconfig"
+sh "echo N3-userspace-built"
+
+sh "cd /; sync; sync; sync"
+sh "/etc/halt"
+simh "quit" 60
+expect eof
+wait
+
+send_user "\n=== N3 STAGE 1 DONE ===\n"
