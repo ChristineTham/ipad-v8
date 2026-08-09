@@ -1,5 +1,5 @@
 diff --git a/src/bus.rs b/src/bus.rs
-index 342e723..888376e 100644
+index 342e723..7fecd00 100644
 --- a/src/bus.rs
 +++ b/src/bus.rs
 @@ -1,5 +1,6 @@
@@ -9,7 +9,7 @@ index 342e723..888376e 100644
  use crate::duart::Duart;
  use crate::err::BusError;
  use crate::mem::Mem;
-@@ -56,6 +57,24 @@ pub trait Device: Send + Sync + Debug {
+@@ -56,6 +57,64 @@ pub trait Device: Send + Sync + Debug {
  //  0x700000..0x7fffff     RAM (256K or 1M)
  //
  
@@ -31,19 +31,95 @@ index 342e723..888376e 100644
 +    (SCREEN_W.load(Ordering::Relaxed) / 8) * SCREEN_H.load(Ordering::Relaxed)
 +}
 +
++/// Is a non-stock screen configured?
++pub fn screen_is_custom() -> bool {
++    SCREEN_W.load(Ordering::Relaxed) != 800 || SCREEN_H.load(Ordering::Relaxed) != 1024
++}
++
++/// The 5620's RAM, and then some.
++///
++/// AT&T's own RAM map (5620rom/doc/memmap/map3) pins everything above the
++/// screen to a fixed address: screen memory is exactly 0x19000 at 0x700000,
++/// then romterm bss at 0x719000, pcbs and stacks at 0x71C000, and Free_RAM --
++/// which is where layers allocates -- after 0x71D700. A larger screen
++/// therefore cannot *grow*; it would run straight through the firmware's own
++/// bss and stacks. It has to move somewhere the firmware has no plans for.
++///
++/// So a custom screen is placed immediately above the 1 MB the terminal
++/// believes it has. The ROM sizes memory from VALMAXADDR in NVRAM and its
++/// allocator never looks past 0x7FFFFF, so this space is invisible to it --
++/// every documented structure keeps its documented address, and Free_RAM keeps
++/// its full extent. Only the screen Bitmap's base, patched in Dmd::reset,
++/// points into it.
++pub const RAM_BASE: usize = 0x700000;
++pub const RAM_STOCK: usize = 0x100000;
++
++pub fn ram_len() -> usize {
++    if screen_is_custom() {
++        RAM_STOCK + screen_bytes()
++    } else {
++        RAM_STOCK
++    }
++}
++
++/// Where the framebuffer lives, as an offset into that RAM region.
++pub fn screen_offset() -> usize {
++    if screen_is_custom() {
++        RAM_STOCK
++    } else {
++        0
++    }
++}
++
  pub struct Bus {
      rom: Mem,
      duart: Duart,
-@@ -110,7 +129,7 @@ impl Bus {
-     fn video_ram_range(&self) -> Range<usize> {
-         let vid_register = (u16::from(self.vid[0]) << 8 | u16::from(self.vid[1])) as usize;
-         let start = vid_register * 4;
--        let end = start + 0x19000;
-+        let end = start + screen_bytes();
-         start..end
+@@ -74,7 +133,7 @@ impl Bus {
+             mouse: Mouse::new(),
+             vid: Mem::new(0x500000, 0x2, false),
+             bbram: Mem::new(0x600000, 0x2000, false),
+-            ram: Mem::new(0x700000, mem_size, false),
++            ram: Mem::new(RAM_BASE, mem_size, false),
+             video_ram_dirty: false,
+         }
+     }
+@@ -100,7 +159,7 @@ impl Bus {
+             return Ok(&mut self.bbram);
+         }
+ 
+-        if (0x700000..0x800000).contains(&address) {
++        if (RAM_BASE..RAM_BASE + ram_len()).contains(&address) {
+             return Ok(&mut self.ram);
+         }
+ 
+@@ -108,15 +167,20 @@ impl Bus {
      }
  
-@@ -227,6 +246,18 @@ impl Bus {
+     fn video_ram_range(&self) -> Range<usize> {
+-        let vid_register = (u16::from(self.vid[0]) << 8 | u16::from(self.vid[1])) as usize;
+-        let start = vid_register * 4;
+-        let end = start + 0x19000;
+-        start..end
++        // A stock screen still follows the video base register the firmware
++        // programs; a relocated one is where we put it, and the firmware's
++        // register no longer describes it.
++        let start = if screen_is_custom() {
++            screen_offset()
++        } else {
++            ((u16::from(self.vid[0]) << 8 | u16::from(self.vid[1])) as usize) * 4
++        };
++        start..start + screen_bytes()
+     }
+ 
+     fn is_video_ram(&self, address: usize) -> bool {
+-        (0x700000..0x800000).contains(&address)
+-            && self.video_ram_range().contains(&(address - 0x700000))
++        (RAM_BASE..RAM_BASE + ram_len()).contains(&address)
++            && self.video_ram_range().contains(&(address - RAM_BASE))
+     }
+ 
+     pub fn read_byte(&mut self, address: usize, access: AccessCode) -> Result<u8, BusError> {
+@@ -227,6 +291,18 @@ impl Bus {
          self.duart.rs232_rx(c);
      }
  
@@ -78,19 +154,28 @@ index dd3c8c8..2976872 100644
          self.r[R_AP]
      }
 diff --git a/src/dmd.rs b/src/dmd.rs
-index 9576473..14b0b4b 100644
+index 9576473..15e79e1 100644
 --- a/src/dmd.rs
 +++ b/src/dmd.rs
 @@ -3,7 +3,9 @@
  use crate::bus::{AccessCode, Bus};
  use crate::cpu::Cpu;
  use crate::err::BusError;
-+use crate::bus::{SCREEN_H, SCREEN_W};
++use crate::bus::{ram_len, screen_offset, RAM_BASE, SCREEN_H, SCREEN_W};
  use crate::rom_hi::{HI_ROM_V1, HI_ROM_V2};
 +use std::sync::atomic::Ordering;
  use crate::rom_lo::{LO_ROM_V1, LO_ROM_V1_LEN, LO_ROM_V2, LO_ROM_V2_LEN};
  
  use libc::*;
+@@ -40,7 +42,7 @@ impl Dmd {
+         });
+ 
+         let cpu = Cpu::new();
+-        let bus = Bus::new(0x100000);
++        let bus = Bus::new(ram_len());
+         Dmd {
+             cpu,
+             bus,
 @@ -52,10 +54,12 @@ impl Dmd {
              1 => {
                  self.bus.load(0, &LO_ROM_V1)?;
@@ -104,7 +189,7 @@ index 9576473..14b0b4b 100644
              }
          }
  
-@@ -64,6 +68,65 @@ impl Dmd {
+@@ -64,6 +68,67 @@ impl Dmd {
          Ok(())
      }
  
@@ -133,7 +218,9 @@ index 9576473..14b0b4b 100644
 +        if w == 800 && h == 1024 {
 +            return Ok(());
 +        }
++        let base = (RAM_BASE + screen_offset()) as u32;
 +        let words = (w / 32) as u32;
++        self.bus.load(at, &base.to_be_bytes())?;
 +        self.bus.load(at + 4, &words.to_be_bytes())?;
 +        self.bus.load(at + 12, &(w as u16).to_be_bytes())?;
 +        self.bus.load(at + 14, &(h as u16).to_be_bytes())?;
@@ -170,7 +257,7 @@ index 9576473..14b0b4b 100644
      pub fn video_ram(&mut self) -> &[u8] {
          self.bus.video_ram()
      }
-@@ -76,6 +139,10 @@ impl Dmd {
+@@ -76,6 +141,10 @@ impl Dmd {
          self.cpu.get_pc()
      }
  
@@ -181,7 +268,7 @@ index 9576473..14b0b4b 100644
      pub fn get_ap(&self) -> u32 {
          self.cpu.get_ap()
      }
-@@ -124,6 +191,18 @@ impl Dmd {
+@@ -124,6 +193,18 @@ impl Dmd {
          self.bus.rs232_rx(c);
      }
  
@@ -200,7 +287,7 @@ index 9576473..14b0b4b 100644
      pub fn keyboard_rx(&mut self, keycode: u8) {
          self.bus.keyboard_rx(keycode);
      }
-@@ -157,6 +236,33 @@ impl Dmd {
+@@ -157,6 +238,33 @@ impl Dmd {
  // Provide a C interface
  //
  
@@ -234,7 +321,7 @@ index 9576473..14b0b4b 100644
  #[no_mangle]
  fn dmd_init(version: u8) -> c_int {
      match DMD.lock() {
-@@ -375,6 +481,28 @@ fn dmd_get_nvram(nvram: &mut [u8; 8192]) -> c_int {
+@@ -375,6 +483,28 @@ fn dmd_get_nvram(nvram: &mut [u8; 8192]) -> c_int {
      }
  }
  
