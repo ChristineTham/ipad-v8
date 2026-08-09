@@ -123,7 +123,14 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
 - SIMH newer than 3.9 needs `set noasync` or V8 corrupts RP06 I/O (simh issue #425).
 - V8's getty sends the first `login:` with **mark parity** (bit 7 set) — byte-matchers must
   strip the high bit until after login.
-- `mux` is not on root's PATH — invoke `/usr/jerq/bin/mux` (same for `jim`).
+- `mux` is not on root's PATH in a *stock* V8 — invoke `/usr/jerq/bin/mux` (same for
+  `jim`). The shipped golden image no longer has this problem: `work/fix-identity.exp`
+  gives root a `/.profile` with `/usr/games` and `/usr/jerq/bin` on PATH, `TERM=dmd`
+  (V8 ships **no** `/.profile`, `/.login` or `/etc/profile` at all, which is why `vi`
+  used to die — `TERM` was simply unset), `kill ^U` and `intr ^C`. Leave `erase` at
+  V8's own **^H**: the app maps a Mac/iPad Delete key to 0x08, so ^H is what that key
+  sends. The machine's name is `/etc/whoami` and nowhere else — V8 has no
+  `hostname(1)`, no `uname(1)`, and `/etc/rc` never sets one.
 - mux's B3 menu pops centered on the cursor: park the cursor mid-screen first or the
   menu clips at the screen edge and the selection is lost. After selecting New, the
   sweep-corner cursor is the confirmation that the B3 sweep is armed.
