@@ -161,7 +161,11 @@ final class Terminal5620: ObservableObject {
         defer { saveNVRAM(to: nvram) }
 
         let fd = dialLoopback(port: dzPort, deadline: Date().addingTimeInterval(30))
-        guard fd >= 0 else { return }
+        guard fd >= 0 else {
+            note("DZ dial to port \(dzPort) FAILED — terminal has no line")
+            return
+        }
+        note("DZ line up on port \(dzPort)")
         defer { close(fd) }
 
         var telnet = TelnetFilter()             // refusals fine on a DZ line
@@ -271,18 +275,13 @@ final class Terminal5620: ObservableObject {
                     writeAll(fd, txbuf)
                     txbuf.removeAll(keepingCapacity: true)
                 }
-                // One nudge so the getty prompts on our fresh carrier.
-                if !poked && steps > 20_000_000 {
-                    poked = true
-                    writeAll(fd, [0x0d])
-                }
             }
 
-            // Screen resize, checked on the same tick as the clock. Applying
-            // it here is what makes it safe: dmd_resize_screen moves both the
-            // framebuffer pointer and its length, and this is the one thread
-            // that ever holds either.
-            if iter % 100 == 0 {
+            // Start-of-session work, on the same tick as the clock. Doing the
+            // resize here is what makes it safe: dmd_resize_screen moves both
+            // the framebuffer pointer and its length, and this is the one
+            // thread that ever holds either.
+            if iter % 100 == 0, !poked {
                 // Is the power-on self-test over?
                 //
                 // "The screen stopped changing" is not a sound answer, and
@@ -304,46 +303,79 @@ final class Terminal5620: ObservableObject {
                     var pc: UInt32 = 0
                     if dmd_get_pc(&pc) == DMD_SUCCESS, (0x5354...0x5389).contains(pc) {
                         idleSamples += 1
-                        if idleSamples >= 3 { selfTestDone = true }
+                        if idleSamples >= 3 {
+                            selfTestDone = true
+                            note("self-test done")
+                        }
                     } else {
                         idleSamples = 0
                     }
                 }
 
-                let wanted = screen.value
-                if selfTestDone, wanted != appliedScreen,
-                   dmd_resize_screen(UInt32(wanted.width), UInt32(wanted.height)) == DMD_SUCCESS {
-                    appliedScreen = wanted
-                    // A wider screen is not a wider terminal on its own: the
-                    // ROM's text grid is compiled in at 88 columns. Widen it
-                    // too, up to the 127 the one-byte operand can hold.
-                    _ = dmd_set_columns(UInt32(wanted.romColumns))
-                    // The new screen comes back cleared and the ROM only
-                    // repaints what something writes to, so publish once
-                    // immediately -- otherwise the view keeps showing the old
-                    // frame at the old size until the guest happens to draw.
-                    if let vram = dmd_video_ram() {
-                        frames.publish(vram, geometry: wanted)
+                // Everything below happens exactly once, the moment the
+                // terminal is genuinely ready — and *only* then. All three of
+                // these used to be arranged differently, and each arrangement
+                // was a bug:
+                //
+                //   - the resize was conditional on the screen differing from
+                //     stock, so the whole block (screen restore and prompt
+                //     nudge included) was skipped entirely at the Original
+                //     preset;
+                //   - the prompt nudge was in the resize's `else` branch, so a
+                //     session that *did* restore its screen never asked the
+                //     host to speak;
+                //   - and a second nudge fired on a raw step count, ~1.0 s in,
+                //     which on a 2x clock is before the self-test finishes at
+                //     ~1.2 s. The host answered it into a terminal that was
+                //     still testing itself, and the reply went nowhere.
+                //
+                // Cold boots hid all three, because getty prints `login:`
+                // unasked when it starts. A restored session has no such
+                // luck: the shell said everything it was ever going to say
+                // before the snapshot was taken.
+                if selfTestDone {
+                    poked = true
+                    let wanted = screen.value
+                    if wanted != appliedScreen,
+                       dmd_resize_screen(UInt32(wanted.width),
+                                         UInt32(wanted.height)) == DMD_SUCCESS {
+                        appliedScreen = wanted
+                        // A wider screen is not a wider terminal on its own:
+                        // the ROM's text grid is compiled in at 88 columns.
+                        // Widen it too, up to the 127 a one-byte operand holds.
+                        _ = dmd_set_columns(UInt32(wanted.romColumns))
                     }
+                    note("screen \(appliedScreen.width)x\(appliedScreen.height), "
+                         + "\(appliedScreen.romColumns) columns")
+
                     // Put the last session's screen back, if we have one at
                     // this exact size. The 5620 always power-cycles, so a
                     // resumed VAX otherwise faces a terminal that has
                     // forgotten everything, and nothing on the host repaints
-                    // unasked -- which is what made a restored session look
-                    // like a dead one.
-                    if let restored = loadScreen(from: screenSnapshot, geometry: wanted) {
+                    // unasked.
+                    if let restored = loadScreen(from: screenSnapshot,
+                                                 geometry: appliedScreen) {
                         restored.withUnsafeBytes { raw in
                             _ = dmd_set_video_ram(raw.bindMemory(to: UInt8.self).baseAddress,
                                                   restored.count)
                         }
-                        if let vram = dmd_video_ram() {
-                            frames.publish(vram, geometry: wanted)
-                        }
+                        note("last session's screen repainted (\(restored.count) B)")
                     } else {
-                        // Nothing to restore: the screen came back cleared, so
-                        // ask the host for a prompt.
-                        writeAll(fd, [0x0d])
+                        note("no screen to restore at this size")
                     }
+                    // Publish whatever we ended up with — resized, restored or
+                    // neither. The ROM only repaints what something writes to,
+                    // so without this the view keeps showing the last frame at
+                    // the last size until the guest happens to draw.
+                    if let vram = dmd_video_ram() {
+                        frames.publish(vram, geometry: appliedScreen)
+                    }
+
+                    // And ask the far end to say something. getty prints its
+                    // banner once and then blocks in getname(); a shell prints
+                    // nothing unasked at all. On a fresh carrier this is the
+                    // only thing that makes either of them speak.
+                    writeAll(fd, [0x0d])
                 }
             }
 
@@ -374,6 +406,13 @@ final class Terminal5620: ObservableObject {
                 }
             }
         }
+    }
+
+    /// One line on stderr per milestone. Cheap, permanent, and the difference
+    /// between "the terminal is mute" and knowing which of the four things
+    /// between a keystroke and V8 did not happen.
+    nonisolated private static func note(_ message: String) {
+        FileHandle.standardError.write(Data("ipnx 5620: \(message)\n".utf8))
     }
 
     // MARK: - NVRAM (8 KB of terminal settings)

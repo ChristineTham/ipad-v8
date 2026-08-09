@@ -137,17 +137,31 @@ final class Machine: ObservableObject {
     """ }
 
     // Restore-path subtleties, all desktop/simulator-bisected:
-    // - The snapshot records the PREVIOUS launch's ports; both the console
-    //   and the DZ must be re-attached on this launch's ports, and those
-    //   binds must SUCCEED. `save` persists UNIT_TM_POLL in each unit's
-    //   dynflags, but `uptr->tmxr` is a runtime pointer only a successful
-    //   tmxr_attach can set — so a restore whose re-attach fails brings the
-    //   unit back tagged for mux polling with a NULL backpointer and `cont`
-    //   segfaults in _tmxr_activate_delay (open-simh/simh#576; restore
-    //   reports success either way). Per-launch port rotation is what
-    //   guarantees the bind. Do NOT "fix" this with `reset tti` — that
-    //   zeroes the CSR the guest kernel configured (interrupt enable
-    //   included) and V8 stops noticing console input entirely.
+    // - **`restore -D`, and attach everything ourselves.** This is the big
+    //   one. A plain `restore` re-attaches every unit that was attached at
+    //   save time, in device order, to the filename recorded in the
+    //   snapshot — and for the DZ that filename is the PREVIOUS launch's
+    //   port. tmxr binds without SO_REUSEADDR, so the terminal connection
+    //   that was live a moment ago still holds that port in TIME_WAIT and
+    //   the bind fails. That alone would be survivable; what is not is
+    //   scp.c's loop, which is gated on `r == SCPE_OK` and therefore
+    //   **silently skips every remaining attach** once one fails. The DZ
+    //   precedes RP0 in device order, so the machine came back with **no
+    //   disk**: console alive (the kernel is in memory), every filesystem
+    //   read dead, getty stuck, exec'd programs SIGKILLed. It presents as a
+    //   terminal that has stopped talking, which is nothing like the truth.
+    //   `-D` tells restore to neither detach nor re-attach, and `-Q`
+    //   suppresses the resulting "was attached to..." warnings.
+    // - So the disk is attached BEFORE the restore, and the DZ AFTER it —
+    //   that order matters. `dz_attach` carries the restore-aware fixup that
+    //   re-asserts DTR/RTS and `lp->rcve` from the restored CSR/TCR, and it
+    //   only runs when CSR_MSE is already set. Attach the DZ before the
+    //   restore and the CSR is still zero, the fixup does nothing, and the
+    //   line comes back with receive disabled — the original mute-DZ bug.
+    // - The console must also be re-established on this launch's port.
+    //   Do NOT "fix" a restore problem with `reset tti` — that zeroes the
+    //   CSR the guest kernel configured (interrupt enable included) and V8
+    //   stops noticing console input entirely.
     // - Idling must be re-established AFTER the restore. `save` records
     //   sim_idle_enab and cpu_idle_type (both are REGs) but not
     //   cpu_idle_mask, and the mask is what the FFS test actually reads —
@@ -164,7 +178,9 @@ final class Machine: ObservableObject {
     set remote telnet=127.0.0.1:\(controlPort)
     set remote timeout=600
     set dz lines=8
-    restore state.sav
+    set rp0 rp06
+    at rp0 v8.disk
+    restore -D -Q state.sav
     set cpu idle=4.1BSD
     set console telnet=127.0.0.1:\(consolePort)
     att dz -m Speed=*32,127.0.0.1:\(dzPort)
@@ -182,6 +198,8 @@ final class Machine: ObservableObject {
         do {
             phase = .provisioning
             let resuming = try await provision()
+            Machine.note("\(resuming ? "resuming a saved session" : "cold boot") "
+                         + "— console \(consolePort), control \(controlPort), dz \(dzPort)")
             phase = .starting
             launchSimhThread(config: resuming ? "resume.conf" : "boot.conf")
             guard await console.connect(port: consolePort) else {
@@ -202,10 +220,12 @@ final class Machine: ObservableObject {
                 console.send([0x0d])
                 guard await console.waitForAnyOutput(timeout: 10) else {
                     consumeSnapshot()
+                    Machine.note("restore produced no console output — cold boot next launch")
                     phase = .failed("saved session did not restore — relaunch to boot fresh")
                     return
                 }
                 consumeSnapshot()   // machine is running again: sav now stale
+                Machine.note("restored")
                 phase = .up
             } else {
                 phase = .booting
@@ -335,6 +355,11 @@ final class Machine: ObservableObject {
 
     func discardSnapshot() { consumeSnapshot() }
 
+    /// One line on stderr per lifecycle milestone — see Terminal5620.note.
+    nonisolated static func note(_ message: String) {
+        FileHandle.standardError.write(Data("ipnx vax: \(message)\n".utf8))
+    }
+
     private func launchSimhThread(config: String) {
         let path = supportDir.appendingPathComponent(config).path
         let t = Thread { [weak self] in
@@ -351,6 +376,7 @@ final class Machine: ObservableObject {
     private func simhExited(rc: Int32) {
         console.close()
         control.close()
+        Machine.note("simulator exited (rc \(rc)) in phase \(phase)")
         if (phase == .restoring || phase == .starting),
            !restartedAfterFailedRestore,
            FileManager.default.fileExists(atPath: snapshotURL.path) {

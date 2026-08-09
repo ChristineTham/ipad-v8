@@ -114,9 +114,9 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// The CRT is one of two fixed sizes, so this is simply: make the window
     /// as big as the desk allows at that shape. The terminal is not the whole
-    /// window — the title bar and the app's own toolbar come off the top
-    /// first — so sizing to `visibleFrame` outright would letterboxed the CRT
-    /// by exactly that much.
+    /// window — the title bar and its toolbar come off the top, the bezel off
+    /// every edge — so sizing to `visibleFrame` outright would letterbox the
+    /// CRT by exactly that much.
     ///
     /// So: take the desk minus the menu bar and Dock (`visibleFrame`), take
     /// the real chrome off that, and give the remainder the CRT's aspect.
@@ -129,10 +129,10 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
         // the runloop. (didBecomeMainNotification looked tidier and never
         // fired: by the time the delegate is installed, the window is already
         // main.)
-        DispatchQueue.main.async { self.shapeWindow() }
+        DispatchQueue.main.async { self.shapeWindow(settle: true) }
     }
 
-    private func shapeWindow() {
+    private func shapeWindow(settle: Bool) {
         guard let window = NSApp.windows.first(where: {
                   $0.isVisible && $0.styleMask.contains(.titled)
                       && $0.styleMask.contains(.resizable)
@@ -141,30 +141,28 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
             guard let screen = window.screen ?? NSScreen.main else { return }
             let desk = screen.visibleFrame
 
-            // Real chrome, measured rather than assumed: the title bar is
-            // whatever this window's style leaves over its content, and the
-            // toolbar is the constant the view lays itself out with.
-            let titleBar = window.frame.height
-                - window.contentRect(forFrameRect: window.frame).height
-            let chrome = titleBar + Blit5620View.toolbarHeight
+            // Real chrome, measured rather than assumed. `contentLayoutRect`
+            // is the part of the window neither the title bar nor the toolbar
+            // covers, so the difference is both of them together -- which
+            // matters now that the controls live in a real NSToolbar whose
+            // height is AppKit's business, not ours. (contentRect(forFrameRect:)
+            // was wrong here: it answers from the style mask alone and never
+            // knows about the toolbar.)
+            let chrome = window.frame.height - window.contentLayoutRect.height
+            let bezel = Blit5620View.bezel * 2
 
-            // "Fit the window" wants the biggest window the desk allows and a
-            // CRT shaped to match it; "Authentic" wants the 5620's own
-            // portrait tube, as large as it will go. Both are the same
-            // calculation once the CRT is known — which is why the CRT is
-            // chosen here, from the desk, before the window is sized.
             let crt = self.settings?.chooseScreen() ?? .stock
             let aspect = CGFloat(crt.width) / CGFloat(crt.height)
-            var screenH = desk.height - chrome
+            var screenH = desk.height - chrome - bezel
             var screenW = screenH * aspect
-            if screenW > desk.width {                 // a wide, short desk
-                screenW = desk.width
+            if screenW > desk.width - bezel {         // a wide, short desk
+                screenW = desk.width - bezel
                 screenH = screenW / aspect
             }
-            let target = NSRect(x: desk.midX - screenW / 2,
-                                y: desk.maxY - (screenH + chrome),
-                                width: screenW,
-                                height: screenH + chrome)
+            let target = NSRect(x: desk.midX - (screenW + bezel) / 2,
+                                y: desk.maxY - (screenH + bezel + chrome),
+                                width: screenW + bezel,
+                                height: screenH + bezel + chrome)
 
             // Stop the frame being restored over the top of ours. AppKit
             // reapplies a remembered frame *after* this point, so setting it
@@ -179,34 +177,25 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
             // emulated CRT is not, which is what used to force the terminal to
             // rebuild itself mid-session.
             window.contentAspectRatio = NSSize(width: target.width,
-                                               height: target.height - titleBar)
-
-            // And check again a beat later, because "reported success" turned
-            // out not to mean "kept it".
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                if abs(window.frame.width - target.width) > 2 {
-                    window.setFrame(target, display: true)
-                }
-            }
+                                               height: target.height - chrome)
 
             let got = window.frame
             FileHandle.standardError.write(Data("""
                 ipnx: desk \(Int(desk.width))x\(Int(desk.height)) \
-                chrome \(Int(chrome)) (title \(Int(titleBar))) -> \
+                chrome \(Int(chrome)) bezel \(Int(bezel)) -> \
                 crt \(Int(screenW))x\(Int(screenH)), \
                 window wanted \(Int(target.width))x\(Int(target.height)), \
                 got \(Int(got.width))x\(Int(got.height))\n
                 """.utf8))
-            if abs(got.width - target.width) > 1 || abs(got.height - target.height) > 1 {
-                // Something constrained us — a content minimum or maximum, or
-                // a resizability policy. Worth knowing rather than silently
-                // shipping a window that is nearly, but not, the whole desk.
-                FileHandle.standardError.write(Data("""
-                    ipnx: window wanted \(Int(target.width))x\(Int(target.height)) \
-                    at \(Int(target.origin.x)),\(Int(target.origin.y)) but got \
-                    \(Int(got.width))x\(Int(got.height)) \
-                    at \(Int(got.origin.x)),\(Int(got.origin.y))\n
-                    """.utf8))
+
+            // And measure again a beat later. Not just because "reported
+            // success" turned out not to mean "kept it" -- the toolbar may not
+            // have been installed on the first pass, and a chrome height
+            // measured before it exists is short by the toolbar.
+            if settle {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    self.shapeWindow(settle: false)
+                }
             }
         }
     }

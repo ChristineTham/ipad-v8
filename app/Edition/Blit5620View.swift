@@ -25,7 +25,14 @@ struct Blit5620View: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            toolbar
+            // The Mac's controls live in the window's own toolbar (MachineView),
+            // which is what "chrome" means there: it overflows gracefully when
+            // the window is narrow, and it costs the CRT nothing. iPad has no
+            // title bar to put them in, so it keeps a bar — but a bar that is
+            // plainly part of the app, not part of the terminal.
+            #if !os(macOS)
+            controlBar
+            #endif
             GeometryReader { geo in
                 // The CRT was chosen once, when the session started, and the
                 // window is locked to its shape — so this only ever scales the
@@ -34,60 +41,81 @@ struct Blit5620View: View {
                 // pass meant a window drag rebuilt the machine, and made the
                 // geometry depend on when in the boot sequence the drag landed.
                 let crt = settings.activeScreen
-                let fitted = settings.screenSize(fitting: geo.size, screen: crt,
+                let room = CGSize(width: max(geo.size.width - Self.bezel * 2, 1),
+                                  height: max(geo.size.height - Self.bezel * 2, 1))
+                let fitted = settings.screenSize(fitting: room, screen: crt,
                                                  displayScale: displayScale)
-                let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
                 ZStack {
                     Color.black
-                    screen(crt: crt, fitted: fitted, center: center)
+                    bezel { screen(crt: crt, fitted: fitted) }
+                        .position(x: geo.size.width / 2, y: geo.size.height / 2)
                 }
             }
         }
         .background(Color.black)
     }
 
-    /// Fixed so the window can be sized around the screen rather than around a
-    /// guess: the Mac's launch geometry subtracts exactly this much.
-    static let toolbarHeight: CGFloat = 30
+    /// Width of the moulding around the tube. Fixed rather than proportional:
+    /// the Mac's launch geometry has to subtract exactly this much to size a
+    /// window around a screen, and a number that depends on the window it is
+    /// helping to compute is a circle.
+    static let bezel: CGFloat = 10
+    private static let bezelRadius: CGFloat = 12
 
-    private var toolbar: some View {
-        HStack(spacing: 14) {
+    /// The moulding: a dark graphite surround, lit from above, with a hairline
+    /// where the glass meets it.
+    ///
+    /// Deliberately restrained — no scanlines, no curvature, no vignette, no
+    /// brand plate. The point is to give the raster a physical edge so it reads
+    /// as a display rather than as a region of the window, and to keep every
+    /// pixel inside it faithful. The real 5620's putty-beige housing would
+    /// glare against a dark app; graphite is the same idea at the right value.
+    @ViewBuilder
+    private func bezel<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .overlay(Rectangle().strokeBorder(Color.white.opacity(0.05), lineWidth: 1))
+            .padding(Self.bezel)
+            .background(
+                RoundedRectangle(cornerRadius: Self.bezelRadius, style: .continuous)
+                    .fill(LinearGradient(colors: [Color(white: 0.17), Color(white: 0.07)],
+                                         startPoint: .top, endPoint: .bottom))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Self.bezelRadius, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.6), radius: 12, y: 4)
+    }
+
+    #if !os(macOS)
+    private var controlBar: some View {
+        HStack(spacing: 12) {
             Text("DMD 5620")
                 .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(.green.opacity(0.8))
             Spacer()
-            #if os(macOS)
-            Text(capture.captured
-                 ? "pointer grabbed — ⌘G or switch away to release"
-                 : "L / M / R → B1 / B2 / B3     ⌥click = B2     ⌘click = B3")
-                .font(.system(.caption2, design: .monospaced))
-                .foregroundStyle(.green.opacity(capture.captured ? 0.8 : 0.5))
-            Button(capture.captured ? "Release" : "Grab pointer") {
-                capture.captured.toggle()
-            }
-            .buttonStyle(.bordered)
-            .tint(capture.captured ? .green : .gray)
-            .font(.caption)
-            #else
             ForEach(0..<3, id: \.self) { (idx: Int) in
                 Button("B\(idx + 1)") { latchedButton = UInt8(idx) }
                     .buttonStyle(.bordered)
                     .tint(latchedButton == UInt8(idx) ? .green : .gray)
                     .font(.caption)
             }
-            #endif
             Button("BREAK") { terminal.sendBreak() }
                 .buttonStyle(.bordered)
                 .tint(.orange)
                 .font(.caption)
         }
-        .padding(.horizontal, 10)
-        .frame(height: Self.toolbarHeight)
-        .background(Color.black)
+        .padding(.horizontal, 12)
+        .frame(height: 34)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1)
+        }
     }
+    #endif
 
     @ViewBuilder
-    private func screen(crt: FrameStore.Geometry, fitted: CGSize, center: CGPoint) -> some View {
+    private func screen(crt: FrameStore.Geometry, fitted: CGSize) -> some View {
         #if os(macOS)
         ZStack {
             FramebufferView(frames: terminal.frames, phosphor: settings.phosphor.tint)
@@ -97,15 +125,15 @@ struct Blit5620View: View {
                          capture: capture)
         }
         .frame(width: fitted.width, height: fitted.height)
-        .position(center)
         #else
-        FramebufferView(frames: terminal.frames, phosphor: settings.phosphor.tint)
-            .frame(width: fitted.width, height: fitted.height)
-            .position(center)
-            .contentShape(Rectangle())
-            .gesture(mouseDrag(crt: crt, fitted: fitted))
-        KeyCaptureRepresentable(terminal: terminal)
-            .frame(width: 0, height: 0)
+        ZStack {
+            FramebufferView(frames: terminal.frames, phosphor: settings.phosphor.tint)
+                .contentShape(Rectangle())
+                .gesture(mouseDrag(crt: crt, fitted: fitted))
+            KeyCaptureRepresentable(terminal: terminal)
+                .frame(width: 0, height: 0)
+        }
+        .frame(width: fitted.width, height: fitted.height)
         #endif
     }
 

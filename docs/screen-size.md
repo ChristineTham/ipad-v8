@@ -283,22 +283,120 @@ because a screen unpacked at the wrong stride is worse than a blank one.
 **Verified**: quit mid-session and relaunch, and the screen comes back exactly
 as it was.
 
-**Still open** — the restored session is *mute*. The picture is right, but
-nothing typed reaches V8 and nothing comes back. This is the older "mute DZ
-line after restore" symptom, and it is not the `lp->rcve` fix missing: that
-patch is present in the checkout and the xcframework was built after it. So
-the screen snapshot fixes the cosmetic half and the input half is still to
-find. Workaround: **Machine ▸ Restart Terminal**, which drops carrier and makes
-getty start over.
+### And the session survives too — but only if the terminal asks
+
+The screen snapshot fixed the picture and left the session apparently *mute*:
+nothing typed reached V8, nothing came back. It looked like the old "mute DZ
+line after restore", so that was checked first and ruled out — the `lp->rcve`
+patch is present in the checkout and the xcframework was built after it. Two
+more independent checks then narrowed it to the app:
+
+- `tools/restore-exec-probe.py` restores a snapshot with the app's exact
+  `resume.conf` and drives the DZ line from a plain socket. `echo one` → `one`,
+  `/bin/echo three` → `three`, `pwd` → `/`, and a fresh console login reaches
+  the MOTD. **SIMH's restore is healthy.**
+- `libdmd/test/keyboard-scope.c` measures the direction nothing had ever
+  measured — `dmd_keyboard_rx()` in, `dmd_rs232_tx()` out — across a resize and
+  the 24-operand column patch. Five bytes in, five bytes out, at every stage.
+  **The widened terminal is healthy**, and the column rewrite lands nowhere
+  near the serial path.
+
+That left two faults, one in SIMH's restore and one in the app, and they had
+been hiding each other.
+
+**The restored machine had no disk.** `restore` re-attaches every saved unit in
+device order, to the filename in the snapshot — and for the DZ that "filename"
+is the *previous launch's port*, which the terminal connection that was live a
+moment ago still holds in TIME_WAIT (tmxr binds without `SO_REUSEADDR`). The
+bind fails. Survivable on its own; scp.c's loop is not:
+
+```c
+for (j = 0; j < attcnt; j++) {
+    if ((r == SCPE_OK) && (!dont_detach_attach)) {
+        ...
+        r = scp_attach_unit (dptr, attunits[j], attnames[j]);
+```
+
+`r` is never reset, so the first failure skips every remaining attach — and the
+DZ precedes RP0. The machine resumed with the kernel in memory and no
+filesystem: the console answered, the shell even echoed `# ` from memory, and
+nothing that touched the disk worked. `tools/restore-attach-probe.py` holds the
+saved port so the failure is deterministic and prints the two outcomes side by
+side — `RP0 ... not attached` against `attached to mutep.disk`. The fix is
+`restore -D -Q` with the disk attached beforehand; the DZ still has to be
+attached *after* the restore, because `dz_attach`'s `lp->rcve`/DTR fixup only
+runs when CSR_MSE is already set.
+
+**And nothing asked the far end to speak.** This is a fact about the far end
+rather than about any device: **getty prints its banner and `login:` exactly
+once**, when it starts, then blocks in `getname()`; a logged-in shell prints
+nothing unasked at all. A cold boot gets its prompt for free because getty is
+starting anyway. A restored session never does — the terminal's own CR nudge is
+the only thing that can make it speak. And that nudge was:
+
+1. sent only in the branch where *no* screen was restored, so a session that
+   restored its picture never asked;
+2. inside a block conditional on the screen needing a resize, so at the
+   Original preset the whole thing — screen restore included — was skipped;
+3. duplicated on a raw step count, 20M steps ≈ 1.0 s at the default 2× clock,
+   which is *before* the self-test finishes at ~1.2 s. V8 answered into a
+   terminal that was still testing itself.
+
+All three are now one block, gated on the firmware reaching its idle PC window
+and nothing else, and it always ends with the CR.
+
+**How to test this and not fool yourself**: delete `screen.bin` before the
+relaunch. With it in place the repainted picture and a live prompt are the same
+pixels — both say `login:` — so a screenshot proves nothing, and an early run
+of this test "passed" while the session was still dead. On a blank terminal,
+anything that appears can only be V8 answering.
+
+## Drawing it: the footprint filter, and what Retina buys
+
+The 5620's raster almost never lands on a whole number of device pixels. On a
+1470×852 desk the Wide screen gets 877×780 points, and on a 2× panel that is
+1755×1560 device pixels for 1152×1024 source pixels — 1.52× magnification, and
+not a ratio anything divides evenly.
+
+Point sampling — read the one texel under the fragment centre, which is what
+the shader did originally — is visibly wrong at any such ratio. Some source
+rows land in two device pixels and their neighbours in one, so a regular
+pattern (mux's stipple background, a run of underscores) beats against the
+sampling grid and crawls. The **Crisp** setting exists to dodge that by forcing
+an integral scale, at the cost of a smaller picture.
+
+The fix is to stop point-sampling. `fb_fragment` now area-averages the device
+pixel's real footprint over the raster: it takes `texels`, the source pixels
+per device pixel, computes the box the fragment covers, and weights each source
+pixel by how much of it falls inside. The loop is bounded at 8×8 and is 2×2 in
+practice.
+
+Two properties make this the right trade rather than a blur:
+
+- **It costs nothing where it does not apply.** Magnified, the box is smaller
+  than a source pixel, so only fragments straddling an edge blend at all —
+  everything else still resolves to a hard 0 or 1.
+- **At an exact integer scale no fragment straddles anything**, so the output
+  is bit-identical to point sampling. "Crisp" stays exactly as crisp as it was;
+  "Fill" simply stops shimmering.
+
+`texels` comes from `MTKView.drawableSize`, never from the layout size — on a
+2× display those differ by exactly the factor that makes the difference
+visible. The renderer logs the ratio once per launch (`ipnx: 5620 … into a …
+drawable`), which is how you check the drawable really is at native scale
+rather than assuming `autoResizeDrawable` did its job.
+
+The screen also now sits in a bezel: a fixed 10 pt graphite surround with a
+hairline where the glass meets it. It is there to give the raster a physical
+edge, and to keep the app's own controls — which used to be a strip inside the
+black field, wrapping at the Original preset's width — out of the picture
+entirely. On the Mac they are a real `NSToolbar` in the title bar, which is
+also why `shapeWindow` measures chrome with `contentLayoutRect` now:
+`contentRect(forFrameRect:)` answers from the style mask alone and never knows
+about a toolbar.
 
 ## Remaining work
 
-- **App plumbing.** The 800/1024/102400/100 constants are still hardcoded in
-  `Terminal5620`/`FrameStore`, `FramebufferView` (Metal texture + `bytesPerRow`),
-  `Shaders.metal` (needs a size uniform), `Blit5620View.pixelScale` and
-  `Settings.screenSize(fitting:)`. Call `dmd_resize_screen` on orientation and
-  window-size change, and re-read `dmd_video_ram()` afterwards — both the
-  pointer and the length move.
 - **muxterm and jim.** They carry their own `display` from V8's `libj`
   (`src/lib/j/display.c`, `{0x700000, 25, 0,0, XMAX, YMAX, 0}`). Either rebuild
   them inside V8 with new `XMAX`/`YMAX`, or patch the same 20-byte structure in

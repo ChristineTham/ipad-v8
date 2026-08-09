@@ -46,9 +46,51 @@ struct MachineView: View {
                 .padding(.top, 8)
             }
         }
+        #if os(macOS)
+        // Real window chrome. Everything the user might reach for lives in the
+        // title bar, so nothing floats over the emulated screen and nothing
+        // has to wrap: AppKit moves whatever does not fit into the overflow
+        // menu, which is exactly the behaviour a hand-rolled strip lacked.
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Picker("Screen", selection: $showBlit) {
+                    Text("Console").tag(false)
+                    Text("5620").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 150)
+            }
+            if showBlit {
+                ToolbarItem {
+                    Text(capture.captured ? "pointer grabbed" : "⌥click B2 · ⌘click B3")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .help("""
+                            The 5620 has three mouse buttons. Left, middle and right map \
+                            to B1, B2 and B3; on a trackpad, ⌥click gives B2 and ⌘click \
+                            gives B3. mux's layer menu is on B3.
+                            """)
+                }
+                ToolbarItem {
+                    Button(capture.captured ? "Release Pointer" : "Grab Pointer") {
+                        capture.captured.toggle()
+                    }
+                    .help("""
+                        The 5620's mouse is a relative device, so its cursor and the \
+                        Mac's drift apart at the screen edge. Grabbing hides the Mac's \
+                        entirely (⌘G).
+                        """)
+                }
+                ToolbarItem {
+                    Button("BREAK") { terminal.sendBreak() }
+                        .help("Send a serial BREAK to the terminal.")
+                }
+            }
+        }
+        #else
         .overlay(alignment: .bottomTrailing) {
             HStack(spacing: 8) {
-                #if !os(macOS)
                 // macOS gets the standard Settings scene on Cmd-, instead.
                 Button {
                     showSettings = true
@@ -57,7 +99,6 @@ struct MachineView: View {
                 }
                 .buttonStyle(.bordered)
                 .tint(.green)
-                #endif
                 Button(showBlit ? "Console" : "5620") {
                     showBlit.toggle()
                 }
@@ -67,7 +108,6 @@ struct MachineView: View {
             }
             .padding(14)
         }
-        #if !os(macOS)
         .sheet(isPresented: $showSettings) {
             NavigationStack {
                 SettingsView(settings: settings, machine: machine, terminal: terminal)

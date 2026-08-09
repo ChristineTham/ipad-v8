@@ -88,6 +88,22 @@ Runbook: [spike-a0.md](spike-a0.md)
       on the 5620 in a native window; real 3-button mouse (right-click is mux's
       menu); snapshot on quit, never on hide*
 
+### A4 — a bigger, sharper, continuous screen *(2026-08-10; [screen-size.md](screen-size.md))*
+- [x] Resize a running 5620 and widen its text grid to 127 columns — *the
+      `display` Bitmap is ROM `.data`; the grid is 24 byte immediates*
+- [x] Two fixed presets, Original (800×1024, 88 cols) and Wide (1152×1024, 127),
+      with the window locked to the CRT's shape instead of the reverse
+- [x] The screen survives a quit: `screen.bin` painted back once the terminal
+      has booted
+- [x] The *session* survives too — the start-of-session nudge now waits for the
+      firmware's idle PC window and always fires *(this is what "restored
+      session is mute" actually was)*
+- [x] Area-average sampling in the fragment shader, from the drawable's real
+      pixel count — no shimmer at fractional scale, bit-identical at integral
+- [x] Controls out of the terminal field: a real `NSToolbar` on the Mac, a
+      chrome bar on iPad, and a plain bezel around the tube
+- [ ] Widen `muxterm` and `jim` to match *(they carry their own `display`)*
+
 ## Track B — the V10 restoration *(desktop SIMH until it boots; see [v10-restoration.md](v10-restoration.md))*
 
 ### B0 — the ingest path *(done 2026-08-09, before any V10 source exists)*
@@ -132,6 +148,21 @@ The courier is too small and too manual to build V10 on: 8.1 MB a load against a
 - [ ] **N5** Host netfs server over TCP, read-only first
 - [ ] **N6** Guest client (~50 lines: socket, handshake, `gmount`)
 - [ ] **N7** Read/write; then port the server into the app for Files access
+
+### B0.6 — a machine to live in *(planned 2026-08-10, [machine-config.md](machine-config.md))*
+
+Turning the shipped image from a demo that boots to `login:` into a machine with
+the user's own account, the host's files, and a network. Stage 1 needs nothing
+new; stages 2 and 3 wait on N3-into-the-image and N4–N7 respectively.
+
+- [ ] **C1** `work/config.exp` — fold the three fix-*.exp scripts into one
+      idempotent build-time script; add `/etc/skel` and the `/n` mount points
+- [ ] **C2** First-boot provisioner in the app: an account named after the host
+      user, a real V8 home at `/usr/<user>` *(not* the host share — 14-byte
+      filenames and case-folding rule that out)*
+- [ ] **C3** Golden image rebuilt on the N3 `il0` kernel; `att il0 nat:` in both
+      configs; `/etc/rc` brings the interface up *(blocked on N3 → image)*
+- [ ] **C4** `/n/macos` and `/n/home` mounted at boot *(blocked on N5–N7)*
 
 ### B1 — toolchain
 - [ ] Import `v10src` + `v10blit` into the running V8

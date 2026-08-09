@@ -234,6 +234,34 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   it the moment the machine runs again; unclean kills cold-boot and V8's autoboot fsck
   self-heals (with a telnet console V8 autoboots straight to `login:`, no single-user
   stop).
+- **`restore` must be `restore -D -Q`, with every unit attached by hand.** A plain
+  `restore` re-attaches each saved unit in device order to the filename in the snapshot
+  — and for a mux that "filename" is the *previous launch's port*, which the terminal
+  connection that was live a moment ago still holds in TIME_WAIT (tmxr binds without
+  `SO_REUSEADDR`). The bind fails. That alone is survivable; scp.c's loop is not: it is
+  gated on `r == SCPE_OK` and never resets `r`, so the **first** failure silently skips
+  **every remaining attach** — and the DZ precedes RP0 in device order, so the machine
+  comes back **with no disk**. The console still answers (the kernel is in memory) and
+  the shell still echoes `# ` from memory, so it presents as a terminal that has gone
+  quiet, which is nothing like the truth: `exec` SIGKILLs (`Killed`), `login` never
+  reaches a shell, getty is stuck. Proof either way:
+  `tools/restore-attach-probe.py` holds the saved port and prints `RP0 ... not attached`
+  vs `attached to v8.disk`. Attach the **disk before** the restore and the **DZ after**
+  it — that order matters, because `dz_attach`'s `lp->rcve`/DTR fixup only runs when
+  CSR_MSE is already set, i.e. against *restored* registers.
+- **A restored session has nothing left to say, so the terminal must ask — and it must
+  ask *late*.** getty prints its banner and `login:` exactly once, when it starts, then
+  blocks in `getname()`; a logged-in shell prints nothing unasked at all. A cold boot
+  therefore gets a prompt for free and a restore never does, so the terminal's own CR
+  nudge is the *only* thing that makes a resumed far end speak. Three ways to get that
+  wrong, all of which shipped at some point and all of which look identical to the user
+  (a picture with a dead keyboard): sending it only when no saved screen was restored;
+  skipping it because the screen was already the right size, so the whole
+  post-self-test block was conditional on a resize; and keying it to a raw step count —
+  20M steps is ~1.0 s at the default 2× clock, but the 5620's self-test does not finish
+  until ~1.2 s, so V8 answered into a terminal that was still testing itself. Gate every
+  start-of-session action on the firmware reaching its idle PC window, never on a timer
+  and never on the resize.
 - NWConnection to loopback parks in `.waiting(ECONNREFUSED)` forever when it races the
   listener (no reachability change is coming) — treat `.waiting` as a failed attempt and
   redial fresh.
@@ -304,6 +332,22 @@ session with no muxterm), staged disk import/export/reset, a licences screen and
 Store prep — plus a **native Mac app** sharing every line of app code. Evidence:
 `work/shots-a1-final/`, `work/shots-a2/`, `work/shots-a3/`.
 
+**A4 — the screen** (2026-08-10, [docs/screen-size.md](docs/screen-size.md)): two fixed
+presets (Original 800×1024/88 columns, Wide 1152×1024/127) with the window locked to
+the CRT's shape rather than the reverse; the screen *and* the session both survive a
+quit (`screen.bin` repainted, plus a CR nudge gated on the firmware's idle PC window —
+the fix for what looked like a mute restore); area-average sampling in the fragment
+shader so fractional scale no longer shimmers, driven off `MTKView.drawableSize` so
+Retina panels are actually used; controls out of the terminal field into a real
+`NSToolbar` (Mac) or a chrome bar (iPad), with a plain bezel around the tube.
+
+**B0.6 — a machine to live in** is planned but not started:
+[docs/machine-config.md](docs/machine-config.md). `fix-identity.exp` becomes
+`work/config.exp` (build time, universal) plus a first-boot provisioner in the app
+(per-installation: an account named after the host user). The host share mounts at
+`/n/macos` and `/n/home` and is deliberately **not** the home directory — V8's 14-byte
+filenames and case sensitivity rule that out.
+
 **Track B's ingest path is settled** (2026-08-09, phase B0): host↔guest file
 transfer is proven end to end — [docs/media-exchange.md](docs/media-exchange.md),
 `tools/tapeio.py`, `work/mediatest.sh` — including a VAX binary compiled inside V8 and
@@ -325,6 +369,14 @@ V8 kernel and whose mount takes any file descriptor.
 Next: **submit** — the remaining steps need the Apple account and a final name
 decision, all listed in [docs/app-store.md](docs/app-store.md) — and **Track B**,
 whose ingest path and source are both now in place — the TUHS tarballs are in `work/`, and B1 needs only 14.87 MB of the 243 MB tree.
-Not yet exercised: `mux`/`jim` driven by the Mac's real mouse, and "Crisp" scaling
-compared visually. Update the checkboxes in [docs/roadmap.md](docs/roadmap.md)
-as phases complete.
+Not yet exercised: `mux`/`jim` driven by the Mac's real mouse, "Crisp" scaling
+compared visually, and `muxterm`/`jim` widened to match the resized screen (they carry
+their own `display` from V8's libj). Update the checkboxes in
+[docs/roadmap.md](docs/roadmap.md) as phases complete.
+
+**Driving the Mac app from a script**: `open -n app --stdout LOG` *appends*, so
+truncate the log first or one file accumulates every run and looks like concurrent
+instances. Never use AppleScript `activate`/`keystroke` against the app — both resolve
+the *bundle* through LaunchServices and can launch a second copy, and two VAXes sharing
+one `v8.disk` is a filesystem-corruption hazard. Target `tell application id "..."` (or
+`System Events` `process`), and assert `pgrep -x ipnx | wc -l` is 1 at every step.
