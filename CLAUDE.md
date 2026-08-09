@@ -248,10 +248,19 @@ session with no muxterm), staged disk import/export/reset, a licences screen and
 Store prep — plus a **native Mac app** sharing every line of app code. Evidence:
 `work/shots-a1-final/`, `work/shots-a2/`, `work/shots-a3/`.
 
-**Track B's ingest path is also settled** (2026-08-09, phase B0): host↔guest file
+**Track B's ingest path is settled** (2026-08-09, phase B0): host↔guest file
 transfer is proven end to end — [docs/media-exchange.md](docs/media-exchange.md),
 `tools/tapeio.py`, `work/mediatest.sh` — including a VAX binary compiled inside V8 and
 carried back out. The golden image's missing `lost+found` was fixed at the same time.
+
+**B0.5 is planned but not started** — [docs/networking-plan.md](docs/networking-plan.md).
+The courier moves 8.1 MB a load against a 243 MB V10 tree, so before B1 the plan is a
+**516 MB RP07 disk** (SIMH and V8 agree on the geometry exactly; `/usr` on partition
+`f` = 475 MB), **real TCP/IP** via a new SIMH model of the Interlan NI1010 that V8
+already has a driver for (SIMH offers only DEUNA, which V8 cannot drive) against SIMH's
+already-compiled-in **NAT/SLiRP** — sandbox-safe, so it works on iOS too — and then
+Weinberger's **netfs over TCP**, whose in-kernel client is already `standard` in every
+V8 kernel and whose mount takes any file descriptor.
 
 Next: **submit** — the remaining steps need the Apple account and a final name
 decision, all listed in [docs/app-store.md](docs/app-store.md) — and **Track B**,

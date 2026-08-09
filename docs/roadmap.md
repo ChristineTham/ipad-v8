@@ -105,6 +105,23 @@ Runbook: [spike-a0.md](spike-a0.md)
       two courier loads. Longest stored path is 51 bytes, so V7 tar's 100-byte name
       field is a non-issue
 
+### B0.5 — infrastructure scope-up *(planned 2026-08-09, [networking-plan.md](networking-plan.md))*
+
+The courier is too small and too manual to build V10 on: 8.1 MB a load against a
+243 MB tree. Three changes, the last of which the iPad app needs anyway.
+
+- [ ] **N0** RP07 disk (516 MB; `/usr` on partition `f` = 475 MB) + migration + `lost+found`.
+      SIMH and V8 agree on the geometry exactly, so no new code
+- [ ] **N1** 4.3BSD under SIMH with `XU` + `nat:` reaching the Internet — a control
+      experiment proving the NAT plumbing before we build on it
+- [ ] **N2** `pdp11_il.c` — model the Interlan NI1010 (3 registers) against `sim_ether`.
+      V8 has `il`/`ec` drivers; SIMH has only DEUNA; this closes the gap. Highest risk
+- [ ] **N3** Rebuild the V8 kernel with `il0`; ping the outside world
+- [ ] **N4** Derive and document the netfs wire format → `docs/netfs-protocol.md`
+- [ ] **N5** Host netfs server over TCP, read-only first
+- [ ] **N6** Guest client (~50 lines: socket, handshake, `gmount`)
+- [ ] **N7** Read/write; then port the server into the app for Files access
+
 ### B1 — toolchain
 - [ ] Import `v10src` + `v10blit` into the running V8
 - [ ] Build pcc2, as, ld with V8's cc; compile a V10 hello.c and one mid-size command
