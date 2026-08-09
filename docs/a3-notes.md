@@ -161,16 +161,26 @@ not trigger. Quitting then wrote a new 1,922,583-byte snapshot through the
 terminate-later path, which also proves the *restored* machine was alive and
 suspendable. `term-stats.log` stayed frozen, confirming the new gating.
 
+**"Crisp" scaling** — verified on screen 2026-08-09 (`work/shots-b0/`). On an
+iPad Pro 13-inch the panel is 1032×1376 pt at 2×, so:
+
+| Mode | 5620 screen | Device pixels per 5620 pixel |
+|---|---|---|
+| Fill | 1032 × 1321 pt | 2.580 — fractional, hence the shimmer |
+| Crisp | 800 × 1024 pt, 116 pt margin each side | **2.000** |
+
+The measured margin in `ipad-scaling-crisp.png` matches the predicted 116 pt,
+confirming the computed geometry reaches the Metal view rather than merely
+being correct on paper. What is still untested is the *subjective* claim: no
+capture compares mux's stipple in the two modes, because that needs a mux
+session running rather than a `login:` prompt.
+
 Not verified yet:
 
 - **`mux` and `jim` on macOS with the real mouse.** Everything but the input
   layer is shared with the iPad, where both work (A2), but the Mac's button
   mapping has never been pointed at mux's B3 menu. Driving the Mac app needs
   event-injection permission this session did not have.
-- **"Crisp" scaling visually.** The arithmetic is checked (including the
-  overflow case) and settings are known to reach the Metal shader, since
-  switching the phosphor repaints the live screen. No screenshot yet compares
-  the stipple side by side.
 
 ## Track B media exchange
 
