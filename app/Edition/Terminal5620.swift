@@ -139,6 +139,7 @@ final class Terminal5620: ObservableObject {
         // Throughput instrumentation: which stage is actually the bottleneck is
         // not guessable from the outside, so measure it.
         var rxBytes: UInt64 = 0
+        let tStart = DispatchTime.now()          // never rebased, unlike t0
         var lastStats = DispatchTime.now()
         var lastRxBytes: UInt64 = 0
         var lastSteps: UInt64 = 0
@@ -252,9 +253,10 @@ final class Terminal5620: ObservableObject {
                 if dt >= 2.0 {
                     let mhz = Double(steps - lastSteps) / dt / 1e6
                     let rxRate = Double(rxBytes - lastRxBytes) / dt
+                    let elapsed = Double(now.uptimeNanoseconds - tStart.uptimeNanoseconds) / 1e9
                     let line = String(
-                        format: "%.1f MHz achieved (target %.0f)  rx %.0f B/s  backlog %d bytes\n",
-                        mhz, hz / 1e6, rxRate, rxq.count)
+                        format: "t=%7.1fs  %5.1f MHz (target %.0f)  rx %6.0f B/s  total %7llu B  backlog %d\n",
+                        elapsed, mhz, hz / 1e6, rxRate, rxBytes, rxq.count)
                     appendStats(line, to: stats)
                     lastStats = now
                     lastRxBytes = rxBytes

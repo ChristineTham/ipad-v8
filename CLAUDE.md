@@ -145,7 +145,9 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   empty injector backlog. Fix without patching: `att dz -m Speed=*32,127.0.0.1:PORT`.
   tmxr keeps the bps *factor* separately (only reset for real serial ports) so it
   survives reprogramming, and its attach parser deliberately allows a bare factor for
-  guest-speed-controlled devices. The mux download went ~100 s -> ~5 s. This **corrects
+  guest-speed-controlled devices. Measured: sustained rx 950 -> ~4,300 B/s and the mux
+  download ~100 s -> **~15 s** (55,473 B on the wire, matching the documented 55,156 B
+  payload plus overhead — so the transfer is complete, not truncated). This **corrects
   A2**: pacing was never "in the DUART" alone — there were two 9600 throttles in series
   (DUART at ÷8 = 9600-equivalent, and this), which is why changing only one gave 1.7x.
   Diagnose with queue depth, not throughput: a permanently empty inbound queue means the
