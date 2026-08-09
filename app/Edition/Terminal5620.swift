@@ -24,7 +24,8 @@ final class Terminal5620: ObservableObject {
     let frames = FrameStore()
     /// Multiplier on the WE32100's 10 MHz clock, live-adjustable from Settings.
     let speed = SpeedBox()
-    /// Screen geometry, live-adjustable: the window drives it.
+    /// The CRT this session runs. Settled once at start; the window is
+    /// shaped to it rather than the other way round.
     let screen = ScreenBox()
     private let rxq = EventQueue<UInt16>()      // host -> terminal (256 = BREAK)
     private let kbq = EventQueue<UInt8>()       // keystrokes, FIFO-paced on the thread
@@ -46,15 +47,20 @@ final class Terminal5620: ObservableObject {
     /// `nvram` is the 8 KB NVRAM file: the terminal's own settings (baud,
     /// screen preferences) live there, so restoring it is what makes the
     /// terminal feel like the same physical unit across launches.
-    func start(dzPort: UInt16, nvram: URL? = nil, stats: URL? = nil) {
+    func start(dzPort: UInt16, screen geometry: FrameStore.Geometry = .stock,
+               nvram: URL? = nil, stats: URL? = nil, screenSnapshot: URL? = nil) {
         guard state == .idle else { return }
         state = .running
         stopFlag.clear()
+        // Geometry is settled here, once, before the machine exists — not
+        // renegotiated from the window on every layout pass.
+        screen.set(geometry)
         let t = Thread { [rxq, kbq, mouseq, frames, stopFlag, speed, screen] in
             Terminal5620.threadMain(dzPort: dzPort, nvram: nvram, stats: stats,
                                     rxq: rxq, kbq: kbq,
                                     mouseq: mouseq, frames: frames, stop: stopFlag,
-                                    speed: speed, screen: screen)
+                                    speed: speed, screen: screen,
+                                    screenSnapshot: screenSnapshot)
             Task { @MainActor in
                 // Only report unexpected exits; deliberate stops go .idle.
                 NotificationCenter.default.post(name: .terminal5620Exited, object: nil)
@@ -79,9 +85,10 @@ final class Terminal5620: ObservableObject {
     /// snapshot while the terminal comes back without muxterm loaded, so the
     /// two ends are talking different protocols. Hanging up lets getty start
     /// over.
-    func restart(dzPort: UInt16, nvram: URL? = nil, stats: URL? = nil) {
+    func restart(dzPort: UInt16, screen geometry: FrameStore.Geometry = .stock,
+                 nvram: URL? = nil, stats: URL? = nil) {
         guard state == .running else {
-            start(dzPort: dzPort, nvram: nvram, stats: stats)
+            start(dzPort: dzPort, screen: geometry, nvram: nvram, stats: stats)
             return
         }
         stopFlag.set()
@@ -91,7 +98,7 @@ final class Terminal5620: ObservableObject {
             // singleton that must not be re-initialised under the old thread.
             try? await Task.sleep(nanoseconds: 500_000_000)
             self.state = .idle
-            self.start(dzPort: dzPort, nvram: nvram, stats: stats)
+            self.start(dzPort: dzPort, screen: geometry, nvram: nvram, stats: stats)
         }
     }
 
@@ -107,15 +114,21 @@ final class Terminal5620: ObservableObject {
 
     func mouse(_ event: MouseEvent) { mouseq.push(event) }
 
-    /// Ask for a different screen size. Cheap and idempotent — safe to call
-    /// on every layout pass; the dmd thread only acts when it actually
-    /// changes. See docs/screen-size.md for why height stays at 1024.
-    func resizeScreen(to geometry: FrameStore.Geometry) {
-        screen.set(geometry)
-    }
-
     /// Host-side BREAK toward the terminal (rarely needed by hand).
     func sendBreak() { rxq.push(256) }
+
+    /// Write the screen out so the next launch can put it back.
+    ///
+    /// Deliberately taken from the FrameStore on the main actor rather than
+    /// from the dmd thread: at quit the thread may be killed before any
+    /// `defer` of its own runs, and the store already holds the latest frame
+    /// under a lock. Nothing has to be coordinated.
+    func saveScreen(to url: URL?) {
+        guard let url else { return }
+        let data = frames.snapshot()
+        guard !data.isEmpty else { return }
+        try? data.write(to: url, options: .atomic)
+    }
 
     // MARK: - The dmd thread
 
@@ -123,7 +136,8 @@ final class Terminal5620: ObservableObject {
                                                rxq: EventQueue<UInt16>,
                                                kbq: EventQueue<UInt8>, mouseq: EventQueue<MouseEvent>,
                                                frames: FrameStore, stop: AtomicFlag,
-                                               speed: SpeedBox, screen: ScreenBox) {
+                                               speed: SpeedBox, screen: ScreenBox,
+                                               screenSnapshot: URL?) {
         // Power on at the authentic 800x1024, and stay there until the
         // self-test has finished.
         //
@@ -311,9 +325,25 @@ final class Terminal5620: ObservableObject {
                     if let vram = dmd_video_ram() {
                         frames.publish(vram, geometry: wanted)
                     }
-                    // Whatever was on the screen is gone, and neither getty
-                    // nor a shell repaints unasked. One CR gets a prompt back.
-                    writeAll(fd, [0x0d])
+                    // Put the last session's screen back, if we have one at
+                    // this exact size. The 5620 always power-cycles, so a
+                    // resumed VAX otherwise faces a terminal that has
+                    // forgotten everything, and nothing on the host repaints
+                    // unasked -- which is what made a restored session look
+                    // like a dead one.
+                    if let restored = loadScreen(from: screenSnapshot, geometry: wanted) {
+                        restored.withUnsafeBytes { raw in
+                            _ = dmd_set_video_ram(raw.bindMemory(to: UInt8.self).baseAddress,
+                                                  restored.count)
+                        }
+                        if let vram = dmd_video_ram() {
+                            frames.publish(vram, geometry: wanted)
+                        }
+                    } else {
+                        // Nothing to restore: the screen came back cleared, so
+                        // ask the host for a prompt.
+                        writeAll(fd, [0x0d])
+                    }
                 }
             }
 
@@ -357,6 +387,19 @@ final class Terminal5620: ObservableObject {
         } else {
             try? data.write(to: url)
         }
+    }
+
+    /// A saved screen, but only if it is exactly this geometry.
+    ///
+    /// The file is raw 1-bit rows with no header, so its length *is* its
+    /// geometry check: at a different width the same bytes would unpack at
+    /// the wrong stride and every row would skew. A mismatch discards it —
+    /// a blank screen is better than a scrambled one.
+    nonisolated private static func loadScreen(from url: URL?,
+                                               geometry: FrameStore.Geometry) -> Data? {
+        guard let url, let data = try? Data(contentsOf: url),
+              data.count == geometry.byteCount else { return nil }
+        return data
     }
 
     nonisolated private static func loadNVRAM(from url: URL?) {
@@ -453,8 +496,8 @@ final class FrameStore: @unchecked Sendable {
         /// than that and the text simply stops, leaving a right margin: the
         /// screen grows but the terminal does not.
         ///
-        /// This is the shape to give a window that should be all terminal.
-        static let widestUseful = Geometry(width: 1152, height: 1024)
+        /// This is the wider of the app's two screens.
+        static let wide = Geometry(width: 1152, height: 1024)
     }
 
     private let lock = NSLock()
@@ -468,6 +511,17 @@ final class FrameStore: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return geometry
+    }
+
+    /// The latest frame as bytes, for writing to disk.
+    ///
+    /// Taken under the same lock as the geometry, so what is written can never
+    /// be one session's pixels labelled with another's size — and the file
+    /// needs no header, because its length is the check.
+    func snapshot() -> Data {
+        lock.lock()
+        defer { lock.unlock() }
+        return Data(buf)
     }
 
     func publish(_ vram: UnsafePointer<UInt8>, geometry g: Geometry) {

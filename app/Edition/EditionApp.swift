@@ -38,6 +38,8 @@ struct EditionApp: App {
                 .onAppear {
                     machine.start()
                     appDelegate.machine = machine
+                    appDelegate.settings = settings
+                    appDelegate.terminal = terminal
                 }
         }
         .defaultSize(width: 900, height: 1120)
@@ -60,6 +62,7 @@ struct EditionApp: App {
                 Divider()
                 Button("Restart Terminal") {
                     terminal.restart(dzPort: machine.dzPort,
+                                     screen: settings.activeScreen,
                                      nvram: settings.persistNVRAM ? machine.nvramURL : nil,
                                      stats: settings.statsURL(machine))
                 }
@@ -81,6 +84,7 @@ struct EditionApp: App {
             case .background:
                 // Snapshot inside a UIKit background task; iOS grants a few
                 // seconds, the save handshake needs well under one.
+                terminal.saveScreen(to: machine.screenURL)
                 let token = UIApplication.shared.beginBackgroundTask(withName: "simh-save")
                 Task {
                     await machine.background()
@@ -102,17 +106,17 @@ struct EditionApp: App {
 /// otherwise the process dies mid-`save` and the next launch cold-boots.
 final class MacAppDelegate: NSObject, NSApplicationDelegate {
     weak var machine: Machine?
+    weak var settings: Settings?
+    weak var terminal: Terminal5620?
 
     /// Open as large as the desk allows, short of full screen — and shaped so
     /// the emulated CRT fills it exactly.
     ///
-    /// Two constraints meet here. The screen may be as tall as the desk
-    /// allows but its useful width stops at 1152 px, because the ROM
-    /// terminal's grid tops out at 127 columns of 9 px plus margins; past
-    /// that the window grows and the terminal does not. And the terminal is
-    /// not the whole window: the title bar and the app's own toolbar come off
-    /// the top first, so sizing to `visibleFrame` outright leaves the CRT
-    /// letterboxed by exactly that much.
+    /// The CRT is one of two fixed sizes, so this is simply: make the window
+    /// as big as the desk allows at that shape. The terminal is not the whole
+    /// window — the title bar and the app's own toolbar come off the top
+    /// first — so sizing to `visibleFrame` outright would letterboxed the CRT
+    /// by exactly that much.
     ///
     /// So: take the desk minus the menu bar and Dock (`visibleFrame`), take
     /// the real chrome off that, and give the remainder the CRT's aspect.
@@ -144,7 +148,12 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
                 - window.contentRect(forFrameRect: window.frame).height
             let chrome = titleBar + Blit5620View.toolbarHeight
 
-            let crt = FrameStore.Geometry.widestUseful
+            // "Fit the window" wants the biggest window the desk allows and a
+            // CRT shaped to match it; "Authentic" wants the 5620's own
+            // portrait tube, as large as it will go. Both are the same
+            // calculation once the CRT is known — which is why the CRT is
+            // chosen here, from the desk, before the window is sized.
+            let crt = self.settings?.chooseScreen() ?? .stock
             let aspect = CGFloat(crt.width) / CGFloat(crt.height)
             var screenH = desk.height - chrome
             var screenW = screenH * aspect
@@ -164,6 +173,13 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
             window.isRestorable = false
             window.setFrameAutosaveName("")
             window.setFrame(target, display: true)
+
+            // Lock the shape. The user can still resize — the picture scales —
+            // but the window can no longer be dragged into a shape the
+            // emulated CRT is not, which is what used to force the terminal to
+            // rebuild itself mid-session.
+            window.contentAspectRatio = NSSize(width: target.width,
+                                               height: target.height - titleBar)
 
             // And check again a beat later, because "reported success" turned
             // out not to mean "kept it".
@@ -196,6 +212,9 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // Before anything else: the terminal always power-cycles, so the only
+        // way the next launch can look continuous is to keep its screen.
+        terminal?.saveScreen(to: machine?.screenURL)
         guard let machine, machine.canSuspend else { return .terminateNow }
         Task { @MainActor in
             await machine.background()

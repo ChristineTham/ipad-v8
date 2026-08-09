@@ -77,6 +77,15 @@ final class Machine: ObservableObject {
     /// from the outside, so the dmd thread records it.
     var termStatsURL: URL { supportDir.appendingPathComponent("term-stats.log") }
 
+    /// The 5620's screen as it was when we last stopped.
+    ///
+    /// SIMH can resume the VAX exactly, but the terminal always power-cycles —
+    /// there is no way to resume a WE32100 mid-instruction — so a restored
+    /// session comes back to a machine that has forgotten everything on screen,
+    /// and neither getty nor a shell repaints unasked. Painting the last frame
+    /// back is what makes the two halves look like one continuous session.
+    var screenURL: URL { supportDir.appendingPathComponent("screen.bin") }
+
     private var snapshotURL: URL { supportDir.appendingPathComponent("state.sav") }
     private var attemptURL: URL { supportDir.appendingPathComponent("restore.attempt") }
     private var pendingDiskURL: URL { supportDir.appendingPathComponent("v8.disk.pending") }

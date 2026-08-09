@@ -59,6 +59,11 @@ int32_t dmd_step_loop(size_t steps);
 
 /* 102,400 bytes: row-major, 100 bytes/row, MSB-first, 1 = lit phosphor. */
 const uint8_t *dmd_video_ram(void);
+
+/* Paint a saved screen back in. len must equal (width/8)*height exactly; a
+ * mismatch is refused, not truncated. The 5620 always power-cycles, so this
+ * is the only way a restored session can look continuous. */
+int32_t dmd_set_video_ram(const uint8_t *data, size_t len);
 int32_t dmd_video_ram_dirty(void);
 
 int32_t dmd_rs232_rx(uint8_t c);                 /* host -> terminal */

@@ -55,29 +55,39 @@ final class Settings: ObservableObject {
         }
     }
 
-    /// What shape of CRT to emulate.
+    /// What shape of CRT to emulate — one of exactly two.
     ///
-    /// The real 5620 was a portrait 800x1024 tube, which letterboxes badly on a
-    /// landscape window. `.fit` widens the emulated screen to the window's
-    /// shape instead of scaling a portrait one into it.
+    /// Not a free size. Both ends of the range are pinned by the firmware:
+    /// height must stay at 1024 because `YCMAX` is compiled in and the ROM
+    /// scrolls at pixel row 969, and width stops being useful past 1152
+    /// because the text grid tops out at 127 columns of 9 px plus margins.
+    /// Everything in between is a shape nothing benefits from, so offering it
+    /// only bought edge cases. See docs/screen-size.md.
     enum ScreenShape: String, CaseIterable, Identifiable {
-        case authentic, fit
+        case original, wide
 
         var id: String { rawValue }
 
+        var geometry: FrameStore.Geometry {
+            switch self {
+            case .original: return .stock        // 800x1024, the real tube
+            case .wide:     return .wide         // 1152x1024, 127 columns
+            }
+        }
+
         var label: String {
             switch self {
-            case .authentic: return "Authentic (800×1024)"
-            case .fit: return "Fit the window"
+            case .original: return "Original (800×1024)"
+            case .wide: return "Wide (1152×1024)"
             }
         }
 
         var explanation: String {
             switch self {
-            case .authentic:
-                return "The real DMD 5620's portrait tube, exactly."
-            case .fit:
-                return "Widen the emulated CRT to match the window. Height stays 1024 — the firmware's text grid needs it. mux layers use the extra width; the login prompt before mux does not."
+            case .original:
+                return "The real DMD 5620's portrait tube, exactly: 88 columns. Takes effect next launch."
+            case .wide:
+                return "As wide as the firmware can be driven: 127 columns, the same 1024 lines. Height cannot change — the ROM's text grid is compiled in. Takes effect next launch."
             }
         }
     }
@@ -132,6 +142,8 @@ final class Settings: ObservableObject {
         static let phosphor = "screen.phosphor"
         static let scaling = "screen.scaling"
         static let shape = "screen.shape"
+        static let screenW = "screen.activeWidth"
+        static let screenH = "screen.activeHeight"
         static let mouse = "input.mouseSensitivity"
         static let nvram = "terminal.persistNVRAM"
         static let speed = "terminal.speed"
@@ -142,7 +154,9 @@ final class Settings: ObservableObject {
         self.store = store
         phosphor = Phosphor(rawValue: store.string(forKey: Key.phosphor) ?? "") ?? .green
         scaling = Scaling(rawValue: store.string(forKey: Key.scaling) ?? "") ?? .fit
-        screenShape = ScreenShape(rawValue: store.string(forKey: Key.shape) ?? "") ?? .fit
+        screenShape = ScreenShape(rawValue: store.string(forKey: Key.shape) ?? "") ?? .wide
+        let w = store.integer(forKey: Key.screenW), h = store.integer(forKey: Key.screenH)
+        if w > 0, h > 0 { activeScreen = FrameStore.Geometry(width: w, height: h) }
         let sensitivity = store.double(forKey: Key.mouse)
         mouseSensitivity = sensitivity == 0 ? 1.0 : sensitivity      // 0 == never set
         persistNVRAM = store.object(forKey: Key.nvram) as? Bool ?? true
@@ -156,25 +170,35 @@ final class Settings: ObservableObject {
         logTerminalStats ? machine.termStatsURL : nil
     }
 
-    /// What CRT to ask the terminal for, given the space it has to live in.
+    /// The CRT this session is running, decided **once** and then left alone.
     ///
-    /// Height is always 1024 and only the width moves. That is not a
-    /// simplification, it is the firmware's constraint: `YCMAX` is compiled
-    /// into the ROM at 69, so it scrolls at pixel row 969, and a screen
-    /// shorter than 983 leaves it blitting rows the CRT does not have —
-    /// measured, the text collapses into the upper half. Width has no such
-    /// limit; it only has to be a multiple of 32, because a Bitmap's stride is
-    /// counted in 32-bit Words. Below 800 the ROM's own 88-column text grid
-    /// would be clipped, so that is the floor. See docs/screen-size.md.
-    func desiredScreen(fitting available: CGSize) -> FrameStore.Geometry {
-        guard screenShape == .fit, available.width > 0, available.height > 0 else {
-            return .stock
-        }
-        let height = 1024
-        let wanted = CGFloat(height) * (available.width / available.height)
-        let words = (wanted / 32).rounded()
-        let width = min(2048, max(800, Int(words) * 32))
-        return FrameStore.Geometry(width: width, height: height)
+    /// It is deliberately not a function of the window's current size. The
+    /// terminal used to be reshaped on every layout pass, which meant a live
+    /// window drag resized the emulated hardware — and made the geometry
+    /// depend on when in the boot sequence the drag happened. Now the window
+    /// is locked to the CRT's shape instead, so resizing scales the picture
+    /// and never rebuilds the machine.
+    @Published private(set) var activeScreen: FrameStore.Geometry = .stock
+
+    /// Settle the CRT for this session. A lookup now, not a calculation:
+    /// the window is shaped to the result rather than the other way round.
+    @discardableResult
+    func chooseScreen() -> FrameStore.Geometry {
+        let chosen = screenShape.geometry
+        activeScreen = chosen
+        store.set(chosen.width, forKey: Key.screenW)
+        store.set(chosen.height, forKey: Key.screenH)
+        return chosen
+    }
+
+    /// The geometry the last session ran at, or nil if there was none.
+    ///
+    /// A restored session has to come back at the size its saved screen was
+    /// captured at, or the pixels would be unpacked at the wrong stride.
+    var lastScreen: FrameStore.Geometry? {
+        let w = store.integer(forKey: Key.screenW), h = store.integer(forKey: Key.screenH)
+        guard w > 0, h > 0 else { return nil }
+        return FrameStore.Geometry(width: w, height: h)
     }
 
     /// Largest size not exceeding `available` that shows a `screen`-sized

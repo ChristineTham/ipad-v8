@@ -27,22 +27,19 @@ struct Blit5620View: View {
         VStack(spacing: 0) {
             toolbar
             GeometryReader { geo in
-                // The window decides the shape of the CRT, and the CRT decides
-                // the layout — in that order, so a rotation or a window drag
-                // reshapes the emulated screen rather than letterboxing a
-                // portrait one into a landscape space.
-                let crt = settings.desiredScreen(fitting: geo.size)
+                // The CRT was chosen once, when the session started, and the
+                // window is locked to its shape — so this only ever scales the
+                // picture into whatever space it has. It deliberately does not
+                // reshape the emulated hardware: doing that on every layout
+                // pass meant a window drag rebuilt the machine, and made the
+                // geometry depend on when in the boot sequence the drag landed.
+                let crt = settings.activeScreen
                 let fitted = settings.screenSize(fitting: geo.size, screen: crt,
                                                  displayScale: displayScale)
                 let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
                 ZStack {
                     Color.black
                     screen(crt: crt, fitted: fitted, center: center)
-                }
-                // Resizing is idempotent and latched, so firing on every layout
-                // pass is free; a live window drag collapses to its last value.
-                .onChange(of: crt, initial: true) { _, wanted in
-                    terminal.resizeScreen(to: wanted)
                 }
             }
         }

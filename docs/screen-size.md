@@ -244,22 +244,52 @@ the end of the table, reads `0x0000000a` as its last valid address and wedges.
 So `ram_visible()` keeps the reserve undecoded until a custom screen exists —
 allocated the whole time, but not on the bus.
 
-## Open bug: restore + "Fit the window" comes back blank
+## Two sizes, and why not a range
 
-After a suspend/restore (`state.sav`), with **Fit the window** selected, the
-5620 comes up black and stays black — the dmd thread is running (79% CPU) and
-the self-test completes, but nothing reaches the screen, and neither a CR poke
-nor **Restart Terminal** recovers it. A cold boot at the same window size and
-the same setting is fine, and a restore at **Authentic (800×1024)** is fine, so
-it is specific to restoring *and* resizing.
+The app offers exactly two screens, and the reason is that both ends of the
+range are pinned by the firmware:
 
-Not yet diagnosed. Ruled out so far: the terminal is not wedged (it runs and
-the PC advances); it is not the ROM column patch (identical boot trace with
-and without); and it is not a restored full-screen program refusing to repaint
-(^L and ^R do nothing either).
+| | | |
+|---|---|---|
+| **Original** | 800×1024 | the real tube, 88 columns |
+| **Wide** | 1152×1024 | 127 columns — as wide as the grid can be driven |
 
-Workaround: switch **Screen shape** to Authentic, or delete `state.sav` from
-the container to force a cold boot.
+Height cannot move (`YCMAX` is compiled in; the ROM scrolls at pixel row 969),
+and width stops being useful past 1152 (127 columns × 9 px + margins = 1149).
+Everything between 800 and 1152 is a shape nothing benefits from, and offering
+it only bought edge cases: the geometry became a function of the window, so a
+window drag rebuilt the emulated machine, and *when* in the boot sequence the
+drag landed changed the result.
+
+So the CRT is chosen once per session, the window is shaped to it and locked to
+that aspect, and resizing only scales the picture. Nothing calls
+`dmd_resize_screen` in response to layout any more.
+
+The patching is still done at **runtime**, not by shipping two prebuilt ROM
+images. It would be easy to bake two ROMs, but the firmware in the app binary
+would then be modified AT&T code rather than the bytes dmd_core ships — a
+worse licensing position for no functional gain ([licensing.md](licensing.md)).
+
+## The screen survives a restore; the session does not
+
+The 5620 always power-cycles — there is no way to resume a WE32100
+mid-instruction — so a restored VAX faces a terminal that has forgotten
+everything on screen, and neither getty nor a shell repaints unasked. The app
+now writes the framebuffer to `screen.bin` at quit and paints it back with
+`dmd_set_video_ram()` once the terminal has booted. The file is raw 1-bit rows
+with no header, so its length *is* its geometry check: a mismatch is discarded,
+because a screen unpacked at the wrong stride is worse than a blank one.
+
+**Verified**: quit mid-session and relaunch, and the screen comes back exactly
+as it was.
+
+**Still open** — the restored session is *mute*. The picture is right, but
+nothing typed reaches V8 and nothing comes back. This is the older "mute DZ
+line after restore" symptom, and it is not the `lp->rcve` fix missing: that
+patch is present in the checkout and the xcframework was built after it. So
+the screen snapshot fixes the cosmetic half and the input half is still to
+find. Workaround: **Machine ▸ Restart Terminal**, which drops carrier and makes
+getty start over.
 
 ## Remaining work
 
