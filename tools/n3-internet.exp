@@ -67,7 +67,11 @@ sh "mkdir /usr/inet/lib"
 sh "echo '10.0.2.15\tv8' > /usr/inet/lib/hosts"
 sh "echo '10.0.2.2\tgateway' >> /usr/inet/lib/hosts"
 sh "echo '10.0.2.3\tnameserver' >> /usr/inet/lib/hosts"
-sh "echo '10.0.2.0\tslirp-net' > /usr/inet/lib/networks"
+# V8 is strictly classful -- in_netof() masks with IN_CLASSA_NET for a 10.x
+# address, so the interface's network must be declared 10.0.0.0. Saying
+# 10.0.2.0, which is what SLiRP's /24 suggests, makes ip_ifonnetof() fail to
+# match and every outbound datagram is dropped without a word.
+sh "echo '10.0.0.0\tslirp-net' > /usr/inet/lib/networks"
 sh "echo N3E-devices"
 
 send_user "\n=== 2. push IP and UDP ===\n"

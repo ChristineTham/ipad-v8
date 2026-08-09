@@ -216,48 +216,65 @@ CH11 at 0164140, which appears there as `04140`.
 nothing else, so `ENIOADDR` returning `02:07:01:00:00:01` is the end-to-end
 check that a 66-byte DMA landed exactly where the UNIBUS map said it would.
 
-### What is *not* done: IP above the driver
+### IP, and the one-word bug that hid it
 
-Raw Ethernet works in both directions. **IP does not yet reach the wire.**
-`tools/n3-internet.exp` sets the interface up exactly as the CSRC's own
-`usr/src/cmd/inet/READ_ME` prescribes and then asks SLiRP's DNS forwarder to
-resolve a name (`tools/v8/dnsq.c`, built on `udp_connect(3)` because V8
-predates every resolver library). Everything reports success and nothing
-happens:
+**V8 resolves names on the real Internet.**
 
-- `ipconfig /dev/il0 v8 slirp-net /dev/il1 &` and `udpconfig /dev/ip17 &` both
-  run with no diagnostic; `ps` shows both alive
-- `route add '*' gateway` returns 0
-- `udp_connect` returns a descriptor and the `write` reports the full length
-- …and the reply never comes
+```
+# /tmp/dnsq www.bell-labs.com 10.0.2.3
+asking 10.0.2.3 for www.bell-labs.com (35 byte query)
+reply: 130 bytes, id 4b21, rcode 0, 1 question(s), 3 answer(s)
+www.bell-labs.com has address 184.24.254.233
+THE INTERNET IS REACHABLE FROM V8
+```
 
-The SIMH-side trace says where the break is. Over a whole session
-`set il debug=CMD` records exactly five commands — `ILC_OFFLINE` (the probe),
-`ILC_RESET`, `ILC_STAT`, `ILC_ONLINE` (attach), and a single `ILC_RCV` — and
-**no `ILC_LDXMIT` or `ILC_XMIT` at all**. V8's IP layer never hands the driver
-a packet, so this is above the device model and above SLiRP; it is V8's own
-streams configuration.
+That answer travelled from a real nameserver, through SLiRP's NAT, across our
+NI1010 model, up V8's streams IP and UDP, and into a program compiled by a 1985
+C compiler. `tools/n3-internet.exp` sets it all up the way the CSRC's own
+`usr/src/cmd/inet/READ_ME` prescribes; `tools/v8/dnsq.c` builds the query by
+hand, because V8 predates every resolver library.
 
-Things already ruled out or established, for whoever picks this up:
+**The bug was one number, and it failed in total silence.** SLiRP offers
+10.0.2.0/24, so the interface's network was declared as `10.0.2.0` — the
+obvious reading. But V8 is strictly **classful**: `ip_subr.c`'s `in_netof()`
+masks a 10.x address with `IN_CLASSA_NET`, giving **10.0.0.0**. So
+`ip_ifonnetof()` compared 10.0.0.0 against the interface's 10.0.2.0, matched
+nothing, returned 0, and every outbound datagram was dropped without a
+diagnostic anywhere. Subnetting did not exist when this code was written.
 
-- `route(8)` talks to the IP layer through **`/dev/ip0`** specifically, which
-  is easy to miss — the minor number of a `/dev/ip*` node is the IP protocol
-  number (hence `ip6` = TCP, `ip17` = UDP), and 0 is used as a control channel.
-  Creating it changed `route` from silent failure to `rc=0`, but not the
-  outcome.
-- The image's kernel config has `pseudo-device uarp 1` but **no `arp`**, so
-  `NARP` is 0 and `NUARP` is 1. That is the intended arrangement — `ipconfig`
-  *is* the ARP daemon — and `ip_arp.c` compiles under
-  `#if NUARP > 0 && NINET > 0`. But `ip_ld.c`'s `IPIOARP` case is guarded by
-  `#if NARP > 0` and still sets `IFF_ARP` and ACKs when that is false, so a
-  half-configured interface would look healthy. Worth checking whether
-  `ifp->queue` (the user-ARP path in `arp_resolve`) is ever bound.
-- `ipdstate[]` is `[256]`, so minor 17 is in bounds — `pseudo-device inet 6`
+The interface's network must therefore be `10.0.0.0`:
+
+```
+$ cat /usr/inet/lib/networks
+10.0.0.0	slirp-net
+$ ipconfig /dev/il0 v8 slirp-net /dev/il1 &
+```
+
+What made it findable was the device model's own tracing rather than anything
+in the guest. With `set il debug=CMD`, a whole failing session logged exactly
+five commands — `ILC_OFFLINE`, `ILC_RESET`, `ILC_STAT`, `ILC_ONLINE`, one
+`ILC_RCV` — and **no transmit command at all**. That put the fault above the
+driver and above SLiRP in one step, which is worth remembering: the emulator is
+the only honest observer in a stack this old.
+
+**The first query after boot always times out.** Resolution is asynchronous —
+`arp_resolve` drops the datagram and asks `ipconfig` to ARP for the next hop —
+so the datagram that triggers the ARP is itself lost. The second query
+succeeds against a warm cache. That is 1985 behaviour, not a defect.
+
+Other things worth knowing:
+
+- **`route(8)` reaches the IP layer through `/dev/ip0` specifically.** The
+  minor number of a `/dev/ip*` node is the IP protocol number — hence `ip6` for
+  TCP and `ip17` for UDP — and 0 serves as a control channel. Without that node
+  `route add` fails, quietly enough to miss.
+- The kernel config has `pseudo-device uarp 1` and no `arp`, so `NARP` is 0 and
+  `NUARP` is 1. That is correct: `ipconfig` *is* the ARP daemon. But note
+  `ip_ld.c` guards its `IPIOARP` case with `#if NARP > 0` while still setting
+  `IFF_ARP` and ACKing when that is false, so a genuinely half-configured
+  interface would still look healthy.
+- `ipdstate[]` is `[256]`, so protocol 17 is in bounds; `pseudo-device inet 6`
   bounds the *interface* array `ipif[]`, not the protocol table.
-- Receive-side type matching is fine: the driver compares `icp->type` against
-  a `u_short` read straight out of DMA'd frame bytes, and `htons(0x0800)` on a
-  little-endian VAX gives exactly the 08 00 that appears on the wire. The ARP
-  test relies on the same path and works.
 
 ### Odds and ends
 
