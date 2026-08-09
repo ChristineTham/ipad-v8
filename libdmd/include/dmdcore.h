@@ -30,6 +30,13 @@ extern "C" {
 /* version 1 = firmware 8;7;3 (required by Research Unix mux). */
 int32_t dmd_init(uint8_t version);
 
+/* Emulated CRT geometry (ipnx patch). Call dmd_set_screen BEFORE dmd_init;
+ * width must be a multiple of 32 (a Bitmap's stride is counted in 32-bit
+ * Words). Defaults to the real 5620's 800x1024, in which case nothing in the
+ * firmware is touched. */
+int32_t dmd_set_screen(uint32_t width, uint32_t height);
+int32_t dmd_get_screen(uint32_t *width, uint32_t *height);
+
 int32_t dmd_step(void);
 int32_t dmd_step_loop(size_t steps);
 

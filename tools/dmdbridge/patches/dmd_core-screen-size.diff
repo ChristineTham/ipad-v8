@@ -1,0 +1,352 @@
+diff --git a/src/bus.rs b/src/bus.rs
+index 342e723..888376e 100644
+--- a/src/bus.rs
++++ b/src/bus.rs
+@@ -1,5 +1,6 @@
+ #![allow(clippy::unreadable_literal)]
+ 
++use std::sync::atomic::{AtomicUsize, Ordering};
+ use crate::duart::Duart;
+ use crate::err::BusError;
+ use crate::mem::Mem;
+@@ -56,6 +57,24 @@ pub trait Device: Send + Sync + Debug {
+ //  0x700000..0x7fffff     RAM (256K or 1M)
+ //
+ 
++/// Screen geometry.
++///
++/// The 5620's CRT was 800x1024, and that number is baked into three separate
++/// places: this framebuffer length, the screen `Bitmap` the ROM hands to every
++/// program it downloads, and XMAX/YMAX in the host-side jerq library that
++/// muxterm and jim are compiled against. This is the first of the three; the
++/// second is patched in Dmd::reset, and the third has to be rebuilt inside the
++/// host Unix.
++///
++/// Width must be a multiple of 32: a Bitmap's stride is counted in 32-bit
++/// Words, and the ROM's blit routines work a Word at a time.
++pub static SCREEN_W: AtomicUsize = AtomicUsize::new(800);
++pub static SCREEN_H: AtomicUsize = AtomicUsize::new(1024);
++
++pub fn screen_bytes() -> usize {
++    (SCREEN_W.load(Ordering::Relaxed) / 8) * SCREEN_H.load(Ordering::Relaxed)
++}
++
+ pub struct Bus {
+     rom: Mem,
+     duart: Duart,
+@@ -110,7 +129,7 @@ impl Bus {
+     fn video_ram_range(&self) -> Range<usize> {
+         let vid_register = (u16::from(self.vid[0]) << 8 | u16::from(self.vid[1])) as usize;
+         let start = vid_register * 4;
+-        let end = start + 0x19000;
++        let end = start + screen_bytes();
+         start..end
+     }
+ 
+@@ -227,6 +246,18 @@ impl Bus {
+         self.duart.rs232_rx(c);
+     }
+ 
++    pub fn duart_debug(&self) -> String {
++        self.duart.debug_state()
++    }
++
++    pub fn rs232_tx_break(&mut self) -> bool {
++        self.duart.rs232_tx_break()
++    }
++
++    pub fn rs232_break(&mut self) {
++        self.duart.rs232_break();
++    }
++
+     pub fn keyboard_rx(&mut self, keycode: u8) {
+         self.duart.keyboard_rx(keycode);
+     }
+diff --git a/src/cpu.rs b/src/cpu.rs
+index dd3c8c8..2976872 100644
+--- a/src/cpu.rs
++++ b/src/cpu.rs
+@@ -2630,6 +2630,10 @@ impl Cpu {
+         self.r[R_PC]
+     }
+ 
++    pub fn ir_debug(&self) -> String {
++        format!("{:?}", self.ir)
++    }
++
+     pub fn get_ap(&self) -> u32 {
+         self.r[R_AP]
+     }
+diff --git a/src/dmd.rs b/src/dmd.rs
+index 9576473..d948c57 100644
+--- a/src/dmd.rs
++++ b/src/dmd.rs
+@@ -3,7 +3,9 @@
+ use crate::bus::{AccessCode, Bus};
+ use crate::cpu::Cpu;
+ use crate::err::BusError;
++use crate::bus::{SCREEN_H, SCREEN_W};
+ use crate::rom_hi::{HI_ROM_V1, HI_ROM_V2};
++use std::sync::atomic::Ordering;
+ use crate::rom_lo::{LO_ROM_V1, LO_ROM_V1_LEN, LO_ROM_V2, LO_ROM_V2_LEN};
+ 
+ use libc::*;
+@@ -52,10 +54,12 @@ impl Dmd {
+             1 => {
+                 self.bus.load(0, &LO_ROM_V1)?;
+                 self.bus.load(LO_ROM_V1_LEN, &HI_ROM_V1)?;
++                self.patch_screen_bitmap(0x9ca8)?;
+             }
+             _ => {
+                 self.bus.load(0, &LO_ROM_V2)?;
+                 self.bus.load(LO_ROM_V2_LEN, &HI_ROM_V2)?;
++                self.patch_screen_bitmap(0xd8c8)?;
+             }
+         }
+ 
+@@ -64,6 +68,38 @@ impl Dmd {
+         Ok(())
+     }
+ 
++
++    /// Retarget the screen `Bitmap` the ROM carries in its own image.
++    ///
++    /// jerq.h:
++    ///     typedef struct Bitmap {
++    ///         Word *base;        /* start of the data */
++    ///         unsigned width;    /* stride, in 32-bit Words */
++    ///         Rectangle rect;    /* two Points, four shorts */
++    ///         char *_null;
++    ///     } Bitmap;
++    ///
++    /// and V8's src/lib/j/display.c initialises exactly this shape to
++    /// { 0x700000, 25, 0,0, XMAX,YMAX, 0 }. The same 20 bytes sit in the ROM
++    /// -- big-endian, at the offsets below -- which is what makes a different
++    /// screen size reachable at all: the geometry is data, not code.
++    ///
++    /// Everything the ROM draws with goes through a Bitmap*, so rewriting this
++    /// one retargets the firmware's own output. Nothing is touched at the
++    /// default 800x1024, so the stock terminal is bit-for-bit unchanged.
++    fn patch_screen_bitmap(&mut self, at: usize) -> Result<(), BusError> {
++        let w = SCREEN_W.load(Ordering::Relaxed);
++        let h = SCREEN_H.load(Ordering::Relaxed);
++        if w == 800 && h == 1024 {
++            return Ok(());
++        }
++        let words = (w / 32) as u32;
++        self.bus.load(at + 4, &words.to_be_bytes())?;
++        self.bus.load(at + 12, &(w as u16).to_be_bytes())?;
++        self.bus.load(at + 14, &(h as u16).to_be_bytes())?;
++        Ok(())
++    }
++
+     pub fn video_ram(&mut self) -> &[u8] {
+         self.bus.video_ram()
+     }
+@@ -76,6 +112,10 @@ impl Dmd {
+         self.cpu.get_pc()
+     }
+ 
++    pub fn ir_debug(&self) -> String {
++        self.cpu.ir_debug()
++    }
++
+     pub fn get_ap(&self) -> u32 {
+         self.cpu.get_ap()
+     }
+@@ -124,6 +164,18 @@ impl Dmd {
+         self.bus.rs232_rx(c);
+     }
+ 
++    pub fn duart_debug(&self) -> String {
++        self.bus.duart_debug()
++    }
++
++    pub fn rs232_tx_break(&mut self) -> bool {
++        self.bus.rs232_tx_break()
++    }
++
++    pub fn rs232_break(&mut self) {
++        self.bus.rs232_break();
++    }
++
+     pub fn keyboard_rx(&mut self, keycode: u8) {
+         self.bus.keyboard_rx(keycode);
+     }
+@@ -157,6 +209,33 @@ impl Dmd {
+ // Provide a C interface
+ //
+ 
++/// Set the emulated CRT's geometry. Must be called before dmd_init(); width
++/// must be a multiple of 32. Returns DMD_SUCCESS, or DMD_FAILURE if the
++/// framebuffer would not fit the 5620's 1 MB of RAM.
++#[no_mangle]
++pub extern "C" fn dmd_set_screen(width: u32, height: u32) -> c_int {
++    let (w, h) = (width as usize, height as usize);
++    if w == 0 || h == 0 || w % 32 != 0 || (w / 8) * h > 0x100000 {
++        return ERROR;
++    }
++    SCREEN_W.store(w, Ordering::Relaxed);
++    SCREEN_H.store(h, Ordering::Relaxed);
++    SUCCESS
++}
++
++/// Report it back, so a host that did not set it still knows what to draw.
++#[no_mangle]
++pub extern "C" fn dmd_get_screen(width: *mut u32, height: *mut u32) -> c_int {
++    unsafe {
++        if width.is_null() || height.is_null() {
++            return ERROR;
++        }
++        *width = SCREEN_W.load(Ordering::Relaxed) as u32;
++        *height = SCREEN_H.load(Ordering::Relaxed) as u32;
++    }
++    SUCCESS
++}
++
+ #[no_mangle]
+ fn dmd_init(version: u8) -> c_int {
+     match DMD.lock() {
+@@ -375,6 +454,28 @@ fn dmd_get_nvram(nvram: &mut [u8; 8192]) -> c_int {
+     }
+ }
+ 
++#[no_mangle]
++fn dmd_rs232_break() -> c_int {
++    match DMD.lock() {
++        Ok(mut dmd) => {
++            dmd.rs232_break();
++            SUCCESS
++        }
++        Err(_) => ERROR,
++    }
++}
++
++#[no_mangle]
++fn dmd_rs232_tx_break(flag: &mut u8) -> c_int {
++    match DMD.lock() {
++        Ok(mut dmd) => {
++            *flag = dmd.rs232_tx_break() as u8;
++            SUCCESS
++        }
++        Err(_) => ERROR,
++    }
++}
++
+ #[cfg(test)]
+ mod tests {
+     use crate::dmd::Dmd;
+diff --git a/src/duart.rs b/src/duart.rs
+index ed7eea0..ccd09c5 100644
+--- a/src/duart.rs
++++ b/src/duart.rs
+@@ -347,6 +347,8 @@ impl Port {
+ 
+ pub struct Duart {
+     ports: [Port; 2],
++    tx_break_pending: bool,
++    cmd_log: std::collections::VecDeque<(usize, u8)>,
+     acr: u8,
+     ipcr: u8,
+     inprt: u8,
+@@ -378,13 +380,19 @@ fn delay_rate(csr_bits: u8, acr_bits: u8) -> Duration {
+         BAUD_RATES_B[baud_bits]
+     };
+ 
+-    Duration::new(0, NS_PER_SEC / (baud_rate / BITS_PER_CHAR))
++    // ipad-v8 spike TURBO patch: run the wire 8x the programmed baud
++    // (9600-equivalent at the 1200-baud NVRAM default) — the speed real
++    // 5620 hardware supported. The 32ld protocol is block-acked and
++    // self-paces safely at this rate.
++    Duration::new(0, (NS_PER_SEC / (baud_rate / BITS_PER_CHAR)) / 32)
+ }
+ 
+ impl Duart {
+     pub fn new() -> Duart {
+         Duart {
+             ports: [Port::new(), Port::new()],
++            tx_break_pending: false,
++            cmd_log: std::collections::VecDeque::new(),
+             acr: 0,
+             ipcr: 0x40,
+             inprt: 0xb,
+@@ -457,6 +465,34 @@ impl Duart {
+         self.ports[PORT_0].rx_deque.push_front(c);
+     }
+ 
++    /// Deliver a BREAK condition on the RS232 (host) line: error flags plus
++    /// the 0x00 data byte a real UART receives. (ipad-v8 spike patch.)
++    /// Debug dump of both ports' live state (ipad-v8 spike diagnostics).
++    pub fn debug_state(&self) -> String {
++        let p = |i: usize| {
++            let port = &self.ports[i];
++            format!(
++                "port{}: conf={:02x} stat={:02x} hold={:02x?} shift={:02x?} rxfifo={} txdq={} rxdq={} delay={:?}",
++                i, port.conf, port.stat, port.tx_holding_reg, port.tx_shift_reg,
++                port.rx_fifo.len(), port.tx_deque.len(), port.rx_deque.len(), port.char_delay
++            )
++        };
++        format!("{} | {} | isr={:02x} imr={:02x} ivec={:02x} | cmds={:02x?}", p(0), p(1), self.isr, self.imr, self.ivec, self.cmd_log)
++    }
++
++    /// Poll-and-clear: has the terminal started a BREAK toward the host?
++    pub fn rs232_tx_break(&mut self) -> bool {
++        let b = self.tx_break_pending;
++        self.tx_break_pending = false;
++        b
++    }
++
++    pub fn rs232_break(&mut self) {
++        let port = &mut self.ports[PORT_0];
++        port.stat |= STS_RXB | STS_PER;
++        port.rx_char(0);
++    }
++
+     /// Queue a single character for processing by the keyboard port
+     pub fn keyboard_rx(&mut self, c: u8) {
+         self.ports[PORT_1].rx_deque.push_front(c);
+@@ -512,6 +548,10 @@ impl Duart {
+     }
+ 
+     fn handle_command(&mut self, cmd: u8, port_no: usize) {
++        self.cmd_log.push_back((port_no, cmd));
++        if self.cmd_log.len() > 48 {
++            self.cmd_log.pop_front();
++        }
+         let port = &mut self.ports[port_no];
+ 
+         let (tx_ists, rx_ists, dbk_ists) = match port_no {
+@@ -588,6 +628,11 @@ impl Duart {
+             }
+             CR_START_BRK => {
+                 debug!("PORT{}: Start Break.", port_no);
++                if !port.loopback() && port_no == PORT_0 {
++                    // ipad-v8 spike patch: expose the outgoing BREAK (the
++                    // in-code TODO) — 32ld's download handshake needs it.
++                    self.tx_break_pending = true;
++                }
+                 if port.loopback() {
+                     // We only care about a BREAK condition if it's
+                     // looping back to te receiver.
+@@ -595,6 +640,11 @@ impl Duart {
+                     // TODO: We may want to expose a BREAK condition
+                     // to the outside world at some point.
+                     port.stat |= STS_RXB | STS_PER;
++                    // ipad-v8 spike patch: a real UART receives a BREAK as a
++                    // 0x00 data byte alongside the error flags. The 8;7;3
++                    // ROM's loopback self-test waits for that byte to end its
++                    // walking-bit sequence.
++                    port.rx_char(0);
+                     // Set "Delta Break"
+                     self.isr |= dbk_ists;
+                 }
+diff --git a/src/lib.rs b/src/lib.rs
+index b9aaf30..6016950 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -19,3 +19,5 @@ mod utils;
+ extern crate lazy_static;
+ extern crate libc;
+ extern crate log;
++
++pub use crate::dmd::Dmd;

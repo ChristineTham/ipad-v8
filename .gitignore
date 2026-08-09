@@ -33,3 +33,5 @@ tools/dmdbridge/.cargo/
 *.iso
 app/*.log
 libdmd/build-*.log
+libdmd/*.pgm
+__pycache__/

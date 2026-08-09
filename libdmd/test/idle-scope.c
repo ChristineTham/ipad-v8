@@ -20,7 +20,7 @@
  *     from outside the core, through dmd_get_pc().
  *
  *   cc -O2 -o idle-scope test/idle-scope.c <libdmd_core.a> -Iinclude
- *   ./idle-scope [multiplier] [seconds]
+ *   ./idle-scope [multiplier] [seconds] [width] [height] [nvram-file]
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,7 +29,6 @@
 #include <unistd.h>
 #include "dmdcore.h"
 
-#define FB_BYTES  102400
 #define SAMPLE    50000            /* steps between samples */
 #define MAXPC     4096
 
@@ -40,13 +39,33 @@ static double now_s(void)
     return t.tv_sec + t.tv_nsec / 1e9;
 }
 
+static int fb_bytes_g = 102400;
+
 static int lit_bytes(void)
 {
     const uint8_t *fb = dmd_video_ram();
     int lit = 0;
-    for (int i = 0; i < FB_BYTES; i++)
+    for (int i = 0; i < fb_bytes_g; i++)
         if (fb[i]) lit++;
     return lit;
+}
+
+/* Dump the 1-bit framebuffer as a PGM. Skew or wrap in this image is the
+   whole test: it says whether the ROM is drawing at the stride we told it. */
+static void dump_pgm(const char *path, uint32_t w, uint32_t h)
+{
+    const uint8_t *fb = dmd_video_ram();
+    FILE *f = fopen(path, "wb");
+    if (!f)
+        return;
+    fprintf(f, "P5\n%u %u\n255\n", w, h);
+    for (uint32_t y = 0; y < h; y++)
+        for (uint32_t x = 0; x < w; x++) {
+            uint8_t byte = fb[(y * (w / 8)) + (x / 8)];
+            fputc((byte & (0x80 >> (x % 8))) ? 0 : 255, f);
+        }
+    fclose(f);
+    fprintf(stderr, "wrote %s (%ux%u)\n", path, w, h);
 }
 
 int main(int argc, char **argv)
@@ -54,6 +73,18 @@ int main(int argc, char **argv)
     double mult = argc > 1 ? atof(argv[1]) : 2.0;   /* app default: "Fast" */
     double secs = argc > 2 ? atof(argv[2]) : 25.0;
     double hz = 10e6 * mult;
+    uint32_t sw = 800, sh = 1024;
+
+    if (argc > 4) {                                 /* [width] [height] */
+        sw = (uint32_t)atoi(argv[3]);
+        sh = (uint32_t)atoi(argv[4]);
+        if (dmd_set_screen(sw, sh) != DMD_SUCCESS) {
+            fprintf(stderr, "dmd_set_screen(%u,%u) refused\n", sw, sh);
+            return 1;
+        }
+    }
+    dmd_get_screen(&sw, &sh);
+    const int fb_bytes = (int)(sw / 8) * (int)sh;
 
     if (dmd_init(1) != DMD_SUCCESS) {               /* firmware 8;7;3 */
         fprintf(stderr, "dmd_init failed\n");
@@ -64,16 +95,16 @@ int main(int argc, char **argv)
        NVRAM carries the programmed baud rate -- which is what sets the DUART's
        real-time per-character delay. Feeding a real saved NVRAM in is the only
        way to reproduce a user's actual power-on. */
-    if (argc > 3) {
+    if (argc > 5) {                                 /* [nvram-file] */
         static uint8_t nv[8192];
-        FILE *f = fopen(argv[3], "rb");
+        FILE *f = fopen(argv[5], "rb");
         if (!f || fread(nv, 1, sizeof nv, f) != sizeof nv) {
-            fprintf(stderr, "could not read 8192-byte NVRAM from %s\n", argv[3]);
+            fprintf(stderr, "could not read 8192-byte NVRAM from %s\n", argv[5]);
             return 1;
         }
         fclose(f);
         dmd_set_nvram(nv);
-        printf("# NVRAM restored from %s\n", argv[3]);
+        printf("# NVRAM restored from %s\n", argv[5]);
     }
 
     double t0 = now_s();
@@ -91,7 +122,8 @@ int main(int argc, char **argv)
     unsigned long long pc_samples = 0;
     double census_from = secs * 0.6;               /* only once settled */
 
-    printf("# 5620 at %.0f MHz emulated (app multiplier %.1fx)\n", hz / 1e6, mult);
+    fb_bytes_g = fb_bytes;
+    printf("# 5620 %ux%u at %.0f MHz emulated (app multiplier %.1fx)\n", sw, sh, hz / 1e6, mult);
     printf("# %8s %10s %8s   %s\n", "wall(s)", "Msteps", "lit", "event");
 
     while (now_s() - t0 < secs) {
@@ -155,5 +187,6 @@ int main(int argc, char **argv)
                100.0 * pc_cnt[best] / pc_samples);
         pc_cnt[best] = 0;
     }
+    dump_pgm("idle-scope.pgm", sw, sh);
     return 0;
 }

@@ -144,9 +144,17 @@ final class Machine: ObservableObject {
     //   cpu_idle_mask, and the mask is what the FFS test actually reads —
     //   so a restored machine would come back looking idle-enabled while
     //   matching VMS's pattern instead of 4.1BSD's, and quietly spin.
+    // - `set dz lines=8` must be repeated here, BEFORE the restore. The line
+    //   count is a device modifier, not a REG, so no snapshot carries it: a
+    //   resumed machine otherwise comes back with the compiled default, a
+    //   4-mux DZ spanning 2013E040-2013E05F with vectors C0-DC, while the
+    //   restored kernel autoconfigured against a 1-mux DZ at C0-C4. It has to
+    //   precede `restore` — dz_setnl resets the device, which would wipe the
+    //   guest-configured CSR if it ran after.
     private var resumeConf: String { """
     set remote telnet=127.0.0.1:\(controlPort)
     set remote timeout=600
+    set dz lines=8
     restore state.sav
     set cpu idle=4.1BSD
     set console telnet=127.0.0.1:\(consolePort)

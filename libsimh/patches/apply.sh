@@ -100,4 +100,64 @@ for old, new, what in edits:
 p.write_text(s)
 PY
 
+# Let a restored DZ line still receive.
+#
+# tmxr's per-line receive enable, lp->rcve, lives in the TMLN -- runtime state
+# that no snapshot records. The DZ sets it in exactly one place: when the guest
+# writes LPR (pdp11_dz.c, case 01). A guest that already has the line open has
+# no reason to write LPR again, so after `restore` the line comes back with
+# rcve = 0 and tmxr_poll_rx skips it forever (sim_tmxr.c: "(conn || txbfd) &&
+# rcve"). Everything typed at the terminal is dropped in silence; the line
+# looks perfectly healthy -- connected, DCD/CTS/DSR asserted, the guest still
+# polling MSR from its clock routine -- and never carries another byte.
+#
+# In ipnx that is the whole "resumed session shows a blinking cursor and
+# pressing RETURN does nothing" symptom: it is the 5620's line, not the 5620.
+#
+# The fix belongs in dz_attach, which already carries the restore-aware fixup
+# for the *other* direction -- re-asserting DTR/RTS from the restored CSR/TCR
+# for lines the guest had open. This extends that same judgement to receive:
+# a line the guest has open is a line that should be listening. The block only
+# runs when CSR_MSE is already set, which on a cold attach it never is, so a
+# fresh boot is untouched.
+python3 - "$SIMH" <<'PY'
+import sys, pathlib
+
+p = pathlib.Path(sys.argv[1]) / "PDP11" / "pdp11_dz.c"
+s = p.read_text()
+old = """    if (!dz_mctl || (0 == (dz_csr[dz] & CSR_MSE)))      /* enabled? */
+        continue;
+    for (muxln = 0; muxln < DZ_LINES; muxln++) {
+        if (dz_tcr[dz] & (1 << (muxln + TCR_V_DTR))) {
+            TMLN *lp = &dz_ldsc[(dz * DZ_LINES) + muxln];
+
+            tmxr_set_get_modem_bits (lp, TMXR_MDM_DTR|TMXR_MDM_RTS, 0, NULL);
+            }
+        }
+"""
+new = """    if (0 == (dz_csr[dz] & CSR_MSE))                    /* scanner enabled? */
+        continue;
+    for (muxln = 0; muxln < DZ_LINES; muxln++) {
+        TMLN *lp = &dz_ldsc[(dz * DZ_LINES) + muxln];
+
+        if (dz_mctl && (0 == (dz_tcr[dz] & (1 << (muxln + TCR_V_DTR)))))
+            continue;                                   /* guest has it hung up */
+        /* lp->rcve is TMLN state, which no snapshot records, and the guest
+           only ever sets it by writing LPR -- which it will not do again on a
+           line it already has open.  Without this a restored line silently
+           drops everything typed at it forever. */
+        lp->rcve = 1;
+        if (dz_mctl)
+            tmxr_set_get_modem_bits (lp, TMXR_MDM_DTR|TMXR_MDM_RTS, 0, NULL);
+        }
+"""
+if new in s:
+    print("apply: dz rcve restore patch already applied")
+elif old in s:
+    p.write_text(s.replace(old, new, 1))
+    print("apply: dz_attach now restores per-line receive enable")
+else:
+    sys.exit("apply: dz_attach modem-restore block not found -- upstream changed?")
+PY
+
 echo "apply: done"

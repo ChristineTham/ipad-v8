@@ -15,7 +15,7 @@ PATCH_DIR="$(cd ../tools/dmdbridge/patches && pwd)"
 if [ ! -d "$DMD_DIR" ]; then
   git clone "$DMD_REPO" "$DMD_DIR"
   git -C "$DMD_DIR" checkout "$DMD_REV"
-  for p in dmd_core-spike-patches.diff dmd_core-a2-ffi-break.diff; do
+  for p in dmd_core-spike-patches.diff dmd_core-a2-ffi-break.diff dmd_core-screen-size.diff; do
     git -C "$DMD_DIR" apply "$PATCH_DIR/$p" \
       || { echo "error: $p failed to apply" >&2; exit 1; }
   done

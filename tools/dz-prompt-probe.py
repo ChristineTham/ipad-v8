@@ -62,6 +62,7 @@ run 2
 RESUME = """\
 set remote telnet=127.0.0.1:{REM}
 set remote timeout=600
+set dz lines=8
 restore {SAV}
 set cpu idle=4.1BSD
 set console telnet=127.0.0.1:{CON}
@@ -92,6 +93,24 @@ class Sim:
                 pass
             time.sleep(0.7)
         self.log.close()
+
+
+def dump_dz(rem_port, tag):
+    """`show dz` prints per-line connection and modem state. Comparing the cold
+    and restored machines side by side is the whole diagnosis."""
+    r = Remote(rem_port)
+    if not r.suspend():
+        print("  [%s] remote console did not reach sim>" % tag)
+        return
+    for cmd in ("show dz", "examine dz csr", "examine dz tcr",
+                "examine dz lpr", "examine dz rxint", "examine dz txint",
+                "examine dz sae", "examine dz mdmctl"):
+        ok, out = r.run(cmd)
+        body = "\n".join(l for l in out.splitlines()
+                         if l.strip() and not l.strip().startswith("sim>")
+                         and cmd not in l)[:600]
+        print("  [%s] %s ->\n      %s" % (tag, cmd, body.replace("\n", "\n      ")))
+    r.resume()
 
 
 def watch_dz(dz, seconds, label):
@@ -141,6 +160,7 @@ def main():
         print("  console reached login: at %.0f s" % (time.time() - t0))
         got = watch_dz(dz, 12, "DZ line, no input:")
         cold_unprompted = "login:" in got
+        dump_dz(s1.rem_p, "cold")
         if not cold_unprompted:
             dz.send("\r")
             watch_dz(dz, 6, "DZ line, after one RETURN:")
@@ -170,6 +190,7 @@ def main():
         got3 = watch_dz(dz2, 8, "DZ line, after one RETURN:")
         dz2.send("\r\r\r")
         got4 = watch_dz(dz2, 8, "DZ line, after three more:")
+        dump_dz(s2.rem_p, "resume")
 
         # Is the line dead, or merely quiet? Drive it from the other end: log in
         # on the console and write to /dev/tty00 directly. If those bytes arrive,
