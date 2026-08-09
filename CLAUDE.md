@@ -191,6 +191,11 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   redial fresh.
 - `libsimh` compiles without `SIM_ASYNCH_IO`, so `set noasynch` errors ("Command not
   allowed") and is unnecessary — the V8-safe synchronous mode is a build-time guarantee.
+  **The desktop `work/opensimh/BIN/vax780` is the opposite**: it *is* built with async
+  I/O, so every hand-written config must open with `set noasynch` (verify with
+  `show asynch`). Omitting it looks like a hardware fault, not a config error —
+  `hp06: hard error er1=5<RMR,ILF>` on both drives and silent file loss — and only
+  once two units have overlapping transfers, so light I/O hides it entirely.
 - macOS gotchas (A3): our preferences type `Settings` **shadows SwiftUI's `Settings`
   scene** — write `SwiftUI.Settings { … }` or the scene silently resolves to the wrong
   initialiser. Exec'ing the app binary directly gets **no WindowServer connection** (it
@@ -213,7 +218,10 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   on one `hp` unit corrupts the filesystem *after* everything appears to work. Raw
   transfers **must be 512 bytes**: 4 KB+ writes fail with `er1=5<RMR,ILF>` after one
   record, and `tar`'s own blocking-20 write path silently drops everything past the
-  first 10,240 bytes while still exiting 0.
+  first 10,240 bytes while still exiting 0. **The 512-byte half of this is now
+  suspect**: `er1=5<RMR,ILF>` turned out to be the signature of a missing
+  `set noasynch` during N0, and `work/rawwrite.exp` never set it either. Re-test
+  before relying on the limit; the `tar` blocking trap is independent and real.
 - The golden image shipped **no `lost+found` on either filesystem**, so an autoboot
   `fsck` needing to reconnect an orphaned inode aborted to a single-user shell instead
   of `login:` ("Automatic reboot failed... help!") — reachable in the app whenever a
@@ -253,7 +261,11 @@ transfer is proven end to end — [docs/media-exchange.md](docs/media-exchange.m
 `tools/tapeio.py`, `work/mediatest.sh` — including a VAX binary compiled inside V8 and
 carried back out. The golden image's missing `lost+found` was fixed at the same time.
 
-**B0.5 is planned but not started** — [docs/networking-plan.md](docs/networking-plan.md).
+**B0.5 (the N track) is under way** — plan in
+[docs/networking-plan.md](docs/networking-plan.md), results in
+[docs/n-track-notes.md](docs/n-track-notes.md). **N0 is done** (2026-08-09):
+`work/myv8/rp07v8.golden` is a 516 MB RP07 that boots on its own with `/usr` at
+459,905 KB / 408,364 free, built by `work/rp07mig.sh`. The app still ships the RP06.
 The courier moves 8.1 MB a load against a 243 MB V10 tree, so before B1 the plan is a
 **516 MB RP07 disk** (SIMH and V8 agree on the geometry exactly; `/usr` on partition
 `f` = 475 MB), **real TCP/IP** via a new SIMH model of the Interlan NI1010 that V8

@@ -1,0 +1,80 @@
+#!/usr/bin/env expect
+#
+# N0 probe: establish the facts the RP07 migration depends on, before
+# committing to a long filesystem copy.
+#
+#   1. Does V8 autoconfigure a second Massbus drive as an RP07?
+#   2. Is the raw-copied root filesystem on rp1a valid? (fsck is the oracle:
+#      hp7_sizes[a] and hp6_sizes[a] are both 15884 sectors at cylinder 0,
+#      so a byte copy of the first 8,132,608 B should be a working root.)
+#   3. What does /etc/fstab look like, and how full is /usr today?
+#   4. Which copy tools does the image actually have?
+#
+# Run from work/myv8 with opensimh/BIN on PATH. Read-only apart from the
+# device nodes it creates on the *golden* image's /dev, which the migration
+# needs anyway.
+
+set timeout 300
+log_file -a rp07probe.log
+proc sendline {x} { send "$x\r" }
+
+proc must {pat {t 0}} {
+    global timeout
+    set use [expr {$t > 0 ? $t : $timeout}]
+    expect -timeout $use "$pat" {
+    } timeout {
+        send_user "\n*** FAILED: never saw '$pat' after ${use}s ***\n"; exit 3
+    } eof {
+        send_user "\n*** FAILED: simulator exited waiting for '$pat' ***\n"; exit 4
+    }
+}
+proc sh   {cmd {t 0}} { must "# "   $t; sendline $cmd }
+proc simh {cmd {t 0}} { must "sim>" $t; sendline $cmd }
+
+spawn vax780
+# This binary is built with SIM_ASYNCH_IO; V8 corrupts RP06 I/O without this
+# (simh issue #425). libsimh omits async at build time, which is why the app
+# never needs it.
+simh "set noasynch"
+simh "set tto 7b"
+simh "set rp0 rp06"
+simh "at rp0 rp06v8.golden"
+simh "set rp1 rp07"
+simh "at rp1 rp07v8.new"
+simh "show rp"
+simh "load -o bootV8 0"
+simh "run 2"
+must "login:" 300
+sendline "root"
+
+sh "echo PROBE-boot-ok"
+
+send_user "\n=== 1. what the kernel found ===\n"
+sh "/etc/dmesg"                 ;# may not exist; failure is informative
+
+send_user "\n=== 2. current layout ===\n"
+sh "cat /etc/fstab"
+sh "df"
+sh "ls -l /dev/rp0a /dev/rp0b /dev/rp0g /dev/rrp0a /dev/rrp0g"
+sh "du -s /usr"                 90
+
+send_user "\n=== 3. tools available for the copy ===\n"
+sh "ls /etc"
+sh "ls /bin"
+sh "ls /usr/bin"
+
+send_user "\n=== 4. is the raw-copied root on rp1a a real filesystem? ===\n"
+sh "/etc/mknod /dev/rrp1a c 4 8"
+sh "/etc/mknod /dev/rp1f  b 0 13"
+sh "/etc/mknod /dev/rrp1f c 4 13"
+sh "ls -l /dev/rrp1a /dev/rp1f /dev/rrp1f"
+sh "/etc/fsck /dev/rrp1a" 600
+sh "echo PROBE-fsck-done"
+
+sh "cd /; sync; sync; sync"
+sh "/etc/halt"
+simh "quit" 60
+expect eof
+wait
+
+send_user "\n=== PROBE DONE ===\n"

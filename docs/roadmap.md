@@ -110,8 +110,12 @@ Runbook: [spike-a0.md](spike-a0.md)
 The courier is too small and too manual to build V10 on: 8.1 MB a load against a
 243 MB tree. Three changes, the last of which the iPad app needs anyway.
 
-- [ ] **N0** RP07 disk (516 MB; `/usr` on partition `f` = 475 MB) + migration + `lost+found`.
-      SIMH and V8 agree on the geometry exactly, so no new code
+- [x] **N0** RP07 disk (516 MB; `/usr` on partition `f`) + migration + `lost+found` —
+      *done 2026-08-09: `work/rp07mig.sh` produces `rp07v8.golden`, which boots on its
+      own with `/usr` at **459,905 KB, 408,364 free** (was 141,578/90,035). Root needed
+      no filesystem copy — partition `a` is the same 15,884 sectors at cylinder 0 on
+      both drive types, so a host byte copy suffices. Notes and gotchas:
+      [n-track-notes.md](n-track-notes.md)*
 - [ ] **N1** 4.3BSD under SIMH with `XU` + `nat:` reaching the Internet — a control
       experiment proving the NAT plumbing before we build on it
 - [ ] **N2** `pdp11_il.c` — model the Interlan NI1010 (3 registers) against `sim_ether`.

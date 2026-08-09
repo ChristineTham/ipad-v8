@@ -265,9 +265,11 @@ it has never been written down outside the source.
 
 ## Plan
 
+Results as phases land: [n-track-notes.md](n-track-notes.md).
+
 | Phase | Work | Risk |
 |---|---|---|
-| **N0** | RP07 image + migration + `lost+found`. No new code | Low |
+| **N0** | RP07 image + migration + `lost+found`. No new code — **done** | Low |
 | **N1** | 4.3BSD under SIMH with `XU` + `nat:` reaching the Internet — control experiment | Low |
 | **N2** | `pdp11_il.c`: NI1010 model wired to `sim_ether` | **Highest** |
 | **N3** | V8 kernel rebuild with `il0`; ping the outside world | High |

@@ -1,0 +1,148 @@
+#!/usr/bin/env expect
+#
+# N0: migrate the V8 system from its 174 MB RP06 to a 516 MB RP07.
+#
+# Root needs no work here: hp7_sizes[a] and hp6_sizes[a] are both 15884
+# sectors at cylinder offset 0, so the wrapper raw-copies the first
+# 8,132,608 bytes on the host and the probe already fsck'd the result clean.
+# What is left is /usr, which grows 141,578 KB -> 464,000 KB and therefore
+# has to be copied file by file.
+#
+# Runs against rp06v8.mig, a throwaway copy — the golden image is never the
+# thing we boot.
+#
+#   rp0 = rp06v8.mig   RP06, the running system
+#   rp1 = rp07v8.new   RP07, the new disk (root already in place)
+#
+# Note the kernel will also treat hp1b as a swap device (swapalice.c lists
+# makedev(0,9)), which lands on cylinders 10-49 — clear of partition a
+# (0-9) and partition f (50-629), so it cannot corrupt what we build.
+
+set timeout 300
+log_file -a rp07mig.log
+proc sendline {x} { send "$x\r" }
+
+proc must {pat {t 0}} {
+    global timeout
+    set use [expr {$t > 0 ? $t : $timeout}]
+    expect -timeout $use "$pat" {
+    } timeout {
+        send_user "\n*** FAILED: never saw '$pat' after ${use}s ***\n"; exit 3
+    } eof {
+        send_user "\n*** FAILED: simulator exited waiting for '$pat' ***\n"; exit 4
+    }
+}
+proc sh   {cmd {t 0}} { must "# "   $t; sendline $cmd }
+proc simh {cmd {t 0}} { must "sim>" $t; sendline $cmd }
+
+spawn vax780
+# Mandatory, and not optional the way it looks: this binary is built WITH
+# SIM_ASYNCH_IO (unlike libsimh, where the V8-safe synchronous mode is a
+# build-time guarantee). Leaving it out gives exactly simh issue #425 —
+# "hp06: hard error er1=5<RMR,ILF>" on both drives once two units have
+# overlapping transfers, and cpio losing files.
+simh "set noasynch"
+simh "show asynch"
+simh "set tto 7b"
+simh "set rp0 rp06"
+simh "at rp0 rp06v8.mig"
+simh "set rp1 rp07"
+simh "at rp1 rp07v8.new"
+simh "load -o bootV8 0"
+simh "run 2"
+must "login:" 300
+sendline "root"
+sh "echo MIG-boot-ok"
+
+send_user "\n=== 1. build the new /usr on rp1f ===\n"
+# These may already exist (the probe made them); mknod just complains.
+sh "/etc/mknod /dev/rp1f  b 0 13"
+sh "/etc/mknod /dev/rrp1f c 4 13"
+sh "/etc/mknod /dev/rp1a  b 0 8"
+sh "mkdir /mnt"
+# 928,000 sectors of partition f = 464,000 blocks of 1 KB. mkfs counts 1 KB
+# blocks, the partition table counts 512-byte sectors: passing 928000 here
+# would build a filesystem twice the size of its partition.
+#
+# This is also the test that V8 really autoconfigured an RP07: hp6_sizes has
+# no partition f at all (size 0), so on an RP06 this command cannot work.
+sh "/etc/mkfs /dev/rrp1f 464000" 900
+sh "echo MIG-mkfs-done"
+sh "/etc/mount /dev/rp1f /mnt"
+sh "df"
+
+send_user "\n=== 2. copy /usr across (8775 files, ~50 MB) ===\n"
+sh "cd /usr; find . -print | cpio -pdm /mnt" 3000
+sh "echo MIG-copy-done"
+sh "sync"
+
+send_user "\n=== 3. lost+found on the new /usr ===\n"
+# The copied lost+found is an ordinary empty directory: mklost+found's whole
+# point is the pre-allocated empty slots fsck needs to reconnect an orphan
+# without being able to extend the directory. Rebuild it after the copy.
+sh "rm -rf /mnt/lost+found"
+sh "cd /mnt; /etc/mklost+found"
+sh "ls -ld /mnt/lost+found"
+sh "df"
+sh "cd /; sync; sync"
+sh "/etc/umount /dev/rp1f"
+sh "/etc/fsck /dev/rrp1f" 900
+sh "echo MIG-usr-verified"
+
+send_user "\n=== 4. point the new root at its new /usr ===\n"
+sh "/etc/mount /dev/rp1a /mnt"
+sh "cat /mnt/etc/fstab"
+sh "grep rp0g /mnt/etc/rc /mnt/etc/fstab"
+# One global substitution covers both spellings: rrp0g contains rp0g, so the
+# raw name follows the block name automatically.
+sh "sed 's/rp0g/rp0f/g' /mnt/etc/fstab > /tmp/fs.new"
+sh "cp /tmp/fs.new /mnt/etc/fstab"
+sh "sed 's/rp0g/rp0f/g' /mnt/etc/rc > /tmp/rc.new"
+sh "cp /tmp/rc.new /mnt/etc/rc"
+sh "cat /mnt/etc/fstab"
+sh "grep rp0f /mnt/etc/rc"
+# hp minor numbers are unit<<3|partition, so unit 0 partition f is 5.
+sh "/etc/mknod /mnt/dev/rp0f  b 0 5"
+sh "/etc/mknod /mnt/dev/rrp0f c 4 5"
+# An RP07 has no partition g at all (hp7_sizes[g] is zero), so leaving the
+# old nodes would turn a clear "no such file" into a puzzling I/O error.
+sh "rm -f /mnt/dev/rp0g /mnt/dev/rrp0g"
+sh "ls -l /mnt/dev/rp0a /mnt/dev/rp0f /mnt/dev/rrp0a /mnt/dev/rrp0f"
+sh "cd /; sync; sync"
+sh "/etc/umount /dev/rp1a"
+sh "/etc/fsck /dev/rrp1a" 300
+sh "echo MIG-root-patched"
+
+sh "cd /; sync; sync; sync"
+sh "/etc/halt"
+simh "quit" 60
+expect eof
+wait
+
+send_user "\n=== 5. boot the RP07 on its own ===\n"
+spawn vax780
+simh "set noasynch"
+simh "set tto 7b"
+simh "set rp0 rp07"
+simh "at rp0 rp07v8.new"
+simh "load -o bootV8 0"
+simh "run 2"
+must "login:" 600
+sendline "root"
+sh "echo MIG-standalone-boot-ok"
+sh "df"
+sh "cat /etc/fstab"
+sh "ls -ld /lost+found /usr/lost+found"
+sh "ls /usr"
+# Compiling proves the toolchain on the copied /usr is intact: cc is in /bin
+# but ccom, as and ld's passes all live under /usr.
+sh "echo 'main(){}' > /tmp/h.c"
+sh "cd /tmp; cc -o h h.c; ls -l h" 300
+sh "echo MIG-DONE"
+sh "cd /; sync; sync; sync"
+sh "/etc/halt"
+simh "quit" 60
+expect eof
+wait
+
+send_user "\n=== MIGRATION COMPLETE ===\n"
