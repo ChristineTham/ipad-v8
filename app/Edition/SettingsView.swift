@@ -54,6 +54,12 @@ struct SettingsView: View {
             Picker("Phosphor", selection: $settings.phosphor) {
                 ForEach(Settings.Phosphor.allCases) { Text($0.label).tag($0) }
             }
+            Picker("Screen shape", selection: $settings.screenShape) {
+                ForEach(Settings.ScreenShape.allCases) { Text($0.label).tag($0) }
+            }
+            Text(settings.screenShape.explanation)
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Picker("Scaling", selection: $settings.scaling) {
                 ForEach(Settings.Scaling.allCases) { Text($0.label).tag($0) }
             }

@@ -172,6 +172,78 @@ stay inside the reserve — but the terminal is unusable.
 
 Hence: **widen, never shorten.**
 
+## The self-test must run at 800×1024, and you must wait for it
+
+This cost two wrong fixes, so it is written down plainly.
+
+**The power-on self-test cannot run at a relocated framebuffer.** It draws each
+stage's name through `display` with `F_XOR`, but it blanks and scribbles on
+screen memory at a **hardcoded `0x700000`** — seven times in `selftest.c`,
+including the RAM tests. Move the framebuffer and the text still lands on the
+visible screen while every clear misses it, so the stage names accumulate on
+top of one another and the power-on screen is unreadable mush.
+
+So the terminal powers on stock and is resized afterwards — which is also why
+the checksum repair is off the boot path.
+
+**Waiting for "the screen stopped changing" is not good enough.** `selftest.c`
+draws `"WAITING FOR KEYBOARD STATUS"` and then blocks in `t_kbd()`:
+
+```c
+	lit_draw("SHORTRAM TEST");
+	shortram();
+	if(which == 0)
+	{
+		lit_draw("WAITING FOR KEYBOARD STATUS");
+		if(t_kbd() == 3) {
+```
+
+The screen is perfectly still in the *middle* of the self-test. Resizing there
+pulls the framebuffer out from under every later hardcoded clear, and the
+terminal never finishes booting — it sits on that message forever.
+
+The sound signal is the firmware's **own idle loop**, `0x5354`–`0x5389`. A
+firmware still polling the keyboard is not in it. Measured with
+`libdmd/test/resize-scope.c` at 2× on this ROM:
+
+| event | when |
+|---|---|
+| last self-test draw | 0.65 s |
+| **PC first enters the idle loop** | **1.15 s** |
+| longest quiet gap *during* the self-test | 0.35 s |
+
+So the PC test separates "finished" from "waiting" cleanly where no timer can.
+The app samples it three times in a row before resizing.
+
+## 127 columns: the text grid *is* reachable
+
+The grid is compiled in, but not out of reach. On the WE32100 a byte immediate
+is the two-byte sequence `6F <value>`, so `XCMAX` appears as `6F 57` and
+`XCMAX+1` as `6F 58`. Rewriting those retargets every comparison in place:
+**24 operands**, and the terminal keeps running across the change.
+
+Verified end to end — 240 characters wrap at x=1144 instead of 793, and in the
+app a 125-character shell line occupies one row where it used to take two.
+
+**127 is a hard ceiling.** The operand is one byte and the WE32100
+sign-extends it, so 128 would compare as negative and the terminal would wrap
+on every character. Past that needs a halfword immediate, which is a longer
+instruction, not an in-place edit. A screen wider than 1158 px therefore keeps
+a right margin in the ROM terminal — `mux` layers still use the full width.
+
+The patch substitutes from the *currently applied* count, not from the ROM's
+original 87/88, so a second resize still finds its operands. `Dmd::reset`
+returns it to 88 with the fresh image.
+
+### And the reserve must stay off the bus until then
+
+The self-test **sizes memory by probing it** and stores the result as an index
+into that two-entry `maxaddr` table. If the reserve above 1 MB answers while
+the probe runs, the firmware decides it has more than a megabyte, indexes past
+the end of the table, reads `0x0000000a` as its last valid address and wedges.
+So `ram_visible()` keeps the reserve undecoded until a custom screen exists —
+allocated the whole time, but not on the bus.
+
 ## Remaining work
 
 - **App plumbing.** The 800/1024/102400/100 constants are still hardcoded in

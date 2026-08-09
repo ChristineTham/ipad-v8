@@ -47,6 +47,7 @@ static double now_s(void)
     return t.tv_sec + t.tv_nsec / 1e9;
 }
 
+static int fb_bytes_g = 102400;
 static double hz_g;
 static double t0_g;
 static unsigned long long steps_g;
@@ -67,6 +68,48 @@ static void run_for(double secs)
                 usleep((useconds_t)((virt - real) * 1e6));
         }
     }
+}
+
+/* When is the power-on self-test actually over?
+ *
+ * "The screen stopped changing" is not the answer -- the RAM tests run for
+ * seconds without drawing anything, so a quiet screen happens repeatedly
+ * *during* the self-test, and acting on it resizes the terminal mid-test.
+ *
+ * A settled 5620 spends its time in a small PC window (0x5354-0x5389, the
+ * firmware's idle loop; see CLAUDE.md). Reaching that is a positive signal
+ * that the firmware has finished and is waiting for input. This traces both,
+ * so the app can be given a rule that is measured rather than guessed. */
+static void trace_boot(double secs, double hz)
+{
+    const uint32_t IDLE_LO = 0x5354, IDLE_HI = 0x5389;
+    double start = now_s(), lastChange = start, firstIdle = -1;
+    int last = -1, longestQuiet = 0;
+    double quietRun = 0;
+    while (now_s() - start < secs) {
+        run_for(0.05);
+        int lit = 0;
+        const uint8_t *fb = dmd_video_ram();
+        for (int i = 0; i < fb_bytes_g; i++) if (fb[i]) lit++;
+        double t = now_s() - start;
+        if (lit != last) {
+            if (last >= 0 && (t - (lastChange - start)) > quietRun)
+                quietRun = t - (lastChange - start);
+            last = lit;
+            lastChange = now_s();
+        }
+        uint32_t pc = 0;
+        if (firstIdle < 0 && dmd_get_pc(&pc) == DMD_SUCCESS
+            && pc >= IDLE_LO && pc <= IDLE_HI)
+            firstIdle = t;
+    }
+    (void)longestQuiet; (void)hz;
+    printf("# boot trace: longest quiet gap DURING the self-test = %.2f s\n", quietRun);
+    if (firstIdle >= 0)
+        printf("# boot trace: PC first entered the idle window at %.2f s\n", firstIdle);
+    else
+        printf("# boot trace: PC never reached the idle window in %.0f s\n", secs);
+    printf("# boot trace: last screen change at %.2f s\n", lastChange - start);
 }
 
 struct ink {
@@ -133,11 +176,22 @@ int main(int argc, char **argv)
     dmd_get_screen(&w, &h);
     printf("# booting stock %ux%u at %.0f MHz emulated\n", w, h, hz_g / 1e6);
 
+    /* Patch the text grid BEFORE the machine takes a step, to see whether the
+       rewritten operands break the power-on self-test -- specifically t_kbd(),
+       which the firmware enters right after "WAITING FOR KEYBOARD STATUS". */
+    if (getenv("COLUMNS_EARLY")) {
+        int n = dmd_set_columns((uint32_t)atoi(getenv("COLUMNS_EARLY")));
+        printf("# EARLY dmd_set_columns(%s) rewrote %d operands\n",
+               getenv("COLUMNS_EARLY"), n);
+    }
+
     t0_g = now_s();
-    run_for(boot);
+    fb_bytes_g = (int)(w / 8) * (int)h;
+    trace_boot(boot, hz_g);
     struct ink after_boot = survey(w, h);
     printf("# self-test settled: %ld lit pixels, %d rows, rightmost x=%d\n",
            after_boot.lit, after_boot.rows, after_boot.right);
+    dump_pgm("resize-selftest.pgm", w, h);
 
     /* --- text before the resize ------------------------------------- */
     feed("ABCDEFGHIJKLMNOPQRSTUVWXYZ", 240);
@@ -163,6 +217,21 @@ int main(int argc, char **argv)
     dmd_get_pc(&pc2);
     printf("# CPU after resize: pc %#010x -> %#010x (%s)\n",
            pc1, pc2, pc1 == pc2 ? "STOPPED" : "running");
+
+    /* --- widen the compiled-in text grid ----------------------------- */
+    int cols = getenv("COLUMNS_PATCH") ? atoi(getenv("COLUMNS_PATCH")) : 0;
+    if (cols > 0) {
+        int n = dmd_set_columns((uint32_t)cols);
+        printf("# dmd_set_columns(%d) rewrote %d operands\n", cols, n);
+        if (n < 0)
+            return 1;
+        uint32_t pc3 = 0, pc4 = 0;
+        dmd_get_pc(&pc3);
+        run_for(1.0);
+        dmd_get_pc(&pc4);
+        printf("# CPU after grid patch: pc %#010x -> %#010x (%s)\n",
+               pc3, pc4, pc3 == pc4 ? "STOPPED" : "running");
+    }
 
     /* --- text after the resize -------------------------------------- */
     feed("\033[H\033[J", 6);                 /* home, clear */

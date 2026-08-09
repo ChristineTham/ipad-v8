@@ -27,11 +27,22 @@ struct Blit5620View: View {
         VStack(spacing: 0) {
             toolbar
             GeometryReader { geo in
-                let fitted = settings.screenSize(fitting: geo.size, displayScale: displayScale)
+                // The window decides the shape of the CRT, and the CRT decides
+                // the layout — in that order, so a rotation or a window drag
+                // reshapes the emulated screen rather than letterboxing a
+                // portrait one into a landscape space.
+                let crt = settings.desiredScreen(fitting: geo.size)
+                let fitted = settings.screenSize(fitting: geo.size, screen: crt,
+                                                 displayScale: displayScale)
                 let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
                 ZStack {
                     Color.black
-                    screen(fitted: fitted, center: center)
+                    screen(crt: crt, fitted: fitted, center: center)
+                }
+                // Resizing is idempotent and latched, so firing on every layout
+                // pass is free; a live window drag collapses to its last value.
+                .onChange(of: crt, initial: true) { _, wanted in
+                    terminal.resizeScreen(to: wanted)
                 }
             }
         }
@@ -75,13 +86,14 @@ struct Blit5620View: View {
     }
 
     @ViewBuilder
-    private func screen(fitted: CGSize, center: CGPoint) -> some View {
+    private func screen(crt: FrameStore.Geometry, fitted: CGSize, center: CGPoint) -> some View {
         #if os(macOS)
         ZStack {
             FramebufferView(frames: terminal.frames, phosphor: settings.phosphor.tint)
             // Transparent event surface over the Metal view: AppKit gives us
             // real button and pointer events, including hover.
-            MacInputView(terminal: terminal, pixelScale: pixelScale(fitted), capture: capture)
+            MacInputView(terminal: terminal, pixelScale: pixelScale(crt: crt, fitted: fitted),
+                         capture: capture)
         }
         .frame(width: fitted.width, height: fitted.height)
         .position(center)
@@ -90,24 +102,24 @@ struct Blit5620View: View {
             .frame(width: fitted.width, height: fitted.height)
             .position(center)
             .contentShape(Rectangle())
-            .gesture(mouseDrag(fitted: fitted))
+            .gesture(mouseDrag(crt: crt, fitted: fitted))
         KeyCaptureRepresentable(terminal: terminal)
             .frame(width: 0, height: 0)
         #endif
     }
 
     /// Screen points -> 5620 pixels, with the user's pointer speed folded in.
-    private func pixelScale(_ fitted: CGSize) -> CGFloat {
-        800.0 / max(fitted.width, 1) * settings.mouseSensitivity
+    private func pixelScale(crt: FrameStore.Geometry, fitted: CGSize) -> CGFloat {
+        CGFloat(crt.width) / max(fitted.width, 1) * settings.mouseSensitivity
     }
 
     #if !os(macOS)
     @State private var lastPoint: CGPoint? = nil
 
-    private func mouseDrag(fitted: CGSize) -> some Gesture {
+    private func mouseDrag(crt: FrameStore.Geometry, fitted: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
-                let scale = pixelScale(fitted)
+                let scale = pixelScale(crt: crt, fitted: fitted)
                 if let last = lastPoint {
                     let dx = Int16((value.location.x - last.x) * scale)
                     let dy = Int16((value.location.y - last.y) * scale)

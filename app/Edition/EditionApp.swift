@@ -103,6 +103,53 @@ struct EditionApp: App {
 final class MacAppDelegate: NSObject, NSApplicationDelegate {
     weak var machine: Machine?
 
+    /// Open as large as the desk allows, short of full screen.
+    ///
+    /// `visibleFrame` is the screen minus the menu bar and the Dock, which is
+    /// exactly "as big as possible without going full screen" — and it is the
+    /// right default here because the emulated CRT now takes the window's
+    /// shape: a bigger window is a bigger 5620, not just a bigger scale
+    /// factor. Full screen is deliberately not used; it hides the menu bar
+    /// and moves the app to its own Space, which is a heavier thing to do to
+    /// someone on launch than they asked for.
+    /// Set once the window has been sized, so we do not fight SwiftUI's own
+    /// initial sizing (which lands *after* applicationDidFinishLaunching, and
+    /// silently undid an earlier attempt made there).
+    private var didMaximise = false
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(maximise(_:)),
+            name: NSWindow.didBecomeMainNotification, object: nil)
+    }
+
+    @objc private func maximise(_ note: Notification) {
+        guard !didMaximise, let window = note.object as? NSWindow,
+              window.styleMask.contains(.titled), window.isVisible else { return }
+        didMaximise = true
+        NotificationCenter.default.removeObserver(
+            self, name: NSWindow.didBecomeMainNotification, object: nil)
+        // One more turn of the runloop: becoming main can precede the final
+        // layout pass, and setting the frame before that gets overwritten.
+        DispatchQueue.main.async {
+            guard let screen = window.screen ?? NSScreen.main else { return }
+            let target = screen.visibleFrame
+            window.setFrame(target, display: true)
+            let got = window.frame
+            if abs(got.width - target.width) > 1 || abs(got.height - target.height) > 1 {
+                // Something constrained us — a content minimum or maximum, or
+                // a resizability policy. Worth knowing rather than silently
+                // shipping a window that is nearly, but not, the whole desk.
+                FileHandle.standardError.write(Data("""
+                    ipnx: window wanted \(Int(target.width))x\(Int(target.height)) \
+                    at \(Int(target.origin.x)),\(Int(target.origin.y)) but got \
+                    \(Int(got.width))x\(Int(got.height)) \
+                    at \(Int(got.origin.x)),\(Int(got.origin.y))\n
+                    """.utf8))
+            }
+        }
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let machine, machine.canSuspend else { return .terminateNow }
         Task { @MainActor in

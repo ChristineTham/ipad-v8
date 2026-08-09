@@ -55,6 +55,33 @@ final class Settings: ObservableObject {
         }
     }
 
+    /// What shape of CRT to emulate.
+    ///
+    /// The real 5620 was a portrait 800x1024 tube, which letterboxes badly on a
+    /// landscape window. `.fit` widens the emulated screen to the window's
+    /// shape instead of scaling a portrait one into it.
+    enum ScreenShape: String, CaseIterable, Identifiable {
+        case authentic, fit
+
+        var id: String { rawValue }
+
+        var label: String {
+            switch self {
+            case .authentic: return "Authentic (800×1024)"
+            case .fit: return "Fit the window"
+            }
+        }
+
+        var explanation: String {
+            switch self {
+            case .authentic:
+                return "The real DMD 5620's portrait tube, exactly."
+            case .fit:
+                return "Widen the emulated CRT to match the window. Height stays 1024 — the firmware's text grid needs it. mux layers use the extra width; the login prompt before mux does not."
+            }
+        }
+    }
+
     /// Multiplier on the terminal CPU's 10 MHz clock. This is what makes the
     /// 5620 *draw* faster (mux painting, scrolling, cursor tracking); it does
     /// not speed up the serial wire, which is paced in wall-clock time by the
@@ -87,6 +114,7 @@ final class Settings: ObservableObject {
 
     @Published var phosphor: Phosphor { didSet { store.set(phosphor.rawValue, forKey: Key.phosphor) } }
     @Published var scaling: Scaling { didSet { store.set(scaling.rawValue, forKey: Key.scaling) } }
+    @Published var screenShape: ScreenShape { didSet { store.set(screenShape.rawValue, forKey: Key.shape) } }
     @Published var mouseSensitivity: Double { didSet { store.set(mouseSensitivity, forKey: Key.mouse) } }
     @Published var persistNVRAM: Bool { didSet { store.set(persistNVRAM, forKey: Key.nvram) } }
     @Published var speed: Speed { didSet { store.set(speed.rawValue, forKey: Key.speed) } }
@@ -103,6 +131,7 @@ final class Settings: ObservableObject {
     private enum Key {
         static let phosphor = "screen.phosphor"
         static let scaling = "screen.scaling"
+        static let shape = "screen.shape"
         static let mouse = "input.mouseSensitivity"
         static let nvram = "terminal.persistNVRAM"
         static let speed = "terminal.speed"
@@ -113,6 +142,7 @@ final class Settings: ObservableObject {
         self.store = store
         phosphor = Phosphor(rawValue: store.string(forKey: Key.phosphor) ?? "") ?? .green
         scaling = Scaling(rawValue: store.string(forKey: Key.scaling) ?? "") ?? .fit
+        screenShape = ScreenShape(rawValue: store.string(forKey: Key.shape) ?? "") ?? .fit
         let sensitivity = store.double(forKey: Key.mouse)
         mouseSensitivity = sensitivity == 0 ? 1.0 : sensitivity      // 0 == never set
         persistNVRAM = store.object(forKey: Key.nvram) as? Bool ?? true
@@ -126,20 +156,45 @@ final class Settings: ObservableObject {
         logTerminalStats ? machine.termStatsURL : nil
     }
 
-    /// Largest size not exceeding `available` that shows the 800x1024 screen
-    /// at this scaling policy. In `.integer` mode the result is a whole number
-    /// of device pixels per 5620 pixel, which is what removes the moire.
-    func screenSize(fitting available: CGSize, displayScale: CGFloat) -> CGSize {
-        let aspect: CGFloat = 800.0 / 1024.0
+    /// What CRT to ask the terminal for, given the space it has to live in.
+    ///
+    /// Height is always 1024 and only the width moves. That is not a
+    /// simplification, it is the firmware's constraint: `YCMAX` is compiled
+    /// into the ROM at 69, so it scrolls at pixel row 969, and a screen
+    /// shorter than 983 leaves it blitting rows the CRT does not have —
+    /// measured, the text collapses into the upper half. Width has no such
+    /// limit; it only has to be a multiple of 32, because a Bitmap's stride is
+    /// counted in 32-bit Words. Below 800 the ROM's own 88-column text grid
+    /// would be clipped, so that is the floor. See docs/screen-size.md.
+    func desiredScreen(fitting available: CGSize) -> FrameStore.Geometry {
+        guard screenShape == .fit, available.width > 0, available.height > 0 else {
+            return .stock
+        }
+        let height = 1024
+        let wanted = CGFloat(height) * (available.width / available.height)
+        let words = (wanted / 32).rounded()
+        let width = min(2048, max(800, Int(words) * 32))
+        return FrameStore.Geometry(width: width, height: height)
+    }
+
+    /// Largest size not exceeding `available` that shows a `screen`-sized
+    /// terminal at this scaling policy. In `.integer` mode the result is a
+    /// whole number of device pixels per 5620 pixel, which is what removes
+    /// the moire.
+    func screenSize(fitting available: CGSize,
+                    screen: FrameStore.Geometry,
+                    displayScale: CGFloat) -> CGSize {
+        let aspect = CGFloat(screen.width) / CGFloat(screen.height)
         var fit = CGSize(width: available.width, height: available.width / aspect)
         if fit.height > available.height {
             fit = CGSize(width: available.height * aspect, height: available.height)
         }
         guard scaling == .integer, displayScale > 0 else { return fit }
-        let factor = floor(fit.width * displayScale / 800)
+        let factor = floor(fit.width * displayScale / CGFloat(screen.width))
         // Below 1:1 there is no integral scale that fits, and rounding *up* to
         // one would overflow the window — fall back to filling it.
         guard factor >= 1 else { return fit }
-        return CGSize(width: 800 * factor / displayScale, height: 1024 * factor / displayScale)
+        return CGSize(width: CGFloat(screen.width) * factor / displayScale,
+                      height: CGFloat(screen.height) * factor / displayScale)
     }
 }

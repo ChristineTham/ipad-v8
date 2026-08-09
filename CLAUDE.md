@@ -162,12 +162,20 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   shadow to chase**. RAM is never reallocated: the emulator always carries 1 MB + a
   512 KB reserve at `0x800000`, which the firmware structurally cannot reach (its
   `maxaddr` table at `0xa37c` has exactly two entries, ceiling `0x00800000`). But the
-  text grid is *compile-time* — `XCMAX`/`YCMAX` from `setup.h` fold to 87/69 — so the
-  pre-`mux` terminal keeps 88 columns at any size (the short `800` appears only 3 times
-  in the whole 64 KB ROM), and it scrolls at pixel row 969, so a screen under 983 tall
-  silently collapses its text. `mux` layers are exempt: `windowproc.c` recomputes the
-  grid per layer from the layer rect. Full evidence and the measurements:
-  [docs/screen-size.md](docs/screen-size.md); harness `libdmd/test/resize-scope.c`.
+  text grid is *compile-time* — `XCMAX`/`YCMAX` from `setup.h` fold to 87/69 — so a
+  resized screen alone keeps 88 columns; `dmd_set_columns()` rewrites the 24 byte
+  immediates (`6F 57`/`6F 58`) that hold it, **ceiling 127** because the operand is a
+  sign-extended byte. It scrolls at pixel row 969, so a screen under 983 tall silently
+  collapses its text. `mux` layers are exempt: `windowproc.c` recomputes the grid per
+  layer from the layer rect. **Three things will wedge or corrupt the power-on
+  self-test, all found the hard way**: it blanks screen memory at a hardcoded
+  `0x700000` (so it must run at 800×1024 — resize *after*); it stalls in `t_kbd()`
+  under "WAITING FOR KEYBOARD STATUS" with a *still screen*, so wait for the idle PC
+  window `0x5354`–`0x5389`, never for a quiet framebuffer; and it sizes RAM by probing,
+  so the reserve above 1 MB must stay undecoded (`ram_visible()`) or it indexes past
+  `maxaddr` and reads `0x0000000a` as its memory limit. Full evidence and the
+  measurements: [docs/screen-size.md](docs/screen-size.md); harness
+  `libdmd/test/resize-scope.c`.
 - AT&T published the 5620 ROM **source** (GPL, Dave Dykstra, 1994 —
   [dmdmtg/5620rom](https://github.com/dmdmtg/5620rom); its README names `lsys.8;7;3`,
   the firmware we run). It answers firmware questions faster than any experiment:

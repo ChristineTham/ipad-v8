@@ -24,6 +24,8 @@ final class Terminal5620: ObservableObject {
     let frames = FrameStore()
     /// Multiplier on the WE32100's 10 MHz clock, live-adjustable from Settings.
     let speed = SpeedBox()
+    /// Screen geometry, live-adjustable: the window drives it.
+    let screen = ScreenBox()
     private let rxq = EventQueue<UInt16>()      // host -> terminal (256 = BREAK)
     private let kbq = EventQueue<UInt8>()       // keystrokes, FIFO-paced on the thread
     private let mouseq = EventQueue<MouseEvent>()
@@ -48,11 +50,11 @@ final class Terminal5620: ObservableObject {
         guard state == .idle else { return }
         state = .running
         stopFlag.clear()
-        let t = Thread { [rxq, kbq, mouseq, frames, stopFlag, speed] in
+        let t = Thread { [rxq, kbq, mouseq, frames, stopFlag, speed, screen] in
             Terminal5620.threadMain(dzPort: dzPort, nvram: nvram, stats: stats,
                                     rxq: rxq, kbq: kbq,
                                     mouseq: mouseq, frames: frames, stop: stopFlag,
-                                    speed: speed)
+                                    speed: speed, screen: screen)
             Task { @MainActor in
                 // Only report unexpected exits; deliberate stops go .idle.
                 NotificationCenter.default.post(name: .terminal5620Exited, object: nil)
@@ -105,6 +107,13 @@ final class Terminal5620: ObservableObject {
 
     func mouse(_ event: MouseEvent) { mouseq.push(event) }
 
+    /// Ask for a different screen size. Cheap and idempotent — safe to call
+    /// on every layout pass; the dmd thread only acts when it actually
+    /// changes. See docs/screen-size.md for why height stays at 1024.
+    func resizeScreen(to geometry: FrameStore.Geometry) {
+        screen.set(geometry)
+    }
+
     /// Host-side BREAK toward the terminal (rarely needed by hand).
     func sendBreak() { rxq.push(256) }
 
@@ -114,8 +123,26 @@ final class Terminal5620: ObservableObject {
                                                rxq: EventQueue<UInt16>,
                                                kbq: EventQueue<UInt8>, mouseq: EventQueue<MouseEvent>,
                                                frames: FrameStore, stop: AtomicFlag,
-                                               speed: SpeedBox) {
+                                               speed: SpeedBox, screen: ScreenBox) {
+        // Power on at the authentic 800x1024, and stay there until the
+        // self-test has finished.
+        //
+        // The self-test cannot run anywhere else. It draws each stage's name
+        // through the `display` Bitmap with F_XOR, but it clears and scribbles
+        // on screen memory at a *hardcoded* 0x700000 -- seven times in
+        // selftest.c, including the RAM tests. Move the framebuffer and the
+        // text still lands on the visible screen while every clear misses it,
+        // so the stage names accumulate on top of one another and the power-on
+        // screen is unreadable mush. Resizing mid-self-test is the same bug
+        // arriving early.
+        //
+        // So: authentic power-on, then resize once it has gone quiet.
+        // (docs/screen-size.md)
+        var appliedScreen = FrameStore.Geometry.stock
+        _ = dmd_set_screen(800, 1024)
         guard dmd_init(1) == DMD_SUCCESS else { return }   // firmware 8;7;3
+        var selfTestDone = false
+        var idleSamples = 0
         loadNVRAM(from: nvram)
         defer { saveNVRAM(to: nvram) }
 
@@ -237,9 +264,62 @@ final class Terminal5620: ObservableObject {
                 }
             }
 
+            // Screen resize, checked on the same tick as the clock. Applying
+            // it here is what makes it safe: dmd_resize_screen moves both the
+            // framebuffer pointer and its length, and this is the one thread
+            // that ever holds either.
+            if iter % 100 == 0 {
+                // Is the power-on self-test over?
+                //
+                // "The screen stopped changing" is not a sound answer, and
+                // getting this wrong is expensive: selftest.c draws
+                // "WAITING FOR KEYBOARD STATUS" and then blocks in t_kbd(),
+                // so the screen sits still in the *middle* of the self-test.
+                // Resizing there moves the framebuffer out from under the
+                // rest of a test that clears screen memory at a hardcoded
+                // 0x700000, and the terminal never finishes booting.
+                //
+                // The sound signal is the firmware's own idle loop. A settled
+                // 5620 lives in 0x5354-0x5389 (CLAUDE.md); a firmware still
+                // polling the keyboard does not. Measured on this ROM with
+                // libdmd/test/resize-scope.c: last self-test draw at 0.65 s,
+                // idle loop first reached at 1.15 s, and the longest quiet
+                // gap *during* the test is 0.35 s -- so the PC test separates
+                // the two cleanly where a timer cannot.
+                if !selfTestDone {
+                    var pc: UInt32 = 0
+                    if dmd_get_pc(&pc) == DMD_SUCCESS, (0x5354...0x5389).contains(pc) {
+                        idleSamples += 1
+                        if idleSamples >= 3 { selfTestDone = true }
+                    } else {
+                        idleSamples = 0
+                    }
+                }
+
+                let wanted = screen.value
+                if selfTestDone, wanted != appliedScreen,
+                   dmd_resize_screen(UInt32(wanted.width), UInt32(wanted.height)) == DMD_SUCCESS {
+                    appliedScreen = wanted
+                    // A wider screen is not a wider terminal on its own: the
+                    // ROM's text grid is compiled in at 88 columns. Widen it
+                    // too, up to the 127 the one-byte operand can hold.
+                    _ = dmd_set_columns(UInt32(wanted.romColumns))
+                    // The new screen comes back cleared and the ROM only
+                    // repaints what something writes to, so publish once
+                    // immediately -- otherwise the view keeps showing the old
+                    // frame at the old size until the guest happens to draw.
+                    if let vram = dmd_video_ram() {
+                        frames.publish(vram, geometry: wanted)
+                    }
+                    // Whatever was on the screen is gone, and neither getty
+                    // nor a shell repaints unasked. One CR gets a prompt back.
+                    writeAll(fd, [0x0d])
+                }
+            }
+
             // Publish frames at most every ~30 ms of virtual time.
             if iter % 600 == 0, dmd_video_ram_dirty() == 1, let vram = dmd_video_ram() {
-                frames.publish(vram)
+                frames.publish(vram, geometry: appliedScreen)
             }
 
             // NVRAM every ~30 s of virtual time: the app can be killed
@@ -338,31 +418,104 @@ extension Notification.Name {
 // MARK: - Thread-safe plumbing
 
 /// Latest-framebuffer store: the dmd thread publishes, the renderer pulls.
+///
+/// The screen can be resized while the terminal runs, so geometry travels
+/// *with* the pixels rather than being agreed separately. A renderer that
+/// read a frame and then asked how big it was could be told about a resize
+/// that happened in between, and would unpack the old bytes at the new
+/// stride — every row skewed. Handing both back from one locked read makes
+/// that unrepresentable.
 final class FrameStore: @unchecked Sendable {
+    /// A framebuffer's dimensions, in 5620 pixels.
+    struct Geometry: Equatable, Sendable {
+        var width: Int
+        var height: Int
+        /// The 5620 is 1 bit per pixel, packed MSB-first, no row padding.
+        var byteCount: Int { (width / 8) * height }
+        static let stock = Geometry(width: 800, height: 1024)
+
+        /// How many columns the ROM's own terminal can be made to lay out on
+        /// a screen this wide.
+        ///
+        /// Its font cell is 9 px with a 3 px margin either side, so the screen
+        /// holds `(width - 6) / 9`. The ceiling is not the screen, though: the
+        /// grid is a sign-extended one-byte instruction operand, so 127 is as
+        /// far as it goes and a wider screen simply leaves a margin. mux
+        /// layers are unaffected — they size themselves from their own
+        /// rectangle. See docs/screen-size.md.
+        var romColumns: Int { min(127, max(40, (width - 6) / 9)) }
+    }
+
     private let lock = NSLock()
-    private var buf = [UInt8](repeating: 0, count: 102_400)
+    private var geometry = Geometry.stock
+    private var buf = [UInt8](repeating: 0, count: Geometry.stock.byteCount)
     private var generation: UInt64 = 0
 
-    func publish(_ vram: UnsafePointer<UInt8>) {
+    /// What the last published frame measured. Only for sizing a renderer's
+    /// buffers up front — never unpack pixels against this, use `copy`.
+    var currentGeometry: Geometry {
         lock.lock()
-        buf.withUnsafeMutableBytes { _ = memcpy($0.baseAddress!, vram, 102_400) }
+        defer { lock.unlock() }
+        return geometry
+    }
+
+    func publish(_ vram: UnsafePointer<UInt8>, geometry g: Geometry) {
+        lock.lock()
+        if g != geometry {
+            geometry = g
+            buf = [UInt8](repeating: 0, count: g.byteCount)
+        }
+        buf.withUnsafeMutableBytes { _ = memcpy($0.baseAddress!, vram, g.byteCount) }
         generation &+= 1
         lock.unlock()
     }
 
-    /// Copies the newest frame into `out` when newer than `seen`; returns
-    /// the current generation either way.
-    func copy(into out: inout [UInt8], ifNewerThan seen: UInt64) -> UInt64 {
+    /// Copies the newest frame into `out` when newer than `seen`, growing
+    /// `out` if the screen has been resized; returns the generation and the
+    /// geometry those bytes are in.
+    func copy(into out: inout [UInt8],
+              ifNewerThan seen: UInt64) -> (generation: UInt64, geometry: Geometry) {
         lock.lock()
         defer { lock.unlock() }
         if generation != seen {
+            if out.count != geometry.byteCount {
+                out = [UInt8](repeating: 0, count: geometry.byteCount)
+            }
             out.withUnsafeMutableBytes { dst in
                 buf.withUnsafeBytes { src in
-                    _ = memcpy(dst.baseAddress!, src.baseAddress!, 102_400)
+                    _ = memcpy(dst.baseAddress!, src.baseAddress!, geometry.byteCount)
                 }
             }
         }
-        return generation
+        return (generation, geometry)
+    }
+}
+
+/// The screen geometry the UI wants, read by the dmd thread.
+///
+/// Resizing has to happen on the dmd thread even though `dmd_resize_screen`
+/// takes dmd_core's own lock: the thread holds a raw `dmd_video_ram()`
+/// pointer across its publish, and a resize from under it would move both
+/// the pointer and the length. So the UI states an intent here and the
+/// thread acts on it between steps — the same shape as SpeedBox.
+///
+/// It is a latch, not a queue, so a burst of live-resize events collapses to
+/// the last one, and a terminal restart re-applies the current size without
+/// the UI having to notice.
+final class ScreenBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var wanted = FrameStore.Geometry.stock
+
+    var value: FrameStore.Geometry {
+        lock.lock()
+        defer { lock.unlock() }
+        return wanted
+    }
+
+    func set(_ g: FrameStore.Geometry) {
+        lock.lock()
+        wanted = g
+        lock.unlock()
     }
 }
 

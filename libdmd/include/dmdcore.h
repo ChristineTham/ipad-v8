@@ -45,6 +45,15 @@ int32_t dmd_set_screen(uint32_t width, uint32_t height);
 int32_t dmd_resize_screen(uint32_t width, uint32_t height);
 int32_t dmd_get_screen(uint32_t *width, uint32_t *height);
 
+/* Widen the ROM terminal's text grid, in place, on a running machine.
+ * Returns the number of instruction operands rewritten, or -1.
+ *
+ * The grid is compiled into the firmware (XCMAX = 87 => 88 columns), not
+ * carried in the screen descriptor, so resizing the screen alone does not
+ * move it. 127 columns is a hard ceiling: the operand is a sign-extended
+ * byte. */
+int32_t dmd_set_columns(uint32_t columns);
+
 int32_t dmd_step(void);
 int32_t dmd_step_loop(size_t steps);
 

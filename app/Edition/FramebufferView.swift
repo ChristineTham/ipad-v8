@@ -1,9 +1,13 @@
 import MetalKit
 import SwiftUI
 
-/// The 5620's 800x1024x1 screen as a Metal view: uploads the packed VRAM
-/// (100x1024 R8Uint) when the FrameStore has a newer generation and lets
-/// the fragment shader expand bits with the phosphor tint.
+/// The 5620's 1-bit screen as a Metal view: uploads the packed VRAM
+/// (width/8 x height, R8Uint) when the FrameStore has a newer generation
+/// and lets the fragment shader expand bits with the phosphor tint.
+///
+/// The screen is resizable while the terminal runs, so the texture is built
+/// from whatever geometry arrives with a frame rather than at configure
+/// time, and the same geometry is handed to the shader.
 struct FramebufferView: PlatformViewRepresentable {
     let frames: FrameStore
     var phosphor: SIMD3<Float> = SIMD3(0.45, 1.0, 0.60)
@@ -33,8 +37,10 @@ struct FramebufferView: PlatformViewRepresentable {
         private let frames: FrameStore
         private var queue: MTLCommandQueue?
         private var pipeline: MTLRenderPipelineState?
+        private var device: MTLDevice?
         private var texture: MTLTexture?
-        private var staging = [UInt8](repeating: 0, count: 102_400)
+        private var textureGeometry = FrameStore.Geometry(width: 0, height: 0)
+        private var staging = [UInt8](repeating: 0, count: FrameStore.Geometry.stock.byteCount)
         private var seenGeneration: UInt64 = .max   // force first upload
         /// Colour of a lit pixel; the user picks it in Settings.
         var phosphor: SIMD3<Float>
@@ -46,12 +52,8 @@ struct FramebufferView: PlatformViewRepresentable {
 
         func configure(for view: MTKView) {
             guard let device = view.device else { return }
+            self.device = device
             queue = device.makeCommandQueue()
-
-            let desc = MTLTextureDescriptor.texture2DDescriptor(
-                pixelFormat: .r8Uint, width: 100, height: 1024, mipmapped: false)
-            desc.usage = [.shaderRead]
-            texture = device.makeTexture(descriptor: desc)
 
             guard let library = device.makeDefaultLibrary(),
                   let vfn = library.makeFunction(name: "fb_vertex"),
@@ -66,16 +68,26 @@ struct FramebufferView: PlatformViewRepresentable {
         func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
 
         func draw(in view: MTKView) {
-            guard let queue, let pipeline, let texture,
+            guard let queue, let pipeline, let device,
                   let drawable = view.currentDrawable,
                   let rpd = view.currentRenderPassDescriptor else { return }
 
-            let gen = frames.copy(into: &staging, ifNewerThan: seenGeneration)
+            let (gen, geometry) = frames.copy(into: &staging, ifNewerThan: seenGeneration)
             if gen != seenGeneration {
                 seenGeneration = gen
-                texture.replace(region: MTLRegionMake2D(0, 0, 100, 1024),
-                                mipmapLevel: 0, withBytes: staging, bytesPerRow: 100)
+                if geometry != textureGeometry {
+                    let desc = MTLTextureDescriptor.texture2DDescriptor(
+                        pixelFormat: .r8Uint, width: geometry.width / 8,
+                        height: geometry.height, mipmapped: false)
+                    desc.usage = [.shaderRead]
+                    texture = device.makeTexture(descriptor: desc)
+                    textureGeometry = geometry
+                }
+                texture?.replace(
+                    region: MTLRegionMake2D(0, 0, geometry.width / 8, geometry.height),
+                    mipmapLevel: 0, withBytes: staging, bytesPerRow: geometry.width / 8)
             }
+            guard let texture else { return }
 
             guard let cmd = queue.makeCommandBuffer(),
                   let enc = cmd.makeRenderCommandEncoder(descriptor: rpd) else { return }
@@ -83,6 +95,10 @@ struct FramebufferView: PlatformViewRepresentable {
             enc.setFragmentTexture(texture, index: 0)
             var tint = phosphor
             enc.setFragmentBytes(&tint, length: MemoryLayout<SIMD3<Float>>.stride, index: 0)
+            // The geometry the texture actually holds, not what the terminal
+            // may have resized to since.
+            var size = SIMD2<UInt32>(UInt32(textureGeometry.width), UInt32(textureGeometry.height))
+            enc.setFragmentBytes(&size, length: MemoryLayout<SIMD2<UInt32>>.stride, index: 1)
             enc.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
             enc.endEncoding()
             cmd.present(drawable)

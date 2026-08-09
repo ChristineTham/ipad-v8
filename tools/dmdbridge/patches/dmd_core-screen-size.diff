@@ -1,5 +1,5 @@
 diff --git a/src/bus.rs b/src/bus.rs
-index 186b156..4348b2d 100644
+index 186b156..cdd192b 100644
 --- a/src/bus.rs
 +++ b/src/bus.rs
 @@ -1,5 +1,6 @@
@@ -9,7 +9,7 @@ index 186b156..4348b2d 100644
  use crate::duart::Duart;
  use crate::err::BusError;
  use crate::mem::Mem;
-@@ -56,6 +57,77 @@ pub trait Device: Send + Sync + Debug {
+@@ -56,6 +57,100 @@ pub trait Device: Send + Sync + Debug {
  //  0x700000..0x7fffff     RAM (256K or 1M)
  //
  
@@ -71,8 +71,31 @@ index 186b156..4348b2d 100644
 +pub const MAX_SCREEN_H: usize = 2048;
 +pub const RAM_EXTRA: usize = (MAX_SCREEN_W / 8) * MAX_SCREEN_H;
 +
++/// How much RAM is allocated: always the worst case, so a resize never has to
++/// reallocate memory underneath a running CPU.
 +pub fn ram_len() -> usize {
 +    RAM_STOCK + RAM_EXTRA
++}
++
++/// How much RAM the bus will actually *answer for* — which is not the same
++/// thing, and the difference is load-bearing.
++///
++/// The power-on self-test sizes memory by probing it, and stores the result
++/// as an index into the ROM's two-entry `maxaddr` table. If the reserve above
++/// 1 MB answers reads and writes while that probe is running, the firmware
++/// concludes it has more than a megabyte, the index goes past the end of the
++/// table, and it reads `0x0000000a` as its last valid address and wedges --
++/// observed as a terminal frozen at "WAITING FOR KEYBOARD STATUS".
++///
++/// So the reserve stays undecoded until a custom screen is configured, which
++/// only happens after the self-test has finished. The memory is allocated the
++/// whole time; it simply is not on the bus.
++pub fn ram_visible() -> usize {
++    if screen_is_custom() {
++        RAM_STOCK + screen_bytes()
++    } else {
++        RAM_STOCK
++    }
 +}
 +
 +/// Where the framebuffer lives, as an offset into that RAM region.
@@ -87,7 +110,7 @@ index 186b156..4348b2d 100644
  pub struct Bus {
      rom: Mem,
      duart: Duart,
-@@ -74,7 +146,7 @@ impl Bus {
+@@ -74,7 +169,7 @@ impl Bus {
              mouse: Mouse::new(),
              vid: Mem::new(0x500000, 0x2, false),
              bbram: Mem::new(0x600000, 0x2000, false),
@@ -96,16 +119,16 @@ index 186b156..4348b2d 100644
              video_ram_dirty: false,
          }
      }
-@@ -100,7 +172,7 @@ impl Bus {
+@@ -100,7 +195,7 @@ impl Bus {
              return Ok(&mut self.bbram);
          }
  
 -        if (0x700000..0x800000).contains(&address) {
-+        if (RAM_BASE..RAM_BASE + ram_len()).contains(&address) {
++        if (RAM_BASE..RAM_BASE + ram_visible()).contains(&address) {
              return Ok(&mut self.ram);
          }
  
-@@ -108,15 +180,20 @@ impl Bus {
+@@ -108,15 +203,20 @@ impl Bus {
      }
  
      fn video_ram_range(&self) -> Range<usize> {
@@ -127,13 +150,13 @@ index 186b156..4348b2d 100644
      fn is_video_ram(&self, address: usize) -> bool {
 -        (0x700000..0x800000).contains(&address)
 -            && self.video_ram_range().contains(&(address - 0x700000))
-+        (RAM_BASE..RAM_BASE + ram_len()).contains(&address)
++        (RAM_BASE..RAM_BASE + ram_visible()).contains(&address)
 +            && self.video_ram_range().contains(&(address - RAM_BASE))
      }
  
      pub fn read_byte(&mut self, address: usize, access: AccessCode) -> Result<u8, BusError> {
 diff --git a/src/dmd.rs b/src/dmd.rs
-index 01f7871..4a1d60d 100644
+index 01f7871..bc9804e 100644
 --- a/src/dmd.rs
 +++ b/src/dmd.rs
 @@ -3,7 +3,11 @@
@@ -148,17 +171,20 @@ index 01f7871..4a1d60d 100644
  use crate::rom_lo::{LO_ROM_V1, LO_ROM_V1_LEN, LO_ROM_V2, LO_ROM_V2_LEN};
  
  use libc::*;
-@@ -24,6 +28,9 @@ static INIT: Once = Once::new();
+@@ -24,6 +28,12 @@ static INIT: Once = Once::new();
  pub struct Dmd {
      cpu: Cpu,
      bus: Bus,
 +    /// Which ROM is loaded, so a later resize knows where its screen
 +    /// descriptor lives (0x9ca8 in 8;7;3, 0xd8c8 in 8;7;5).
 +    version: u8,
++    /// The text grid currently compiled into the ROM image. Starts at the
++    /// firmware's own 88 and follows patch_text_grid from there.
++    columns: usize,
  }
  
  impl Default for Dmd {
-@@ -40,14 +47,16 @@ impl Dmd {
+@@ -40,14 +50,18 @@ impl Dmd {
          });
  
          let cpu = Cpu::new();
@@ -168,15 +194,17 @@ index 01f7871..4a1d60d 100644
              cpu,
              bus,
 +            version: 1,
++            columns: 88,
          }
      }
  
      pub fn reset(&mut self, version: u8) -> Result<(), BusError> {
 +        self.version = version;
++        self.columns = 88;              // a fresh image is AT&T's own grid
          match version {
              1 => {
                  self.bus.load(0, &LO_ROM_V1)?;
-@@ -58,12 +67,110 @@ impl Dmd {
+@@ -58,12 +72,172 @@ impl Dmd {
                  self.bus.load(LO_ROM_V2_LEN, &HI_ROM_V2)?;
              }
          }
@@ -257,6 +285,68 @@ index 01f7871..4a1d60d 100644
 +        self.repair_rom_checksum(rom_len)
 +    }
 +
++    /// Widen the ROM terminal's compiled-in text grid.
++    ///
++    /// Unlike the screen `Bitmap`, the character grid is not data. setup.h
++    /// computes XCMAX = (XMAX-2*XMARGIN)/CW-1 = (800-6)/9-1 = 87 at compile
++    /// time and vitty.c compares against it wherever it wraps, scrolls,
++    /// clears or clamps -- so it is folded into the instruction stream as
++    /// immediate operands and no descriptor patch can reach it. That is why a
++    /// resized 5620 still lays out 88 columns.
++    ///
++    /// The operands are reachable, though. On the WE32100 a byte immediate is
++    /// the two-byte sequence `6F <value>`, so XCMAX appears as `6F 57` and
++    /// XCMAX+1 as `6F 58`, and rewriting those retargets the comparisons in
++    /// place. Both patterns are searched over the whole image rather than a
++    /// guessed function range, and the result is verified by running the
++    /// firmware, not by trusting the search.
++    ///
++    /// **127 columns is a hard ceiling.** The operand is one byte and the
++    /// WE32100 sign-extends it, so 128 or more would compare as negative and
++    /// the terminal would wrap on every character. Widening past that needs a
++    /// halfword immediate, which is a longer instruction -- not an in-place
++    /// edit.
++    fn patch_text_grid(&mut self, columns: usize) -> Result<usize, BusError> {
++        if !(1..=128).contains(&columns) || columns == self.columns {
++            return Ok(0);
++        }
++        let (_, rom_len) = self.rom_layout();
++        let mut rom = vec![0u8; rom_len];
++        for (a, b) in rom.iter_mut().enumerate() {
++            *b = self.bus.read_byte(a, AccessCode::AddressFetch)?;
++        }
++        // (old, new) for XCMAX and for XCMAX+1, which appear about equally
++        // often -- `> XCMAX` and `Rect(..., XCMAX+1, ...)` respectively.
++        //
++        // Substituting from the *current* value, not from the ROM's original
++        // 87/88, is what makes a second resize work: after one patch there
++        // are no 87s left to find. Every read is from the snapshot above, so
++        // a value rewritten by the first substitution cannot be caught again
++        // by the second.
++        let subs = [
++            ((self.columns - 1) as u8, (columns - 1) as u8),
++            (self.columns as u8, columns as u8),
++        ];
++        let mut patched = 0;
++        let mut a = 0;
++        while a + 1 < rom_len {
++            if rom[a] == 0x6F {
++                for (old, new) in subs {
++                    if rom[a + 1] == old {
++                        self.bus.load(a + 1, &[new])?;
++                        patched += 1;
++                    }
++                }
++                a += 2; // an immediate's value byte is not itself a descriptor
++            } else {
++                a += 1;
++            }
++        }
++        self.columns = columns;
++        self.repair_rom_checksum(rom_len)?;
++        Ok(patched)
++    }
++
 +    /// Re-stamp the ROM's self-test checksum after editing the image.
 +    ///
 +    /// The firmware's ROM TEST is the first thing it runs, and it halts the
@@ -287,7 +377,7 @@ index 01f7871..4a1d60d 100644
      pub fn video_ram(&mut self) -> &[u8] {
          self.bus.video_ram()
      }
-@@ -173,6 +280,65 @@ impl Dmd {
+@@ -173,6 +347,84 @@ impl Dmd {
  // Provide a C interface
  //
  
@@ -314,6 +404,25 @@ index 01f7871..4a1d60d 100644
 +    SCREEN_W.store(w, Ordering::Relaxed);
 +    SCREEN_H.store(h, Ordering::Relaxed);
 +    SUCCESS
++}
++
++/// Widen the ROM terminal's text grid to `columns`, in place, on a running
++/// machine. Returns the number of operands rewritten, or -1 on failure.
++///
++/// 127 is the ceiling: the operand is a sign-extended byte. Anything above
++/// that is rejected rather than silently wrapping every character.
++#[no_mangle]
++pub extern "C" fn dmd_set_columns(columns: u32) -> c_int {
++    if columns < 40 || columns > 128 {
++        return -1;
++    }
++    match DMD.lock() {
++        Ok(mut dmd) => match dmd.patch_text_grid(columns as usize) {
++            Ok(n) => n as c_int,
++            Err(_) => -1,
++        },
++        Err(_) => -1,
++    }
 +}
 +
 +/// Resize a terminal that is already running, without resetting it.
