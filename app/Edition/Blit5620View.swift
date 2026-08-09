@@ -49,6 +49,10 @@ struct Blit5620View: View {
         .background(Color.black)
     }
 
+    /// Fixed so the window can be sized around the screen rather than around a
+    /// guess: the Mac's launch geometry subtracts exactly this much.
+    static let toolbarHeight: CGFloat = 30
+
     private var toolbar: some View {
         HStack(spacing: 14) {
             Text("DMD 5620")
@@ -81,7 +85,7 @@ struct Blit5620View: View {
                 .font(.caption)
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .frame(height: Self.toolbarHeight)
         .background(Color.black)
     }
 

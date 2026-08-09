@@ -244,6 +244,23 @@ the end of the table, reads `0x0000000a` as its last valid address and wedges.
 So `ram_visible()` keeps the reserve undecoded until a custom screen exists —
 allocated the whole time, but not on the bus.
 
+## Open bug: restore + "Fit the window" comes back blank
+
+After a suspend/restore (`state.sav`), with **Fit the window** selected, the
+5620 comes up black and stays black — the dmd thread is running (79% CPU) and
+the self-test completes, but nothing reaches the screen, and neither a CR poke
+nor **Restart Terminal** recovers it. A cold boot at the same window size and
+the same setting is fine, and a restore at **Authentic (800×1024)** is fine, so
+it is specific to restoring *and* resizing.
+
+Not yet diagnosed. Ruled out so far: the terminal is not wedged (it runs and
+the PC advances); it is not the ROM column patch (identical boot trace with
+and without); and it is not a restored full-screen program refusing to repaint
+(^L and ^R do nothing either).
+
+Workaround: switch **Screen shape** to Authentic, or delete `state.sav` from
+the container to force a cold boot.
+
 ## Remaining work
 
 - **App plumbing.** The 800/1024/102400/100 constants are still hardcoded in

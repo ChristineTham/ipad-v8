@@ -103,39 +103,84 @@ struct EditionApp: App {
 final class MacAppDelegate: NSObject, NSApplicationDelegate {
     weak var machine: Machine?
 
-    /// Open as large as the desk allows, short of full screen.
+    /// Open as large as the desk allows, short of full screen — and shaped so
+    /// the emulated CRT fills it exactly.
     ///
-    /// `visibleFrame` is the screen minus the menu bar and the Dock, which is
-    /// exactly "as big as possible without going full screen" — and it is the
-    /// right default here because the emulated CRT now takes the window's
-    /// shape: a bigger window is a bigger 5620, not just a bigger scale
-    /// factor. Full screen is deliberately not used; it hides the menu bar
-    /// and moves the app to its own Space, which is a heavier thing to do to
-    /// someone on launch than they asked for.
-    /// Set once the window has been sized, so we do not fight SwiftUI's own
-    /// initial sizing (which lands *after* applicationDidFinishLaunching, and
-    /// silently undid an earlier attempt made there).
-    private var didMaximise = false
-
+    /// Two constraints meet here. The screen may be as tall as the desk
+    /// allows but its useful width stops at 1152 px, because the ROM
+    /// terminal's grid tops out at 127 columns of 9 px plus margins; past
+    /// that the window grows and the terminal does not. And the terminal is
+    /// not the whole window: the title bar and the app's own toolbar come off
+    /// the top first, so sizing to `visibleFrame` outright leaves the CRT
+    /// letterboxed by exactly that much.
+    ///
+    /// So: take the desk minus the menu bar and Dock (`visibleFrame`), take
+    /// the real chrome off that, and give the remainder the CRT's aspect.
+    /// Full screen is deliberately not used — it hides the menu bar and moves
+    /// the app to its own Space, which is a heavier thing to do to someone on
+    /// launch than they asked for.
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(maximise(_:)),
-            name: NSWindow.didBecomeMainNotification, object: nil)
+        // The window does not exist yet at this point -- SwiftUI creates it
+        // during the first update pass -- so this runs on the next turn of
+        // the runloop. (didBecomeMainNotification looked tidier and never
+        // fired: by the time the delegate is installed, the window is already
+        // main.)
+        DispatchQueue.main.async { self.shapeWindow() }
     }
 
-    @objc private func maximise(_ note: Notification) {
-        guard !didMaximise, let window = note.object as? NSWindow,
-              window.styleMask.contains(.titled), window.isVisible else { return }
-        didMaximise = true
-        NotificationCenter.default.removeObserver(
-            self, name: NSWindow.didBecomeMainNotification, object: nil)
-        // One more turn of the runloop: becoming main can precede the final
-        // layout pass, and setting the frame before that gets overwritten.
+    private func shapeWindow() {
+        guard let window = NSApp.windows.first(where: {
+                  $0.isVisible && $0.styleMask.contains(.titled)
+                      && $0.styleMask.contains(.resizable)
+              }) else { return }
         DispatchQueue.main.async {
             guard let screen = window.screen ?? NSScreen.main else { return }
-            let target = screen.visibleFrame
+            let desk = screen.visibleFrame
+
+            // Real chrome, measured rather than assumed: the title bar is
+            // whatever this window's style leaves over its content, and the
+            // toolbar is the constant the view lays itself out with.
+            let titleBar = window.frame.height
+                - window.contentRect(forFrameRect: window.frame).height
+            let chrome = titleBar + Blit5620View.toolbarHeight
+
+            let crt = FrameStore.Geometry.widestUseful
+            let aspect = CGFloat(crt.width) / CGFloat(crt.height)
+            var screenH = desk.height - chrome
+            var screenW = screenH * aspect
+            if screenW > desk.width {                 // a wide, short desk
+                screenW = desk.width
+                screenH = screenW / aspect
+            }
+            let target = NSRect(x: desk.midX - screenW / 2,
+                                y: desk.maxY - (screenH + chrome),
+                                width: screenW,
+                                height: screenH + chrome)
+
+            // Stop the frame being restored over the top of ours. AppKit
+            // reapplies a remembered frame *after* this point, so setting it
+            // here alone looked like it worked -- setFrame reported success --
+            // and the window still came up at whatever size it was last time.
+            window.isRestorable = false
+            window.setFrameAutosaveName("")
             window.setFrame(target, display: true)
+
+            // And check again a beat later, because "reported success" turned
+            // out not to mean "kept it".
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                if abs(window.frame.width - target.width) > 2 {
+                    window.setFrame(target, display: true)
+                }
+            }
+
             let got = window.frame
+            FileHandle.standardError.write(Data("""
+                ipnx: desk \(Int(desk.width))x\(Int(desk.height)) \
+                chrome \(Int(chrome)) (title \(Int(titleBar))) -> \
+                crt \(Int(screenW))x\(Int(screenH)), \
+                window wanted \(Int(target.width))x\(Int(target.height)), \
+                got \(Int(got.width))x\(Int(got.height))\n
+                """.utf8))
             if abs(got.width - target.width) > 1 || abs(got.height - target.height) > 1 {
                 // Something constrained us — a content minimum or maximum, or
                 // a resizability policy. Worth knowing rather than silently

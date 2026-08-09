@@ -444,6 +444,17 @@ final class FrameStore: @unchecked Sendable {
         /// layers are unaffected — they size themselves from their own
         /// rectangle. See docs/screen-size.md.
         var romColumns: Int { min(127, max(40, (width - 6) / 9)) }
+
+        /// The widest screen the ROM terminal can actually *fill*.
+        ///
+        /// 127 columns is the ceiling, and a column is 9 px with a 3 px margin
+        /// either side, so the terminal wants 127·9 + 6 = 1149 px — and 1152
+        /// is the next multiple of 32, which is the stride requirement. Wider
+        /// than that and the text simply stops, leaving a right margin: the
+        /// screen grows but the terminal does not.
+        ///
+        /// This is the shape to give a window that should be all terminal.
+        static let widestUseful = Geometry(width: 1152, height: 1024)
     }
 
     private let lock = NSLock()
