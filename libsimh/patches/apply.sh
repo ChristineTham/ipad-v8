@@ -43,4 +43,61 @@ else:
     sys.exit("apply: sim_con_units declaration not found -- upstream changed?")
 PY
 
+# Let the VAX-780 idle at all.
+#
+# sim_idle() sleeps only if the unit at the *head* of the event queue is
+# UNIT_IDLE. On this machine two units are permanently near the head, 100
+# times a second each, and neither carries the flag:
+#
+#   clk_unit (TODR) -- the calibrated 100 Hz clock; clk_svc reactivates it
+#     every 10 ms for as long as the machine runs.
+#   tmr_unit (TMR)  -- the programmable interval timer, which V8 (like every
+#     other VAX Unix) sets to 10 ms and leaves running, so tmr_sched
+#     coschedules it onto the same tick forever.
+#
+# So `set cpu idle=4.1BSD` can match V8's idle loop perfectly and still buy
+# almost nothing: measured here, 100% of sim_idle()'s refusals at an idle
+# login prompt named one of these two.
+#
+# clk_unit is a plain omission. Every other VAX in the tree sets UNIT_IDLE on
+# it -- including the 730 and 750, whose TOY-clock unit is byte-identical
+# (`UDATA (&clk_svc, UNIT_FIX, sizeof(TOY))` + the same
+# sim_rtcn_init_unit(&clk_unit, CLK_DELAY, TMR_CLK)) and which are declared
+# UNIT_IDLE+UNIT_FIX. Only 780, 820 and 860 drop it: one omission copied
+# twice, not a decision about those machines.
+#
+# tmr_unit is missing the flag on all five big VAXen (730/750/780/820/860 --
+# exactly the models that have a separate interval timer; the MicroVAX-class
+# models fold it into clk_unit and mark that idle-capable). Sleeping until the
+# guest's own tick is precisely what idling means, and the flag is safe by
+# construction: UNIT_IDLE is read nowhere in SIMH except sim_idle() and the
+# SHOW QUEUE label, and sim_idle() is only ever reached from cpu_idle(), i.e.
+# when the guest is already executing its recognised do-nothing loop.
+#
+# We patch the 780 because that is the model ipnx ships; the same two one-word
+# fixes apply to the other big VAXen.
+python3 - "$SIMH" <<'PY'
+import sys, pathlib
+
+p = pathlib.Path(sys.argv[1]) / "VAX" / "vax780_stddev.c"
+s = p.read_text()
+edits = [
+    ("UNIT clk_unit = { UDATA (&clk_svc, UNIT_FIX, sizeof(TOY))};",
+     "UNIT clk_unit = { UDATA (&clk_svc, UNIT_IDLE+UNIT_FIX, sizeof(TOY))};",
+     "clk_unit (TODR)"),
+    ("UNIT tmr_unit = { UDATA (&tmr_svc, 0, 0) };",
+     "UNIT tmr_unit = { UDATA (&tmr_svc, UNIT_IDLE, 0) };",
+     "tmr_unit (TMR)"),
+]
+for old, new, what in edits:
+    if new in s:
+        print("apply: vax780 %s already UNIT_IDLE" % what)
+    elif old in s:
+        s = s.replace(old, new, 1)
+        print("apply: vax780 %s now UNIT_IDLE" % what)
+    else:
+        sys.exit("apply: vax780 %s declaration not found -- upstream changed?" % what)
+p.write_text(s)
+PY
+
 echo "apply: done"

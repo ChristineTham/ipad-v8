@@ -18,8 +18,9 @@ ACTUAL=$(git -C "$SIMH_DIR" rev-parse HEAD)
 [ "$ACTUAL" = "$SIMH_REV" ] || echo "warning: open-simh at $ACTUAL, not pinned $SIMH_REV" >&2
 
 # Our additions to upstream: the Interlan NI1010 device V8 can actually drive,
-# and UNIT_IDLE on the telnet console poll unit so idling works at all. Both
-# are idempotent, so this is safe on an already-patched tree.
+# and three UNIT_IDLE flags -- telnet console poll, VAX-780 TODR clock, VAX-780
+# interval timer -- without which sim_idle() never sleeps and the machine burns
+# a core doing nothing. All idempotent, so this is safe on a patched tree.
 patches/apply.sh "$SIMH_DIR"
 
 slice() {  # <slug> [extra cmake args...]

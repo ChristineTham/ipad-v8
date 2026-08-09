@@ -127,8 +127,22 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
 - mux's B3 menu pops centered on the cursor: park the cursor mid-screen first or the
   menu clips at the screen edge and the selection is lost. After selecting New, the
   sweep-corner cursor is the confirmation that the B3 sweep is armed.
-- SIMH `vax780` burns ~97% of a core while V8 idles (no idle detection) — a design
-  constraint for the iPad app, and worth killing the simulator when not in use.
+- **Idling needs `set cpu idle=4.1BSD` *and* three `UNIT_IDLE` flags upstream forgot**
+  (`libsimh/patches/apply.sh`). `sim_idle()` sleeps only when the unit at the *head* of
+  the event queue has `UNIT_IDLE`, so one periodic unit without it pins a core: the
+  telnet-console poll unit (1 s), `clk_unit`/TODR and `tmr_unit`/TMR (10 ms each). Fix
+  them together — unblocking one only promotes the next to the head. Stock `vax780`
+  burns ~97% of a core at an idle `login:`; patched, the app's SIMH thread sits at
+  **2.7%**, with V8's clock still exact (90 guest seconds per 90.1 host seconds). The
+  flags survive `save`/`restore` because `UNIT_IDLE` is not in `UNIT_RFLAGS`, but
+  `cpu_idle_mask` does *not*, so `resume.conf` must re-issue `set cpu idle=`.
+  Diagnose with `tools/idle-probe.py --why`, which histograms `sim_idle()`'s own
+  "Can't idle: <unit>" messages; measure the app with `tools/app-cpu.sh`.
+- The **dmd (5620) thread does not idle at all** and is now the app's whole CPU cost
+  (63.5% at the default 2× = 20 MHz; dmd_core tops out near 28.5 MHz on an M-series
+  Mac). `libdmd/test/idle-scope.c` shows a settled terminal spends ~86% of its time in
+  a 54-byte PC window (0x5354–0x5389) and `dmd_get_pc()` is exported, so the same trick
+  is available from Swift — not done yet.
 - dmd_core's GitHub HEAD embeds only the **8;7;5** ROM, which V8's `32ld` download crashes
   (unimplemented `MOVTRW` + unaligned access in the WE32100 core, ~30 KB in) — this is the
   mechanism behind the documented "use firmware 8;7;3" requirement. dmd_core's DUART is

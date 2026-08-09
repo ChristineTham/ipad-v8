@@ -288,7 +288,7 @@ Other things worth knowing:
   the IP stack, so a failure points at the device model.
 - **V8's userland libc has no `bcopy`.** It is a kernel routine.
 
-## Idling — one config line, no kernel change *(2026-08-09)*
+## Idling — one config line and three missing flags *(2026-08-09)*
 
 SIMH ships an idle pattern for **4.1BSD**, and V8's kernel is 4.1BSD-derived,
 so it already matches. `vax_cpu.c` looks for an `FFS` that finds nothing, at
@@ -301,34 +301,82 @@ sw1:	ffs	$0,$32,_whichqs,r0	# look for non-empty queue
 	brw	sw1			# this is an idle loop!
 ```
 
-Measured at the `login:` prompt with `set cpu idle=4.1BSD`:
+The config line is necessary but nowhere near sufficient. **`sim_idle()` sleeps
+only when the unit at the *head* of the event queue carries `UNIT_IDLE`**
+(`sim_timer.c`) — so a single periodic unit without the flag pins the host CPU
+no matter how well the guest's idle loop is recognised. Three units on this
+machine were missing it, and they had to be fixed together: unblocking one just
+promotes the next one to the head of the queue.
 
-| Configuration | CPU |
-|---|---|
-| desktop `vax780`, no idle setting | **97%** |
-| desktop `vax780`, idle enabled | **18%** |
-| ditto with the DZ attached | **25%** |
-| `libsimh` CLI, local console | **30%** |
+| Unit | Rescheduled | Present when |
+|---|---|---|
+| `sim_con_units[0]` (CON-TELNET) | every 1 s | `set console telnet=` — i.e. always, in the app |
+| `clk_unit` (TODR) | every 10 ms | always: the calibrated 100 Hz clock |
+| `tmr_unit` (TMR) | every 10 ms | always: V8 programs the interval timer and leaves it running |
 
-**A telnet console blocks idling entirely.** `sim_idle()` refuses whenever the
-next scheduled event belongs to a unit without `UNIT_IDLE`, and
-`sim_con_poll_svc` reschedules itself every second for as long as a telnet
-console is configured — from a `sim_con_unit` declared without that flag. This
-reads as an oversight: `sim_console.c` sets `UNIT_IDLE` explicitly on both
-*remote* console units a few hundred lines further down. `libsimh/patches/apply.sh`
-adds it. Keystroke latency is unaffected, because console input arrives through
-`tti_unit`, which is already `UNIT_IDLE` and polls at the clock rate.
+All three are upstream omissions rather than decisions, and `UNIT_IDLE` is read
+nowhere in SIMH except `sim_idle()` and the `SHOW QUEUE` label, so setting it
+cannot change device behaviour:
 
-In the app (`set cpu idle=4.1BSD` in both `boot.conf` and `resume.conf`), the
-SIMH thread went from **100% to ~72%** — a real gain, but not the ~25% the
-desktop reaches, so **something further is still suppressing it** and this is
-not finished. Two things are worth knowing before picking it up:
+- **CON-TELNET** — `sim_console.c` sets `UNIT_IDLE` explicitly on both *remote*
+  console units a few hundred lines further down, but not on the local one.
+  Keystroke latency is unaffected either way: console input arrives through
+  `tti_unit`, which is already `UNIT_IDLE` and polls at the clock rate.
+- **TODR** — every other VAX in the tree sets it, including the 730 and 750
+  whose TOY-clock unit is byte-identical (`UDATA (&clk_svc, UNIT_FIX,
+  sizeof(TOY))` plus the same `sim_rtcn_init_unit(&clk_unit, CLK_DELAY,
+  TMR_CLK)`) and which are declared `UNIT_IDLE+UNIT_FIX`. Only 780, 820 and 860
+  drop it — one omission copied twice.
+- **TMR** — missing on all five big VAXen (730/750/780/820/860, exactly the
+  models with a separate interval timer; the MicroVAX-class models fold it into
+  `clk_unit` and mark that idle-capable). Sleeping until the guest's own tick is
+  precisely what idling *means*, and `sim_idle()` is only ever reached from
+  `cpu_idle()` — i.e. when the guest is already in its recognised do-nothing
+  loop — so there is nothing to lose by waiting for it.
 
-- The **dmd (5620) thread is a separate ~33%** and never idles at all.
-  dmd_core paces its WE32100 against the wall clock and has no idle detection;
-  that is an unrelated problem with a different fix.
+All three are in `libsimh/patches/apply.sh`.
+
+### Measurements
+
+`tools/idle-probe.py` runs the app's exact SIMH topology under the library
+build, boots V8 to `login:`, samples host CPU in three windows, dumps
+`SHOW QUEUE` (which annotates each entry `(Idle capable)`), and with `--why`
+turns on `INT-CLOCK debug=IDLE` for half a second and histograms
+`sim_idle()`'s own "Can't idle: <unit>" messages — which name the offender
+outright.
+
+| State | Idle CPU | `--why` says |
+|---|---|---|
+| console patch only | 31–42% | head of queue is TODR or TMR |
+| + TODR `UNIT_IDLE` | 41% | **100%** of refusals: TMR |
+| + TMR `UNIT_IDLE` | **3.1%** | no refusals at all |
+
+In the Mac app, cold-booted to `login:` and measured per thread
+(`tools/app-cpu.sh`, which also runs `sample(1)` to name the threads):
+
+| Thread | Before | After |
+|---|---|---|
+| `simh-vax780` | ~72% | **2.7%** — `sample` shows it in `sim_idle` → `nanosleep` in 1321 of 1373 samples |
+| `dmd-5620` | — | 63.5% (unchanged; see below) |
+
+Correctness checks, all passed: V8's own clock advanced **90 s while the host
+advanced 90.1 s** (`--clock 90`), so nothing is lost by sleeping through ticks;
+login, `date` and the shell stay responsive; and `work/verify-libcli.sh`'s
+boot → suspend → save → restore round trip is unaffected.
+
+Two things worth knowing:
+
+- The **dmd (5620) thread is a separate 63.5%** (at the default "Fast" 2× =
+  20 MHz) and never idles at all — dmd_core has no idle detection. It is not
+  the same problem, but it *is* tractable: `libdmd/test/idle-scope.c` shows a
+  settled terminal spends ~86% of its time in a 54-byte PC window
+  (0x5354–0x5389), and `dmd_get_pc()` is already exported, so the same
+  recognise-the-idle-loop trick could be done from Swift with no core changes.
 - Idling must be re-established **after** `restore`. `save` records
   `sim_idle_enab` and `cpu_idle_type` (both are `REG`s) but not
   `cpu_idle_mask`, and the mask is what the FFS test actually reads — so a
   restored machine would come back looking idle-enabled while matching VMS's
-  pattern instead of 4.1BSD's, and quietly spin.
+  pattern instead of 4.1BSD's, and quietly spin. The `UNIT_IDLE` flags
+  themselves are safe across a snapshot: restore only takes the bits in
+  `UNIT_RFLAGS` (`UNIT_UFMASK|UNIT_DIS`), and `UNIT_IDLE` is not among them, so
+  the compiled-in value always wins.

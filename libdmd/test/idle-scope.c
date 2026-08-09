@@ -1,0 +1,159 @@
+/* idle-scope: watch a 5620 come up from reset and then sit there.
+ *
+ * Two questions, one instrument:
+ *
+ *  1. Where does power-on time actually go? The ROM's self-test draws each
+ *     stage's name (ROM TEST, SHORTRAM TEST, RAM TEST, NONVOLATILE MEMORY
+ *     TEST, I/O TEST, EXTERNAL DUART TEST, ...) as it runs, so a change in the
+ *     lit-pixel count is a stage boundary. Timing those against BOTH the wall
+ *     clock and the emulated instruction count separates the stages that are
+ *     CPU-bound (they scale with the emulated clock) from the ones that are
+ *     wall-clock bound (they do not) -- dmd_core's DUART hands over one
+ *     character per real-time interval derived from the programmed baud rate,
+ *     so anything that loops the serial port back to itself costs real seconds
+ *     no matter how fast the CPU runs.
+ *
+ *  2. Is the idle terminal in a tight loop? SIMH saves ~70% of a core at an
+ *     idle V8 prompt by recognising the guest's idle loop; dmd_core has no
+ *     such thing and burns whatever the emulated clock costs. If the settled
+ *     firmware sits in a small PC window, the same trick is available to us
+ *     from outside the core, through dmd_get_pc().
+ *
+ *   cc -O2 -o idle-scope test/idle-scope.c <libdmd_core.a> -Iinclude
+ *   ./idle-scope [multiplier] [seconds]
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <unistd.h>
+#include "dmdcore.h"
+
+#define FB_BYTES  102400
+#define SAMPLE    50000            /* steps between samples */
+#define MAXPC     4096
+
+static double now_s(void)
+{
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return t.tv_sec + t.tv_nsec / 1e9;
+}
+
+static int lit_bytes(void)
+{
+    const uint8_t *fb = dmd_video_ram();
+    int lit = 0;
+    for (int i = 0; i < FB_BYTES; i++)
+        if (fb[i]) lit++;
+    return lit;
+}
+
+int main(int argc, char **argv)
+{
+    double mult = argc > 1 ? atof(argv[1]) : 2.0;   /* app default: "Fast" */
+    double secs = argc > 2 ? atof(argv[2]) : 25.0;
+    double hz = 10e6 * mult;
+
+    if (dmd_init(1) != DMD_SUCCESS) {               /* firmware 8;7;3 */
+        fprintf(stderr, "dmd_init failed\n");
+        return 1;
+    }
+
+    /* The app restores saved NVRAM before it steps the terminal (A3), and
+       NVRAM carries the programmed baud rate -- which is what sets the DUART's
+       real-time per-character delay. Feeding a real saved NVRAM in is the only
+       way to reproduce a user's actual power-on. */
+    if (argc > 3) {
+        static uint8_t nv[8192];
+        FILE *f = fopen(argv[3], "rb");
+        if (!f || fread(nv, 1, sizeof nv, f) != sizeof nv) {
+            fprintf(stderr, "could not read 8192-byte NVRAM from %s\n", argv[3]);
+            return 1;
+        }
+        fclose(f);
+        dmd_set_nvram(nv);
+        printf("# NVRAM restored from %s\n", argv[3]);
+    }
+
+    double t0 = now_s();
+    unsigned long long steps = 0;
+    long long iter = 0;
+    int last_lit = -1;
+    double last_change_t = 0, last_change_v = 0;
+
+    /* PC census over the last stretch, to see whether an idle terminal is
+       looping somewhere small. Cheap open-addressed count table. */
+    uint32_t pc_key[MAXPC];
+    uint32_t pc_cnt[MAXPC];
+    memset(pc_key, 0xff, sizeof pc_key);
+    memset(pc_cnt, 0, sizeof pc_cnt);
+    unsigned long long pc_samples = 0;
+    double census_from = secs * 0.6;               /* only once settled */
+
+    printf("# 5620 at %.0f MHz emulated (app multiplier %.1fx)\n", hz / 1e6, mult);
+    printf("# %8s %10s %8s   %s\n", "wall(s)", "Msteps", "lit", "event");
+
+    while (now_s() - t0 < secs) {
+        dmd_step_loop(500);
+        steps += 500;
+        iter++;
+
+        /* Same wall-clock pacing the app uses (Terminal5620.swift). */
+        if (iter % 100 == 0) {
+            double virt = (double)steps / hz;
+            double real = now_s() - t0;
+            if (virt > real + 0.002)
+                usleep((useconds_t)((virt - real) * 1e6));
+        }
+
+        if (steps % SAMPLE == 0) {
+            double wall = now_s() - t0;
+            int lit = lit_bytes();
+            if (lit != last_lit) {
+                if (last_lit >= 0)
+                    printf("  %8.2f %10.1f %8d   screen changed  (+%.2f s wall, "
+                           "+%.1f Msteps since previous)\n",
+                           wall, steps / 1e6, lit,
+                           wall - last_change_t, (steps - last_change_v) / 1e6);
+                last_lit = lit;
+                last_change_t = wall;
+                last_change_v = steps;
+            }
+            if (wall > census_from) {
+                uint32_t pc = 0;
+                if (dmd_get_pc(&pc) == DMD_SUCCESS) {
+                    uint32_t h = (pc * 2654435761u) % MAXPC;
+                    while (pc_key[h] != 0xffffffffu && pc_key[h] != pc)
+                        h = (h + 1) % MAXPC;
+                    pc_key[h] = pc;
+                    pc_cnt[h]++;
+                    pc_samples++;
+                }
+            }
+        }
+    }
+
+    double wall = now_s() - t0;
+    printf("\n# ran %.1f Msteps in %.1f s wall = %.1f MHz effective "
+           "(%.0f%% of the %.0f MHz asked for)\n",
+           steps / 1e6, wall, steps / wall / 1e6,
+           100.0 * (steps / wall) / hz, hz / 1e6);
+
+    /* Top PCs while settled. A handful of addresses covering most samples
+       means a tight loop -- i.e. an idle loop we could detect and sleep on. */
+    printf("\n# PC census while settled (%llu samples, one per %d steps)\n",
+           pc_samples, SAMPLE);
+    for (int shown = 0; shown < 12; shown++) {
+        int best = -1;
+        for (int i = 0; i < MAXPC; i++)
+            if (pc_cnt[i] && (best < 0 || pc_cnt[i] > pc_cnt[best]))
+                best = i;
+        if (best < 0 || pc_samples == 0)
+            break;
+        printf("   0x%08x  %6u  %5.1f%%\n", pc_key[best], pc_cnt[best],
+               100.0 * pc_cnt[best] / pc_samples);
+        pc_cnt[best] = 0;
+    }
+    return 0;
+}

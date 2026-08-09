@@ -17,6 +17,7 @@ work/
 libsimh/dist/
 libdmd/dist/
 libdmd/build-smoke
+libdmd/build-idle-scope
 tools/vendor/
 tools/dmdbridge/.cargo/
 
