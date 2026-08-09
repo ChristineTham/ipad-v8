@@ -25,6 +25,7 @@ struct EditionApp: App {
 
     #if os(macOS)
     @NSApplicationDelegateAdaptor(MacAppDelegate.self) private var appDelegate
+    @StateObject private var capture = PointerCapture()
     #else
     @Environment(\.scenePhase) private var scenePhase
     #endif
@@ -32,7 +33,8 @@ struct EditionApp: App {
     var body: some Scene {
         #if os(macOS)
         WindowGroup {
-            MachineView(machine: machine, terminal: terminal, settings: settings)
+            MachineView(machine: machine, terminal: terminal, settings: settings,
+                        capture: capture)
                 .onAppear {
                     machine.start()
                     appDelegate.machine = machine
@@ -40,6 +42,16 @@ struct EditionApp: App {
         }
         .defaultSize(width: 900, height: 1120)
         .commands {
+            CommandMenu("Terminal") {
+                // The 5620's mouse is a relative device with free-running
+                // counters, so its cursor and the Mac's cannot stay in step
+                // once the Mac's hits a screen edge. Grabbing removes the
+                // second cursor entirely, which is the only reliable fix.
+                Button(capture.captured ? "Release Pointer" : "Grab Pointer") {
+                    capture.captured.toggle()
+                }
+                .keyboardShortcut("g", modifiers: [.command])
+            }
             CommandMenu("Machine") {
                 Button("Suspend") { Task { await machine.background() } }
                     .keyboardShortcut(".", modifiers: [.command])

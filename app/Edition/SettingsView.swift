@@ -91,6 +91,15 @@ struct SettingsView: View {
 
     private var terminalSection: some View {
         Section("Terminal") {
+            Picker("Terminal speed", selection: $settings.speed) {
+                ForEach(Settings.Speed.allCases) { Text($0.label).tag($0) }
+            }
+            .onChange(of: settings.speed) { _, new in
+                terminal.speed.set(new.multiplier)
+            }
+            Text("How fast the 5620's own processor runs, which is what makes mux paint and scroll quickly. It does not change the serial wire — that is paced inside the terminal's DUART. Above 4× the firmware's serial handshakes can be starved.")
+                .font(.caption).foregroundStyle(.secondary)
+
             Toggle("Remember terminal settings", isOn: $settings.persistNVRAM)
             Text("Keeps the 5620's 8 KB NVRAM between launches, the way the real terminal's battery did.")
                 .font(.caption).foregroundStyle(.secondary)

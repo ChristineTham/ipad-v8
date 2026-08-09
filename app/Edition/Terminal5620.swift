@@ -22,6 +22,8 @@ final class Terminal5620: ObservableObject {
     @Published private(set) var state: State = .idle
 
     let frames = FrameStore()
+    /// Multiplier on the WE32100's 10 MHz clock, live-adjustable from Settings.
+    let speed = SpeedBox()
     private let rxq = EventQueue<UInt16>()      // host -> terminal (256 = BREAK)
     private let kbq = EventQueue<UInt8>()       // keystrokes, FIFO-paced on the thread
     private let mouseq = EventQueue<MouseEvent>()
@@ -46,9 +48,10 @@ final class Terminal5620: ObservableObject {
         guard state == .idle else { return }
         state = .running
         stopFlag.clear()
-        let t = Thread { [rxq, kbq, mouseq, frames, stopFlag] in
+        let t = Thread { [rxq, kbq, mouseq, frames, stopFlag, speed] in
             Terminal5620.threadMain(dzPort: dzPort, nvram: nvram, rxq: rxq, kbq: kbq,
-                                    mouseq: mouseq, frames: frames, stop: stopFlag)
+                                    mouseq: mouseq, frames: frames, stop: stopFlag,
+                                    speed: speed)
             Task { @MainActor in
                 // Only report unexpected exits; deliberate stops go .idle.
                 NotificationCenter.default.post(name: .terminal5620Exited, object: nil)
@@ -109,7 +112,8 @@ final class Terminal5620: ObservableObject {
     nonisolated private static func threadMain(dzPort: UInt16, nvram: URL?,
                                                rxq: EventQueue<UInt16>,
                                                kbq: EventQueue<UInt8>, mouseq: EventQueue<MouseEvent>,
-                                               frames: FrameStore, stop: AtomicFlag) {
+                                               frames: FrameStore, stop: AtomicFlag,
+                                               speed: SpeedBox) {
         guard dmd_init(1) == DMD_SUCCESS else { return }   // firmware 8;7;3
         loadNVRAM(from: nvram)
         defer { saveNVRAM(to: nvram) }
@@ -128,16 +132,25 @@ final class Terminal5620: ObservableObject {
         var ctrX: UInt16 = 0
         var ctrY: UInt16 = 0
         var poked = false
-        let t0 = DispatchTime.now()
+        var t0 = DispatchTime.now()
+        var hz = 10_000_000.0 * speed.value
 
         while !stop.isSet {
             dmd_step_loop(500)
             steps &+= 500
             iter &+= 1
 
-            // Wall-clock pacing to 10 MHz, 2 ms slack (the A0 bridge model).
+            // Wall-clock pacing to the chosen clock, 2 ms slack (the A0 bridge
+            // model). This governs how fast the terminal *draws*; the serial
+            // wire is paced separately inside dmd_core's DUART.
             if iter % 100 == 0 {
-                let virt = Double(steps) / 10_000_000.0
+                let wanted = 10_000_000.0 * speed.value
+                if wanted != hz {
+                    hz = wanted                     // rebase, or the clock jumps
+                    steps = 0
+                    t0 = DispatchTime.now()
+                }
+                let virt = Double(steps) / hz
                 let real = Double(DispatchTime.now().uptimeNanoseconds - t0.uptimeNanoseconds) / 1e9
                 if virt > real + 0.002 {
                     usleep(useconds_t((virt - real) * 1e6))
@@ -322,6 +335,22 @@ final class EventQueue<T>: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return items.isEmpty ? nil : items.removeFirst()
+    }
+}
+
+/// Live-adjustable CPU clock multiplier, read by the dmd thread every ~100
+/// batches and written from the UI.
+final class SpeedBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var v: Double = 1
+
+    var value: Double {
+        lock.lock(); defer { lock.unlock() }
+        return v
+    }
+
+    func set(_ newValue: Double) {
+        lock.lock(); v = newValue; lock.unlock()
     }
 }
 

@@ -88,11 +88,11 @@ index ed7eea0..8d8c98f 100644
      };
  
 -    Duration::new(0, NS_PER_SEC / (baud_rate / BITS_PER_CHAR))
-+    // ipad-v8 spike TURBO patch: run the wire 8x the programmed baud
-+    // (9600-equivalent at the 1200-baud NVRAM default) — the speed real
-+    // 5620 hardware supported. The 32ld protocol is block-acked and
-+    // self-paces safely at this rate.
-+    Duration::new(0, (NS_PER_SEC / (baud_rate / BITS_PER_CHAR)) / 8)
++    // ipad-v8 TURBO patch: run the wire 32x the programmed baud
++    // (38400-equivalent at the 1200-baud NVRAM default). The 32ld
++    // protocol is block-acked so it self-paces, and the app injects at
++    // most ~10 KB/s, comfortably above this and below DUART overrun.
++    Duration::new(0, (NS_PER_SEC / (baud_rate / BITS_PER_CHAR)) / 32)
  }
  
  impl Duart {

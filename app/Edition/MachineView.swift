@@ -9,6 +9,9 @@ struct MachineView: View {
     @ObservedObject var machine: Machine
     @ObservedObject var terminal: Terminal5620
     @ObservedObject var settings: Settings
+    #if os(macOS)
+    @ObservedObject var capture: PointerCapture
+    #endif
     @State private var showBlit = false
     @State private var autoSwitched = false
     @State private var showSettings = false
@@ -20,9 +23,15 @@ struct MachineView: View {
                 .padding(.horizontal, 4)
                 .opacity(showBlit ? 0 : 1)
                 .allowsHitTesting(!showBlit)
+            #if os(macOS)
+            Blit5620View(terminal: terminal, settings: settings, capture: capture)
+                .opacity(showBlit ? 1 : 0)
+                .allowsHitTesting(showBlit)
+            #else
             Blit5620View(terminal: terminal, settings: settings)
                 .opacity(showBlit ? 1 : 0)
                 .allowsHitTesting(showBlit)
+            #endif
             if let status = statusText {
                 HStack(spacing: 10) {
                     if !isFailure { ProgressView().tint(.green) }
@@ -75,6 +84,7 @@ struct MachineView: View {
         .onReceive(machine.$phase) { phase in
             guard phase == .up else { return }
             if terminal.state == .idle {
+                terminal.speed.set(settings.speed.multiplier)
                 terminal.start(dzPort: machine.dzPort,
                                nvram: settings.persistNVRAM ? machine.nvramURL : nil)
             }

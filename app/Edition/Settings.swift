@@ -55,10 +55,41 @@ final class Settings: ObservableObject {
         }
     }
 
+    /// Multiplier on the terminal CPU's 10 MHz clock. This is what makes the
+    /// 5620 *draw* faster (mux painting, scrolling, cursor tracking); it does
+    /// not speed up the serial wire, which is paced in wall-clock time by the
+    /// DUART. Above ~4x the firmware's serial handshakes start to be starved —
+    /// A0 found a flat-out CPU breaks them outright — so it is a choice with a
+    /// stated risk rather than a free win.
+    enum Speed: String, CaseIterable, Identifiable {
+        case authentic, fast, faster, turbo
+
+        var id: String { rawValue }
+
+        var multiplier: Double {
+            switch self {
+            case .authentic: return 1
+            case .fast: return 2
+            case .faster: return 4
+            case .turbo: return 8
+            }
+        }
+
+        var label: String {
+            switch self {
+            case .authentic: return "Authentic (10 MHz)"
+            case .fast: return "Fast (2×)"
+            case .faster: return "Faster (4×)"
+            case .turbo: return "Turbo (8×)"
+            }
+        }
+    }
+
     @Published var phosphor: Phosphor { didSet { store.set(phosphor.rawValue, forKey: Key.phosphor) } }
     @Published var scaling: Scaling { didSet { store.set(scaling.rawValue, forKey: Key.scaling) } }
     @Published var mouseSensitivity: Double { didSet { store.set(mouseSensitivity, forKey: Key.mouse) } }
     @Published var persistNVRAM: Bool { didSet { store.set(persistNVRAM, forKey: Key.nvram) } }
+    @Published var speed: Speed { didSet { store.set(speed.rawValue, forKey: Key.speed) } }
 
     private let store: UserDefaults
 
@@ -67,6 +98,7 @@ final class Settings: ObservableObject {
         static let scaling = "screen.scaling"
         static let mouse = "input.mouseSensitivity"
         static let nvram = "terminal.persistNVRAM"
+        static let speed = "terminal.speed"
     }
 
     init(store: UserDefaults = .standard) {
@@ -76,6 +108,7 @@ final class Settings: ObservableObject {
         let sensitivity = store.double(forKey: Key.mouse)
         mouseSensitivity = sensitivity == 0 ? 1.0 : sensitivity      // 0 == never set
         persistNVRAM = store.object(forKey: Key.nvram) as? Bool ?? true
+        speed = Speed(rawValue: store.string(forKey: Key.speed) ?? "") ?? .fast
     }
 
     /// Largest size not exceeding `available` that shows the 800x1024 screen
