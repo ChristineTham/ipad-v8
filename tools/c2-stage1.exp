@@ -254,6 +254,13 @@ send_user "
 # right -- so the filesystem was provably fine and the panic read as a
 # filesystem or mount-table problem.  Whenever raw works and block does not,
 # suspect the majors before anything else.
+# rm first: mknod does NOT replace an existing node, it just says "File
+# exists" and carries on.  So a bad node made by an earlier run outlives the
+# fix, and the next run panics again in exactly the same place with a script
+# that is now correct -- which is what happened here, and it reads as the fix
+# not working rather than as the fix not being applied.  /dev/rp1a is removed
+# too: run 1 left a b 2 8 behind by the same mistake.
+sh "rm -f /dev/rp1g /dev/rrp1g /dev/rp1a"
 sh "/etc/mknod /dev/rp1g b 0 14"
 sh "/etc/mknod /dev/rrp1g c 4 14"
 # record the majors next to a node that is known-good, so a repeat is one
