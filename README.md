@@ -132,6 +132,30 @@ corridor. So most of v11 is **restoration rather than importation**, which is bo
 and much more defensible. Scope, evidence and the open questions:
 [docs/v11-plan.md](docs/v11-plan.md).
 
+### ipnx-v12 — a wish
+
+*Not a plan, not a track, not even a maybe. Weaker than Inferno's "maybe, depending on
+licensing", and recorded only so the direction is written down somewhere.*
+
+Every edition above runs on an emulated VAX. The wish is that one day it needn't: Research
+Unix retargeted to **ARM64** and to **WASM** — running natively on the machine in your hand,
+and in a browser tab, with no 11/780 underneath at all. (Distinct from the long-standing
+idea of compiling the *emulator* to WebAssembly, which is a much smaller thing and already
+sits in the post-1.0 list.)
+
+It is not an absurd wish, only a very hard one, because this system has been ported before
+and its kernel still knows how. V10 keeps the boundary explicit: `sys/md/` holds
+machine-dependent code *per machine* — `star` (the 780), with `comet`, `naut`, `mfair`,
+`mflow` and `uvax` for its siblings — and `sys/ml/` holds the assembler, `trap*.s`,
+`swtch.s`, `copy.s`, `setjmp.s`. A new architecture means a new `md`, a new `ml`, and in
+principle nothing else. Ritchie and Johnson crossed that boundary to the Interdata and
+proved Unix portable at all; London and Reiser crossed it to the VAX; Norman Wilson took V8
+to a Cray.
+
+So a twelfth edition would be the most traditional act in this repository — and against a
+target with no MMU, or a memory model nothing in 1989 anticipated, comfortably the hardest.
+It stays a wish until everything above it is done.
+
 ## ipnx-ports
 
 *Planned; nothing built yet.*

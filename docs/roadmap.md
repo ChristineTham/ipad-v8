@@ -275,5 +275,16 @@ this one.
 ## Post-1.0 (unscheduled)
 
 - [ ] Original 68000 Blit mode (Musashi core; requires ROM permission resolution)
-- [ ] Emscripten web demo — the first browser VAX
+- [ ] Emscripten web demo — the first browser VAX. *The emulator compiled to WASM; not
+      the same thing as the v12 wish below, which is the opposite — no VAX at all*
 - [ ] V10-era networking exploration (DEQNA/IP)
+
+## ipnx-v12 — a wish, and deliberately not a track
+
+Research Unix retargeted to **ARM64** and **WASM**: ipnx on real hardware and in a browser
+tab, with no emulated 11/780 underneath. There are no phases here and there should not be —
+this is weaker than Inferno's "maybe", and everything above it comes first.
+
+Written down only so the direction survives: the kernel's portability boundary is already
+explicit (`sys/md/` per machine, `sys/ml/` for the assembler), and the system has crossed
+it before — Interdata, VAX, Cray. See the README for the longer note.
