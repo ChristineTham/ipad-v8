@@ -1,5 +1,5 @@
 libplot.a:	plot.c.a
-	ar x plot.c.a
+	cp plot.c.a/* .
 	cc -cO *.c
 	ar rc libplot.a *.o
 	ranlib libplot.a

@@ -100,6 +100,10 @@ one thing that a from-source rebuild provably cannot reconstruct. V10's tape doe
 games source; moving it back is noted as a Track C idea in
 [../docs/v11-plan.md](../docs/v11-plan.md).
 
+**`learn`'s lessons were never on the tape either.** `usr/src/cmd/learn` builds the
+driver, and its makefile unpacks lesson archives from `/usr/lib/learn/*.a` — a directory
+the tape does not carry at all. The program will build; it will have nothing to teach.
+
 Other binaries without an obvious matching source name are mostly name mismatches —
 `vi` is built from `usr/src/cmd/ex`, `nroff` from `troff` — and the build itself is a
 far better oracle than filename matching, so they are resolved as the world build

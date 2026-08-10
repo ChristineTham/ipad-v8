@@ -1,6 +1,6 @@
 libtr.a: tr.c.a
 	mkdir xplot
-	cd xplot;ar x ../tr.c.a
+	cp tr.c.a/* xplot
 	cd xplot;cc -c -O *.c
 	cd xplot;ar rc ../libtr.a *.o
 	rm -r xplot

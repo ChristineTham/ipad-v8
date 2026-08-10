@@ -1,11 +1,11 @@
 jplot: libblit.a driver.o
 	cc driver.o libblit.a -lm -o jplot
 unplot: unplot.c
-	ar x blit.c.a jcom.h
+	cp blit.c.a/jcom.h .
 	cc unplot.c -o unplot
 libblit.a: blit.c.a
 	mkdir xplot
-	cd xplot;ar x ../blit.c.a
+	cp blit.c.a/* xplot
 	cd xplot;cc -c -O *.c
 	cd xplot;ar rc libblit.a *.o
 	mv xplot/libblit.a libblit.a
@@ -14,16 +14,16 @@ libblit.a: blit.c.a
 	rmdir xplot
 jplot.m:	inblit.a
 	mkdir xplot
-	cd xplot;ar x ../inblit.a
-	cd xplot; ar x ../blit.c.a jcom.h
+	cp inblit.a/* xplot
+	cp blit.c.a/jcom.h xplot
 	cd xplot;mcc *.c -lmj -o jplot.m
 	mv xplot/jplot.m jplot.m
 	rm xplot/*
 	rmdir xplot
 jplot.j:	inblit.a
 	mkdir xplot
-	cd xplot;ar x ../inblit.a
-	cd xplot;ar x ../blit.c.a jcom.h
+	cp inblit.a/* xplot
+	cp blit.c.a/jcom.h xplot
 	cd xplot;mcc -j *.c -lmj -o jplot.j
 	mv xplot/jplot.j jplot.j
 	rm xplot/*

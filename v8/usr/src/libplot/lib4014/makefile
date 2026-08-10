@@ -1,6 +1,6 @@
 lib4014.a: tek.c.a
 	mkdir xplot
-	cd xplot;ar x ../tek.c.a
+	cp tek.c.a/* xplot
 	cd xplot;cc -c -O *.c
 	cd xplot;ar rc ../lib4014.a *.o
 	rm -r xplot

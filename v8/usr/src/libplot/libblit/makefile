@@ -1,6 +1,6 @@
 libblit.a: blit.c.a
 	mkdir xplot
-	cd xplot;ar x ../blit.c.a
+	cp blit.c.a/* xplot
 	cd xplot;cc -c -O *.c
 	cd xplot;ar rc ../libblit.a *.o
 	rm -r xplot/*

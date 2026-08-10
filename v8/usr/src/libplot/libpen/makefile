@@ -1,6 +1,6 @@
 libpen.a: pen.c.a
 	mkdir xplot
-	cd xplot;ar x ../pen.c.a
+	cp pen.c.a/* xplot
 	cd xplot;cc -c -O *.c
 	cd xplot;ar rc ../libpen.a *.o
 	rm -r xplot

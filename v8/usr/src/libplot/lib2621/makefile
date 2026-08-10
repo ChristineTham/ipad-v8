@@ -1,6 +1,6 @@
 lib2621.a: hp.c.a
 	mkdir xplot
-	cd xplot;ar x ../hp.c.a
+	cp hp.c.a/* xplot
 	cd xplot;cc -c -O *.c
 	cd xplot;ar rc ../lib2621.a *.o
 	rm -r xplot
