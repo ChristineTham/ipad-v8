@@ -251,6 +251,42 @@ new; stages 2 and 3 wait on N3-into-the-image and N4–N7 respectively.
 ### Merge
 - [ ] "Edition 10" machine in the app (embed the winning SIMH simulator if not `vax780`)
 
+## Track S — the world build *(started 2026-08-10, [build-from-source.md](build-from-source.md))*
+
+> **A note on the letter C.** Three different things in this repo have been
+> called C, and it has already caused confusion. "Track C" below is
+> **ipnx-ports**. B0.6's **C1–C4** are *image and machine configuration*. The
+> task list's **C1–C6** are *this* section — building the system from our own
+> source. Prefer **S1, S2, …** for these from here on; the task subjects still
+> say C and are not worth renumbering mid-flight.
+
+Building Research Unix from the source in `v8/` rather than shipping a disk
+image someone else made. This is what makes `v8/` a *source tree* instead of an
+archive, and it is the foundation for Track B — you cannot cross-build V10
+inside V8 until you can rebuild V8 itself.
+
+Research Unix never had a world build; the stages, the ordering evidence and
+the safety rules are in [build-from-source.md](build-from-source.md).
+
+- [x] **S1** Take ownership of the tape as ipnx source — 7,819 files, `MANIFEST`,
+      case collisions escaped, `ar` source archives unpacked *(2026-08-10)*
+- [x] **S2** Serve it read-only at `/n/src` over netfs, with the escaped names
+      resolved server-side — nothing is copied to guest disk *(2026-08-10)*
+- [x] **S3** **Stage 1: the bootstrap toolchain builds from our source.** All
+      fourteen of `yacc make lex cpp ccom c2 as ld ar ranlib nm size strip cc`,
+      compiled off the share into a separate build filesystem. The compiler
+      works and agrees with the 1985 one byte-for-byte on the same input
+      *(2026-08-10; `tools/drive-stage1.sh`, `work/myv8/c2-stage1.log`)*
+- [ ] **S4** Stage 2–3: the toolchain rebuilds itself; fixpoint comparison
+- [ ] **S5** `cc -B` extended to `as`, `ld`, `crt0.o`, and `yaccpar` behind an
+      `#ifndef` — the hermeticity gaps
+- [ ] **S6** Stages 4–7: headers, libraries, then everything
+- [ ] **S7** Stage 8: a disk built from source, and a boot from it
+- [ ] **S8** Stage 9: the new system rebuilds itself under `chroot` — the point
+      at which `v8/` is demonstrably complete
+- [ ] **S9** Our guest-side patches move into the tree (the `streamio.c`
+      `istread` fix, `nmount.c`, the `il0` kernel config)
+
 ## Track C — ipnx-ports *(declared 2026-08-10; nothing built)*
 
 A ports tree in this repository, in the spirit of FreeBSD's: one recipe per package —
