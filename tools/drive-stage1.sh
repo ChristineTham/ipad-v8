@@ -29,6 +29,10 @@ trap cleanup EXIT INT TERM
 # regenerating first means the guest can never build from stale makefiles
 python3 "$ROOT/v8/mk/mkdep.py" --check || {
     echo "regenerating..."; python3 "$ROOT/v8/mk/mkdep.py"; }
+python3 "$ROOT/tools/ipnx-release.py" --check || exit 1
+# tree.list is what makes staging incremental; it must describe the tree we are
+# about to serve, not the one from last time.
+python3 "$ROOT/tools/gen-tree-list.py" || exit 1
 
 cd "$ROOT/work/myv8" || exit 1
 : > c2-stage1.log

@@ -37,3 +37,4 @@ libdmd/build-*.log
 libdmd/*.pgm
 libdmd/*.png
 __pycache__/
+v8/mk/tree.list

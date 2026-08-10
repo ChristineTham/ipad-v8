@@ -22,6 +22,13 @@
 # stored-name, true-name) rather than two full paths: once %4Dail has become
 # Mail, no path recorded against the old spelling is valid any more.
 
+# -f as the first argument forces a full copy.
+FORCE=""
+if test "$1" = "-f"
+then
+	FORCE=yes
+	shift
+fi
 SHARE=${1-/n/src}
 DEST=${2-/usr/bld/src}
 
@@ -60,17 +67,67 @@ then
 	df /
 fi
 
-echo "stage: copying $SHARE -> $DEST"
-rm -rf $DEST
+echo "stage: $SHARE -> $DEST"
 mkdir /usr/bld 2>/dev/null
-mkdir $DEST || exit 1
 
-# cp -r would follow the share one file at a time; tar keeps one stream open
-# and moves ~100 KB/s, which is netfs's measured ceiling either way.
-# usr first: it is the bulk and the part everything else needs, so if space
-# does run out we find out on the member that matters.
-(cd $SHARE; tar cf - usr mk etc bin jerq blit proto-dev) | (cd $DEST; tar xf -)
+# INCREMENTAL.  A full copy is ~25 minutes over netfs, which is fine once and
+# indefensible on every run when what changed was one shell script.  There is no
+# rsync here and never will be, so tree.list (written by tools/gen-tree-list.py
+# on the host) carries a size per file and one stamp over the lot:
+#
+#   stamp matches   -> nothing changed, do nothing at all
+#   no tree yet     -> one tar stream, which beats 7819 separate cp's
+#   otherwise       -> copy only the files whose size differs
+#
+# Size, not mtime, on purpose: the guest's TODR starts in 1976 until someone
+# sets it, so mtime comparison would call every file stale forever.  Size misses
+# an edit that happens to preserve length -- rare in source, and `stage.sh -f`
+# forces a full copy when it matters.
+STAMP=`sed 1q $SHARE/mk/tree.list`
+HAVE=""
+if test -f $DEST/.stamp
+then
+	HAVE=`cat $DEST/.stamp`
+fi
 
+if test "$FORCE" = ""  -a  "$STAMP" = "$HAVE"  -a  -d $DEST/usr/src
+then
+	echo "stage: unchanged ($STAMP) -- nothing to do"
+	exit 0
+fi
+
+if test ! -d $DEST/usr/src -o "$FORCE" != ""
+then
+	echo "stage: full copy"
+	FULL=yes
+	rm -rf $DEST
+	mkdir $DEST || exit 1
+	# usr first: it is the bulk and the part everything else needs, so if
+	# space does run out we find out on the member that matters.
+	(cd $SHARE; tar cf - usr mk etc bin jerq blit proto-dev) | (cd $DEST; tar xf -)
+else
+	echo "stage: incremental against $HAVE"
+	FULL=no
+	# stored is how the share spells it, true is how the staged tree does;
+	# compare against true, copy from stored.
+	sed 1d $SHARE/mk/tree.list | while read size stored true
+	do
+		have=`ls -l $DEST/$true 2>/dev/null | awk '{print $5}'`
+		if test "$have" != "$size"
+		then
+			echo "  update $true"
+			d=`echo $true | sed 's|/[^/]*$||'`
+			test -d $DEST/$d || sh $SHARE/mk/mkdirp.sh $DEST/$d
+			cp $SHARE/$stored $DEST/$true
+		fi
+	done
+fi
+echo "$STAMP" > $DEST/.stamp
+
+# Only after a full copy.  An incremental pass writes true names directly, so
+# there is nothing escaped left to rename and every line would report "missing".
+if test "$FULL" = "yes"
+then
 echo "stage: restoring case-sensitive names"
 # `test -e` does not exist in 1985 -- V7's test has -f, -d, -r, -w, -s and no
 # more, so `-e` made every one of these look absent and silently skipped the
@@ -87,6 +144,7 @@ do
 		echo "  missing $dir/$stored"
 	fi
 done
+fi
 
 echo "stage: recreating empty directories"
 grep -v '^#' $SHARE/EMPTYDIRS | grep . | while read d
