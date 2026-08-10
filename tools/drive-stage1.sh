@@ -35,7 +35,7 @@ python3 "$ROOT/tools/ipnx-release.py" --check || exit 1
 cd "$ROOT/work/myv8" || exit 1
 # A blank RP06 for build products.  Recreated per run: it holds nothing we
 # want to keep, and a fresh filesystem is one less variable.
-rm -f rp06build && dd if=/dev/zero of=rp06build bs=1m count=166 2>/dev/null
+rm -f rp06build && dd if=/dev/zero of=rp06build bs=512 count=340670 2>/dev/null
 : > c2-stage1.log
 : > "$ROOT/work/netfsd-stage1.log"
 
@@ -60,29 +60,45 @@ ck() {  # ck <label> <pattern>
     else printf '  FAIL  %s\n' "$1"; fail=1; fi
 }
 
+# Patterns below are deliberately UNANCHORED.
+#
+# The tty echoes typed characters as they arrive and they interleave into
+# whatever is printing, so a marker routinely lands mid-line -- the last run
+# logged "echC3-CASE-clean" and "echoC3-CLOCK-ok", and every ^-anchored check
+# scored them as failures on a run where they had in fact passed.
+#
+# Unanchored is only safe because the guest spells each marker with a shell
+# variable (echo C3-CLOCK$OK), so the echo contains "C3-CLOCK$OK" and the
+# output contains "C3-CLOCK-ok"; nothing but the result can match the full
+# string.  Do not "simplify" a marker back to a literal.
 echo
 echo "== share =="
-ck "mounted /n/src"                '^C2-MOUNTED'
-ck "CASEMAP readable over netfs"   '^usr/src/cmd.*%4Dail'
+ck "mounted /n/src"                'C2-MOUNTED-ok'
+ck "CASEMAP readable over netfs"   'usr/src/cmd.*%4Dail'
 # The two directory pairs that cannot coexist on macOS at all.  netfsd's
 # CaseMap serves them under their true names, so the guest must see both --
 # and must never see an escaped one, which would not fit a 14-byte direct.
-ck "Mail and mail both visible"    '^C3-CASE-Mail-ok'
-ck "C and c both visible"          '^C3-CASE-C-ok'
+ck "Mail and mail both visible"    'C3-CASE-Mail-ok'
+ck "C and c both visible"          'C3-CASE-C-ok'
 # Not a blanket grep for '%': CASEMAP's own contents are full of escaped names
-# and we print them deliberately above.  This asks the guest to count them in a
-# *directory listing*, where the answer must be zero.
-ck "no escaped name in a listing"  '^C3-CASE-clean'
+# and we print them deliberately above.  This asks the guest to look for them
+# in a *directory listing*, where the answer must be none.
+ck "no escaped name in a listing"  'C3-CASE-clean-ok'
 
 echo
 echo "== clock =="
-ck "guest clock set past 2000"     '^C3-CLOCK-ok'
+ck "guest clock set past 2000"     'C3-CLOCK-ok'
+
+echo
+echo "== build filesystem =="
+ck "mkfs + fsck clean on rp1g"     'BUILDFS-ok'
+ck "mounted on /b"                 '/dev/rp1g|rp1g +[0-9]'
 
 echo
 echo "== stage 1 toolchain =="
 for t in yacc make lex cpp ccom c2 as ld ar ranlib nm size strip cc; do
-    if grep -qE "^=== stage1: $t " <<< "$LOGC"; then
-        if grep -A40 "^=== stage1: $t " <<< "$LOGC" | grep -qE 'BUILD FAILED|INSTALL FAILED'; then
+    if grep -qE "=== stage1: $t " <<< "$LOGC"; then
+        if grep -A40 "=== stage1: $t " <<< "$LOGC" | grep -qE 'BUILD FAILED|INSTALL FAILED'; then
             printf '  FAIL  %s\n' "$t"; fail=1
         else printf '  ok    %s\n' "$t"; fi
     else printf '  ----  %s (never reached)\n' "$t"; fail=1; fi
@@ -90,9 +106,10 @@ done
 
 echo
 echo "== the new compiler =="
-# Anchored: the string also appears inside the echo that writes t.c, and an
-# unanchored grep reported "ok" for a compiler that was never built.
-ck "it runs and compiles"          '^newcc-ok'
+# t.c prints this via %s, so "newcc-ok" cannot appear in the echo of the line
+# that writes t.c -- which is how an earlier unanchored grep reported a working
+# compiler that had never been built.
+ck "it runs and compiles"          'newcc-ok'
 v=$(grep -oE 'cmp-newcc-vs-oldcc=[0-9]+' <<< "$LOGC" | tail -1 | cut -d= -f2)
 case "${v:-?}" in
     0) echo "  ok    new compiler reproduces the old one's output byte-for-byte" ;;
@@ -104,7 +121,7 @@ esac
 echo
 grep -E 'STAGE1 OK|STAGE1 INCOMPLETE' <<< "$LOGC" | tail -1 | sed 's/^/  /'
 echo
-if [[ $fail -eq 0 ]] && grep -q 'C2-DONE' <<< "$LOGC"; then
+if [[ $fail -eq 0 ]] && grep -q 'C2-DONE-ok' <<< "$LOGC"; then
     echo "STAGE 1 OK  ($LOG)"; exit 0
 fi
 echo "STAGE 1 FAILED (rc=$rc) -- $LOG"; exit 1

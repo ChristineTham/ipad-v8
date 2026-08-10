@@ -104,18 +104,27 @@ simh "run 2"
 must "login:" 300
 sendline "root"
 bootsh "PS1='ipnx%%% '" 120
-sh "echo C2-boot-ok" 120
+# Every result marker is spelled with this variable, never literally.
+#
+# The tty echoes typed characters as they arrive, so the echo of
+# `echo C3-CLOCK-ok` lands in the output stream too -- and because the echo
+# interleaves *into* whatever is printing, the marker turns up mid-line
+# ("echC3-CASE-clean"), which defeats a ^-anchored grep just as reliably as an
+# unanchored one matches the echo.  Writing `echo C3-CLOCK$OK` puts
+# "C3-CLOCK$OK" in the echo and "C3-CLOCK-ok" only in the output, so an
+# unanchored grep for the full marker cannot match anything but the result.
+sh "OK=-ok" 120
+sh "echo C2-boot\$OK" 120
 
-# Clear any wreckage from an earlier attempt BEFORE mounting anything.  This
-# cannot be left to stage.sh, because stage.sh lives on the share and a full
+# Clear any wreckage from an earlier attempt BEFORE mounting anything.  A full
 # root partition is precisely what stops the share being readable: `ls /n/src`
-# succeeds, every open(2) fails, and it looks like a netfs bug rather than a
-# disk that ran out of room in a previous run.
+# succeeds, every open(2) fails, and it presents as a netfs bug rather than as
+# a disk that ran out of room in a previous run.
 send_user "\n=== clear previous attempts ===\n"
 sh "df /"
 sh "rm -rf /bld"
 sh "rm -rf /usr/bld"
-sh "/etc/umount /dev/rp1a"
+sh "/etc/umount /dev/rp1g"
 sh "df /"
 
 # ------------------------------------------------------------- networking
@@ -145,7 +154,7 @@ sh "mkdir /n/src"
 catfile "../../tools/v8/nmount.c" "/tmp/nmount.c"
 sh "cd /tmp; cc -o nmount nmount.c -lin" 300
 sh "/tmp/nmount 10.0.2.2 $port 65 /n/src" 120
-sh "echo C2-MOUNTED"
+sh "echo C2-MOUNTED\$OK"
 sh "ls /n/src"
 sh "sed 5q /n/src/CASEMAP"
 
@@ -166,12 +175,12 @@ sh "sed 5q /n/src/CASEMAP"
 send_user "\n=== case-collision pairs ===\n"
 sh "A=/n/src/usr/src/cmd/Mail/Makefile; B=/n/src/usr/src/cmd/mail/Makefile"
 sh "ls -l \$A \$B"
-sh "if test -f \$A -a -f \$B; then cmp -s \$A \$B || echo C3-CASE-Mail-ok; fi" 120
+sh "if test -f \$A -a -f \$B; then cmp -s \$A \$B || echo C3-CASE-Mail\$OK; fi" 120
 sh "ls /n/src/jerq/src/lib"
-sh "if test -d /n/src/jerq/src/lib/C -a -d /n/src/jerq/src/lib/c; then echo C3-CASE-C-ok; fi"
+sh "if test -d /n/src/jerq/src/lib/C -a -d /n/src/jerq/src/lib/c; then echo C3-CASE-C\$OK; fi"
 # and nothing escaped may leak into a listing
 sh "ls /n/src/usr/src/cmd /n/src/jerq/src/lib /n/src/usr/bin > /tmp/ls.out" 120
-sh "if grep '%' /tmp/ls.out > /dev/null; then echo C3-CASE-DIRTY; else echo C3-CASE-clean; fi"
+sh "if grep '%' /tmp/ls.out > /dev/null; then echo C3-CASE-DIRTY; else echo C3-CASE-clean\$OK; fi"
 
 # --------------------------------------------------------------- the clock
 # make(1) compares mtimes, and the source mtimes arrive from the host over
@@ -202,7 +211,7 @@ sh "/tmp/newdate -u [exec date -u +%y%m%d%H%M.%S]"
 sh "date"
 # sync writes the superblock, which is what carries the year to the next boot
 sh "sync"
-sh "if date | grep '[exec date -u +%Y]' > /dev/null; then echo C3-CLOCK-ok; else echo C3-CLOCK-BAD; fi"
+sh "if date | grep '[exec date -u +%Y]' > /dev/null; then echo C3-CLOCK\$OK; else echo C3-CLOCK-BAD; fi"
 
 # ------------------------------------- a filesystem for the build products
 # Real Unix mounted /usr/src as its own disk for exactly this reason.  Here the
@@ -211,14 +220,37 @@ sh "if date | grep '[exec date -u +%Y]' > /dev/null; then echo C3-CLOCK-ok; else
 # fsck as holding 8799 files; dropping a build tree into it exhausted the inodes
 # and V7 mkdir started answering "cannot access .".  So the build gets rp1, its
 # own filesystem, sized for the job.
+#
+# Partition g, not a.  hp6_sizes (sys/dev/hp.c) gives the RP06 as
+#
+#	a  15884 sectors  cyl 0-37       g  291280 sectors  cyl 118-814
+#	b  33440          cyl 38-117     c  340670          whole disk
+#
+# and B0 used rp1a as a raw courier, which needs no size at all.  A 40000
+# *block* (40 MB) filesystem does not fit in a 15884 *sector* (7.7 MB)
+# partition, and mkfs lays its free list down from the top, so the very first
+# write went past the end: "write error: 39968" with nothing else wrong.
+#
+# Minor number is drive<<3 | partition, so drive 1 partition g is 14.
+#
+# 60000 blocks gives 60 MB and, by mkfs's own arithmetic (n/25 i-list blocks
+# at NIPB=16 inodes each), 38400 inodes.  Both are ample: stage 1 writes a few
+# hundred files, and even a full world build is working against a 24 MB
+# source tree.  Inode count is worth stating rather than assuming -- V8 fixes
+# it at mkfs time and running out presents as mkdir answering "cannot access .".
 send_user "
 === build filesystem on rp1 ===
 "
-sh "/etc/mknod /dev/rp1a b 2 8"
-sh "/etc/mknod /dev/rrp1a c 4 8"
-sh "/etc/mkfs /dev/rrp1a 40000" 600
+sh "/etc/mknod /dev/rp1g b 2 14"
+sh "/etc/mknod /dev/rrp1g c 4 14"
+sh "/etc/mkfs /dev/rrp1g 60000" 1800
+# Do not mount an unverified filesystem.  Mounting the failed one panicked the
+# kernel outright -- "type 8 ... panic: trap" -- which costs a repair cycle on
+# an image that was fine a moment earlier.  fsck on a fresh filesystem is
+# seconds, and its exit status is the gate.
+sh "if /etc/fsck -y /dev/rrp1g; then echo BUILDFS\$OK; fi" 900
 sh "mkdir /b"
-sh "/etc/mount /dev/rp1a /b"
+sh "if /etc/fsck -y /dev/rrp1g > /dev/null; then /etc/mount /dev/rp1g /b; fi" 900
 sh "df /b"
 
 # ---------------------------------------------------------- build stage 1
@@ -228,9 +260,14 @@ sh "sh /n/src/mk/build1.sh /n/src /b 2>&1" 5400
 sh "date"
 
 # Did we build a compiler that works?  Cheapest possible proof: use it.
+#
+# The program prints its marker via %s so that the literal "newcc-ok" never
+# appears in the echo of the line that writes t.c.  An earlier version had it
+# spelled out, and an unanchored grep duly reported a working compiler that had
+# never been built -- it was matching the echo of the echo.
 send_user "\n=== does the new toolchain compile anything? ===\n"
 sh "cd /tmp"
-sh "echo 'main(){printf(\"newcc-ok\\n\");}' > t.c"
+sh "echo 'main(){printf(\"newcc%s\\n\", \"-ok\");}' > t.c"
 sh "cat t.c"
 sh "/b/tools/bin/cc -B/b/tools/ -t02p -o t t.c" 300
 sh "./t"
@@ -244,7 +281,7 @@ sh "strip ls.new ls.old"
 sh "ls -l ls.new ls.old"
 sh "cmp ls.new ls.old; echo cmp-newcc-vs-oldcc=\$?"
 
-sh "echo C2-DONE"
+sh "echo C2-DONE\$OK"
 sh "cd /; sync; sync"
 sh "/etc/halt" 120
 simh "quit" 60
