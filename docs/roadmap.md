@@ -293,8 +293,8 @@ the safety rules are in [build-from-source.md](build-from-source.md).
       stage3-vs-stage3b fallback, now in `v8/mk/fixpoint.sh`
 - [ ] **S6** Stages 4–7: headers, libraries, then everything. Four separate
       pieces, in a forced order, each blocked on the one before:
-  - [ ] **4** headers — 224 files into `DESTDIR/usr/include`; nothing after
-        this compiles against the running system's
+  - [x] **4** headers — 224 files into `DESTDIR/usr/include`; nothing after
+        this compiles against the running system's *(2026-08-10, first run)*
   - [ ] **5** libraries — 18 archives (curses, termcap, F77, I77, mp, l, jobs,
         cbt, dbm, dk, g, and the seven plot libraries); libc is stage 2
   - [ ] **6** commands — starts with `config`(8), which stage 7 cannot run
