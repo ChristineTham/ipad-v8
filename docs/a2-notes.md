@@ -60,7 +60,7 @@ constant this port reuses) and [a1-notes.md](a1-notes.md) (the SIMH side).*
 - **Two xcframeworks cannot both bundle `module.modulemap`** — Xcode
   copies every framework's Headers into one flat `include/` and the build
   fails with "Multiple commands produce". Both modules are declared in
-  `app/Edition/Modules/module.modulemap` instead (SWIFT_INCLUDE_PATHS
+  `app/ipnx/Modules/module.modulemap` instead (SWIFT_INCLUDE_PATHS
   points there; header paths are modulemap-relative).
 - The mux **menu needs the cursor mid-screen** before the B3 click: the
   menu pops centered on the cursor, and a cursor parked in a corner gets

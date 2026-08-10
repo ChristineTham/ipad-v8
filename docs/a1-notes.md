@@ -83,7 +83,7 @@ The remote-console dialect in full, all desktop-verified:
 
 ## The app (`app/`)
 
-- Hand-authored `Edition.xcodeproj` (Xcode 26 synchronized folders — the
+- Hand-authored `ipnx.xcodeproj` (Xcode 26 synchronized folders — the
   pbxproj lists no source files), `DEVELOPMENT_TEAM = RPL5R637DS` fixed at
   creation time, `TARGETED_DEVICE_FAMILY = 2`, SwiftTerm via SPM
   (Package.resolved pins the version), `SimhVAX.xcframework` by reference.

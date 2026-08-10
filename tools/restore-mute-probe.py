@@ -62,7 +62,7 @@ load -o bootV8 0
 run 2
 """
 
-# Byte-for-byte the app's resume.conf (app/Edition/Machine.swift).
+# Byte-for-byte the app's resume.conf (app/ipnx/Machine.swift).
 RESUME = """\
 set remote telnet=127.0.0.1:{REM}
 set remote timeout=600

@@ -41,12 +41,12 @@ libdmd/build-xcframework.sh
 
 ```bash
 # Build the ipnx iPad app for the simulator
-cd app && xcodebuild -project Edition.xcodeproj -scheme Edition -destination 'platform=iOS Simulator,name=iPad Pro 13-inch (M5)' build
+cd app && xcodebuild -project ipnx.xcodeproj -scheme ipnx -destination 'platform=iOS Simulator,name=iPad Pro 13-inch (M5)' build
 ```
 
 ```bash
 # Build the ipnx Mac app (same sources, second target)
-cd app && xcodebuild -project Edition.xcodeproj -scheme EditionMac -destination 'platform=macOS,arch=arm64' build
+cd app && xcodebuild -project ipnx.xcodeproj -scheme ipnxMac -destination 'platform=macOS,arch=arm64' build
 ```
 
 ```bash
@@ -71,18 +71,21 @@ python3 work/dztalk.py
 ```
 
 Toolchains:
-- App shell (real since A1): Swift/SwiftUI, `app/Edition.xcodeproj` — hand-authored,
+- App shell (real since A1): Swift/SwiftUI, `app/ipnx.xcodeproj` — hand-authored,
   synchronized-folder format. **Code signing: always the Hello Tham Pty. Ltd. org team —
   `DEVELOPMENT_TEAM = RPL5R637DS` — never the personal team** (set at creation, verified
-  2026-08-09). Two targets (`Edition` iPad, `EditionMac`) share the one `Edition/`
+  2026-08-09). Two targets (`ipnx` iPad, `ipnxMac`) share the one `app/ipnx/`
   folder; platform differences go behind `#if os(macOS)` and the
   `PlatformViewRepresentable` shim in `Platform.swift`, never a forked file.
+  Everything was named **Edition** until 2026-08-10 — project, targets, schemes,
+  folder, `EditionApp` — and is now `ipnx`/`ipnxMac`/`IpnxApp`. The product was
+  always `ipnx.app`; only the scaffolding lagged.
 - VAX core (real since A1): open-simh as a C static library — `libsimh/` (CMake →
   xcframework; scp's `main` renamed via `-Dmain` only; no async/network/SDL).
 - Terminal core (real since A2): dmd_core as a Rust `aarch64-apple-ios` staticlib via
   its **built-in** C FFI — `libdmd/` (never wrap it in another crate: the unmangled
   exports collide; extend via logged patch, e.g. the A2 BREAK exports). Both
-  xcframeworks' Swift modules are declared in `app/Edition/Modules/module.modulemap` —
+  xcframeworks' Swift modules are declared in `app/ipnx/Modules/module.modulemap` —
   two frameworks cannot each bundle a modulemap (flat `include/` collision).
 
 ## Architecture (the big picture)

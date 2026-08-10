@@ -23,7 +23,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		ED17A10000000000000000A5 /* Edition */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Edition; sourceTree = "<group>"; };
+		ED17A10000000000000000A5 /* ipnx */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = ipnx; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -53,7 +53,7 @@
 		ED17A10000000000000000A7 = {
 			isa = PBXGroup;
 			children = (
-				ED17A10000000000000000A5 /* Edition */,
+				ED17A10000000000000000A5 /* ipnx */,
 				ED17A10000000000000000A9 /* Frameworks */,
 				ED17A10000000000000000A8 /* Products */,
 			);
@@ -80,9 +80,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		ED17A10000000000000000AA /* Edition */ = {
+		ED17A10000000000000000AA /* ipnx */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = ED17A10000000000000000B4 /* Build configuration list for PBXNativeTarget "Edition" */;
+			buildConfigurationList = ED17A10000000000000000B4 /* Build configuration list for PBXNativeTarget "ipnx" */;
 			buildPhases = (
 				ED17A10000000000000000AB /* Sources */,
 				ED17A10000000000000000A6 /* Frameworks */,
@@ -94,19 +94,19 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				ED17A10000000000000000A5 /* Edition */,
+				ED17A10000000000000000A5 /* ipnx */,
 			);
-			name = Edition;
+			name = ipnx;
 			packageProductDependencies = (
 				ED17A10000000000000000B6 /* SwiftTerm */,
 			);
-			productName = Edition;
+			productName = ipnx;
 			productReference = ED17A10000000000000000A4 /* ipnx.app */;
 			productType = "com.apple.product-type.application";
 		};
-		ED17A20000000000000000C9 /* EditionMac */ = {
+		ED17A20000000000000000C9 /* ipnxMac */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = ED17A20000000000000000CA /* Build configuration list for PBXNativeTarget "EditionMac" */;
+			buildConfigurationList = ED17A20000000000000000CA /* Build configuration list for PBXNativeTarget "ipnxMac" */;
 			buildPhases = (
 				ED17A20000000000000000C6 /* Sources */,
 				ED17A20000000000000000C5 /* Frameworks */,
@@ -118,13 +118,13 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				ED17A10000000000000000A5 /* Edition */,
+				ED17A10000000000000000A5 /* ipnx */,
 			);
-			name = EditionMac;
+			name = ipnxMac;
 			packageProductDependencies = (
 				ED17A20000000000000000CD /* SwiftTerm */,
 			);
-			productName = Edition;
+			productName = ipnx;
 			productReference = ED17A20000000000000000C4 /* ipnx.app */;
 			productType = "com.apple.product-type.application";
 		};
@@ -146,7 +146,7 @@
 					};
 				};
 			};
-			buildConfigurationList = ED17A10000000000000000B3 /* Build configuration list for PBXProject "Edition" */;
+			buildConfigurationList = ED17A10000000000000000B3 /* Build configuration list for PBXProject "ipnx" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -161,8 +161,8 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				ED17A10000000000000000AA /* Edition */,
-				ED17A20000000000000000C9 /* EditionMac */,
+				ED17A10000000000000000AA /* ipnx */,
+				ED17A20000000000000000C9 /* ipnxMac */,
 			);
 		};
 /* End PBXProject section */
@@ -315,7 +315,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.hellotham.ipnx;
 				PRODUCT_NAME = ipnx;
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Edition/Modules";
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/ipnx/Modules";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 2;
 			};
@@ -345,7 +345,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.hellotham.ipnx;
 				PRODUCT_NAME = ipnx;
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Edition/Modules";
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/ipnx/Modules";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 2;
 			};
@@ -354,7 +354,7 @@
 		ED17A20000000000000000CB /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = "Edition-macOS.entitlements";
+				CODE_SIGN_ENTITLEMENTS = "ipnx-macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
@@ -376,7 +376,7 @@
 				PRODUCT_NAME = ipnx;
 				SDKROOT = macosx;
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Edition/Modules";
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/ipnx/Modules";
 				SWIFT_VERSION = 5.0;
 			};
 			name = Debug;
@@ -384,7 +384,7 @@
 		ED17A20000000000000000CC /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = "Edition-macOS.entitlements";
+				CODE_SIGN_ENTITLEMENTS = "ipnx-macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
@@ -406,7 +406,7 @@
 				PRODUCT_NAME = ipnx;
 				SDKROOT = macosx;
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Edition/Modules";
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/ipnx/Modules";
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
@@ -414,7 +414,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		ED17A10000000000000000B3 /* Build configuration list for PBXProject "Edition" */ = {
+		ED17A10000000000000000B3 /* Build configuration list for PBXProject "ipnx" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				ED17A10000000000000000AF /* Debug */,
@@ -423,7 +423,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		ED17A10000000000000000B4 /* Build configuration list for PBXNativeTarget "Edition" */ = {
+		ED17A10000000000000000B4 /* Build configuration list for PBXNativeTarget "ipnx" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				ED17A10000000000000000B1 /* Debug */,
@@ -432,7 +432,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		ED17A20000000000000000CA /* Build configuration list for PBXNativeTarget "EditionMac" */ = {
+		ED17A20000000000000000CA /* Build configuration list for PBXNativeTarget "ipnxMac" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				ED17A20000000000000000CB /* Debug */,

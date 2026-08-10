@@ -16,8 +16,8 @@
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "ED17A10000000000000000AA"
                BuildableName = "ipnx.app"
-               BlueprintName = "Edition"
-               ReferencedContainer = "container:Edition.xcodeproj">
+               BlueprintName = "ipnx"
+               ReferencedContainer = "container:ipnx.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -46,8 +46,8 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "ED17A10000000000000000AA"
             BuildableName = "ipnx.app"
-            BlueprintName = "Edition"
-            ReferencedContainer = "container:Edition.xcodeproj">
+            BlueprintName = "ipnx"
+            ReferencedContainer = "container:ipnx.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -63,8 +63,8 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "ED17A10000000000000000AA"
             BuildableName = "ipnx.app"
-            BlueprintName = "Edition"
-            ReferencedContainer = "container:Edition.xcodeproj">
+            BlueprintName = "ipnx"
+            ReferencedContainer = "container:ipnx.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

@@ -6,9 +6,10 @@ import AppKit
 import UIKit
 #endif
 
-/// "ipnx" — iPad is not Unix. The name itself carries no trademark, which is
-/// the binding constraint (see docs/licensing.md); the expansion is a joke in
-/// the GNU tradition and stays out of the app's name and branding.
+/// "ipnx" — iPad is not Unix, and Intellectual Property is not Unix. The name
+/// itself carries no trademark, which is the binding constraint (see
+/// docs/licensing.md); both expansions are jokes in the GNU tradition and stay
+/// out of the app's name and branding.
 /// Boots the bundled V8 disk, shows it on the operator console and the DMD 5620,
 /// and keeps the machine alive across app lifecycle via SIMH save/restore.
 ///
@@ -18,7 +19,7 @@ import UIKit
 /// running when the user switches away. The Mac therefore snapshots only on
 /// quit (which still buys instant-on) or when explicitly asked.
 @main
-struct EditionApp: App {
+struct IpnxApp: App {
     @StateObject private var machine = Machine()
     @StateObject private var terminal = Terminal5620()
     @StateObject private var glass = GlassTerminal()
