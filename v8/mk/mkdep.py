@@ -75,7 +75,14 @@ STAGE1 = [
     # links a generated rodata.c that does not exist until yacc has run.
     dict(name="yacc", dir="usr/src/cmd/yacc", objs="*.c", cflags="-DWORD32",
          product="yacc", install="bin/yacc",
-         data=[("yaccpar", "lib/yaccpar")],
+         # /usr/lib, not /lib: yacc/files has
+         #     # define PARSER "/usr/lib/yaccpar"
+         # unconditionally, so a yacc we build reads that absolute path
+         # whatever TOOLDIR says.  Installing our copy there keeps the
+         # tape's layout; making the build properly hermetic needs
+         # PARSER behind an #ifndef, which is a change to our source and
+         # a later stage's problem.
+         data=[("yaccpar", "usr/lib/yaccpar")],
          note="yacc/Makefile: y?.o, CFLAGS=-O -DWORD32"),
 
     # -DVERSION8 is not decoration: make/defs uses it to pick <ndir.h> over
@@ -231,9 +238,27 @@ SRC     = /n/src
 TOOLDIR = /b/tools
 DESTDIR = /b/root
 
-# Stage 0 is the running system; later stages override CC to point -B at the
-# tools they just built.  Nothing here ever writes outside $(TOOLDIR)/$(DESTDIR).
-CC   = cc
+# Stage 0 is the running system; later stages override these to point -B at
+# the tools they just built.  Nothing here ever writes outside
+# $(TOOLDIR)/$(DESTDIR).
+#
+# Each of cc, yacc and lex needs TWO macros, and they are not interchangeable.
+# $(CC) is what a rule runs -- a command, resolved on PATH, and in later
+# stages a whole phrase with -B and -t in it.  $(CCPATH) is the file whose
+# timestamp means "the compiler changed", and that is what a prerequisite list
+# needs.  Writing "CC = cc" and then using $(CC) as a prerequisite produced
+#
+#	Make:  Don't know how to make cc.  Stop.
+#
+# on all fourteen components at once: make went looking for a file named cc in
+# the build directory.  The other tools are already absolute paths, so they
+# serve as both.
+CC       = cc
+CCPATH   = /bin/cc
+YACC     = yacc
+YACCPATH = /usr/bin/yacc
+LEX      = lex
+LEXPATH  = /usr/bin/lex
 CPP  = /lib/cpp
 CCOM = /lib/ccom
 C2   = /lib/c2
@@ -241,8 +266,6 @@ AS   = /bin/as
 LD   = /bin/ld
 AR   = /bin/ar
 LIBC = /lib/libc.a
-YACC = yacc
-LEX  = lex
 
 # Where <angle-bracket> headers really come from.  Stage 1 builds against the
 # running system, like any bootstrap; stage 5 onward points this at
@@ -252,7 +275,7 @@ INCDIR = $(SRC)/usr/include
 CFLAGS = -O %(cflags)s
 INCS   = %(incs)s -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) $(INCS) -c
-TOOLS  = $(CC) $(CCOM) $(CPP) $(C2) $(AS)
+TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
 
 """
 
@@ -309,9 +332,16 @@ def emit(c):
     # generated sources
     for target, (tool, src, extra) in sorted(gen.items()):
         toolmac = "$(YACC)" if tool == "yacc" else "$(LEX)"
+        # command vs binary again: the recipe runs $(YACC), the
+        # prerequisite must name the file whose mtime says it changed.
+        toolpath = "$(YACCPATH)" if tool == "yacc" else "$(LEXPATH)"
         deps = sorted(dep(p) for p in scan_includes(os.path.join(d, src), incdirs))
-        out.append("\n%s: %s/%s %s %s\n" % (target, srcdir, src, toolmac,
-                                         " ".join(x for x in deps if x != src)))
+        # compare against the full path: deps hold "$(SRC)/dir/gram.y" while
+        # src is the bare "gram.y", so a bare comparison never matched and the
+        # input was listed twice.
+        self = "%s/%s" % (srcdir, src)
+        out.append("\n%s: %s %s %s\n" % (target, self, toolpath,
+                                         " ".join(x for x in deps if x != self)))
         out.append("\t%s %s/%s\n" % (toolmac, srcdir, src))
         if extra:
             out.append("\t%s\n" % extra)

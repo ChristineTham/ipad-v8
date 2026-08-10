@@ -16,9 +16,27 @@ SRC     = /n/src
 TOOLDIR = /b/tools
 DESTDIR = /b/root
 
-# Stage 0 is the running system; later stages override CC to point -B at the
-# tools they just built.  Nothing here ever writes outside $(TOOLDIR)/$(DESTDIR).
-CC   = cc
+# Stage 0 is the running system; later stages override these to point -B at
+# the tools they just built.  Nothing here ever writes outside
+# $(TOOLDIR)/$(DESTDIR).
+#
+# Each of cc, yacc and lex needs TWO macros, and they are not interchangeable.
+# $(CC) is what a rule runs -- a command, resolved on PATH, and in later
+# stages a whole phrase with -B and -t in it.  $(CCPATH) is the file whose
+# timestamp means "the compiler changed", and that is what a prerequisite list
+# needs.  Writing "CC = cc" and then using $(CC) as a prerequisite produced
+#
+#	Make:  Don't know how to make cc.  Stop.
+#
+# on all fourteen components at once: make went looking for a file named cc in
+# the build directory.  The other tools are already absolute paths, so they
+# serve as both.
+CC       = cc
+CCPATH   = /bin/cc
+YACC     = yacc
+YACCPATH = /usr/bin/yacc
+LEX      = lex
+LEXPATH  = /usr/bin/lex
 CPP  = /lib/cpp
 CCOM = /lib/ccom
 C2   = /lib/c2
@@ -26,8 +44,6 @@ AS   = /bin/as
 LD   = /bin/ld
 AR   = /bin/ar
 LIBC = /lib/libc.a
-YACC = yacc
-LEX  = lex
 
 # Where <angle-bracket> headers really come from.  Stage 1 builds against the
 # running system, like any bootstrap; stage 5 onward points this at
@@ -37,7 +53,7 @@ INCDIR = $(SRC)/usr/include
 CFLAGS = -O -DVAX -DYYDEBUG
 INCS   = -I$(SRC)/usr/src/cmd/ccom/vax -I$(SRC)/usr/src/cmd/ccom/common -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) $(INCS) -c
-TOOLS  = $(CC) $(CCOM) $(CPP) $(C2) $(AS)
+TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
 
 OBJS = catch2.o cgram.o common1.o debug.o genaux.o gencode.o lcatch2.o local.o local2.o lookup.o memcpy.o optim.o pftn.o pjw.o printx.o reader.o scan.o t2print.o trees.o xdefs.o
 
@@ -46,7 +62,7 @@ all: comp
 comp: $(OBJS) $(LD) $(LIBC)
 	$(CC) $(CFLAGS) -o comp $(OBJS)
 
-cgram.c: $(SRC)/usr/src/cmd/ccom/vax/../common/cgram.y $(YACC) $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/ccom/vax/../common/cgram.y $(SRC)/usr/src/cmd/ccom/vax/../common/manifest.h $(SRC)/usr/src/cmd/ccom/vax/../common/mfile1.h $(SRC)/usr/src/cmd/ccom/vax/macdefs.h
+cgram.c: $(SRC)/usr/src/cmd/ccom/vax/../common/cgram.y $(YACCPATH) $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/ccom/vax/../common/manifest.h $(SRC)/usr/src/cmd/ccom/vax/../common/mfile1.h $(SRC)/usr/src/cmd/ccom/vax/macdefs.h
 	$(YACC) $(SRC)/usr/src/cmd/ccom/vax/../common/cgram.y
 	sed 's_^# line .*_/* & */_' y.tab.c >cgram.c; rm -f y.tab.c
 

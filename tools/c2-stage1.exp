@@ -306,7 +306,10 @@ sh "cmp ls.new ls.old; echo cmp-newcc-vs-oldcc=\$?"
 
 sh "echo C2-DONE\$OK"
 sh "cd /; sync; sync"
-sh "/etc/halt" 120
+# Not sh: halt never returns, so its marker never arrives and the run burns the
+# full timeout at the finish line looking like a hang.
+sendline "/etc/halt"
+must "Infinite loop" 120
 simh "quit" 60
 expect eof
 wait

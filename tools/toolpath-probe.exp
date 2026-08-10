@@ -1,0 +1,73 @@
+#!/usr/bin/env expect
+#
+# Where do the stage-0 tools actually live?
+#
+#	PATH=work/opensimh/BIN:$PATH expect tools/toolpath-probe.exp [image]
+#
+# The generated makefiles depend on the *binaries*, not just on invoking them:
+# replacing /lib/ccom has to rebuild every object it produced.  That means each
+# tool appears in a prerequisite list, and a prerequisite is a pathname -- so
+# "CC = cc" produced "Make: Don't know how to make cc. Stop." on all fourteen
+# components.
+#
+# Guessing the paths instead fails in exactly the same way, one run later, so
+# this asks the machine.  Two minutes here against a run per wrong guess.
+
+set timeout 300
+log_file -a toolpath-probe.log
+proc sendline {x} { send "$x\r" }
+proc must {pat {t 0}} {
+    global timeout
+    set use [expr {$t > 0 ? $t : $timeout}]
+    expect -timeout $use "$pat" {
+    } timeout { send_user "\n*** never saw '$pat' after ${use}s ***\n"; exit 3
+    } eof     { send_user "\n*** simulator exited waiting for '$pat' ***\n"; exit 4 }
+}
+set SEQ 0
+proc sh {cmd {t 0}} {
+    global SEQ
+    incr SEQ
+    sendline "M=+ok$SEQ"
+    sendline "$cmd"
+    sendline "echo \$M+"
+    must "+ok$SEQ+" $t
+}
+proc simh {cmd {t 0}} { must "sim>" $t; sendline $cmd }
+
+set img [lindex $argv 0]
+if {$img == ""} { set img rp07v8.net }
+
+spawn vax780
+simh "set noasynch"
+simh "set cpu idle=4.1BSD"
+simh "set tto 7b"
+simh "set rp0 rp07"
+simh "at rp0 $img"
+simh "load -o bootV8 0"
+simh "run 2"
+must "login:" 300
+sendline "root"
+must "# " 120
+sh "PS1='ipnx%%% '" 120
+
+send_user "\n=== where the stage-0 toolchain lives ===\n"
+# One `ls -l` per line so a missing file is named rather than swallowed, and
+# each line stays well inside CANBSIZ.
+sh "ls -l /bin/cc /bin/as /bin/ld"
+sh "ls -l /bin/ar /bin/nm /bin/size"
+sh "ls -l /lib/cpp /lib/ccom /lib/c2"
+sh "ls -l /lib/libc.a /bin/strip"
+sh "ls -l /bin/yacc /usr/bin/yacc"
+sh "ls -l /bin/lex /usr/bin/lex"
+sh "ls -l /bin/make /usr/bin/make"
+sh "ls -l /usr/bin/ranlib /bin/ranlib"
+sh "ls -l /lib/yaccpar /usr/lib/yaccpar"
+sh "ls -l /lib/crt0.o"
+sh "echo TOOLPATH-DONE\$Z"
+
+sendline "/etc/halt"
+must "Infinite loop" 120
+simh "quit" 60
+expect eof
+wait
+send_user "\n=== TOOLPATH PROBE DONE ===\n"
