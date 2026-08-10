@@ -62,6 +62,17 @@ sendline "root"
 bootsh "PS1='ipnx%%% '" 120
 sh "echo C2-boot-ok" 120
 
+# Clear any wreckage from an earlier attempt BEFORE mounting anything.  This
+# cannot be left to stage.sh, because stage.sh lives on the share and a full
+# root partition is precisely what stops the share being readable: `ls /n/src`
+# succeeds, every open(2) fails, and it looks like a netfs bug rather than a
+# disk that ran out of room in a previous run.
+send_user "\n=== clear previous attempts ===\n"
+sh "df /"
+sh "rm -rf /bld"
+sh "rm -rf /usr/bld"
+sh "df /"
+
 # ------------------------------------------------------------- networking
 # Same sequence the N track settled on: il0 up, TCP discipline pushed onto
 # /dev/ip6, default route to the SLiRP gateway which aliases to host loopback.

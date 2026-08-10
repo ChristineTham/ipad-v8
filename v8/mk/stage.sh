@@ -38,9 +38,27 @@ fi
 # the tree looks like it copied.  Check the space before spending five minutes
 # discovering that again.
 echo "stage: space check"
+df /
 df /usr
-free=`df /usr | sed -n '2p' | sed 's/.*  *\([0-9][0-9]*\)  *[0-9][0-9]*%*.*/\1/'`
+free=`df /usr | awk 'NR==2 {print $5}'`
 echo "stage: $free KB free on /usr, need about 30000"
+if test "$free" -lt 30000
+then
+	echo "stage: not enough room -- refusing to half-fill a filesystem" 1>&2
+	exit 1
+fi
+
+# A root partition with no space left is not a slow system, it is a system
+# where open(2) fails on files that plainly exist -- including files on the
+# netfs share, which is how the first run of this presented: `ls /n/src` fine,
+# every read "cannot open".  Clear the wreckage of any earlier attempt.
+rootfree=`df / | awk 'NR==2 {print $5}'`
+if test "$rootfree" -lt 500
+then
+	echo "stage: / has only $rootfree KB free -- clearing /bld if it is ours"
+	rm -rf /bld
+	df /
+fi
 
 echo "stage: copying $SHARE -> $DEST"
 rm -rf $DEST
