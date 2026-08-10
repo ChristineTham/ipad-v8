@@ -8,8 +8,13 @@
 # $(LIBC). That is the invalidation a self-hosting build needs and V8's make
 # cannot work out for itself.
 
-TOOLDIR = /bld/tools
-DESTDIR = /bld/root
+# Source is READ ONLY and lives on the netfs share.  Nothing is ever copied to
+# local disk: objects are written into the current directory, which the driver
+# makes a per-component directory on the build filesystem.  That is what the
+# share is for, and it is why $(SRC) appears on every source path below.
+SRC     = /n/src
+TOOLDIR = /b/tools
+DESTDIR = /b/root
 
 # Stage 0 is the running system; later stages override CC to point -B at the
 # tools they just built.  Nothing here ever writes outside $(TOOLDIR)/$(DESTDIR).
@@ -27,10 +32,10 @@ LEX  = lex
 # Where <angle-bracket> headers really come from.  Stage 1 builds against the
 # running system, like any bootstrap; stage 5 onward points this at
 # $(DESTDIR)/usr/include so touching our headers rebuilds what includes them.
-INCDIR = /usr/include
+INCDIR = $(SRC)/usr/include
 
 CFLAGS = -O -DWORD32
-INCS   = -I.
+INCS   = -I$(SRC)/usr/src/cmd/yacc -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) $(INCS) -c
 TOOLS  = $(CC) $(CCOM) $(CPP) $(C2) $(AS)
 
@@ -41,23 +46,23 @@ all: yacc
 yacc: $(OBJS) $(LD) $(LIBC)
 	$(CC) $(CFLAGS) -o yacc $(OBJS)
 
-y1.o: y1.c $(INCDIR)/ctype.h $(INCDIR)/stdio.h dextern files $(TOOLS)
-	$(COMPILE) y1.c
+y1.o: $(SRC)/usr/src/cmd/yacc/y1.c $(INCDIR)/ctype.h $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/yacc/dextern $(SRC)/usr/src/cmd/yacc/files $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/yacc/y1.c
 
-y2.o: y2.c $(INCDIR)/ctype.h $(INCDIR)/stdio.h dextern files $(TOOLS)
-	$(COMPILE) y2.c
+y2.o: $(SRC)/usr/src/cmd/yacc/y2.c $(INCDIR)/ctype.h $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/yacc/dextern $(SRC)/usr/src/cmd/yacc/files $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/yacc/y2.c
 
-y3.o: y3.c $(INCDIR)/ctype.h $(INCDIR)/stdio.h dextern files $(TOOLS)
-	$(COMPILE) y3.c
+y3.o: $(SRC)/usr/src/cmd/yacc/y3.c $(INCDIR)/ctype.h $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/yacc/dextern $(SRC)/usr/src/cmd/yacc/files $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/yacc/y3.c
 
-y4.o: y4.c $(INCDIR)/ctype.h $(INCDIR)/stdio.h dextern files $(TOOLS)
-	$(COMPILE) y4.c
+y4.o: $(SRC)/usr/src/cmd/yacc/y4.c $(INCDIR)/ctype.h $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/yacc/dextern $(SRC)/usr/src/cmd/yacc/files $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/yacc/y4.c
 
 install: yacc
 	-mkdir $(TOOLDIR)/bin
 	cp yacc $(TOOLDIR)/bin/yacc
 	-mkdir $(TOOLDIR)/lib
-	cp yaccpar $(TOOLDIR)/lib/yaccpar
+	cp $(SRC)/usr/src/cmd/yacc/yaccpar $(TOOLDIR)/lib/yaccpar
 
 clean:
 	-rm -f $(OBJS) yacc 

@@ -8,8 +8,13 @@
 # $(LIBC). That is the invalidation a self-hosting build needs and V8's make
 # cannot work out for itself.
 
-TOOLDIR = /bld/tools
-DESTDIR = /bld/root
+# Source is READ ONLY and lives on the netfs share.  Nothing is ever copied to
+# local disk: objects are written into the current directory, which the driver
+# makes a per-component directory on the build filesystem.  That is what the
+# share is for, and it is why $(SRC) appears on every source path below.
+SRC     = /n/src
+TOOLDIR = /b/tools
+DESTDIR = /b/root
 
 # Stage 0 is the running system; later stages override CC to point -B at the
 # tools they just built.  Nothing here ever writes outside $(TOOLDIR)/$(DESTDIR).
@@ -27,10 +32,10 @@ LEX  = lex
 # Where <angle-bracket> headers really come from.  Stage 1 builds against the
 # running system, like any bootstrap; stage 5 onward points this at
 # $(DESTDIR)/usr/include so touching our headers rebuilds what includes them.
-INCDIR = /usr/include
+INCDIR = $(SRC)/usr/include
 
 CFLAGS = -O 
-INCS   = -I.
+INCS   = -I$(SRC)/usr/src/cmd/lex -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) $(INCS) -c
 TOOLS  = $(CC) $(CCOM) $(CPP) $(C2) $(AS)
 
@@ -41,20 +46,20 @@ all: lex
 lex: $(OBJS) $(LD) $(LIBC)
 	$(CC) $(CFLAGS) -o lex $(OBJS)
 
-y.tab.c: parser.y $(YACC) $(INCDIR)/stdio.h ldefs.c
-	$(YACC) parser.y
+y.tab.c: $(SRC)/usr/src/cmd/lex/parser.y $(YACC) $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/lex/ldefs.c $(SRC)/usr/src/cmd/lex/parser.y
+	$(YACC) $(SRC)/usr/src/cmd/lex/parser.y
 
-header.o: header.c $(INCDIR)/stdio.h ldefs.c $(TOOLS)
-	$(COMPILE) header.c
+header.o: $(SRC)/usr/src/cmd/lex/header.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/lex/ldefs.c $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/lex/header.c
 
-lmain.o: lmain.c $(INCDIR)/signal.h $(INCDIR)/stdio.h ldefs.c once.c $(TOOLS)
-	$(COMPILE) lmain.c
+lmain.o: $(SRC)/usr/src/cmd/lex/lmain.c $(INCDIR)/signal.h $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/lex/ldefs.c $(SRC)/usr/src/cmd/lex/once.c $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/lex/lmain.c
 
-sub1.o: sub1.c $(INCDIR)/stdio.h ldefs.c $(TOOLS)
-	$(COMPILE) sub1.c
+sub1.o: $(SRC)/usr/src/cmd/lex/sub1.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/lex/ldefs.c $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/lex/sub1.c
 
-sub2.o: sub2.c $(INCDIR)/stdio.h ldefs.c $(TOOLS)
-	$(COMPILE) sub2.c
+sub2.o: $(SRC)/usr/src/cmd/lex/sub2.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/lex/ldefs.c $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/lex/sub2.c
 
 y.tab.o: y.tab.c $(TOOLS)
 	$(COMPILE) y.tab.c
@@ -63,7 +68,7 @@ install: lex
 	-mkdir $(TOOLDIR)/usr/bin
 	cp lex $(TOOLDIR)/usr/bin/lex
 	-mkdir $(TOOLDIR)/usr/lib/lex
-	cp ncform $(TOOLDIR)/usr/lib/lex/ncform
+	cp $(SRC)/usr/src/cmd/lex/ncform $(TOOLDIR)/usr/lib/lex/ncform
 
 clean:
 	-rm -f $(OBJS) lex y.tab.c

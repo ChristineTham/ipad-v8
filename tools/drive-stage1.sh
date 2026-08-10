@@ -35,6 +35,9 @@ python3 "$ROOT/tools/ipnx-release.py" --check || exit 1
 python3 "$ROOT/tools/gen-tree-list.py" || exit 1
 
 cd "$ROOT/work/myv8" || exit 1
+# A blank RP06 for build products.  Recreated per run: it holds nothing we
+# want to keep, and a fresh filesystem is one less variable.
+rm -f rp06build && dd if=/dev/zero of=rp06build bs=1m count=166 2>/dev/null
 : > c2-stage1.log
 : > "$ROOT/work/netfsd-stage1.log"
 

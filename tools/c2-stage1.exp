@@ -93,6 +93,9 @@ simh "set cpu idle=4.1BSD"
 simh "set tto 7b"
 simh "set rp0 rp07"
 simh "at rp0 rp07v8.net"
+# rp1 is the build filesystem -- objects and products only, never source.
+simh "set rp1 rp06"
+simh "at rp1 rp06build"
 simh "set il enable"
 simh "attach il nat:"
 simh "load -o bootV8 0"
@@ -111,6 +114,7 @@ send_user "\n=== clear previous attempts ===\n"
 sh "df /"
 sh "rm -rf /bld"
 sh "rm -rf /usr/bld"
+sh "/etc/umount /dev/rp1a"
 sh "df /"
 
 # ------------------------------------------------------------- networking
@@ -144,28 +148,27 @@ sh "echo C2-MOUNTED"
 sh "ls /n/src"
 sh "sed 5q /n/src/CASEMAP"
 
-# ------------------------------------------------------------- stage it
-# ~25 MB at netfs's measured ~100 KB/s is about four minutes; the timeout is
-# generous because a stall here is far more likely than a slow copy.
-send_user "\n=== stage source onto local disk ===\n"
-sh "df"
-sh "date"
-sh "sh /n/src/mk/stage.sh /n/src /usr/bld/src" 2400
-sh "date"
-sh "du -s /usr/bld/src"
-
-# The point of the whole exercise, checked explicitly: both members of each
-# case-colliding pair are present in the guest, which is something the macOS
-# side physically cannot represent.
-send_user "\n=== the collisions macOS cannot hold ===\n"
-sh "ls -ld /usr/bld/src/usr/src/cmd/Mail /usr/bld/src/usr/src/cmd/mail"
-sh "ls -ld /usr/bld/src/jerq/src/lib/C /usr/bld/src/jerq/src/lib/c"
-sh "sum /usr/bld/src/usr/src/cmd/Mail/Makefile /usr/bld/src/usr/src/cmd/mail/Makefile"
+# ------------------------------------- a filesystem for the build products
+# Real Unix mounted /usr/src as its own disk for exactly this reason.  Here the
+# source needs no disk at all -- it stays on the share -- but the objects do,
+# and V8 fixes a filesystem's inode count at mkfs time.  /usr was reported by
+# fsck as holding 8799 files; dropping a build tree into it exhausted the inodes
+# and V7 mkdir started answering "cannot access .".  So the build gets rp1, its
+# own filesystem, sized for the job.
+send_user "
+=== build filesystem on rp1 ===
+"
+sh "/etc/mknod /dev/rp1a b 2 8"
+sh "/etc/mknod /dev/rrp1a c 4 8"
+sh "/etc/mkfs /dev/rrp1a 40000" 600
+sh "mkdir /b"
+sh "/etc/mount /dev/rp1a /b"
+sh "df /b"
 
 # ---------------------------------------------------------- build stage 1
 send_user "\n=== stage 1: bootstrap toolchain ===\n"
 sh "date"
-sh "sh /usr/bld/src/mk/build1.sh /usr/bld/src /usr/bld/tools 2>&1" 5400
+sh "sh /n/src/mk/build1.sh /n/src /b 2>&1" 5400
 sh "date"
 
 # Did we build a compiler that works?  Cheapest possible proof: use it.
@@ -173,14 +176,14 @@ send_user "\n=== does the new toolchain compile anything? ===\n"
 sh "cd /tmp"
 sh "echo 'main(){printf(\"newcc-ok\\n\");}' > t.c"
 sh "cat t.c"
-sh "/usr/bld/tools/bin/cc -B/usr/bld/tools/ -t02p -o t t.c" 300
+sh "/b/tools/bin/cc -B/b/tools/ -t02p -o t t.c" 300
 sh "./t"
 
 # And the real question: can the new compiler rebuild something the old one
 # built, identically?  Stripped, because cc bakes its PID into the symbol table.
 send_user "\n=== new compiler vs old, same source ===\n"
-sh "/usr/bld/tools/bin/cc -B/usr/bld/tools/ -t02p -O -o ls.new /usr/bld/src/usr/src/cmd/ls.c" 600
-sh "cc -O -o ls.old /usr/bld/src/usr/src/cmd/ls.c" 600
+sh "/b/tools/bin/cc -B/b/tools/ -t02p -O -o ls.new /n/src/usr/src/cmd/ls.c" 600
+sh "cc -O -o ls.old /n/src/usr/src/cmd/ls.c" 600
 sh "strip ls.new ls.old"
 sh "ls -l ls.new ls.old"
 sh "cmp ls.new ls.old; echo cmp-newcc-vs-oldcc=\$?"

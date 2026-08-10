@@ -27,8 +27,14 @@
 # with no way back if it is wrong.  We never run the tape's install targets;
 # v8/mk/gen/*.mk install into $(TOOLDIR) and nowhere else.
 
-SRC=${1-/usr/bld/src}
-TOOLDIR=${2-/usr/bld/tools}
+# SRC is the read-only netfs share.  Nothing is ever copied out of it: each
+# component is built in its own directory on the build filesystem, compiling
+# $(SRC)/... straight off the wire.  That is what the share is for, and it is
+# why there is no staging step here any more -- there was one, it copied 7840
+# files for 25 minutes per run, and it existed only because I put it there.
+SRC=${1-/n/src}
+BLD=${2-/b}
+TOOLDIR=$BLD/tools
 MK=$SRC/mk/gen
 
 if test ! -f $MK/stage1.order
@@ -38,7 +44,8 @@ then
 fi
 
 # V8's mkdir makes one level at a time; there is no -p.
-mkdir /usr/bld			2>/dev/null
+mkdir $BLD			2>/dev/null
+mkdir $BLD/obj			2>/dev/null
 mkdir $TOOLDIR			2>/dev/null
 mkdir $TOOLDIR/bin		2>/dev/null
 mkdir $TOOLDIR/lib		2>/dev/null
@@ -56,15 +63,20 @@ do
 	dir=`grep "^$t	" $MK/stage1.order | sed 's/^[^	]*	//; s/	.*//'`
 	echo ""
 	echo "=== stage1: $t   ($dir) ==="
-	cd $SRC/$dir || { echo "  no such directory"; fail=1; continue; }
+	# Objects land here, never in the source tree -- which is read-only
+	# anyway, so the share enforces the out-of-tree build for us.
+	obj=$BLD/obj/$t
+	rm -rf $obj
+	mkdir $obj || { echo "  cannot make $obj"; fail=1; continue; }
+	cd $obj || { fail=1; continue; }
 
 	# `prepare` exists only where the tape needs a file staged before the
 	# first compile -- ccom wants y.debug in place for cgram.o.
-	make -f $MK/$t.mk TOOLDIR=$TOOLDIR prepare 2>/dev/null
+	make -f $MK/$t.mk SRC=$SRC TOOLDIR=$TOOLDIR prepare 2>/dev/null
 
-	if make -f $MK/$t.mk TOOLDIR=$TOOLDIR
+	if make -f $MK/$t.mk SRC=$SRC TOOLDIR=$TOOLDIR
 	then
-		if make -f $MK/$t.mk TOOLDIR=$TOOLDIR install
+		if make -f $MK/$t.mk SRC=$SRC TOOLDIR=$TOOLDIR install
 		then echo "  installed"
 		else echo "  INSTALL FAILED $t"; fail=1
 		fi

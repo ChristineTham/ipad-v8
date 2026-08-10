@@ -8,8 +8,13 @@
 # $(LIBC). That is the invalidation a self-hosting build needs and V8's make
 # cannot work out for itself.
 
-TOOLDIR = /bld/tools
-DESTDIR = /bld/root
+# Source is READ ONLY and lives on the netfs share.  Nothing is ever copied to
+# local disk: objects are written into the current directory, which the driver
+# makes a per-component directory on the build filesystem.  That is what the
+# share is for, and it is why $(SRC) appears on every source path below.
+SRC     = /n/src
+TOOLDIR = /b/tools
+DESTDIR = /b/root
 
 # Stage 0 is the running system; later stages override CC to point -B at the
 # tools they just built.  Nothing here ever writes outside $(TOOLDIR)/$(DESTDIR).
@@ -27,10 +32,10 @@ LEX  = lex
 # Where <angle-bracket> headers really come from.  Stage 1 builds against the
 # running system, like any bootstrap; stage 5 onward points this at
 # $(DESTDIR)/usr/include so touching our headers rebuilds what includes them.
-INCDIR = /usr/include
+INCDIR = $(SRC)/usr/include
 
 CFLAGS = -O -DVAX -DYYDEBUG
-INCS   = -I. -I../common
+INCS   = -I$(SRC)/usr/src/cmd/ccom/vax -I$(SRC)/usr/src/cmd/ccom/common -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) $(INCS) -c
 TOOLS  = $(CC) $(CCOM) $(CPP) $(C2) $(AS)
 
@@ -41,69 +46,69 @@ all: comp
 comp: $(OBJS) $(LD) $(LIBC)
 	$(CC) $(CFLAGS) -o comp $(OBJS)
 
-cgram.c: ../common/cgram.y $(YACC) $(INCDIR)/stdio.h ../common/manifest.h ../common/mfile1.h macdefs.h
-	$(YACC) ../common/cgram.y
+cgram.c: $(SRC)/usr/src/cmd/ccom/vax/../common/cgram.y $(YACC) $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/ccom/vax/../common/cgram.y $(SRC)/usr/src/cmd/ccom/vax/../common/manifest.h $(SRC)/usr/src/cmd/ccom/vax/../common/mfile1.h $(SRC)/usr/src/cmd/ccom/vax/macdefs.h
+	$(YACC) $(SRC)/usr/src/cmd/ccom/vax/../common/cgram.y
 	sed 's_^# line .*_/* & */_' y.tab.c >cgram.c; rm -f y.tab.c
 
-catch2.o: ../common/catch2.c $(INCDIR)/stdio.h ../common/manifest.h ../common/mfile2.h macdefs.h $(TOOLS)
-	$(COMPILE) ../common/catch2.c
+catch2.o: $(SRC)/usr/src/cmd/ccom/vax/../common/catch2.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/ccom/vax/../common/manifest.h $(SRC)/usr/src/cmd/ccom/vax/../common/mfile2.h $(SRC)/usr/src/cmd/ccom/vax/macdefs.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/ccom/vax/../common/catch2.c
 
 cgram.o: cgram.c $(TOOLS)
 	$(COMPILE) cgram.c
 
-common1.o: ../common/common1.c $(INCDIR)/stdio.h ../common/manifest.h ../common/mfile1.h dope.h macdefs.h $(TOOLS)
-	$(COMPILE) ../common/common1.c
+common1.o: $(SRC)/usr/src/cmd/ccom/vax/../common/common1.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/ccom/vax/../common/manifest.h $(SRC)/usr/src/cmd/ccom/vax/../common/mfile1.h $(SRC)/usr/src/cmd/ccom/vax/dope.h $(SRC)/usr/src/cmd/ccom/vax/macdefs.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/ccom/vax/../common/common1.c
 
-debug.o: debug.c $(INCDIR)/stdio.h ../common/manifest.h ../common/mfile1.h debug.h macdefs.h $(TOOLS)
-	$(COMPILE) debug.c
+debug.o: $(SRC)/usr/src/cmd/ccom/vax/debug.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/ccom/vax/../common/manifest.h $(SRC)/usr/src/cmd/ccom/vax/../common/mfile1.h $(SRC)/usr/src/cmd/ccom/vax/debug.h $(SRC)/usr/src/cmd/ccom/vax/macdefs.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/ccom/vax/debug.c
 
-genaux.o: genaux.c $(INCDIR)/setjmp.h $(INCDIR)/stdio.h ../common/manifest.h ../common/mfile2.h gencode.h macdefs.h $(TOOLS)
-	$(COMPILE) genaux.c
+genaux.o: $(SRC)/usr/src/cmd/ccom/vax/genaux.c $(INCDIR)/setjmp.h $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/ccom/vax/../common/manifest.h $(SRC)/usr/src/cmd/ccom/vax/../common/mfile2.h $(SRC)/usr/src/cmd/ccom/vax/gencode.h $(SRC)/usr/src/cmd/ccom/vax/macdefs.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/ccom/vax/genaux.c
 
-gencode.o: gencode.c $(INCDIR)/setjmp.h $(INCDIR)/stdio.h ../common/manifest.h ../common/mfile2.h gencode.h macdefs.h $(TOOLS)
-	$(COMPILE) gencode.c
+gencode.o: $(SRC)/usr/src/cmd/ccom/vax/gencode.c $(INCDIR)/setjmp.h $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/ccom/vax/../common/manifest.h $(SRC)/usr/src/cmd/ccom/vax/../common/mfile2.h $(SRC)/usr/src/cmd/ccom/vax/gencode.h $(SRC)/usr/src/cmd/ccom/vax/macdefs.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/ccom/vax/gencode.c
 
-lcatch2.o: lcatch2.c $(INCDIR)/stdio.h ../common/manifest.h ../common/mfile2.h macdefs.h $(TOOLS)
-	$(COMPILE) lcatch2.c
+lcatch2.o: $(SRC)/usr/src/cmd/ccom/vax/lcatch2.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/ccom/vax/../common/manifest.h $(SRC)/usr/src/cmd/ccom/vax/../common/mfile2.h $(SRC)/usr/src/cmd/ccom/vax/macdefs.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/ccom/vax/lcatch2.c
 
-local.o: local.c $(INCDIR)/stdio.h ../common/manifest.h ../common/mfile1.h macdefs.h $(TOOLS)
-	$(COMPILE) local.c
+local.o: $(SRC)/usr/src/cmd/ccom/vax/local.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/ccom/vax/../common/manifest.h $(SRC)/usr/src/cmd/ccom/vax/../common/mfile1.h $(SRC)/usr/src/cmd/ccom/vax/macdefs.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/ccom/vax/local.c
 
-local2.o: local2.c $(INCDIR)/stdio.h ../common/manifest.h ../common/mfile2.h macdefs.h $(TOOLS)
-	$(COMPILE) local2.c
+local2.o: $(SRC)/usr/src/cmd/ccom/vax/local2.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/ccom/vax/../common/manifest.h $(SRC)/usr/src/cmd/ccom/vax/../common/mfile2.h $(SRC)/usr/src/cmd/ccom/vax/macdefs.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/ccom/vax/local2.c
 
-lookup.o: ../common/lookup.c $(INCDIR)/stdio.h ../common/manifest.h ../common/mfile1.h macdefs.h $(TOOLS)
-	$(COMPILE) ../common/lookup.c
+lookup.o: $(SRC)/usr/src/cmd/ccom/vax/../common/lookup.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/ccom/vax/../common/manifest.h $(SRC)/usr/src/cmd/ccom/vax/../common/mfile1.h $(SRC)/usr/src/cmd/ccom/vax/macdefs.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/ccom/vax/../common/lookup.c
 
-memcpy.o: memcpy.c $(TOOLS)
-	$(COMPILE) memcpy.c
+memcpy.o: $(SRC)/usr/src/cmd/ccom/vax/memcpy.c $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/ccom/vax/memcpy.c
 
-optim.o: ../common/optim.c $(INCDIR)/stdio.h ../common/manifest.h ../common/mfile1.h macdefs.h $(TOOLS)
-	$(COMPILE) ../common/optim.c
+optim.o: $(SRC)/usr/src/cmd/ccom/vax/../common/optim.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/ccom/vax/../common/manifest.h $(SRC)/usr/src/cmd/ccom/vax/../common/mfile1.h $(SRC)/usr/src/cmd/ccom/vax/macdefs.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/ccom/vax/../common/optim.c
 
-pftn.o: ../common/pftn.c $(INCDIR)/stdio.h ../common/manifest.h ../common/mfile1.h macdefs.h $(TOOLS)
-	$(COMPILE) ../common/pftn.c
+pftn.o: $(SRC)/usr/src/cmd/ccom/vax/../common/pftn.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/ccom/vax/../common/manifest.h $(SRC)/usr/src/cmd/ccom/vax/../common/mfile1.h $(SRC)/usr/src/cmd/ccom/vax/macdefs.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/ccom/vax/../common/pftn.c
 
-pjw.o: ../common/pjw.c $(INCDIR)/stdio.h ../common/manifest.h ../common/mfile2.h macdefs.h $(TOOLS)
-	$(COMPILE) ../common/pjw.c
+pjw.o: $(SRC)/usr/src/cmd/ccom/vax/../common/pjw.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/ccom/vax/../common/manifest.h $(SRC)/usr/src/cmd/ccom/vax/../common/mfile2.h $(SRC)/usr/src/cmd/ccom/vax/macdefs.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/ccom/vax/../common/pjw.c
 
-printx.o: printx.c $(INCDIR)/stdio.h $(TOOLS)
-	$(COMPILE) printx.c
+printx.o: $(SRC)/usr/src/cmd/ccom/vax/printx.c $(INCDIR)/stdio.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/ccom/vax/printx.c
 
-reader.o: ../common/reader.c $(INCDIR)/stdio.h ../common/manifest.h ../common/mfile2.h macdefs.h $(TOOLS)
-	$(COMPILE) ../common/reader.c
+reader.o: $(SRC)/usr/src/cmd/ccom/vax/../common/reader.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/ccom/vax/../common/manifest.h $(SRC)/usr/src/cmd/ccom/vax/../common/mfile2.h $(SRC)/usr/src/cmd/ccom/vax/macdefs.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/ccom/vax/../common/reader.c
 
-scan.o: ../common/scan.c $(INCDIR)/ctype.h $(INCDIR)/stdio.h ../common/manifest.h ../common/mfile1.h macdefs.h $(TOOLS)
-	$(COMPILE) ../common/scan.c
+scan.o: $(SRC)/usr/src/cmd/ccom/vax/../common/scan.c $(INCDIR)/ctype.h $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/ccom/vax/../common/manifest.h $(SRC)/usr/src/cmd/ccom/vax/../common/mfile1.h $(SRC)/usr/src/cmd/ccom/vax/macdefs.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/ccom/vax/../common/scan.c
 
-t2print.o: t2print.c $(TOOLS)
-	$(COMPILE) t2print.c
+t2print.o: $(SRC)/usr/src/cmd/ccom/vax/t2print.c $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/ccom/vax/t2print.c
 
-trees.o: ../common/trees.c $(INCDIR)/stdio.h ../common/manifest.h ../common/mfile1.h macdefs.h $(TOOLS)
-	$(COMPILE) ../common/trees.c
+trees.o: $(SRC)/usr/src/cmd/ccom/vax/../common/trees.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/ccom/vax/../common/manifest.h $(SRC)/usr/src/cmd/ccom/vax/../common/mfile1.h $(SRC)/usr/src/cmd/ccom/vax/macdefs.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/ccom/vax/../common/trees.c
 
-xdefs.o: ../common/xdefs.c $(INCDIR)/stdio.h ../common/manifest.h ../common/mfile1.h macdefs.h $(TOOLS)
-	$(COMPILE) ../common/xdefs.c
+xdefs.o: $(SRC)/usr/src/cmd/ccom/vax/../common/xdefs.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/ccom/vax/../common/manifest.h $(SRC)/usr/src/cmd/ccom/vax/../common/mfile1.h $(SRC)/usr/src/cmd/ccom/vax/macdefs.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/ccom/vax/../common/xdefs.c
 
 prepare:
 	cp y.debug.sv y.debug

@@ -8,8 +8,13 @@
 # $(LIBC). That is the invalidation a self-hosting build needs and V8's make
 # cannot work out for itself.
 
-TOOLDIR = /bld/tools
-DESTDIR = /bld/root
+# Source is READ ONLY and lives on the netfs share.  Nothing is ever copied to
+# local disk: objects are written into the current directory, which the driver
+# makes a per-component directory on the build filesystem.  That is what the
+# share is for, and it is why $(SRC) appears on every source path below.
+SRC     = /n/src
+TOOLDIR = /b/tools
+DESTDIR = /b/root
 
 # Stage 0 is the running system; later stages override CC to point -B at the
 # tools they just built.  Nothing here ever writes outside $(TOOLDIR)/$(DESTDIR).
@@ -27,10 +32,10 @@ LEX  = lex
 # Where <angle-bracket> headers really come from.  Stage 1 builds against the
 # running system, like any bootstrap; stage 5 onward points this at
 # $(DESTDIR)/usr/include so touching our headers rebuilds what includes them.
-INCDIR = /usr/include
+INCDIR = $(SRC)/usr/include
 
 CFLAGS = -O -d2
-INCS   = -I.
+INCS   = -I$(SRC)/usr/src/cmd/strip -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) $(INCS) -c
 TOOLS  = $(CC) $(CCOM) $(CPP) $(C2) $(AS)
 
@@ -41,23 +46,23 @@ all: strip
 strip: $(OBJS) $(LD) $(LIBC)
 	$(CC) $(CFLAGS) -o strip $(OBJS)
 
-fcopy.o: fcopy.c $(TOOLS)
-	$(COMPILE) fcopy.c
+fcopy.o: $(SRC)/usr/src/cmd/strip/fcopy.c $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/strip/fcopy.c
 
-hash.o: hash.c hash.h malloc.h $(TOOLS)
-	$(COMPILE) hash.c
+hash.o: $(SRC)/usr/src/cmd/strip/hash.c $(SRC)/usr/src/cmd/strip/hash.h $(SRC)/usr/src/cmd/strip/malloc.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/strip/hash.c
 
-rdout.o: rdout.c $(INCDIR)/a.out.h $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/stat.h $(INCDIR)/sys/types.h malloc.h strip.h $(TOOLS)
-	$(COMPILE) rdout.c
+rdout.o: $(SRC)/usr/src/cmd/strip/rdout.c $(INCDIR)/a.out.h $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/stat.h $(INCDIR)/sys/types.h $(SRC)/usr/src/cmd/strip/malloc.h $(SRC)/usr/src/cmd/strip/strip.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/strip/rdout.c
 
-shrink.o: shrink.c $(INCDIR)/a.out.h $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/stat.h $(INCDIR)/sys/types.h hash.h malloc.h stab.h strip.h $(TOOLS)
-	$(COMPILE) shrink.c
+shrink.o: $(SRC)/usr/src/cmd/strip/shrink.c $(INCDIR)/a.out.h $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/stat.h $(INCDIR)/sys/types.h $(SRC)/usr/src/cmd/strip/hash.h $(SRC)/usr/src/cmd/strip/malloc.h $(SRC)/usr/src/cmd/strip/stab.h $(SRC)/usr/src/cmd/strip/strip.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/strip/shrink.c
 
-strip.o: strip.c $(INCDIR)/a.out.h $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/stat.h $(INCDIR)/sys/types.h hash.h malloc.h strip.h $(TOOLS)
-	$(COMPILE) strip.c
+strip.o: $(SRC)/usr/src/cmd/strip/strip.c $(INCDIR)/a.out.h $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/stat.h $(INCDIR)/sys/types.h $(SRC)/usr/src/cmd/strip/hash.h $(SRC)/usr/src/cmd/strip/malloc.h $(SRC)/usr/src/cmd/strip/strip.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/strip/strip.c
 
-symwrite.o: symwrite.c $(INCDIR)/a.out.h $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/stat.h $(INCDIR)/sys/types.h hash.h malloc.h strip.h $(TOOLS)
-	$(COMPILE) symwrite.c
+symwrite.o: $(SRC)/usr/src/cmd/strip/symwrite.c $(INCDIR)/a.out.h $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/stat.h $(INCDIR)/sys/types.h $(SRC)/usr/src/cmd/strip/hash.h $(SRC)/usr/src/cmd/strip/malloc.h $(SRC)/usr/src/cmd/strip/strip.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/strip/symwrite.c
 
 install: strip
 	-mkdir $(TOOLDIR)/bin

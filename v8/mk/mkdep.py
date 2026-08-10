@@ -223,8 +223,13 @@ PREAMBLE = """\
 # $(LIBC). That is the invalidation a self-hosting build needs and V8's make
 # cannot work out for itself.
 
-TOOLDIR = /bld/tools
-DESTDIR = /bld/root
+# Source is READ ONLY and lives on the netfs share.  Nothing is ever copied to
+# local disk: objects are written into the current directory, which the driver
+# makes a per-component directory on the build filesystem.  That is what the
+# share is for, and it is why $(SRC) appears on every source path below.
+SRC     = /n/src
+TOOLDIR = /b/tools
+DESTDIR = /b/root
 
 # Stage 0 is the running system; later stages override CC to point -B at the
 # tools they just built.  Nothing here ever writes outside $(TOOLDIR)/$(DESTDIR).
@@ -242,10 +247,10 @@ LEX  = lex
 # Where <angle-bracket> headers really come from.  Stage 1 builds against the
 # running system, like any bootstrap; stage 5 onward points this at
 # $(DESTDIR)/usr/include so touching our headers rebuilds what includes them.
-INCDIR = /usr/include
+INCDIR = $(SRC)/usr/include
 
 CFLAGS = -O %(cflags)s
-INCS   = %(incs)s
+INCS   = %(incs)s -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) $(INCS) -c
 TOOLS  = $(CC) $(CCOM) $(CPP) $(C2) $(AS)
 
@@ -275,6 +280,8 @@ def emit(c):
 
     incdir = os.path.join(V8, "usr/include")
 
+    srcdir = "$(SRC)/" + c["dir"]
+
     def dep(path):
         """Name a dependency the way make will see it at build time.
 
@@ -286,10 +293,11 @@ def emit(c):
         path = os.path.normpath(path)
         if path.startswith(incdir + os.sep):
             return "$(INCDIR)/" + rel(path, incdir)
-        return rel(path, d)
+        return srcdir + "/" + rel(path, d)
 
     out = [PREAMBLE % dict(name=c["name"], cflags=c.get("cflags", ""),
-                           incs=" ".join("-I" + i for i in incs))]
+                           incs=" ".join("-I$(SRC)/" + os.path.normpath(
+                               os.path.join(c["dir"], i)) for i in incs))]
     out.append("OBJS = " + " ".join(sorted(objmap)) + "\n")
     out.append("\nall: %s\n" % c["product"])
 
@@ -302,9 +310,9 @@ def emit(c):
     for target, (tool, src, extra) in sorted(gen.items()):
         toolmac = "$(YACC)" if tool == "yacc" else "$(LEX)"
         deps = sorted(dep(p) for p in scan_includes(os.path.join(d, src), incdirs))
-        out.append("\n%s: %s %s %s\n" % (target, src, toolmac,
+        out.append("\n%s: %s/%s %s %s\n" % (target, srcdir, src, toolmac,
                                          " ".join(x for x in deps if x != src)))
-        out.append("\t%s %s\n" % (toolmac, src))
+        out.append("\t%s %s/%s\n" % (toolmac, srcdir, src))
         if extra:
             out.append("\t%s\n" % extra)
         elif target != "y.tab.c":
@@ -317,12 +325,14 @@ def emit(c):
         if src in gen:                       # generated: deps handled above
             deps = [src]
         else:
-            deps = [src] + [x for x in sorted(dep(y) for y in
-                                              scan_includes(os.path.join(d, src), incdirs))
-                            if x != src]
+            deps = [srcdir + "/" + src] + [
+                x for x in sorted(dep(y) for y in
+                                  scan_includes(os.path.join(d, src), incdirs))
+                if x != srcdir + "/" + src]
         extra = (oflags[obj] + " ") if obj in oflags else ""
+        srcref = src if src in gen else srcdir + "/" + src
         out.append("\n%s: %s $(TOOLS)\n\t$(COMPILE) %s%s\n"
-                   % (obj, " ".join(deps), extra, src))
+                   % (obj, " ".join(deps), extra, srcref))
 
     # pre-commands (ccom needs y.debug in place before cgram.o)
     if c.get("pre"):
@@ -337,7 +347,7 @@ def emit(c):
     out.append("\tcp %s $(TOOLDIR)/%s\n" % (c["product"], inst))
     for src, dst in c.get("data", []):
         out.append("\t-mkdir $(TOOLDIR)/%s\n" % os.path.dirname(dst))
-        out.append("\tcp %s $(TOOLDIR)/%s\n" % (src, dst))
+        out.append("\tcp %s/%s $(TOOLDIR)/%s\n" % (srcdir, src, dst))
 
     out.append("\nclean:\n\t-rm -f $(OBJS) %s %s\n"
                % (c["product"], " ".join(sorted(gen))))

@@ -8,8 +8,13 @@
 # $(LIBC). That is the invalidation a self-hosting build needs and V8's make
 # cannot work out for itself.
 
-TOOLDIR = /bld/tools
-DESTDIR = /bld/root
+# Source is READ ONLY and lives on the netfs share.  Nothing is ever copied to
+# local disk: objects are written into the current directory, which the driver
+# makes a per-component directory on the build filesystem.  That is what the
+# share is for, and it is why $(SRC) appears on every source path below.
+SRC     = /n/src
+TOOLDIR = /b/tools
+DESTDIR = /b/root
 
 # Stage 0 is the running system; later stages override CC to point -B at the
 # tools they just built.  Nothing here ever writes outside $(TOOLDIR)/$(DESTDIR).
@@ -27,10 +32,10 @@ LEX  = lex
 # Where <angle-bracket> headers really come from.  Stage 1 builds against the
 # running system, like any bootstrap; stage 5 onward points this at
 # $(DESTDIR)/usr/include so touching our headers rebuilds what includes them.
-INCDIR = /usr/include
+INCDIR = $(SRC)/usr/include
 
 CFLAGS = -O -DUNIX -DUNIXDEVEL -DFLEXNAMES
-INCS   = -I.
+INCS   = -I$(SRC)/usr/src/cmd/as -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) $(INCS) -c
 TOOLS  = $(CC) $(CCOM) $(CPP) $(C2) $(AS)
 
@@ -41,32 +46,32 @@ all: as
 as: $(OBJS) $(LD) $(LIBC)
 	$(CC) $(CFLAGS) -o as $(OBJS)
 
-ascode.o: ascode.c $(INCDIR)/a.out.h $(INCDIR)/pagsiz.h $(INCDIR)/signal.h $(INCDIR)/stab.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h as.h assyms.h astoks.h $(TOOLS)
-	$(COMPILE) ascode.c
+ascode.o: $(SRC)/usr/src/cmd/as/ascode.c $(INCDIR)/a.out.h $(INCDIR)/pagsiz.h $(INCDIR)/signal.h $(INCDIR)/stab.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h $(SRC)/usr/src/cmd/as/as.h $(SRC)/usr/src/cmd/as/assyms.h $(SRC)/usr/src/cmd/as/astoks.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/as/ascode.c
 
-asexpr.o: asexpr.c $(INCDIR)/a.out.h $(INCDIR)/pagsiz.h $(INCDIR)/signal.h $(INCDIR)/stab.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h as.h asexpr.h astoks.h $(TOOLS)
-	$(COMPILE) asexpr.c
+asexpr.o: $(SRC)/usr/src/cmd/as/asexpr.c $(INCDIR)/a.out.h $(INCDIR)/pagsiz.h $(INCDIR)/signal.h $(INCDIR)/stab.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h $(SRC)/usr/src/cmd/as/as.h $(SRC)/usr/src/cmd/as/asexpr.h $(SRC)/usr/src/cmd/as/astoks.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/as/asexpr.c
 
-asio.o: asio.c $(INCDIR)/a.out.h $(INCDIR)/pagsiz.h $(INCDIR)/signal.h $(INCDIR)/stab.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h as.h astoks.h $(TOOLS)
-	$(COMPILE) asio.c
+asio.o: $(SRC)/usr/src/cmd/as/asio.c $(INCDIR)/a.out.h $(INCDIR)/pagsiz.h $(INCDIR)/signal.h $(INCDIR)/stab.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h $(SRC)/usr/src/cmd/as/as.h $(SRC)/usr/src/cmd/as/astoks.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/as/asio.c
 
-asjxxx.o: asjxxx.c $(INCDIR)/a.out.h $(INCDIR)/pagsiz.h $(INCDIR)/signal.h $(INCDIR)/stab.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h as.h assyms.h astoks.h $(TOOLS)
-	$(COMPILE) asjxxx.c
+asjxxx.o: $(SRC)/usr/src/cmd/as/asjxxx.c $(INCDIR)/a.out.h $(INCDIR)/pagsiz.h $(INCDIR)/signal.h $(INCDIR)/stab.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h $(SRC)/usr/src/cmd/as/as.h $(SRC)/usr/src/cmd/as/assyms.h $(SRC)/usr/src/cmd/as/astoks.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/as/asjxxx.c
 
-asmain.o: asmain.c $(INCDIR)/a.out.h $(INCDIR)/ctype.h $(INCDIR)/pagsiz.h $(INCDIR)/signal.h $(INCDIR)/stab.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h as.h asexpr.h asscan.h assyms.h astoks.h $(TOOLS)
-	$(COMPILE) asmain.c
+asmain.o: $(SRC)/usr/src/cmd/as/asmain.c $(INCDIR)/a.out.h $(INCDIR)/ctype.h $(INCDIR)/pagsiz.h $(INCDIR)/signal.h $(INCDIR)/stab.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h $(SRC)/usr/src/cmd/as/as.h $(SRC)/usr/src/cmd/as/asexpr.h $(SRC)/usr/src/cmd/as/asscan.h $(SRC)/usr/src/cmd/as/assyms.h $(SRC)/usr/src/cmd/as/astoks.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/as/asmain.c
 
-asparse.o: asparse.c $(INCDIR)/a.out.h $(INCDIR)/pagsiz.h $(INCDIR)/signal.h $(INCDIR)/stab.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h as.h asexpr.h asscan.h assyms.h astoks.h $(TOOLS)
-	$(COMPILE) asparse.c
+asparse.o: $(SRC)/usr/src/cmd/as/asparse.c $(INCDIR)/a.out.h $(INCDIR)/pagsiz.h $(INCDIR)/signal.h $(INCDIR)/stab.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h $(SRC)/usr/src/cmd/as/as.h $(SRC)/usr/src/cmd/as/asexpr.h $(SRC)/usr/src/cmd/as/asscan.h $(SRC)/usr/src/cmd/as/assyms.h $(SRC)/usr/src/cmd/as/astoks.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/as/asparse.c
 
-aspseudo.o: aspseudo.c $(INCDIR)/a.out.h $(INCDIR)/pagsiz.h $(INCDIR)/signal.h $(INCDIR)/stab.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h as.h astoks.h instrs $(TOOLS)
-	$(COMPILE) aspseudo.c
+aspseudo.o: $(SRC)/usr/src/cmd/as/aspseudo.c $(INCDIR)/a.out.h $(INCDIR)/pagsiz.h $(INCDIR)/signal.h $(INCDIR)/stab.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h $(SRC)/usr/src/cmd/as/as.h $(SRC)/usr/src/cmd/as/astoks.h $(SRC)/usr/src/cmd/as/instrs $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/as/aspseudo.c
 
-asscan.o: asscan.c $(INCDIR)/a.out.h $(INCDIR)/pagsiz.h $(INCDIR)/signal.h $(INCDIR)/stab.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h as.h asscan.h astoks.h $(TOOLS)
-	$(COMPILE) asscan.c
+asscan.o: $(SRC)/usr/src/cmd/as/asscan.c $(INCDIR)/a.out.h $(INCDIR)/pagsiz.h $(INCDIR)/signal.h $(INCDIR)/stab.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h $(SRC)/usr/src/cmd/as/as.h $(SRC)/usr/src/cmd/as/asscan.h $(SRC)/usr/src/cmd/as/astoks.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/as/asscan.c
 
-assyms.o: assyms.c $(INCDIR)/a.out.h $(INCDIR)/ctype.h $(INCDIR)/pagsiz.h $(INCDIR)/signal.h $(INCDIR)/stab.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h as.h asscan.h assyms.h astoks.h $(TOOLS)
-	$(COMPILE) assyms.c
+assyms.o: $(SRC)/usr/src/cmd/as/assyms.c $(INCDIR)/a.out.h $(INCDIR)/ctype.h $(INCDIR)/pagsiz.h $(INCDIR)/signal.h $(INCDIR)/stab.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h $(SRC)/usr/src/cmd/as/as.h $(SRC)/usr/src/cmd/as/asscan.h $(SRC)/usr/src/cmd/as/assyms.h $(SRC)/usr/src/cmd/as/astoks.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/as/assyms.c
 
 install: as
 	-mkdir $(TOOLDIR)/bin

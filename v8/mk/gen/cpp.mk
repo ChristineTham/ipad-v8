@@ -8,8 +8,13 @@
 # $(LIBC). That is the invalidation a self-hosting build needs and V8's make
 # cannot work out for itself.
 
-TOOLDIR = /bld/tools
-DESTDIR = /bld/root
+# Source is READ ONLY and lives on the netfs share.  Nothing is ever copied to
+# local disk: objects are written into the current directory, which the driver
+# makes a per-component directory on the build filesystem.  That is what the
+# share is for, and it is why $(SRC) appears on every source path below.
+SRC     = /n/src
+TOOLDIR = /b/tools
+DESTDIR = /b/root
 
 # Stage 0 is the running system; later stages override CC to point -B at the
 # tools they just built.  Nothing here ever writes outside $(TOOLDIR)/$(DESTDIR).
@@ -27,10 +32,10 @@ LEX  = lex
 # Where <angle-bracket> headers really come from.  Stage 1 builds against the
 # running system, like any bootstrap; stage 5 onward points this at
 # $(DESTDIR)/usr/include so touching our headers rebuilds what includes them.
-INCDIR = /usr/include
+INCDIR = $(SRC)/usr/include
 
 CFLAGS = -O -Dunix=1 -Dvax=1 -DFLEXNAMES -DMTIME
-INCS   = -I.
+INCS   = -I$(SRC)/usr/src/cmd/cpp -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) $(INCS) -c
 TOOLS  = $(CC) $(CCOM) $(CPP) $(C2) $(AS)
 
@@ -41,18 +46,18 @@ all: cpp
 cpp: $(OBJS) $(LD) $(LIBC)
 	$(CC) $(CFLAGS) -o cpp $(OBJS)
 
-cpy.c: cpy.y $(YACC) yylex.c
-	$(YACC) cpy.y
+cpy.c: $(SRC)/usr/src/cmd/cpp/cpy.y $(YACC) $(SRC)/usr/src/cmd/cpp/cpy.y $(SRC)/usr/src/cmd/cpp/yylex.c
+	$(YACC) $(SRC)/usr/src/cmd/cpp/cpy.y
 	:yyfix yyexca yyact yypact yypgo yyr1 yyr2 yychk yydef; mv y.tab.c cpy.c
 
-cpp.o: cpp.c $(INCDIR)/setjmp.h $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/stat.h $(INCDIR)/sys/types.h $(TOOLS)
-	$(COMPILE) cpp.c
+cpp.o: $(SRC)/usr/src/cmd/cpp/cpp.c $(INCDIR)/setjmp.h $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/stat.h $(INCDIR)/sys/types.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/cpp/cpp.c
 
 cpy.o: cpy.c $(TOOLS)
 	$(COMPILE) cpy.c
 
-rodata.o: rodata.c $(TOOLS)
-	$(COMPILE) -R rodata.c
+rodata.o: $(SRC)/usr/src/cmd/cpp/rodata.c $(TOOLS)
+	$(COMPILE) -R $(SRC)/usr/src/cmd/cpp/rodata.c
 
 install: cpp
 	-mkdir $(TOOLDIR)/lib

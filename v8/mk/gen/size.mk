@@ -8,8 +8,13 @@
 # $(LIBC). That is the invalidation a self-hosting build needs and V8's make
 # cannot work out for itself.
 
-TOOLDIR = /bld/tools
-DESTDIR = /bld/root
+# Source is READ ONLY and lives on the netfs share.  Nothing is ever copied to
+# local disk: objects are written into the current directory, which the driver
+# makes a per-component directory on the build filesystem.  That is what the
+# share is for, and it is why $(SRC) appears on every source path below.
+SRC     = /n/src
+TOOLDIR = /b/tools
+DESTDIR = /b/root
 
 # Stage 0 is the running system; later stages override CC to point -B at the
 # tools they just built.  Nothing here ever writes outside $(TOOLDIR)/$(DESTDIR).
@@ -27,10 +32,10 @@ LEX  = lex
 # Where <angle-bracket> headers really come from.  Stage 1 builds against the
 # running system, like any bootstrap; stage 5 onward points this at
 # $(DESTDIR)/usr/include so touching our headers rebuilds what includes them.
-INCDIR = /usr/include
+INCDIR = $(SRC)/usr/include
 
 CFLAGS = -O 
-INCS   = -I.
+INCS   = -I$(SRC)/usr/src/cmd -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) $(INCS) -c
 TOOLS  = $(CC) $(CCOM) $(CPP) $(C2) $(AS)
 
@@ -41,8 +46,8 @@ all: size
 size: $(OBJS) $(LD) $(LIBC)
 	$(CC) $(CFLAGS) -o size $(OBJS)
 
-size.o: size.c $(INCDIR)/a.out.h $(INCDIR)/stdio.h $(TOOLS)
-	$(COMPILE) size.c
+size.o: $(SRC)/usr/src/cmd/size.c $(INCDIR)/a.out.h $(INCDIR)/stdio.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/size.c
 
 install: size
 	-mkdir $(TOOLDIR)/bin

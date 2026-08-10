@@ -78,6 +78,11 @@ let rootIno: UInt16 = 2
 
 final class Export {
     let root: String
+    /// Presents the repo's percent-escaped names under their true spelling; see
+    /// CaseMap.swift.  Without this the guest cannot see both usr/src/cmd/Mail
+    /// and usr/src/cmd/mail, and the escaped names are too long for a
+    /// 14-byte directory entry anyway.
+    let caseMap: CaseMap
     let readOnly: Bool
     /// Everything is presented as owned by this uid/gid. The client kernel runs
     /// its own permission checks against whatever we report (`iaccess` on the
@@ -106,6 +111,7 @@ final class Export {
     init(root: String, readOnly: Bool, mapUID: UInt16 = 0, mapGID: UInt16 = 0,
          trace: @escaping (String) -> Void = { _ in }) {
         self.root = root
+        self.caseMap = CaseMap(root: root)
         self.readOnly = readOnly
         self.mapUID = mapUID
         self.mapGID = mapGID
@@ -234,7 +240,7 @@ final class Export {
             let child = (path as NSString).appendingPathComponent(name)
             var st = stat()
             guard lstat(child, &st) == 0, Self.visible(st.st_mode) else { continue }
-            let short = Self.v8Name(name)
+            let short = Self.v8Name(caseMap.shown(parent: path, onDisk: name))
             if !seen.insert(short).inserted {
                 trace("collision: \(name) truncates onto an existing entry in \(path)")
                 continue
@@ -280,7 +286,8 @@ final class Export {
 
         // The exact name first -- the overwhelmingly common case, and it avoids
         // listing a big directory for every component of every path.
-        let direct = (parent.path as NSString).appendingPathComponent(name)
+        let onDisk = caseMap.onDisk(parent: parent.path, shown: name)
+        let direct = (parent.path as NSString).appendingPathComponent(onDisk)
         var st = stat()
         if bytes.count < dirSiz, lstat(direct, &st) == 0 {
             guard Self.visible(st.st_mode) else { return .noMatch }
@@ -293,7 +300,8 @@ final class Export {
         // truncated name matches.
         if bytes.count == dirSiz,
            let names = try? FileManager.default.contentsOfDirectory(atPath: parent.path) {
-            for candidate in names.sorted() where Self.v8Name(candidate) == bytes {
+            for candidate in names.sorted()
+                where Self.v8Name(caseMap.shown(parent: parent.path, onDisk: candidate)) == bytes {
                 let child = (parent.path as NSString).appendingPathComponent(candidate)
                 var cst = stat()
                 guard lstat(child, &cst) == 0, Self.visible(cst.st_mode) else { continue }
