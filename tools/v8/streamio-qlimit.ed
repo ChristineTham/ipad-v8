@@ -1,0 +1,6 @@
+/qinit strdata = {/
+c
+struct	qinit strdata = { strput, NULL, nulldev, nulldev, 8192, 4096 };
+.
+w
+q

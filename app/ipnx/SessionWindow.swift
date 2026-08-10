@@ -13,6 +13,7 @@ struct SessionWindow: View {
     @ObservedObject var machine: Machine
     @ObservedObject var settings: Settings
     @ObservedObject var dmd: Terminal5620
+    @ObservedObject var share: FileShare
     #if os(macOS)
     @ObservedObject var capture: PointerCapture
     #endif
@@ -86,7 +87,7 @@ struct SessionWindow: View {
             EmptyView()
             #else
             NavigationStack {
-                SettingsView(settings: settings, machine: machine, terminal: dmd)
+                SettingsView(settings: settings, machine: machine, terminal: dmd, share: share)
                     .navigationTitle("Settings")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {

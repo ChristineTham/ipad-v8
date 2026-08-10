@@ -10,9 +10,11 @@ struct SettingsView: View {
     @ObservedObject var settings: Settings
     @ObservedObject var machine: Machine
     @ObservedObject var terminal: Terminal5620
+    @ObservedObject var share: FileShare
 
     @State private var showLicences = false
     @State private var importError: String?
+    @State private var pickingFolder = false
 
     var body: some View {
         Form {
@@ -22,6 +24,7 @@ struct SettingsView: View {
             glassSection
             sessionSection
             diskSection
+            shareSection
             aboutSection
         }
         .formStyle(.grouped)
@@ -211,6 +214,48 @@ struct SettingsView: View {
             }
             Text("Exporting copies the live image; the copy is only guaranteed consistent while the machine is suspended. Imports and resets are applied at the next launch, never under a running machine.")
                 .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: Shared folder
+
+    /// N7. The server is real and running; what is not yet in place is a guest
+    /// that can dial it, so this section says so rather than presenting a
+    /// feature that silently does nothing.
+    private var shareSection: some View {
+        Section("Shared folder") {
+            if let folder = share.folder {
+                LabeledContent("Folder") {
+                    Text(folder.lastPathComponent).font(.caption)
+                }
+                Toggle("Allow the VAX to write", isOn: $share.allowWrites)
+                LabeledContent("Status") {
+                    Text(share.running ? "Serving on port \(share.port)" : "Stopped")
+                        .font(.caption).foregroundStyle(share.running ? .green : .secondary)
+                }
+                LabeledContent("Mount with") {
+                    Text(share.mountCommand)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                }
+                Button(share.running ? "Stop sharing" : "Start sharing") {
+                    share.running ? share.stop() : share.start()
+                }
+                Button("Choose a different folder…") { pickingFolder = true }
+                Button("Stop sharing this folder", role: .destructive) { share.forget() }
+            } else {
+                Button("Choose a folder to share…") { pickingFolder = true }
+            }
+
+            if let err = share.lastError {
+                Text(err).font(.caption).foregroundStyle(.red)
+            }
+            Text("Serves the folder to the emulated VAX over its own network, using the file system Research Unix has had built into its kernel since 1985. Needs a disk image with networking configured, which the bundled one does not yet have.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .fileImporter(isPresented: $pickingFolder,
+                      allowedContentTypes: [.folder]) { result in
+            if case .success(let url) = result { share.adopt(url) }
         }
     }
 

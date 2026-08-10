@@ -31,11 +31,22 @@ public struct NetFSConfig: Sendable {
     public var mapUID: UInt16
     public var mapGID: UInt16
     public var verbose: Bool
+    /// Largest `NREAD` payload to return, or 0 for "as much as was asked".
+    ///
+    /// A short but non-zero reply is legal and the client simply comes back
+    /// for the rest -- `naread()` loops `while(u.u_error == 0 && u.u_count != 0
+    /// && n > 0)`, so only a *zero*-length reply ends a read. That makes this a
+    /// safe accommodation for a guest whose stream head cannot pass a large
+    /// reply in one piece, at the cost of one round trip per chunk. It should
+    /// not be needed against a kernel carrying the N6 queue-limit patch.
+    public var maxRead: Int32
 
     public init(root: String, port: UInt16 = 9200, readOnly: Bool = true,
-                mapUID: UInt16 = 0, mapGID: UInt16 = 0, verbose: Bool = false) {
+                mapUID: UInt16 = 0, mapGID: UInt16 = 0, verbose: Bool = false,
+                maxRead: Int32 = 0) {
         self.root = root; self.port = port; self.readOnly = readOnly
         self.mapUID = mapUID; self.mapGID = mapGID; self.verbose = verbose
+        self.maxRead = maxRead
     }
 }
 
@@ -353,7 +364,8 @@ final class Connection {
     /// a short answer is how EOF is signalled; there is no separate EOF.
     private func doRead(_ x: Senda, _ y: inout Rcva) -> Bool {
         guard let h = export.handle(tag: x.tag) else { return respond(&y, V8Errno.ENOENT) }
-        let want = min(max(x.count, 0), Self.maxCount)
+        var want = min(max(x.count, 0), Self.maxCount)
+        if cfg.maxRead > 0 { want = min(want, cfg.maxRead) }
         switch export.read(h, offset: x.offset, count: want) {
         case .failure(let e):
             return respond(&y, e.code)

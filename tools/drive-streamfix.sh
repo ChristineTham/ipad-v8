@@ -62,6 +62,7 @@ inrange "the remainder is kept"       '^istread' '^\}' 'bp->rptr \+= n'
 inrange "it waits for the full count" '^istread' '^\}' 'if \(count == 0\)'
 inrange "a zero-length read returns 0" '^istread' '^\}' 'return\(0\);'
 check "the QDELIM early return is gone" 'if \(stq->flag&HUNGUP\) \{'
+check "the stream head was widened"  'nulldev, 8192, 4096'
 check "kernel relinked"              'SFIX-made'
 check "installed"                    'SFIX-DONE'
 if grep -qE "Undefined|Error code|\*\*\*" n6-streamfix.log; then

@@ -16,6 +16,10 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LIMIT="${1:-2400}"
 PORT="${2:-9200}"
+# Cap on each NREAD reply. A short but non-zero reply is legal --
+# naread() loops while (u_count != 0 && n > 0) -- so this costs round
+# trips and nothing else. 0 means "as much as was asked".
+MAXREAD="${3:-0}"
 SHARE="$ROOT/work/netfs-share"
 NETFSD="$ROOT/netfs/.build/release/netfsd"
 
@@ -72,8 +76,8 @@ command -v vax780 >/dev/null || { echo "vax780 not on PATH"; exit 1; }
 [[ -f rp07v8.net ]] || { echo "no rp07v8.net -- run tools/n3-ilkernel.sh first"; exit 1; }
 
 rm -f n6-netfs.log netfsd.log
-echo "== starting netfsd on 127.0.0.1:$PORT (read-only) =="
-"$NETFSD" -p "$PORT" -v "$SHARE" > netfsd.log 2>&1 &
+echo "== starting netfsd on 127.0.0.1:$PORT (read-only, maxread=$MAXREAD) =="
+"$NETFSD" -p "$PORT" -v -m "$MAXREAD" "$SHARE" > netfsd.log 2>&1 &
 SRV_PID=$!
 sleep 1
 kill -0 "$SRV_PID" 2>/dev/null || { echo "netfsd died:"; cat netfsd.log; exit 1; }

@@ -24,6 +24,7 @@
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		ED17A10000000000000000A5 /* ipnx */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = ipnx; sourceTree = "<group>"; };
+		ED17A30000000000000000E1 /* NetFS */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); name = NetFS; path = ../netfs/Sources/NetFS; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -54,6 +55,7 @@
 			isa = PBXGroup;
 			children = (
 				ED17A10000000000000000A5 /* ipnx */,
+				ED17A30000000000000000E1 /* NetFS */,
 				ED17A10000000000000000A9 /* Frameworks */,
 				ED17A10000000000000000A8 /* Products */,
 			);
@@ -95,6 +97,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				ED17A10000000000000000A5 /* ipnx */,
+				ED17A30000000000000000E1 /* NetFS */,
 			);
 			name = ipnx;
 			packageProductDependencies = (
@@ -119,6 +122,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				ED17A10000000000000000A5 /* ipnx */,
+				ED17A30000000000000000E1 /* NetFS */,
 			);
 			name = ipnxMac;
 			packageProductDependencies = (

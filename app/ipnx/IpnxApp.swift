@@ -31,6 +31,9 @@ struct IpnxApp: App {
     @StateObject private var dmd: Terminal5620
     @StateObject private var settings: Settings
     @StateObject private var store: SessionStore
+    /// N7. Built at launch so a share the user already chose is serving before
+    /// the guest is in a position to mount it.
+    @StateObject private var share = FileShare()
 
     #if os(macOS)
     @NSApplicationDelegateAdaptor(MacAppDelegate.self) private var appDelegate
@@ -69,7 +72,7 @@ struct IpnxApp: App {
         // Qualified: our own preferences type is also called Settings, and the
         // scene builder would otherwise resolve to its initialiser.
         SwiftUI.Settings {
-            SettingsView(settings: settings, machine: machine, terminal: dmd)
+            SettingsView(settings: settings, machine: machine, terminal: dmd, share: share)
                 .frame(width: 520, height: 640)
         }
         #else
@@ -85,11 +88,11 @@ struct IpnxApp: App {
     private func window(_ shape: TerminalShape) -> some View {
         #if os(macOS)
         SessionWindow(shape: shape, store: store, machine: machine,
-                      settings: settings, dmd: dmd, capture: capture)
+                      settings: settings, dmd: dmd, share: share, capture: capture)
             .onAppear { launch(shape) }
         #else
         SessionWindow(shape: shape, store: store, machine: machine,
-                      settings: settings, dmd: dmd)
+                      settings: settings, dmd: dmd, share: share)
             .onAppear { launch(shape) }
             .onChange(of: scenePhase) { _, newPhase in
                 switch newPhase {

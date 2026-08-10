@@ -8,6 +8,7 @@
 //    -v  trace every request
 //    -u  uid to present every file as (default 0)
 //    -g  gid to present every file as (default 0)
+//    -m  cap each NREAD reply to this many bytes (0 = whatever was asked)
 //
 //  The guest reaches this at 10.0.2.2:<port>. Nothing has to be forwarded:
 //  SLiRP redirects every address inside its virtual network to the host's
@@ -21,6 +22,7 @@ var readOnly = true
 var verbose = false
 var mapUID: UInt16 = 0
 var mapGID: UInt16 = 0
+var maxRead: Int32 = 0
 var root: String? = nil
 
 var args = Array(CommandLine.arguments.dropFirst())
@@ -32,8 +34,9 @@ while let arg = args.first {
     case "-v": verbose = true
     case "-u": mapUID = UInt16(args.removeFirst()) ?? 0
     case "-g": mapGID = UInt16(args.removeFirst()) ?? 0
+    case "-m": maxRead = Int32(args.removeFirst()) ?? 0
     case "-h", "--help":
-        print("usage: netfsd [-p port] [-w] [-v] [-u uid] [-g gid] <directory>")
+        print("usage: netfsd [-p port] [-w] [-v] [-u uid] [-g gid] [-m maxread] <directory>")
         exit(0)
     default:
         root = arg
@@ -58,7 +61,8 @@ let absolute = (root as NSString).isAbsolutePath
 
 let server = NetFSServer(NetFSConfig(root: (absolute as NSString).standardizingPath,
                                      port: port, readOnly: readOnly,
-                                     mapUID: mapUID, mapGID: mapGID, verbose: verbose))
+                                     mapUID: mapUID, mapGID: mapGID, verbose: verbose,
+                                     maxRead: maxRead))
 do {
     try server.start()
 } catch {

@@ -132,6 +132,29 @@ sh "ed - /usr/sys/sys/streamio.c < /tmp/fix.ed" 120
 # five possible causes and no way to tell them apart from userland.
 catfile "../../tools/v8/streamio-istwrite.ed" "/tmp/wrt.ed"
 sh "ed - /usr/sys/sys/streamio.c < /tmp/wrt.ed" 120
+# THE STREAM HEAD IS 512 BYTES WIDE, and a netfs reply does not fit through it.
+#
+#	struct qinit strdata = { strput, NULL, nulldev, nulldev, 512, 256 };
+#
+# q->count is bytes, not blocks -- putq adds bsize[bp->class] -- so the stream
+# head's read queue goes QFULL at 512. tcpdisrv only moves data up
+# `while((q->next->flag&QFULL) == 0)', so a 48-byte header plus a 1024-byte
+# payload cannot all reach the reader: TCP holds the rest, so_rcount stays
+# high, the advertised window shrinks, and istread waits for a header that is
+# sitting one queue below it. Measured exactly that way --
+#
+#	istread: timeout, got 0 want 48 more
+#
+# with the server's own log showing the reply had been written. Small files
+# and directory listings all fit under 512 and worked throughout, which is why
+# this only appeared on the first file bigger than a couple of blocks.
+#
+# 8192/4096 is enough for a full BUFSIZE reply with room to spare. It is a
+# buffering limit on a read queue, so the cost is memory, and it applies to
+# every stream -- ttys included, where more slack before flow control is not a
+# behaviour change anyone can observe.
+catfile "../../tools/v8/streamio-qlimit.ed" "/tmp/qlm.ed"
+sh "ed - /usr/sys/sys/streamio.c < /tmp/qlm.ed" 120
 sh "echo SFIX-edited"
 
 send_user "\n=== 3. show what it now says ===\n"
@@ -152,6 +175,7 @@ sh "sum /usr/sys/sys/streamio.c" 60
 # looking like it asked a question. egrep is the one that alternates.
 sh "egrep -n '^istread|^stread|^istwrite' /usr/sys/sys/streamio.c" 60
 sh "grep -n 'count == 0' /usr/sys/sys/streamio.c" 60
+sh "grep -n 'qinit strdata' /usr/sys/sys/streamio.c" 60
 sh "sed -n '/^istread/,/^}/p' /usr/sys/sys/streamio.c" 60
 sh "echo SFIX-shown"
 
