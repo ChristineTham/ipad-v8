@@ -76,7 +76,7 @@ cpy.o: cpy.c $(TOOLS)
 	$(COMPILE) cpy.c
 
 rodata.o: rodata.c $(TOOLS)
-	$(COMPILE) -R $(SRC)/usr/src/cmd/cpp/rodata.c
+	$(COMPILE) -R rodata.c
 
 install: cpp
 	-mkdir $(TOOLDIR)/lib

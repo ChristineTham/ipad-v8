@@ -390,7 +390,11 @@ def emit(c):
                                   scan_includes(os.path.join(d, src), incdirs))
                 if x != srcdir + "/" + src]
         extra = (oflags[obj] + " ") if obj in oflags else ""
-        srcref = src if src in gen else srcdir + "/" + src
+        # A generated or side-effect source is compiled from the object
+        # directory, not from the share.  Getting this right in the
+        # prerequisite but not in the recipe just moves the error from
+        # make ("Don't know how to make") to cc ("No source file").
+        srcref = src if (src in gen or src in sidegen) else srcdir + "/" + src
         out.append("\n%s: %s $(TOOLS)\n\t$(COMPILE) %s%s\n"
                    % (obj, " ".join(deps), extra, srcref))
 
