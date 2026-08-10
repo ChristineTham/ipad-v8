@@ -142,6 +142,15 @@ Evidence in `work/shots-a5/`.
 | CRT window shaped to the tube | `crt 877x780` inside a `897x852` window |
 | 5620 still works | self-test, 1152×1024, 127 columns, `login:` on the raster |
 | iPad | same tab bar, the `+` menu listing tty02..tty06 and the other shapes |
+| **Suspend and restore still work** | quit → `SAVED` → relaunch → *resuming a saved session* → `restored`, and the nudge brings back the same root shell on line 1 |
+
+The restore check was the one worth running, because `resumeConf` now carries
+eight `att dz` lines instead of three and this is the path with the worst
+history in the project (the mute DZ, and the silent no-disk that presented as a
+terminal which had merely gone quiet). The executed config confirms the order
+the [A1 notes](a1-notes.md) require: `at rp0 v8.disk` **before** `restore -D -Q`,
+all eight DZ lines **after** it, then `cont`. Not checked: running a command
+inside the restored shell, which needs synthetic typing.
 
 ## Still to do
 
