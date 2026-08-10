@@ -8,6 +8,48 @@ at that, and unlike a hand-maintained list it cannot be wrong.
 
 ---
 
+## 0.2.0 — 2026-08-10
+
+**The bootstrap toolchain builds from this tree.** All fourteen stage-1
+components — `yacc make lex cpp ccom c2 as ld ar ranlib nm size strip cc` —
+compile straight off the read-only netfs share into a separate build
+filesystem, and the compiler they produce is a fixpoint: `cmp` of a binary
+built by our `ccom` against one built by the 1985 `/lib/ccom` returns **0**,
+byte for byte, stripped. Driver `tools/drive-stage1.sh`, evidence
+`work/myv8/c2-stage1.log`, method [docs/build-from-source.md](../docs/build-from-source.md).
+
+Still 0.x: a toolchain is not a system, and nothing here has produced a
+bootable disk yet.
+
+### Fixed
+
+- **`usr/src/cmd/date.c` — a Y2K bug, and the reason the machine lived in
+  1976.** `gtime()` read two digits and did a bare `year += 1900`, so `26`
+  meant 1926. That is before `YRREF`, so `clkinit()`'s year loop contributed
+  nothing and the date collapsed to 1970. It matters more than a display
+  nuisance: the kernel takes the **year from the root filesystem's superblock**
+  and only the position within it from the TODR (`sys/sys/machdep.c`), so an
+  unsettable year is an unsettable clock — and `make(1)` cannot compare a 2026
+  source served over netfs against a 1976 object. Now windowed at 69/70, the
+  same fix everyone applied in 1999.
+
+### Changed
+
+- **`mk/` understands out-of-tree builds.** The tape's makefiles assume the
+  current directory *is* the source directory; ours compiles from a read-only
+  mount into a separate object directory. Three assumptions had to be named
+  explicitly — a script beside the source (`:yyfix`), a data file beside the
+  source (`y.debug.sv`), and a generated file that exists only in the object
+  directory (`rodata.c`, a side effect of making `cpy.c`). One entry in the
+  `ccom` object table was simply wrong: `t2print.c` is in `common/`, not
+  `vax/`.
+- **Tool macros split into command and path.** `$(CC)` is what a rule runs;
+  `$(CCPATH)` is the binary whose mtime means the compiler changed and is what
+  belongs in a prerequisite. Likewise `$(YACC)`/`$(YACCPATH)` and
+  `$(LEX)`/`$(LEXPATH)`.
+- `yaccpar` installs to `usr/lib/`, matching the unconditional
+  `# define PARSER "/usr/lib/yaccpar"` in `usr/src/cmd/yacc/files`.
+
 ## 0.1.0 — 2026-08-10
 
 The first numbered state of the tree, and the baseline every later claim is

@@ -13,7 +13,7 @@
 # compiled matters; for a tagged -RELEASE the release date in RELEASE is the
 # one that means anything.
 
-REL="0.1.0"
+REL="0.2.0"
 BRANCH="CURRENT"
 EDITION="Eighth"
 RELDATE="2026-08-10"

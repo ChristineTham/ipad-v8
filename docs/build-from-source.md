@@ -231,22 +231,65 @@ the design.*
 - [x] Determinism measured: code generation reproducible, symbol table is not
 - [x] `v8/mk/mkdep.py` — dependency scanner and makefile generator, 14 components
 - [x] Source served, not staged; case collisions resolved in netfsd
-- [ ] **Stage 1 has never completed a run.** Five attempts, every failure
-      environmental rather than in the design: `/bld` on a 7.6 MB root; `test -e`
-      absent in V7; prompt-matching unusable because V8 echoes typed characters
-      into its output; `@` is the line-kill character; `cmd & ; echo` is a
-      syntax error. The driver is `tools/drive-stage1.sh`; it has not been run
-      since the share-only rework.
+- [x] Guest clock fixed — see below
+- [x] **Stage 1 builds the toolchain from the repo's source**, compiled straight
+      off the share into `/b`. `tools/drive-stage1.sh` runs it end to end in
+      about ten minutes.
 - [ ] `cc -B` extended to `as`, `ld`, `crt0.o`
 - [ ] Stages 2–3, with the fixpoint comparison
 - [ ] Stages 4–7
 - [ ] Stage 8, and a boot
 - [ ] Stage 9 — the new system rebuilds itself under `chroot`
 
-**The guest clock is a known blocker for anything incremental** (task #59). Its
-TODR starts in 1976 unless `attach TODR` is used and the date set once, so every
-object is older than its source and `make` can never converge. A first full
-build is unaffected, which is why stage 1 does not expose it.
+### The clock: not the TODR
+
+Recorded earlier as "the TODR starts in 1976 unless `attach TODR` is used".
+That was wrong, and the correction is worth keeping because it points at the
+right file.
+
+`sys/sys/machdep.c`'s `clkinit()` takes the **year from the root filesystem's
+superblock** and only the position within that year from the TODR. So no TODR
+setting can fix the year, and SIMH was never implicated. 1976 specifically is
+the hardcoded `6*SECYR + 186*SECDAY` fallback behind *"preposterous time in
+file system"*, which trips whenever the superblock time is below `5*SECYR`.
+
+And `date(1)` cannot set it out of that: Berkeley's 1980 `date.c` does a bare
+`year += 1900` on the two digits `gp()` reads, so `26` means 1926 — before
+`YRREF`, so `clkinit`'s year loop contributes nothing. That is a Y2K bug in
+source we now own, and `v8/usr/src/cmd/date.c` carries the usual 69/70 window
+as the first substantive ipnx change to the tree.
+
+The driver compiles our `date.c` off the share and runs it with `-u` and UTC
+digits — `stime(2)` takes GMT, and going through local time would apply V8's
+configured zone against the host's — then `sync`s, so the superblock carries
+the year to every later boot. Jumping fifty years while the machine runs is
+safe: `cron`'s `slp()` resynchronises on any delta over an hour.
+
+### What out-of-tree building actually costs
+
+Every stage-1 failure after the environment was sorted came from the same
+place: **the tape's makefiles were written to run in the source directory**,
+and we run in an object directory with the source on a read-only mount. Three
+distinct shapes, each invisible in-tree:
+
+- a script beside the source invoked bare (`:yyfix`, which needs `.` on PATH —
+  and `pcc1/pcc/makefile` writes `./:yyfix` for the same script, so the tape
+  disagrees with itself)
+- a data file beside the source copied by relative name (`y.debug.sv`)
+- a generated file that exists only in the object directory — `rodata.c`, which
+  `:yyfix` writes as a *side effect* of making `cpy.c`, so it has no rule of
+  its own and no file on the share. `mkdep.py` models this as `sidegen`: a rule
+  with a prerequisite and no commands.
+
+A fourth was mine rather than the tape's, and is the one to remember:
+`$(CC)` was `cc`, a command resolved on PATH, used as a **prerequisite**, which
+is a pathname. Thirteen components failed at once with `Don't know how to make
+cc`. `cc`, `yacc` and `lex` now each carry two macros — `$(CC)` for what a rule
+runs, `$(CCPATH)` for the binary whose mtime means it changed.
+
+`cc -B` is a plain string concatenation (`ccom = strspl(npassname, "ccom")`),
+so the prefix must name the directory the passes are really in:
+`-B$(TOOLDIR)/lib/`, not `-B$(TOOLDIR)/`.
 
 ## Sources
 

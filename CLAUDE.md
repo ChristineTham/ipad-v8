@@ -410,6 +410,61 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   of `login:` ("Automatic reboot failed... help!") — reachable in the app whenever a
   hard kill interrupts a compile. Fixed 2026-08-09 via `/etc/mklost+found` on `/` and
   `/usr`; `work/fix-lostfound.exp` reapplies it if the image is ever rebuilt.
+  A run that *is* hard-killed still needs `tools/fsck-repair.exp`: the autoboot
+  `fsck -p` can't answer its own questions, so it aborts to single-user and the machine
+  never reaches `login:`. `/etc/reboot -n` does **not** work there (*"Reboot request
+  failed, PC: 80004183"* — the VAX780 reboot goes through a console-subsystem request
+  the simulator doesn't implement); drop to `sim>` with ^E and quit, which also avoids
+  syncing the stale in-core root superblock back over `fsck`'s repair.
+- **`hp` is block major 0 and char major 4** — `bdevsw` and `cdevsw` are unrelated
+  tables and the indices don't match (`sys/dev/conf.c`). Block major 2 is `up`, a
+  Unibus disk our machines don't have, so `mknod /dev/rp1g b 2 14` builds a node into
+  `upstrategy` on absent hardware and `mount` dies on a wild pointer (`type 8 ... code
+  xae50d144`, `panic: trap`). It cost two runs because `fsck` had just passed on that
+  exact filesystem through the **raw** node, which was right — so a verified filesystem
+  panicking on mount reads as a mount-table bug. **When raw works and block doesn't,
+  suspect the majors first.** Minor is `drive<<3 | partition`, and `mknod` does **not**
+  replace an existing node — it prints "File exists" and leaves the old one, so a bad
+  node outlives the fix and the next run fails identically with a correct script.
+- **RP06 partition `a` is 15,884 *sectors*, not blocks** (`hp6_sizes`, `sys/dev/hp.c`):
+  `a` 15884, `b` 33440, `c` 340670 (whole disk), `g` 291280 from cyl 118. `mkfs` lays
+  its free list down from the top, so an oversized filesystem fails on its *first*
+  write ("write error: 39968") rather than partway. `mkfs n` gives `n/25` i-list blocks
+  at 16 inodes each — state the inode count, since V8 fixes it at `mkfs` time and
+  exhausting it presents as `mkdir` answering "cannot access .".
+- **The guest's year comes from the root superblock, not the TODR.** `clkinit()`
+  (`sys/sys/machdep.c`) takes only the position-within-year from the TODR; a superblock
+  time under `5*SECYR` trips *"preposterous time in file system"*, whose fallback is the
+  hardcoded `6*SECYR + 186*SECDAY` — mid-1976 exactly. So `attach TODR` fixes nothing.
+  And `date(1)` can't set the year out of it: Berkeley's 1980 `date.c` does a bare
+  `year += 1900` on two digits, so `26` means 1926. `v8/usr/src/cmd/date.c` now carries
+  the 69/70 window; set the time with `-u` and UTC digits (`stime(2)` takes GMT), then
+  `sync` so the superblock carries the year forward. Safe while running — `cron`'s
+  `slp()` resynchronises on any delta over an hour.
+- **Driving V8 over the console: markers, never prompts, and never a literal.** The tty
+  echoes typed characters as they arrive and they interleave *into* whatever is
+  printing, so a marker lands mid-line (`echC3-CASE-clean`) — which defeats a
+  `^`-anchored grep exactly as reliably as an unanchored one matches the command's own
+  echo. Spell every marker through a shell variable (`echo C3-CLOCK$OK`) so the echo
+  carries `C3-CLOCK$OK` and only the result carries `C3-CLOCK-ok`. Keep every line under
+  **`CANBSIZ` = 256** (`sys/h/param.h`) or the tty discards it silently, and never wrap a
+  command that doesn't return (`/etc/halt`) in the marker helper. Dry-run an expect
+  driver under `tclsh` with the interactive verbs stubbed: Tcl only reports a syntax
+  error when it *reaches* the command, so a typo in the last block surfaces three hours
+  in.
+- **The tape's makefiles assume you build in the source directory.** Out-of-tree, off a
+  read-only share, three things break and none are visible in-tree: a script invoked
+  bare from beside the source (`:yyfix` — and `pcc1/pcc/makefile` writes `./:yyfix` for
+  the same script, so the tape contradicts itself); a data file copied by relative name
+  (`y.debug.sv`); and a generated file that exists only in the object directory
+  (`rodata.c`, written by `:yyfix` as a *side effect* of making `cpy.c`, so it has no
+  rule and no file on the share). Also **a command is not a path**: `$(CC)` = `cc` used
+  as a *prerequisite* gives `Make: Don't know how to make cc` on every component at
+  once, so `cc`/`yacc`/`lex` each need a second `*PATH` macro. Stage-0 tools live at
+  `/bin/{cc,as,ld,ar,nm,size,make}`, `/lib/{cpp,ccom,c2,libc.a}`,
+  `/usr/bin/{yacc,lex,ranlib}`, `/usr/lib/yaccpar` — there is no `/bin/strip`.
+  `cc -B` is a bare `strspl`, so the prefix must name the passes' actual directory
+  (`-B$(TOOLDIR)/lib/`), and `as`/`ld`/`crt0.o` have no `-B` equivalent at all.
 
 ## Conventions
 
