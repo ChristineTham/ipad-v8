@@ -60,10 +60,24 @@ GlassEffectContainer(spacing:) { … }
 .buttonStyle(.glass)
 ```
 
-The app currently targets **macOS 14.0 / iOS 17.0**, so the deployment targets
-must rise to 26. That is the right trade here — there is no install base, and a
-half-glass interface looks worse than either whole choice — but it is a real
-decision and it belongs in the record.
+**Decided 2026-08-10: raise the deployment targets to macOS 26 / iOS 26.**
+Christine chose this over gating the glass behind `if #available`. The app has
+not shipped, so there is no install base to strand; the cost is reach at launch
+and nothing else. The gain is that there is exactly one visual design to build
+and test rather than two, and no availability check in any chrome view.
+
+Do the bump **first**, and confirm both targets still build *before* any UI work
+— a target bump surfaces its own unrelated errors, and they should not be
+tangled up with the redesign's.
+
+Two smaller decisions, recorded so they are not re-derived:
+
+- **tty01 auto-logs in as `root`** — the only account until B0.6's first-boot
+  provisioner exists. Revisit when it does.
+- **Glass belongs to chrome only.** Nothing composites over the emulated raster:
+  the 5620's screen and the glass ttys' text are meant to be faithful, and a
+  translucency effect over a 1-bit phosphor display would be a lie about what
+  the hardware did.
 
 The emulated screens stay exactly as they are. Glass belongs to the chrome; the
 raster inside the bezel is meant to be a faithful 1985 display and nothing
