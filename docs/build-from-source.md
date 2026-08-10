@@ -175,9 +175,9 @@ disk.
 | **1** | yacc, then make, lex, cpp, ccom, c2, as, ld, ar, ranlib, nm, size, strip, cc | stage 0 | `TOOLDIR` | ✅ |
 | **2** | libc | stage 1 | `TOOLDIR/lib` | ✅ |
 | **3** | the whole toolchain **again** | stage 1 + stage 2 libc | `TOOLDIR3` | ✅ |
-| **4** | headers | — | `DESTDIR/usr/include` |
-| **5** | libraries | stage 3 | `DESTDIR/lib`, `DESTDIR/usr/lib` |
-| **6** | 113 makefile commands + 163 loose `.c` + 6 `.sh` | stage 3 | `DESTDIR/bin`, `DESTDIR/usr/bin`, `DESTDIR/etc` |
+| **4** | 224 headers | — | `DESTDIR/usr/include` |
+| **5** | 19 libraries | stage 3 | `DESTDIR/usr/lib` |
+| **6** | 113 makefile commands + 164 loose `.c` + 2 `.y` + 6 `.sh` | stage 3 | `DESTDIR/bin`, `DESTDIR/usr/bin`, `DESTDIR/etc` |
 | **7** | the kernel, via `config` | stage 3 | `DESTDIR/unix` |
 | **8** | a bootable disk | `mkfs` + `DESTDIR` + `hpboot` + `proto-dev` | a new RP06/RP07 image |
 | **9** | the whole system, again, from inside itself | `chroot DESTDIR` | the completeness proof |
@@ -347,6 +347,56 @@ a mistake — 25 minutes a run, and every disk problem above was downstream of i
 It is recorded here because the reasoning that produced it («a long compile
 should not depend on a live mount») sounds prudent and was wrong: the mount is
 the design.*
+
+## Stages 4 to 7: four different problems
+
+They look like one phase and are not. Each is blocked on the one before, and each
+breaks differently.
+
+**Stage 4 — headers.** No compilation at all; 224 copies. It exists as a stage because
+everything after it must compile against *our* headers, and that is a property of where
+`-I` points rather than of anything stage 4 does. Per-file rules, so touching a header
+reinstalls it and everything including it rebuilds — the dependency rule the whole build
+is organised around, and headers are where it bites hardest. The prerequisite lists are
+grouped and split at 50: V8's make reads a line into `INMAX` = 5000 and expands a
+target's prerequisites into `tgsbuf[QBUFMAX]`, also 5000, and all 224 paths at once is
+about 7,800 characters.
+
+**Stage 5 — libraries.** 19 archives, and no `lorder | tsort` on any of them: with a
+valid `__.SYMDEF` the member order stops mattering (see above). Two are not what they
+look like. `libg.a` is **not an archive** — `as dbxxx.s -o libg.a`, one assembled object
+that happens to end in `.a`, which `ld` loads as a plain file. And `libtermlib` builds
+`termcap.a`, installs it as `libtermcap.a`, and hard-links `libtermlib.a` to it, so
+`-ltermlib` and `-ltermcap` are one file.
+
+**Stage 6 — commands.** A *list*, not a loop. The tape's 113 makefiles are not a family:
+`awk`'s opens by saying it is wrong, `sed` links with `cc -o sed -n *.o`, `troff` builds
+two programs from overlapping object sets under different `CFLAGS`. Only six state an
+object macro, one link line and nothing exotic. The list starts with what later stages
+need and grows. **One rule applies to every entry: never `-l`, always the path** — for
+the `ld`-has-no-`-L` reason above, `-ll` would resolve out of the running system's
+`/usr/lib` in preference to the `libl.a` stage 5 just built, silently, and the build
+would succeed.
+
+**Stage 7 — the kernel.** The only stage that copies source, and not by choice:
+`config` resolves its global inputs by literal string concatenation —
+`strcpy(cp, "../conf/")` in `main.c`'s `gpath()` — and the makefile it generates
+compiles `../sys/*.c`, `../dev/*.c`. The whole build is relative-path bound to a
+directory sitting beside `conf/`, `sys/`, `dev/` and `h/`. The invariant that actually
+matters is untouched: the copy goes into `$BLD`, and the share is still never written.
+
+Two things about `config` that are not what they appear:
+
+- **`config alice unix` is not (machine, kernel).** `mkconf(dev, sysname)` records the
+  first name as `f_fn`, and the generated makefile then compiles `../dev/swap$(f_fn).c`.
+  The first name selects a **swap configuration that must exist as a file**.
+- **It emitted a literal `ld`** for the one command whose output *is* the product.
+  Everything else it generates goes through `${CC}`, `${C2}` or `${AS}`; only the kernel
+  link and `vers.c` were hardwired, so a fully staged build would have compiled every
+  object with our toolchain and linked the result with the running system's loader. Now
+  `${LD}` and `${CC}`, with defaults added to `conf/makefile` — V8's make has no built-in
+  `LD` (`dfltmacro[]` defines `CC`, `AS`, `AR`, `YACC`, `LEX` and stops), so without one
+  the link line would begin with a space and fail at the last command.
 
 ## Stage 8: a disk, and what the tree already has for it
 
