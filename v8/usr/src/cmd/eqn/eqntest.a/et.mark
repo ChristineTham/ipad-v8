@@ -1,0 +1,16 @@
+.nf
+.EQ
+	x mark = 1
+.EN
+.EQ
+lineup = 2
+.EN
+.EQ
+1 lineup = 2
+.EN
+.EQ
+ij lineup =3
+.EN
+.EQ
+bold k lineup =4
+.EN

@@ -1,0 +1,24 @@
+define L %
+	if "$2" != "" then | x = $2; |
+	if "$3" != "" then | y = $3; |
+	if "$4" != "" then | n = $4; | else | n = m; |
+	if "$5" != "" then | co = cos(2*$5); si = sin(2*$5); |\
+		else | co = cos(2*theta); si = sin(2*theta); |
+	px=x*hu; py=y*vu;
+	vx=(px+n*(px*co+py*si))/2; vy=(py+n*(px*si-py*co))/2;
+	alpha = atan2(vy,vx); beta = atan2(py-vy,px-vx);
+	 { spline $1 from Here + c*cos(alpha),c*sin(alpha)\
+		to Here + vx,vy\
+		to Here + px-c*cos(beta),py-c*sin(beta);
+	}
+	move to Here + px,py
+% x=0; y=0; m=0; theta=0; c=0; # initially
+define E %
+	 { move to Here + .25*(px/2+vx)-px,.25*(py/2+vx)-py;
+		$1;
+	}
+%
+pi = 3.1415926535; hu = 0.3i; vu = hu;
+for i = 0 to 7 do | { L(,4,4,1,i*pi/8); E(plot i);} |
+move down 2i;
+for i = 0 to 7 do | { L(,6,3,1,i*pi/8); E(plot i);} |

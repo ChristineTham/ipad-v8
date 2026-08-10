@@ -1,0 +1,45 @@
+.de EQ
+.sp
+\h'5.5i'\\$1\h'|.5i'
+..
+.de EN
+.sp
+..
+.EQ (2.01)
+bold x sup { n alpha } (t) ~->~ bold x sup alpha ( bold X ,t).
+.EN
+.sp
+.EQ (2.02)
+sum from n F( bold x sup { n alpha } (t))
+~->~ 1 over OMEGA int F( bold x sup alpha ( bold X ,t))d bold X
+.EN
+.EQ (2.03)
+bold x ( bold X ,t) ~==~
+sum from  { alpha =1} to  N
+rho sup alpha  over rho sup 0 bold x sup alpha ( bold X ,t)
+.EN
+.EQ (2.08)
+sum from  {alpha =1} to  N
+U sup { mu alpha } V sup { mu alpha } ~=~ delta sup { mu nu }
+.EN
+.EQ (2.06)
+bold y sup { T mu } ( bold X ,t) 
+~==~ sum from  {alpha =1} to  N
+U sup { mu alpha }
+bold x sup alpha
+( bold X ,t)
+.EN
+.EQ  (7.02)
+~ partial over {partial d} 
+ ( epsilon sub 0 bold E sup T times  bold B ) sub i  
+- m sub ij,j ~=~
+-q sup D E sub i sup T
+-( bold ~j sup D times bold B ) sub i
+.EN
+.EQ (7.04)
+~ partial over {partial d} 
+[ rho x dot sub i + epsilon sub 0 ( bold E sup T times bold B ) sub i ]
+~+~ partial over \(pdz sub j
+[ rho x dot sub i x dot sub j -t sub ij sup L
+- E hat sub i sup T P sub j sup T -m sub ij ]~=~0
+.EN

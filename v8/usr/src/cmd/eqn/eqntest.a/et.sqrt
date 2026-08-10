@@ -1,0 +1,47 @@
+et.sqrt
+.sp
+.EQ
+x = sqrt{a sup 2 + b sup 2}+ sqrt a over b +
+sqrt a sup 2 over b sup 2
+.EN
+.EQ
+sqrt a+b over sqrt c+d
+.EN
+.EQ
+1 over sqrt{ax sup 2 +bx+c}
+.EN
+.EQ
+sqrt{a over b}
+.EN
+.EQ
+sqrt 2
+.EN
+.EQ
+sqrt x+1
+.EN
+.EQ
+sqrt { x+y sup half}
+.EN
+.sp .5i
+.EQ
+X = sqrt{A sup 2 + B sup 2}+ sqrt A over B +
+sqrt A sup 2 over B sup 2
+.EN
+.EQ
+sqrt A+B over sqrt C+D
+.EN
+.EQ
+1 over sqrt{AX sup 2 +BX+C}
+.EN
+.EQ
+sqrt{A over B}
+.EN
+.EQ
+sqrt 2
+.EN
+.EQ
+sqrt X+1
+.EN
+.EQ
+sqrt { X+Y sup half}
+.EN

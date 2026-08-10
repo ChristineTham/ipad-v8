@@ -1,0 +1,28 @@
+.nf
+.EQ
+x = left { lpile { a above pile { b above c above d} }
+right }
+.EN
+.EQ
+x = left [ lpile { a above pile { b above c above d} }
+right ]
+.EN
+.sp 1i
+.EQ
+delim $$
+define NMO `~"\(mo\s+3\h'-\w'/'u'/\s-3"~`
+.EN
+.LP
+.EQ (3.6a)
+lambda sub i ~:=~ left { ~ lpile {
+left ( C sub 0 sup -T grad f ( x sup c ) right ) sub j
+~if~ C sub i ~roman {is~row}~ j ~roman of~ C sub 0
+above ^0 ~if~ i NMO A sub 0 ( x sup c ) .}
+right }
+.EN
+.EQ (7.2)
+s tilde sup k ~:=~ left { ~ lpile {bold 0 ~if~ Z~ roman {is~null~or}
+~Z sup T g~=~ bold 0
+above -{Z Z sup T g} over {|| Z Z sup T g || sub 2}~^ roman otherwise }
+right }
+.EN

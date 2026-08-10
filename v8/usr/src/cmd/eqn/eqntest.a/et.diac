@@ -1,0 +1,353 @@
+.nf
+.vs 18p
+.EQ
+( x dyad ) ~~
+( x vec ) ~~
+( x bar ) ~~
+( x hat ) ~~
+( x dot ) ~~
+( x dotdot ) ~~
+( x tilde ) ~~
+( x under ) ~~
+( x utilde ) ~~
+.EN
+.EQ
+( X dyad ) ~~
+( X vec ) ~~
+( X bar ) ~~
+( X hat ) ~~
+( X dot ) ~~
+( X dotdot ) ~~
+( X tilde ) ~~
+( X under ) ~~
+( X utilde ) ~~
+.EN
+.EQ
+( alpha dyad ) ~~
+( alpha vec ) ~~
+( alpha bar ) ~~
+( alpha hat ) ~~
+( alpha dot ) ~~
+( alpha dotdot ) ~~
+( alpha tilde ) ~~
+( alpha under ) ~~
+( alpha utilde ) ~~
+.EN
+.EQ
+( phi dyad ) ~~
+( phi vec ) ~~
+( phi bar ) ~~
+( phi hat ) ~~
+( phi dot ) ~~
+( phi dotdot ) ~~
+( phi tilde ) ~~
+( phi under ) ~~
+( phi utilde ) ~~
+.EN
+.EQ
+( GAMMA dyad ) ~~
+( GAMMA vec ) ~~
+( GAMMA bar ) ~~
+( GAMMA hat ) ~~
+( GAMMA dot ) ~~
+( GAMMA dotdot ) ~~
+( GAMMA tilde ) ~~
+( GAMMA under ) ~~
+( GAMMA utilde ) ~~
+.EN
+.EQ
+gfont R
+( x dyad ) ~~
+( x vec ) ~~
+( x bar ) ~~
+( x hat ) ~~
+( x dot ) ~~
+( x dotdot ) ~~
+( x tilde ) ~~
+( x under ) ~~
+( x utilde ) ~~
+( X dyad ) ~~
+( X vec ) ~~
+( X bar ) ~~
+( X hat ) ~~
+( X dot ) ~~
+( X dotdot ) ~~
+( X tilde ) ~~
+( X under ) ~~
+( X utilde ) ~~
+.EN
+.EQ
+gfont B
+( x dyad ) ~~
+( x vec ) ~~
+( x bar ) ~~
+( x hat ) ~~
+( x dot ) ~~
+( x dotdot ) ~~
+( x tilde ) ~~
+( x under ) ~~
+( x utilde ) ~~
+( X dyad ) ~~
+( X vec ) ~~
+( X bar ) ~~
+( X hat ) ~~
+( X dot ) ~~
+( X dotdot ) ~~
+( X tilde ) ~~
+( X under ) ~~
+( X utilde ) ~~
+.EN
+.sp
+.nf
+.vs 18p
+.EQ
+gfont I
+( x dyad  sub i ) ~~
+( x vec  sub i ) ~~
+( x bar  sub i ) ~~
+( x hat  sub i ) ~~
+( x dot  sub i ) ~~
+( x dotdot  sub i ) ~~
+( x tilde  sub i ) ~~
+( x under  sub i ) ~~
+( x utilde  sub i ) ~~
+.EN
+.EQ
+( X dyad  sub i ) ~~
+( X vec  sub i ) ~~
+( X bar  sub i ) ~~
+( X hat  sub i ) ~~
+( X dot  sub i ) ~~
+( X dotdot  sub i ) ~~
+( X tilde  sub i ) ~~
+( X under  sub i ) ~~
+( X utilde  sub i ) ~~
+.EN
+.EQ
+( alpha dyad  sub i ) ~~
+( alpha vec  sub i ) ~~
+( alpha bar  sub i ) ~~
+( alpha hat  sub i ) ~~
+( alpha dot  sub i ) ~~
+( alpha dotdot  sub i ) ~~
+( alpha tilde  sub i ) ~~
+( alpha under  sub i ) ~~
+( alpha utilde  sub i ) ~~
+.EN
+.EQ
+( phi dyad  sub i ) ~~
+( phi vec  sub i ) ~~
+( phi bar  sub i ) ~~
+( phi hat  sub i ) ~~
+( phi dot  sub i ) ~~
+( phi dotdot  sub i ) ~~
+( phi tilde  sub i ) ~~
+( phi under  sub i ) ~~
+( phi utilde  sub i ) ~~
+.EN
+.EQ
+( GAMMA dyad  sub i ) ~~
+( GAMMA vec  sub i ) ~~
+( GAMMA bar  sub i ) ~~
+( GAMMA hat  sub i ) ~~
+( GAMMA dot  sub i ) ~~
+( GAMMA dotdot  sub i ) ~~
+( GAMMA tilde  sub i ) ~~
+( GAMMA under  sub i ) ~~
+( GAMMA utilde  sub i ) ~~
+.EN
+.EQ
+gfont R
+( x dyad  sub i ) ~~
+( x vec  sub i ) ~~
+( x bar  sub i ) ~~
+( x hat  sub i ) ~~
+( x dot  sub i ) ~~
+( x dotdot  sub i ) ~~
+( x tilde  sub i ) ~~
+( x under  sub i ) ~~
+( x utilde  sub i ) ~~
+( X dyad  sub i ) ~~
+( X vec  sub i ) ~~
+( X bar  sub i ) ~~
+( X hat  sub i ) ~~
+( X dot  sub i ) ~~
+( X dotdot  sub i ) ~~
+( X tilde  sub i ) ~~
+( X under  sub i ) ~~
+( X utilde  sub i ) ~~
+.EN
+.EQ
+gfont B
+( x dyad  sub i ) ~~
+( x vec  sub i ) ~~
+( x bar  sub i ) ~~
+( x hat  sub i ) ~~
+( x dot  sub i ) ~~
+( x dotdot  sub i ) ~~
+( x tilde  sub i ) ~~
+( x under  sub i ) ~~
+( x utilde  sub i ) ~~
+( X dyad  sub i ) ~~
+( X vec  sub i ) ~~
+( X bar  sub i ) ~~
+( X hat  sub i ) ~~
+( X dot  sub i ) ~~
+( X dotdot  sub i ) ~~
+( X tilde  sub i ) ~~
+( X under  sub i ) ~~
+( X utilde  sub i ) ~~
+.EN
+.sp
+.sp
+.nf
+.vs 18p
+.EQ
+gfont I
+( x dyad  sub i sup 2 ) ~~
+( x vec  sub i sup 2 ) ~~
+( x bar  sub i sup 2 ) ~~
+( x hat  sub i sup 2 ) ~~
+( x dot  sub i sup 2 ) ~~
+( x dotdot  sub i sup 2 ) ~~
+( x tilde  sub i sup 2 ) ~~
+( x under  sub i sup 2 ) ~~
+( x utilde  sub i sup 2 ) ~~
+.EN
+.EQ
+( X dyad  sub i sup 2 ) ~~
+( X vec  sub i sup 2 ) ~~
+( X bar  sub i sup 2 ) ~~
+( X hat  sub i sup 2 ) ~~
+( X dot  sub i sup 2 ) ~~
+( X dotdot  sub i sup 2 ) ~~
+( X tilde  sub i sup 2 ) ~~
+( X under  sub i sup 2 ) ~~
+( X utilde  sub i sup 2 ) ~~
+.EN
+.EQ
+( alpha dyad  sub i sup 2 ) ~~
+( alpha vec  sub i sup 2 ) ~~
+( alpha bar  sub i sup 2 ) ~~
+( alpha hat  sub i sup 2 ) ~~
+( alpha dot  sub i sup 2 ) ~~
+( alpha dotdot  sub i sup 2 ) ~~
+( alpha tilde  sub i sup 2 ) ~~
+( alpha under  sub i sup 2 ) ~~
+( alpha utilde  sub i sup 2 ) ~~
+.EN
+.EQ
+( phi dyad  sub i sup 2 ) ~~
+( phi vec  sub i sup 2 ) ~~
+( phi bar  sub i sup 2 ) ~~
+( phi hat  sub i sup 2 ) ~~
+( phi dot  sub i sup 2 ) ~~
+( phi dotdot  sub i sup 2 ) ~~
+( phi tilde  sub i sup 2 ) ~~
+( phi under  sub i sup 2 ) ~~
+( phi utilde  sub i sup 2 ) ~~
+.EN
+.EQ
+( GAMMA dyad  sub i sup 2 ) ~~
+( GAMMA vec  sub i sup 2 ) ~~
+( GAMMA bar  sub i sup 2 ) ~~
+( GAMMA hat  sub i sup 2 ) ~~
+( GAMMA dot  sub i sup 2 ) ~~
+( GAMMA dotdot  sub i sup 2 ) ~~
+( GAMMA tilde  sub i sup 2 ) ~~
+( GAMMA under  sub i sup 2 ) ~~
+( GAMMA utilde  sub i sup 2 ) ~~
+.EN
+.EQ
+gfont R
+( x dyad  sub i sup 2 ) ~~
+( x vec  sub i sup 2 ) ~~
+( x bar  sub i sup 2 ) ~~
+( x hat  sub i sup 2 ) ~~
+( x dot  sub i sup 2 ) ~~
+( x dotdot  sub i sup 2 ) ~~
+( x tilde  sub i sup 2 ) ~~
+( x under  sub i sup 2 ) ~~
+( x utilde  sub i sup 2 ) ~~
+( X dyad  sub i sup 2 ) ~~
+( X vec  sub i sup 2 ) ~~
+( X bar  sub i sup 2 ) ~~
+( X hat  sub i sup 2 ) ~~
+( X dot  sub i sup 2 ) ~~
+( X dotdot  sub i sup 2 ) ~~
+( X tilde  sub i sup 2 ) ~~
+( X under  sub i sup 2 ) ~~
+( X utilde  sub i sup 2 ) ~~
+.EN
+.EQ
+gfont B
+( x dyad  sub i sup 2 ) ~~
+( x vec  sub i sup 2 ) ~~
+( x bar  sub i sup 2 ) ~~
+( x hat  sub i sup 2 ) ~~
+( x dot  sub i sup 2 ) ~~
+( x dotdot  sub i sup 2 ) ~~
+( x tilde  sub i sup 2 ) ~~
+( x under  sub i sup 2 ) ~~
+( x utilde  sub i sup 2 ) ~~
+( X dyad  sub i sup 2 ) ~~
+( X vec  sub i sup 2 ) ~~
+( X bar  sub i sup 2 ) ~~
+( X hat  sub i sup 2 ) ~~
+( X dot  sub i sup 2 ) ~~
+( X dotdot  sub i sup 2 ) ~~
+( X tilde  sub i sup 2 ) ~~
+( X under  sub i sup 2 ) ~~
+( X utilde  sub i sup 2 ) ~~
+.EN
+.sp
+.EQ
+123 over x ~123 over x hat ~ 123 over x bar ~ 123 over x dot
+.EN
+.EQ
+123 over X ~123 over X hat ~ 123 over X bar ~ 123 over X dot
+.EN
+
+.EQ
+gfont I
+W + W bar + {W sub a} bar + W vec + W dot +
+.EN
+.EQ
+w + w bar + {w sub a} bar + w vec + w dot +
+.EN
+
+.EQ
+gfont R
+.EN
+.EQ
+W + W bar + {W sub a} bar + W vec + W dot +
+.EN
+.EQ
+w + w bar + {w sub a} bar + w vec + w dot +
+.EN
+
+.EQ
+gfont B
+.EN
+.EQ
+W + W bar + {W sub a} bar + W vec + W dot +
+.EN
+.EQ
+w + w bar + {w sub a} bar + w vec + w dot +
+.EN
+.EQ
+gfont 2
+.EN
+.nf
+.EQ
+x ~ x bar ~ x bar bar ~ x dot ~ x dot bar ~ x dot bar bar
+.EN
+.EQ
+X ~ X bar ~ X bar bar ~ X dot ~ X dot bar ~ X dot bar bar
+.EN
+.EQ
+x sup 2 ~ x sup 2 bar ~ {x sup 2} bar ~ {x bar sup 2} bar
+.EN
+.EQ
+X sup 2 ~ X sup 2 bar ~ {X sup 2} bar ~ {X bar sup 2} bar
+.EN

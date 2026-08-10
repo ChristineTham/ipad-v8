@@ -1,0 +1,15 @@
+.nf
+.EQ
+matrix {
+  rcol { "" above rpile { s above Calculated~u above v} }
+  ccol { s ~~ u ~~ v
+    above left [
+    matrix {
+    ccol {0 above 1 above 1}
+    ccol {1 above 0 above 1}
+    ccol {1 above 1 above 1}
+    }
+  right ]
+  }
+}
+.EN

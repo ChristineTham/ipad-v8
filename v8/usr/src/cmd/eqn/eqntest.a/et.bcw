@@ -1,0 +1,56 @@
+.ta .5i
+.nf
+.EQ
+define -+ X ^"\v'.2m'\z\(pl\v'-.4m'\(mi\v'.4m'\v'-.2m'"^ X
+define uh "U sub h"
+define phi "PHI sub i"
+define phr "PHI sub r"
+define psi "PSI sub i"
+define psr "PSI sub r"
+define p4 "pi over 4"
+define v0 "V sub 0"
+define vh "V sub h"
+define u0 "U sub 0"
+define a0 "|A sub 0 | sup 2~~"
+.EN
+.EQ
+delim $$
+.EN
+.EQ
+I sub 1~=~a0 left {
+1~-~4~{ u0  uh }over{( u0 + uh ) sup 2 } ~sin sup 2 delta over 2
+right}
+^^
+{[ sinh sup 2 phi + cos sup 2 ( phr - p4 )]}
+over {d^ sqrt{1-Y sup 2}}
+.EN
+.sp4
+.EQ
+I sub 2~=~4 a0~{v0 sup 2 sin sup 2 delta over 2~ 
+[ sinh sup 2 psi + cos sup 2 (| psr |- p4 )]} over
+{( v0 + vh ) sup 2 |d' sub A -d| ( v0  vh ) sup 0.5 }
+.EN
+.sp4
+.EQ
+I sub 3~=~  a0 ~v0 over {  (d|d' sub A -d|) sup 0.5
+(1-Z sup 2 ) sup 0.25 (1-Y sup 2 ) sup 0.25 ( v0 + vh )
+}
+.EN
+.sp 1.5
+.EQ
+~~~~~~~~~~ "{" 2~sin sup 2 ( delta over 2 )[ mark cos ( phr - psr - p4 +- p4 )
+cosh ( phi + psi )
+.EN
+.EQ
+~~~~~~~~~~ lineup +~cos ( phr + psr - p4 -+  p4 ) cosh ( phi - psi )]
+~{u0 - uh} over {u0 + uh}
+.EN
+.sp1
+.EQ
+~~~~~~~~~~ ~~+~sin~delta [ mark sin ( phr - psr - p4 +- p4 ) sinh ( phi + psi )
+.EN
+.sp 1
+.EQ
+~~~~~~~~~~ lineup +~ sin ( phr + psr - p4 -+  p4 ) sinh ( phi - psi )]
+"}"
+.EN

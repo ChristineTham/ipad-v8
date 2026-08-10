@@ -1,0 +1,14 @@
+.sp 1i
+.nf
+.EQ
+{{{{{ A bar B bar } bar } bar } bar ~
+{ A bar B bar }} bar ~
+{{A bar B bar} bar ~
+{{ A bar B bar} bar } bar } bar } bar
+.EN
+.br
+.EQ
+sqrt { { phi  sup 1 } bar }
+~~~
+sqrt { { phi sub m sup 1 } bar }
+.EN

@@ -1,0 +1,16 @@
+.nf
+.EQ
+alpha ~~~ beta ~~~ gamma ~~~
+GAMMA ~~~ delta ~~~ DELTA ~~~
+epsilon ~~~ zeta ~~~ eta ~~~
+THETA ~~~ theta ~~~ lambda ~~~
+LAMBDA ~~~ mu ~~~ nu ~~~
+.EN
+.EQ
+xi ~~~ pi ~~~ PI ~~~
+rho ~~~ sigma ~~~ SIGMA ~~~
+tau ~~~ phi ~~~ PHI ~~~
+psi ~~~ PSI ~~~ omega ~~~
+OMEGA ~~~ del ~~~ "\(no" ~~~
+partial ~~~ integral ~~~
+.EN

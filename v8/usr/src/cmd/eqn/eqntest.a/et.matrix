@@ -1,0 +1,58 @@
+.nf
+Knuth, vol 2, page 317:
+.sp
+.EQ 
+Q sub n (x sub 1 ,x sub 2 , ... ,x sub n ) ~=~ left {
+matrix {
+lcol { 1, above x sub 1 , above 
+x sub 1 Q sub n-1 (x sub 2 , ... ,x sub n ) +
+Q sub n-2 (x sub 3 , ... ,x sub n ) }
+lcol {  if above  if above  if }
+lcol { n=0; above n=1; above n>1. }
+}
+.EN
+.sp
+Knuth, vol 2, p426:
+.sp
+.ti 3
+When zero occurs, the determinant is even easier to compute;
+for example, if
+.EQ
+x sub 11 =0 
+.EN
+but
+.EQ
+x sub 21  != 0,
+.EN
+we have
+.sp
+.nf
+.EQ
+det ~
+left [ 
+matrix {
+col { 0 above x sub 21 above x sub 31 above ...  above x sub n1 }
+col { x sub 12 above x sub 22 above x sub 32 above ~ above x sub n2 }
+col { ...  above ...  above ...  above ~ above ...  }
+col { x sub 1n above x sub 2n above x sub 3n above ~ above x sub nn }
+}
+right ]
+.EN
+.sp
+.ti 5
+.EQ
+=~-x sub 21 det
+left [
+matrix {
+col { 
+x sub 12 above x sub 32 -(x sub 31 /x sub 21 )x sub 22
+above ...  above x sub n2 -(x sub n1 /x sub 21 )x sub 22 }
+col { ...  above ...  above ~ above ...  }
+col {
+x sub 1n above x sub 3n -(x sub 31 /x sub 21 )x sub 2n
+above ...  above x sub nn -(x sub n1 /x sub 21 )x sub 2n
+   }
+}
+right ]
+~~.~~~(8)
+.EN

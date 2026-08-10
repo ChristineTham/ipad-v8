@@ -1,0 +1,160 @@
+.vs 18p
+.nf
+.EQ
+z sub i sup j
+i sub i sup j
+j sub i sup j
+f sub i sup j
+x sub i sup j
+1 sub i sup j
+0 sub i sup j
+X sub i sup j
+H sub i sup j
+Y sub i sup j
+partial sub i sup j
+pi sub i sup j
+lambda sub i sup j
+.EN
+.EQ
+z sub m sup k
+i sub m sup k
+j sub m sup k
+f sub m sup k
+x sub m sup k
+1 sub m sup k
+0 sub m sup k
+X sub m sup k
+H sub m sup k
+Y sub m sup k
+partial sub m sup k
+pi sub m sup k
+lambda sub m sup k
+.EN
+.EQ
+z sub pi sup 2
+i sub pi sup 2
+j sub pi sup 2
+f sub pi sup 2
+x sub pi sup 2
+1 sub pi sup 2
+0 sub pi sup 2
+X sub pi sup 2
+H sub pi sup 2
+Y sub pi sup 2
+partial sub pi sup 2
+pi sub pi sup 2
+lambda sub pi sup 2
+.EN
+=======
+.EQ
+gfont R
+.EN
+.EQ
+z sub i sup j
+i sub i sup j
+j sub i sup j
+f sub i sup j
+x sub i sup j
+1 sub i sup j
+0 sub i sup j
+X sub i sup j
+H sub i sup j
+Y sub i sup j
+partial sub i sup j
+pi sub i sup j
+lambda sub i sup j
+.EN
+.EQ
+z sub m sup k
+i sub m sup k
+j sub m sup k
+f sub m sup k
+x sub m sup k
+1 sub m sup k
+0 sub m sup k
+X sub m sup k
+H sub m sup k
+Y sub m sup k
+partial sub m sup k
+pi sub m sup k
+lambda sub m sup k
+.EN
+.EQ
+z sub pi sup 2
+i sub pi sup 2
+j sub pi sup 2
+f sub pi sup 2
+x sub pi sup 2
+1 sub pi sup 2
+0 sub pi sup 2
+X sub pi sup 2
+H sub pi sup 2
+Y sub pi sup 2
+partial sub pi sup 2
+pi sub pi sup 2
+lambda sub pi sup 2
+.EN
+=======
+.EQ
+gfont B
+.EN
+.EQ
+z sub i sup j
+i sub i sup j
+j sub i sup j
+f sub i sup j
+x sub i sup j
+1 sub i sup j
+0 sub i sup j
+X sub i sup j
+H sub i sup j
+Y sub i sup j
+partial sub i sup j
+pi sub i sup j
+lambda sub i sup j
+.EN
+.EQ
+z sub m sup k
+i sub m sup k
+j sub m sup k
+f sub m sup k
+x sub m sup k
+1 sub m sup k
+0 sub m sup k
+X sub m sup k
+H sub m sup k
+Y sub m sup k
+partial sub m sup k
+pi sub m sup k
+lambda sub m sup k
+.EN
+.EQ
+z sub pi sup 2
+i sub pi sup 2
+j sub pi sup 2
+f sub pi sup 2
+x sub pi sup 2
+1 sub pi sup 2
+0 sub pi sup 2
+X sub pi sup 2
+H sub pi sup 2
+Y sub pi sup 2
+partial sub pi sup 2
+pi sub pi sup 2
+lambda sub pi sup 2
+.EN
+=======
+.vs 16p
+.nf
+.EQ
+1.2 ~~ 3.4 ~~~ x.1 ~~~ 1.x ~~~ a.b ~~~ x.y ~~~ X.Z
+.EN
+.EQ
+gfont R
+1.2 ~~ 3.4 ~~~ x.1 ~~~ 1.x ~~~ a.b ~~~ x.y ~~~ X.Z
+.EN
+.EQ
+gfont B
+1.2 ~~ 3.4 ~~~ x.1 ~~~ 1.x ~~~ a.b ~~~ x.y ~~~ X.Z
+.EN
+1.2 ~~ 3.4 ~~~ x.1 ~~~ 1.x ~~~ a.b ~~~ x.y ~~~ X.Z

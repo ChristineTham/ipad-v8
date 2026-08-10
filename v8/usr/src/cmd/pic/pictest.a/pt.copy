@@ -1,0 +1,12 @@
+.PS
+copy thru / "abc" at 1,1 /
+x
+x
+x
+.PE
+.PS
+copy thru / box at $1,$2 /
+1 2
+3 4
+5 6
+.PE

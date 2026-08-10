@@ -1,0 +1,13 @@
+.EQ
+delim $$
+.EN
+.ps 25
+	Boxb: box "$size 10 { M sub B}$" wid 1 ht .5
+	Boxt: box "$ gsize 10 M sub T$" wid 1 ht .5 with .sw at Boxb.nw + 0,.5
+
+
+.ps 25
+.EQ
+gsize 10 { M sub B}
+.EN
+glop

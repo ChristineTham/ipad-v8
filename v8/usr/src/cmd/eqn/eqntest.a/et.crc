@@ -1,0 +1,18 @@
+.sp
+.nf
+CRC Tables, p.335:
+.sp
+.EQ
+4.05.~~ int dx over { ae sup mx - be sup -mx } ~=~
+left { lpile 
+{ 1 over { 2m sqrt ab } ~ log ~ { sqrt a e sup mx - sqrt b }
+  over { sqrt a e sup mx  + sqrt b } 
+above
+ 1 over { m sqrt ab } roman ~tanh sup -1 ( sqrt a over sqrt b e sup mx ) 
+above
+ - 1 over { m sqrt ab  } roman ~coth sup -1
+  ( sqrt a over sqrt b e sup mx ), 
+  ~~~~~~~~~(a>0,~b>0)
+}
+.EN
+.sp 3

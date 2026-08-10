@@ -1,0 +1,18 @@
+.ps 16
+.vs 20p
+.EQ
+gsize 16
+gfont 3
+.EN
+6.~~FROM EQS. 1, 4, 7 and 8,
+.EQ (9)
+r sub m ~=~
+{q sub m}
+over 
+{
+{
+[{x under} sup t x under ~-~ {q under} sup t q under ]
+}
+sup half }
+.
+.EN

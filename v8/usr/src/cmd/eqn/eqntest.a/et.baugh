@@ -1,0 +1,24 @@
+.nf
+.br
+.EQ
+V bar sub cc ~=~  left [ 1+ 51 over { beta  bar ( beta  bar +1)  } right ]
+I bar sub mu R bar sub 1 ~+~ { I bar sub mu R bar sub E } over alpha bar
+~+~  lambda left [ 2~ ln ( I bar sub mu over I bar sub s  )
++ ln (51  alpha  bar  over  beta  bar  ) right ]    
+~~~~(2)
+.EN
+.sp
+.EQ
+A bar sub mu I bar sub mu ~=~
+alpha  bar 
+left [ 1- (  alpha  bar  over   alpha  bar  sub L  )
+e  sup { - V bar sub i / lambda }
+right ]
+sum from j=1 to N
+w sub j
+~+~ alpha  bar
+e  sup { - V bar sub i / lambda }
+sum from j=N+1 to M
+w sub j
+~~~~~(3)
+.EN

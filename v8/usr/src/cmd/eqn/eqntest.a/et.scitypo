@@ -1,0 +1,21 @@
+.nf
+.sp 1i
+.LP
+.EQ
+(N sub roman Sh ) sub a sup * mark = 1 over 2 left ( d sub t over L right )
+  N sub roman Re N sub roman Sc
+.EN
+.EQ
+lineup times
+left [
+{ 1 - sum from j=1 to {j= inf} {-4 beta sub j} over {beta sub j sup 2}
+  left ( {d phi sub j} over dr sub + right ) sub {r sub + =1}
+  exp left ( {- beta sub j sup 2 (x/r sub t ) } over { N sub Re N sub roman Sc} right ) 
+}
+over
+{ 1 + sum from j=1 to {j= inf} {-4 beta sub j} over {beta sub j sup 2}
+  left ( {d phi sub j} over dr sub + right ) sub {r sub + =1}
+  exp left ( {- beta sub j sup 2 (x/r sub t ) } over { N sub Re N sub roman Sc} right ) 
+}
+right ]
+.EN

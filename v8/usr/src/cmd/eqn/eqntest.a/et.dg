@@ -1,0 +1,368 @@
+.ll 7.75i
+.po 0
+.nf
+.vs 16p
+.sp
+.EQ
+z0
+z1
+z2
+z(z)[z]z[(z+1)]z(z-0)2-z
+z=1
+1=z
+z+z-z/z/z>z<z>=z<=z->z<-z,z;z:z>>z<<z
+|z||z|z|
+.EN
+.EQ
+z sub i,j z sub 1 z sub j z sub 0 z sup 0 z sup i z sup j z sup 1 z sub 1 sup 2
+z sub i,j z sup 1 z sub j sub 0 z sub i sup j z sup 1 z sub 1 sup 2
+.EN
+.EQ
+z cdot
+z times
+z alpha
+z beta
+z delta
+z theta
+z lambda z chi
+z DELTA z inf z int z sum z pi z partial z
+z ,..., z ... z
+.EN
+.sp
+.EQ
+j0
+j1
+j2
+j(j)[j]j[(j+1)]j(j-0)2-j
+j=1
+1=j
+j+j-j/j/j>j<j>=j<=j->j<-j,j;j:j>>j<<j
+|j||j|j|
+.EN
+.EQ
+j sub i,j j sub 1 j sub j j sub 0 j sup 0 j sup i j sup j j sup 1 j sub 1 sup 2
+j sub i,j j sup 1 j sub j sub 0 j sub i sup j j sup 1 j sub 1 sup 2
+.EN
+.EQ
+j cdot
+j times
+j alpha
+j beta
+j delta
+j theta
+j lambda j chi
+j DELTA j inf j int j sum j pi j partial j
+j ,..., j ... j
+.EN
+.sp
+.EQ
+i0
+i1
+i2
+i(i)[i]i[(i+1)]i(i-0)2-i
+i=1
+1=i
+i+i-i/i/i>i<i>=i<=i->i<-i,i;i:i>>i<<i
+|i||i|i|
+.EN
+.EQ
+i sub i,j i sub 1 i sub j i sub 0 i sup 0 i sup i i sup j i sup 1 i sub 1 sup 2
+i sub i,j i sup 1 i sub j sub 0 i sub i sup j i sup 1 i sub 1 sup 2
+.EN
+.EQ
+i cdot
+i times
+i alpha
+i beta
+i delta
+i theta
+i lambda i chi
+i DELTA i inf i int i sum i pi i partial i
+i ,..., i ... i
+.EN
+.sp
+.EQ
+j0
+j1
+j2
+j(j)[j]j[(j+1)]j(j-0)2-j
+j=1
+1=j
+j+j-j/j/j>j<j>=j<=j->j<-j,j;j:j>>j<<j
+|j||j|j|
+.EN
+.EQ
+j sub i,j j sub 1 j sub j j sub 0 j sup 0 j sup i j sup j j sup 1 j sub 1 sup 2
+j sub i,j j sup 1 j sub j sub 0 j sub i sup j j sup 1 j sub 1 sup 2
+.EN
+.EQ
+j cdot
+j times
+j alpha
+j beta
+j delta
+j theta
+j lambda j chi
+j DELTA j inf j int j sum j pi j partial j
+j ,..., j ... j
+.EN
+.sp
+.EQ
+f0
+f1
+f2
+f(f)[f]f[(f+1)]f(f-0)2-f
+f=1
+1=f
+f+f-f/f/f>f<f>=f<=f->f<-f,f;f:f>>f<<f
+|f||f|f|
+.EN
+.EQ
+f sub i,j f sub 1 f sub j f sub 0 f sup 0 f sup i f sup j f sup 1 f sub 1 sup 2
+f sub i,j f sup 1 f sub j sub 0 f sub i sup j f sup 1 f sub 1 sup 2
+.EN
+.EQ
+f cdot
+f times
+f alpha
+f beta
+f delta
+f theta
+f lambda f chi
+f DELTA f inf f int f sum f pi f partial f
+f ,..., f ... f
+.EN
+.sp
+.EQ
+x0
+x1
+x2
+x(x)[x]x[(x+1)]x(x-0)2-x
+x=1
+1=x
+x+x-x/x/x>x<x>=x<=x->x<-x,x;x:x>>x<<x
+|x||x|x|
+.EN
+.EQ
+x sub i,j x sub 1 x sub j x sub 0 x sup 0 x sup i x sup j x sup 1 x sub 1 sup 2
+x sub i,j x sup 1 x sub j sub 0 x sub i sup j x sup 1 x sub 1 sup 2
+.EN
+.EQ
+x cdot
+x times
+x alpha
+x beta
+x delta
+x theta
+x lambda x chi
+x DELTA x inf x int x sum x pi x partial x
+x ,..., x ... x
+.EN
+.sp
+.EQ
+10
+11
+12
+1(1)[1]1[(1+1)]1(1-0)2-1
+1=1
+1=1
+1+1-1/1/1>1<1>=1<=1->1<-1,1;1:1>>1<<1
+|1||1|1|
+.EN
+.EQ
+1 sub i,j 1 sub 1 1 sub j 1 sub 0 1 sup 0 1 sup i 1 sup j 1 sup 1 1 sub 1 sup 2
+1 sub i,j 1 sup 1 1 sub j sub 0 1 sub i sup j 1 sup 1 1 sub 1 sup 2
+.EN
+.EQ
+1 cdot
+1 times
+1 alpha
+1 beta
+1 delta
+1 theta
+1 lambda 1 chi
+1 DELTA 1 inf 1 int 1 sum 1 pi 1 partial 1
+1 ,..., 1 ... 1
+.EN
+.sp
+.EQ
+00
+01
+02
+0(0)[0]0[(0+1)]0(0-0)2-0
+0=1
+1=0
+0+0-0/0/0>0<0>=0<=0->0<-0,0;0:0>>0<<0
+|0||0|0|
+.EN
+.EQ
+0 sub i,j 0 sub 1 0 sub j 0 sub 0 0 sup 0 0 sup i 0 sup j 0 sup 1 0 sub 1 sup 2
+0 sub i,j 0 sup 1 0 sub j sub 0 0 sub i sup j 0 sup 1 0 sub 1 sup 2
+.EN
+.EQ
+0 cdot
+0 times
+0 alpha
+0 beta
+0 delta
+0 theta
+0 lambda 0 chi
+0 DELTA 0 inf 0 int 0 sum 0 pi 0 partial 0
+0 ,..., 0 ... 0
+.EN
+.sp
+.EQ
+X0
+X1
+X2
+X(X)[X]X[(X+1)]X(X-0)2-X
+X=1
+1=X
+X+X-X/X/X>X<X>=X<=X->X<-X,X;X:X>>X<<X
+|X||X|X|
+.EN
+.EQ
+X sub i,j X sub 1 X sub j X sub 0 X sup 0 X sup i X sup j X sup 1 X sub 1 sup 2
+X sub i,j X sup 1 X sub j sub 0 X sub i sup j X sup 1 X sub 1 sup 2
+.EN
+.EQ
+X cdot
+X times
+X alpha
+X beta
+X delta
+X theta
+X lambda X chi
+X DELTA X inf X int X sum X pi X partial X
+X ,..., X ... X
+.EN
+.sp
+.EQ
+H0
+H1
+H2
+H(H)[H]H[(H+1)]H(H-0)2-H
+H=1
+1=H
+H+H-H/H/H>H<H>=H<=H->H<-H,H;H:H>>H<<H
+|H||H|H|
+.EN
+.EQ
+H sub i,j H sub 1 H sub j H sub 0 H sup 0 H sup i H sup j H sup 1 H sub 1 sup 2
+H sub i,j H sup 1 H sub j sub 0 H sub i sup j H sup 1 H sub 1 sup 2
+.EN
+.EQ
+H cdot
+H times
+H alpha
+H beta
+H delta
+H theta
+H lambda H chi
+H DELTA H inf H int H sum H pi H partial H
+H ,..., H ... H
+.EN
+.sp
+.EQ
+Y0
+Y1
+Y2
+Y(Y)[Y]Y[(Y+1)]Y(Y-0)2-Y
+Y=1
+1=Y
+Y+Y-Y/Y/Y>Y<Y>=Y<=Y->Y<-Y,Y;Y:Y>>Y<<Y
+|Y||Y|Y|
+.EN
+.EQ
+Y sub i,j Y sub 1 Y sub j Y sub 0 Y sup 0 Y sup i Y sup j Y sup 1 Y sub 1 sup 2
+Y sub i,j Y sup 1 Y sub j sub 0 Y sub i sup j Y sup 1 Y sub 1 sup 2
+.EN
+.EQ
+Y cdot
+Y times
+Y alpha
+Y beta
+Y delta
+Y theta
+Y lambda Y chi
+Y DELTA Y inf Y int Y sum Y pi Y partial Y
+Y ,..., Y ... Y
+.EN
+.sp
+.EQ
+partial 0
+partial 1
+partial 2
+partial ( partial )[ partial ] partial [( partial +1)] partial ( partial -0)2- partial 
+partial =1
+1= partial 
+partial + partial - partial / partial / partial > partial < partial >= partial <= partial -> partial <- partial , partial ; partial : partial >> partial << partial 
+| partial || partial | partial |
+.EN
+.EQ
+partial sub i,j partial sub 1 partial sub j partial sub 0 partial sup 0 partial sup i partial sup j partial sup 1 partial sub 1 sup 2
+partial sub i,j partial sup 1 partial sub j sub 0 partial sub i sup j partial sup 1 partial sub 1 sup 2
+.EN
+.EQ
+partial cdot
+partial times
+partial alpha
+partial beta
+partial delta
+partial theta
+partial lambda partial chi
+partial DELTA partial inf partial int partial sum partial pi partial partial partial 
+partial ,..., partial ... partial 
+.EN
+.sp
+.EQ
+pi 0
+pi 1
+pi 2
+pi ( pi )[ pi ] pi [( pi +1)] pi ( pi -0)2- pi 
+pi =1
+1= pi 
+pi + pi - pi / pi / pi > pi < pi >= pi <= pi -> pi <- pi , pi ; pi : pi >> pi << pi 
+| pi || pi | pi |
+.EN
+.EQ
+pi sub i,j pi sub 1 pi sub j pi sub 0 pi sup 0 pi sup i pi sup j pi sup 1 pi sub 1 sup 2
+pi sub i,j pi sup 1 pi sub j sub 0 pi sub i sup j pi sup 1 pi sub 1 sup 2
+.EN
+.EQ
+pi cdot
+pi times
+pi alpha
+pi beta
+pi delta
+pi theta
+pi lambda pi chi
+pi DELTA pi inf pi int pi sum pi pi pi partial pi 
+pi ,..., pi ... pi 
+.EN
+.sp
+.EQ
+lambda 0
+lambda 1
+lambda 2
+lambda ( lambda )[ lambda ] lambda [( lambda +1)] lambda ( lambda -0)2- lambda 
+lambda =1
+1= lambda 
+lambda + lambda - lambda / lambda / lambda > lambda < lambda >= lambda <= lambda -> lambda <- lambda , lambda ; lambda : lambda >> lambda << lambda 
+| lambda || lambda | lambda |
+.EN
+.EQ
+lambda sub i,j lambda sub 1 lambda sub j lambda sub 0 lambda sup 0 lambda sup i lambda sup j lambda sup 1 lambda sub 1 sup 2
+lambda sub i,j lambda sup 1 lambda sub j sub 0 lambda sub i sup j lambda sup 1 lambda sub 1 sup 2
+.EN
+.EQ
+lambda cdot
+lambda times
+lambda alpha
+lambda beta
+lambda delta
+lambda theta
+lambda lambda lambda chi
+lambda DELTA lambda inf lambda int lambda sum lambda pi lambda partial lambda 
+lambda ,..., lambda ... lambda 
+.EN

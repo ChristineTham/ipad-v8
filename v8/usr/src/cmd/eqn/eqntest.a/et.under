@@ -1,0 +1,4 @@
+.nf
+.EQ
+x under ~~~ x sub i under ~~~ {x sub i} under ~~~ {x sub i sup i} under
+.EN

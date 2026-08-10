@@ -1,0 +1,11 @@
+.nf
+.PS
+box "thing 1"
+spline -> right 1.5 down .2 then left 1 down .2 then down .2 right 1.5 
+box "thing 2"
+.PE
+.PS 4i
+box "thing 1"
+spline -> right 1.5 down .2 then left 1 down .2 then down .2 right 1.5 
+box "thing 2"
+.PE

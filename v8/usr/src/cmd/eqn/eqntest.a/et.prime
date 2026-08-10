@@ -1,0 +1,22 @@
+.nf
+.EQ
+tdefine sup' X sup "\s+3\v'.35m'\(fm\v'-.35m'\s-3" X
+tdefine sup'' X sup "\s+3\v'.35m'\(fm\(fm\v'-.35m'\s-3" X
+ndefine sup' X sup ' X
+ndefine sup'' X sup '' X
+.EN
+.EQ
+x sub i sup' ~~~
+x sub X sup'' ~~~
+x sup' ~~~
+X sup'' ~~~
+X sub x sup' ~~~
+.EN
+.EQ
+x sup prime ~~ x sub i sup prime ~~
+X sup prime ~~ X sub i sup prime ~~
+alpha sup prime ~~ alpha sub i sup prime ~~
+f sup prime ~~ f sub i sup prime ~~
+x sub {i sup prime} ~~ x sub {i sup prime} sup 2 ~~
+x sub {i sup prime} ~~ x sub {i sup prime} sup j ~~
+.EN

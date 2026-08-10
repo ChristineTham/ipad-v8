@@ -1,0 +1,172 @@
+.PS
+u = 0.1i;
+h = 2*u; hs = h+2*u;
+v = 2*u; vs = v+2*u;
+
+define ln %
+	{line $3 from Here to Here + $1*hs,$2*vs chop 1.4*u;}
+	move to Here + $1*hs,$2*vs
+%
+define lf %
+	line $3 to Here + $1*hs,$2*vs
+%
+
+define digit %
+	"`bd digit`";
+	{
+		move right 2*u; "`d = $1`" ljust;
+	}
+%
+define nont %
+	"`$1`";
+	{
+		move right 2*u; "`v = $2`" ljust;
+	}
+%
+define chain %
+	nont(exp,$1);
+	ln(0,-0.6);
+	nont(num,$2);
+	ln(0,-0.6);
+	digit($3)
+%
+
+nont(exp,119); {ln(0,-0.6); "\f8+\fP";}
+{
+	ln(1.5,-0.6);
+	chain(4,4,4);
+}
+ln(-2.5,-1.2);
+nont(exp,115); {ln(0,-0.6); "\f8*\fP";}
+{
+	ln(1.5,-0.6);
+	chain(5,5,5);
+}
+ln(-2,-1.2);
+nont(exp,23);
+ln(0,-0.6);
+nont(num,23);
+{
+	ln(1,-0.6);
+	digit(3);
+}
+ln(-1.2,-1.2);
+nont(num,2);
+ln(0,-0.6);
+digit(2);
+.PE
+.PS
+u = 0.1i;
+h = 3*u; hs = h+2*u;
+v = 4*u; vs = v+2*u;
+
+define ln %
+	{line $3 from Here to Here + $1*hs,$2*vs chop 1.5*u;}
+	move to Here + $1*hs,$2*vs
+%
+define lf %
+	line $3 to Here + $1*hs,$2*vs
+%
+"\f8;\f1"
+{
+	ln(-2,-0.6); "\f8:=\f1";
+	{
+		ln(-0.6,-0.6); "\f8r\f1"
+	}
+	{
+		ln(0.6,-0.6); "\f8m\f1"
+	}
+}
+ln(2,-0.6); "\f8while\f1"
+{
+	ln(-1.2,-0.6); "\f8>\f1";
+	{
+		ln(-0.6,-0.6); "\f8r\f1"
+	}
+	{
+		ln(0.6,-0.6); "\f8n\f1"
+	}
+}
+ln(1.2,-0.6); "\f8:=\f1"
+{
+	ln(-0.6,-0.6); "\f8r\f1"
+}
+ln(0.6,-0.6); "\f8-\f1";
+{
+	ln(-0.6,-0.6); "\f8r\f1";
+}
+ln(0.6,-0.6); "\f8n\f1"
+.PE
+.PS
+u = 0.1i;
+h = 5*u; hs = h+2*u;
+v = 2*u; vs = v+2*u;
+
+define ln %
+	{line $3 from Here to Here + $1*hs,$2*vs chop u*($1*$1+$2*$2+4.75)/5;}
+	move to Here + $1*hs,$2*vs
+%
+define lf %
+	line $3 to Here + $1*hs,$2*vs
+%
+bs = 3*u;
+define stmt %
+	"\f8;\f1";
+	{
+		move left bs; "\(bu"; move left u; "\f2b\f1" rjust;
+	}
+%
+define while %
+	"\f8while\f1"
+	{
+		move left bs; "\(bu"; move left u; "\f2b\f1" rjust;
+	}
+	{
+		move right bs; "\(bu"; move right u; "\f2out\f1" ljust;
+	}
+%
+define pwhile %
+	while;
+	{
+		ln(1,-1,dotted);
+		move left bs;
+		line <- to Here + -hs+2*bs,vs;
+	}
+	{
+		ln(-1,-1,dotted);
+		"\f8EXP\f1";
+	}
+%
+define pseq %
+	stmt;
+	{
+		ln(-1,-1,dotted);
+		move left bs;
+		lf(1,1,<-);
+		lf(1,-1,->);
+		move right bs;
+		ln(-1,1,dotted);
+	}
+%
+
+pwhile;
+move down vs right hs;
+pseq;
+{
+	move down vs left hs; stmt;
+}
+move down vs right hs;
+pseq;
+{
+	move down vs right hs; stmt;
+}
+move down vs left hs;
+pwhile;
+move down vs right hs;
+pseq;
+{
+	move down vs right hs; stmt;
+}
+move down vs left hs;
+stmt;
+.PE

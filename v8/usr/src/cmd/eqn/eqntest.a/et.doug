@@ -1,0 +1,70 @@
+.nf
+.EQ
+define BR "bold r"
+define r0 "bold r sub 0"
+define cm "{ roman cosh ~ mu }"
+define m0 "mu sub 0"
+define c0 "{ roman cosh ~ m0 }"
+.EN
+.EQ
+G( BR | r0 | omega ) ~=~
+G sub k ( BR | r0 ) ~=~
+i pi H sub 0 sup 1 (kR)
+.EN
+.br
+.EQ
+~~~~~~~~~~~~~=~ 4 pi i ~ left {
+sum from m=0 to inf 
+left [ { Se sub m (h,~~ cos ~ theta sub 0 ) }
+ over { M sub m sup e (h) } right ] ~
+Se sub m (h,~ cos ~ theta ) .
+.EN
+.in 1.3i
+.EQ
+. ~ left { pile
+ { Je sub m (h,~ c0 ) He sub m (h,~ cm ) ) ; 
+ above
+  Je sub m (h,~ cm ) He sub m (h,~ c0 ); }
+~~ pile { mu ~>~ m0 
+ above  m0 ~>~ mu }
+.EN
+.in 1i
+.EQ
++~ sum from m=1 to inf left [
+ { So sub m (h,~ cos ~ theta sub 0 ) }
+ over { M sub m sup 0 (h) } right ] ~ .
+.EN
+.in 1.3i
+.EQ
+. ~ left "" ~  { left { pile
+ { Jo sub m ( h,~ c0 ) Ho sub m (h,~ cm ); 
+ above
+  Jo sub m (h,~ cm ) Ho sub m (h,~ c0 ); } 
+~~ pile { mu ~>~ m0 
+ above  m0 ~>~ mu }
+} right }
+.EN
+.sp .5i
+.in 0
+.EQ
+r(k)~=~-~ { PHI sub + (k) }
+ over { PHI sub + (-k) } ~=~
+{ (k-k sub 0 ) } over { (k+ k sub 0 ) }
+size 28 prod from n=1 to inf
+{ left [ sqrt { 1- left ( ka over { pi n } right ) sup 2 }
+ - i left ( ka over { pi n } right ) right ]
+over left [ sqrt { 1 - left ( ka over { pi n } right ) sup 2 }
+ + i left ( ka over { pi n } right ) right ] }
+~e sup { 2iak/ pi n } .
+.EN
+.in +1i
+.sp 1i
+.EQ
+. ~ size 28 prod from m=1 to inf {
+ left [ sqrt { 1 - left ( ka over { pi mu sub m } right ) }
+ + i left ( ka over { pi mu sub m }  right ) right ]
+ over
+ left [ sqrt { 1 - left ( ka over { pi mu sub m } right ) sup 2 }
+ - i left ( ka over { pi mu sub m } right ) right ] }
+~e sup { -2iak/ pi m }
+.EN

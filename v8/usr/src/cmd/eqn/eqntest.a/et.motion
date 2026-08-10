@@ -1,0 +1,27 @@
+.EQ
+delim $$
+.EN
+.nf
+.vs 20p
+int sub 0 sup inf	$ int sub 0 sup inf$
+int sub back 30 down 30 0 sup up 40 inf	$ int sub back 30 down 30 0 sup up 40 inf$
+int sub back 30 down 30 size 7 0 sup up 40 size 7 inf	$ int sub back 30 down 30 size 7 0 sup up 40 size 7 inf$
+.sp 2
+.sp 2
+int from 0 to 1	$int from 0 to 1$
+int from back 100 0 to fwd 100 1	$int from back 100 0 to fwd 100 1$
+int from back 150 0 to fwd 150 1	$int from back 150 0 to fwd 150 1$
+$x up 9 y$
+.nf
+.EQ
+gsize 9
+define solid % "\b'\(bv\(bv'" %
+define dotted % "\s7\b'\(or\(or\(or'\s0" %
+.EN
+\l'3i'
+.EQ (20)
+solid from { down 60 {u sub n} } ~~ solid from { down 60 {u sub n-1}} ~~ ... ~~
+solid from { down 60 {u sub {n-k sub i +1}}} ~~ fat dotted from { down 60 {u- epsilon sub i}}
+~~ solid from { down 60 {u sub n-k sub i}} ~~ (k sub i ~ roman defined ) ,
+.EN
+\l'3i'

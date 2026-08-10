@@ -1,0 +1,83 @@
+.nf
+.EQ
+x sub i )x
+x sub j )x
+x sub K )x
+x sub H )x
+x sub 1 )x
+x sub 2 )x
+.EN
+.EQ
+x sup i )x
+x sup j )x
+x sup K )x
+x sup H )x
+x sup 1 )x
+x sup 2 )x
+.EN
+.EQ
+(x)x
+(1)x
+(y)x
+(K)x
+(H)x
+(2)x
+.EN
+.EQ
+(x )x
+(1 )x
+(y )x
+(K )x
+(H )x
+(2 )x
+.EN
+.sp
+.EQ
+x sup i sup j )x
+x sup i sup 1 )x
+x sup i sup 2 )x
+x sup i sup K )x
+x sup i sup H )x
+x sup i sup n )x
+x sup i sup m )x
+.EN
+.sp
+.EQ
+x sup 2 sup j )x
+x sup 2 sup 1 )x
+x sup 2 sup 2 )x
+x sup 2 sup K )x
+x sup 2 sup H )x
+x sup 2 sup n )x
+x sup 2 sup m )x
+.EN
+.EQ
+x sub i sub j )x
+x sub i sub 1 )x
+x sub i sub 2 )x
+x sub i sub K )x
+x sub i sub H )x
+x sub i sub n )x
+x sub i sub m )x
+.EN
+.sp
+.EQ
+x sub 2 sub j )x
+x sub 2 sub 1 )x
+x sub 2 sub 2 )x
+x sub 2 sub K )x
+x sub 2 sub H )x
+x sub 2 sub n )x
+x sub 2 sub m )x
+.EN
+.EQ
+gfont R
+(x)xxxx
+(y)xxxx
+(1)xxxx
+(2)xxxx
+(X)xxxx
+(Y)xxxx
+(x+y)xxxx
+(X-Y)xxxx
+.EN

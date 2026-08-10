@@ -1,0 +1,79 @@
+.EQ
+delim $$
+.EN
+.EQ
+{A sub B} {A sub B} {A sub B} {A sub B} {A sub B}
+.EN
+.sp
+.EQ
+P(XXXX~ k|X) ~=~ max from {1<i<m} ~P(XXXX ~i|X)
+.EN
+.sp
+.EQ
+D sub 2 ~=~ left [ S sup -1 ~-~ {d sup T ~(S sup -1 ) sup 2 ~d~(S sup -1 )
+sup 2} over
+{d sup T~(S sup -1 ) sup 3 ~d } right ] ~cdot~ d
+.EN
+.sp
+.EQ
+M sub g ~=~ left ( pile {{X bar sub 1 sup {(g)}} above . above . above
+. above {X bar sub n sup {(g)} }} right ) ~~,g ~=~ 1,2
+.EN
+.sp
+.EQ
+W ~=~ left [ pile { {W sub 11} above {W sub 21}}
+pile { {W sub 12} above {W sub 22}} right ]
+~~and~~
+T ~=~ left [ pile { {T sub 11} above {T sub 21}}
+pile { {T sub 12} above {T sub 22}} right ]
+.EN
+.sp
+.EQ
+X bar sub i sup {(g)} ~=~ 1 over N sub g ~sum from r=1 to N sub g
+X sub ir sup {(g)}
+~~, lpile {{i~=~1,2...n} over {g~=~1,2}}
+.EN
+.sp
+.EQ
+S sub ij ~=~ 1 over {N sub 1 + N sub 2 - 2}
+left [ mark ~sum from r=1 to N sub 1
+(X sub ir sup {(1)} ~-~ X bar sub i sup {(1)} )
+(X sub jr sup {(1)} ~-~ X bar sub j sup {(1)} ) ~+~
+.EN
+.sp
+.EQ
+sum from r=1 to N sub 2
+(X sub ir sup {(2)} ~-~ X bar sub i sup {(2)} )
+(X sub jr sup {(2)} ~-~ X bar sub j sup {(2)} ) 
+.EN
+.sp
+.EQ
+IF~ (M sub 2 - M sub 1 ) sup T S sup -1 X ~-~
+0.5(M sub 2 - M sub 1 ) sup T S sup -1 (M sub 2 + M sub 1 )
+~-~ ln( P sub 2 over P sup 1 ) ~<~ 0
+.EN
+.sp
+.EQ
+IF~0.5X sup T (S sub 1 sup -1 ~-~ S sub 2 sup -1 )X ~-~
+(M sub 1 sup T S sub 1 sup -1 ~-~ M sub 2 sup T S sub 2 sup -1 )X ~+~
+.EN
+.sp
+.EQ
+0.5(M sub 1 sup T S sub 1 sup -1 M sub 1 ~-~
+M sub 2 sup T S sub 2 sup -1 M sub 2 ) ~+~
+0.5ln( {P sub 2} over {P sub 1} ) ~+~
+0.5ln( {D sub 2} over {D sub 1} ) ~<~ 0
+.EN
+.sp
+.EQ
+F sub i (X) ~=~ ln(P sub i ) ~-~ 1 over 2 ln(D sub i ) ~+~
+1 over 2 M sub i sup T S sub i sup -1 M sub i ~-~
+1 over 2 X sup T S sub i sup -1 X sup 2 ~+~
+X sup T S sub i sup -1 M sub i
+.EN
+.sp
+.EQ
+w sub ij ~=~ 1 over n ~sum from m=1 to {n sub s} ~~~sum from k=1
+to {n sub {m sub 0}} ( X sub mki - X bar sub m sub i )
+( X sub mki - X bar sub m sub j )
+.EN

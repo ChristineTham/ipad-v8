@@ -1,0 +1,93 @@
+.PS
+box
+arrow right from 2/3 <last box.ne, last box.se>
+.PE
+.PS
+"x" at .5 < (0,0),(1,1) >
+.PE
+.PS 5i
+CRT: circle "DISK"
+"  paper" ljust at  0.25, 0.25
+.PE
+.PS
+define ur "then up right"
+define ul "then up left"
+define dr "then down right"
+define dl "then down left"
+
+spline  down right dr ur ur ur ul ul ul ul dl dl dl dl dr dr
+.PE
+.PS
+box
+.PF
+.PS
+arrow
+.PE
+.PS
+"abc" with .w at 1,2
+.PE
+.PS
+line from 1,0 to 0,0
+X: 1,0
+"x"
+.PE
+.PS
+define L {
+	if "$2" == "" then || else | x = $2; |
+	if "$3" == "" then || else | y = $3; |
+	if "$4" == "" then | n = m; | else | n = $4; |
+	xx=x*hu; vx=xx*(1-n)/2; yy=y*vu; vy=yy*(1+n)/2
+	spline $1 to Here + vx,vy to Here + xx,yy
+	kx = vx/2;		ky = vy/2;
+	mx = (vx+xx)/2;		my = (vy+yy)/2;
+	mxk = mx-kx;		myk = my-ky;
+	vxk = vx-kx;		vyk = vy-ky;
+
+	b = 2*vxk; a = mxk-b;
+	d = 2*vyk; c = myk-d;
+	bcad = b*c - a*d;
+	k = .5*bcad*(a*b+c*d)/(a*a+c*c);
+	ksq = k*k;
+	ta = d*bcad-2*c*k;
+	tb = -b*bcad+2*a*k;
+	ey = (ksq+k*ta/c)/(tb+a*ta/c);
+	ex = (ksq-tb*ey)/ta;
+	 { move to kx+ex,ky+ey; sprintf("%g",n);
+	}
+} x=0; y=0; m=0; # initially
+
+hu = 0.3i; vu = hu;
+define T % { L(,6,3,$1);} %
+
+T(-1.5)
+T(-1)
+T(-.5)
+T(0)
+T(.5)
+T(1)
+T(1.5);
+
+.PE
+.PS 4
+define L %
+	if "$2" == "" then || else | x = $2 * hu; |
+	if "$3" == "" then || else | y = $3 * hu; |
+	{ line $1 to Here + x,y chop c
+	} move to Here + x,y
+%
+x = 0; y = 0; c = 0
+.PE
+.PS
+define S % "$1"; { circle rad .12i at Here; } %
+define F % S($1); { circle rad .1i at Here; } %
+define T % L(-> "$1" above,$2,$3); %
+c = .12; hu = .75; vu = .5
+T(start,1,0); S(0);
+{	T(<,1,1); F(1);
+	{	T(=,1,.75); F(2);
+	}{	T(>,1,-.75); F(3);
+	}
+}{	T(=,1,0); F(4);
+}{	T(>,1,-1); F(5); T(=,1,0); F(6);
+}
+.PE

@@ -1,0 +1,465 @@
+.PS
+b = 0.1i
+a = 1.5*b
+d = a+2*b
+define lleft % move down b left b; line down a left a; move down b left b %
+define ldown % move down b; line down a; move down b %
+define lright % move down b right b; line down a right a; move down b right b %
+"$list$";
+{
+	move down b left 2*b;
+	line down a left a+d; move down b left b; "$list$";
+	{
+		lleft; "$list$"; ldown; "$digit$"; ldown; "$9$";
+	}
+	{
+		move down b; line down a+2*d; move down b; "$-$";
+	}
+	{
+		lright; "$digit$";
+		move down b; line down a+d; move down b; "$5$";
+	}
+}
+{
+	move down b; line down a+3*d; move down b; "$-$";
+}
+{
+	move right b;
+	lright; "$digit$";
+	move down b; line down a+2*d; move down b; "$2$";
+}
+.PE
+.PS
+u = 0.08i;
+h = 3*u; hs = h+2*u;
+v = 2*u; vs = v+2*u;
+
+define ln %
+	{line $3 from Here to Here + $1*hs,$2*vs chop u*1.4;}
+	move to Here + $1*hs,$2*vs
+%
+define lf %
+	line $3 to Here + $1*hs,$2*vs
+%
+"$A$";	 { ln(-1,-1); "$X$";
+	}{ ln(0,-1); "$Y$";
+	}{ ln(1,-1); "$Z$";
+	}
+.PE
+.PS
+"$string$";
+{
+	lleft; "$string$";
+	{ lleft; "$string$"; ldown; "$9$"; }
+	{ ldown; "$-$"; }
+	{ lright; "$string$"; ldown; "$5$"; }
+}
+{
+	ldown; "$-$";
+}
+{
+	lright; "$string$";
+	ldown; "$2$";
+}
+move right 20*b;
+"$string$";
+{
+	lleft; "$string$";
+	ldown; "$9$";
+}
+{
+	ldown; "$-$";
+}
+{
+	lright; "$string$";
+	{
+		lleft; "$string$";
+		ldown; "$5$";
+	}
+	{
+		ldown; "$-$";
+	}
+	{
+		lright; "$string$";
+		ldown; "$2$";
+	}
+}
+.PE
+.PS
+b = 0.1i
+a = 1.5*b
+d = a+2*b
+define lleft % move down b left b; line down a left a; move down b left b %
+define ldown % move down b; line down a; move down b %
+define lright % move down b right b; line down a right a; move down b right b %
+"$list$";
+{
+	lleft; "$list$";
+	{
+		lleft; "$list$";
+		ldown; "$digit$"; ldown; "$9$";
+	}
+	{
+		ldown; "$-$";
+	}
+	{
+		lright; "$digit$"; ldown; "$5$";
+	}
+}
+{
+	ldown; "$-$";
+}
+{
+	lright; "$digit$"; ldown; "$2$";
+}
+move right 20*b;
+"\f2right\fP";
+{
+	lleft; "$letter$"; ldown; "$bd a $";
+}
+{
+	ldown; "$=$";
+}
+{
+	lright; "\f2right\fP";
+	{
+		lleft; "$letter$"; ldown; "$bd b$";
+	}
+	{
+		ldown; "$=$";
+	}
+	{
+		lright; "\f2right\fP";
+		ldown; "$letter$"; ldown; "$ bd c$";
+	}
+}
+.PE
+.PS
+b = 0.1i
+a = 2*b
+h = 6*b; hf = h+2*b;
+d = a+2*b
+define lleft % move down b left b; line down a left h; move down b left b %
+define ldown % move down b; line down a; move down b %
+define lright % move down b right b; line down a right h; move down b right b %
+"$expr.t^=^95-2-$";
+{
+	move down b left 2*b;
+	line down a left 2*h+2*b; move down b left 2*b;
+	"$expr.t^=^95-$";
+	{
+		lleft; "$expr.t^=^9$";
+		ldown; "$term.t^=^9$";
+		ldown; "$9$";
+	}
+	{
+		move down b; line down a+2*d; move down b; "$-$";
+	}
+	{
+		lright; "$term.t^=^5$";
+		move down b; line down a+d; move down b; "$5$";
+	}
+}
+{
+	move down b; line down a+3*d; move down b; "$-$";
+}
+{
+	move right b;
+	lright; "$term.t^=^2$";
+	move down b; line down a+2*d; move down b; "$2$";
+}
+.PE
+.PS
+scale = 50
+{
+	line down 5
+	line left 6
+	line up 7
+	line right 8
+}
+move right 50;
+{
+	line down 5
+	line left 6
+	line up 7
+	line right 8
+	line down 9
+	line left 10
+	line up 11
+	line right 12
+	line down 13
+	line left 14
+	line up 15
+	line right 16
+	line down 17
+	line left 18
+	line up 19
+	line right 20
+}
+move right 100
+{
+	line down 5
+	line left 6
+	line up 7
+	line right 8
+	line down 9
+	line left 10
+	line up 11
+	line right 12
+	line down 13
+	line left 14
+	line up 15
+	line right 16
+	line down 17
+	line left 18
+	line up 19
+	line right 20
+	line down 21
+	line left 22
+	line up 23
+	line right 24
+	line down 25
+	line left 26
+	line up 27
+	line right 28
+	line down 29
+	line left 30
+	line up 31
+	line right 32
+	line down 33
+	line left 34
+	line up 35
+	line right 36
+	line down 37
+	line left 38
+	line up 39
+	line right 40
+	line down 41
+	line left 42
+	line up 43
+	line right 44
+	line down 45
+	line left 46
+	line up 47
+	line right 48
+	line down 49
+	line left 50
+	line up 51
+	line right 52
+	line down 53
+	line left 54
+	line up 55
+	line right 56
+	line down 57
+	line left 58
+	line up 59
+	line right 60
+	line down 61
+	line left 62
+	line up 63
+	line right 64
+	line down 65
+	line left 66
+	line up 67
+	line right 68
+}
+.PE
+.PS
+scale = 1;
+b = 0.1i
+a = 1.5*b
+d = a+2*b
+define lleft % move down b left 2*b; line down 2*a+b left 2*d-b; move down b left b %
+define ldown % move down b; line down a; move down b %
+define lright % move down b right 2*b; line down 2*a+b right 2*d-b; move down b right b %
+
+"$expr$"; { move right b; " {print $-$}" ljust; }
+{
+	ldown; "$-$";
+}
+{
+	lright;
+	"$term$"; { move right b; " {print $5$}" ljust; }
+	ldown; "$9$";
+}
+
+lleft;
+"$expr$"; { move right b; " {print $-$}" ljust; }
+{
+	ldown; "$-$";
+}
+{
+	lright;
+	"$term$"; { move right b; " {print $5$}" ljust; }
+	ldown; "$5$";
+}
+
+lleft;
+"$expr$";
+ldown; "$term$"; { move right b; " {print $2$}" ljust; }
+ldown; "$2$";
+.PE
+.PS
+b = 0.1i
+a = 2*b
+h = 6*b; hf = h+2*b;
+d = a+2*b
+define lleft % move down b left b; line down a left h; move down b left b %
+define ldown % move down b; line down a; move down b %
+define lright % move down b right b; line down a right h; move down b right b %
+"$expr.t^=^95-2-$";
+{
+	move down b left 2*b;
+	line down a left 2*h+2*b; move down b left 2*b;
+	"$expr.t^=^95-$";
+	{
+		lleft; "$expr.t^=^9$";
+		ldown; "$term.t^=^9$";
+		ldown; "$9$";
+	}
+	{
+		move down b; line down a+2*d; move down b; "$-$";
+	}
+	{
+		lright; "$term.t^=^5$";
+		move down b; line down a+d; move down b; "$5$";
+	}
+}
+{
+	move down b; line down a+3*d; move down b; "$-$";
+}
+{
+	move right b;
+	lright; "$term.t^=^2$";
+	move down b; line down a+2*d; move down b; "$2$";
+}
+.PE
+.PS
+u=0.02i;
+{
+	line to Here + 0*u,-5*u
+	line to Here + -6*u,0*u
+	line to Here + 0*u,7*u
+	line to Here + 8*u,0*u
+}
+move right 1.0i;
+{
+	line to Here + 0*u,-5*u
+	line to Here + -6*u,0*u
+	line to Here + 0*u,7*u
+	line to Here + 8*u,0*u
+	line to Here + 0*u,-9*u
+	line to Here + -10*u,0*u
+	line to Here + 0*u,11*u
+	line to Here + 12*u,0*u
+	line to Here + 0*u,-13*u
+	line to Here + -14*u,0*u
+	line to Here + 0*u,15*u
+	line to Here + 16*u,0*u
+	line to Here + 0*u,-17*u
+	line to Here + -18*u,0*u
+	line to Here + 0*u,19*u
+	line to Here + 20*u,0*u
+}
+move right 2.0i
+{
+	line to Here + 0*u,-5*u
+	line to Here + -6*u,0*u
+	line to Here + 0*u,7*u
+	line to Here + 8*u,0*u
+	line to Here + 0*u,-9*u
+	line to Here + -10*u,0*u
+	line to Here + 0*u,11*u
+	line to Here + 12*u,0*u
+	line to Here + 0*u,-13*u
+	line to Here + -14*u,0*u
+	line to Here + 0*u,15*u
+	line to Here + 16*u,0*u
+	line to Here + 0*u,-17*u
+	line to Here + -18*u,0*u
+	line to Here + 0*u,19*u
+	line to Here + 20*u,0*u
+	line to Here + 0*u,-21*u
+	line to Here + -22*u,0*u
+	line to Here + 0*u,23*u
+	line to Here + 24*u,0*u
+	line to Here + 0*u,-25*u
+	line to Here + -26*u,0*u
+	line to Here + 0*u,27*u
+	line to Here + 28*u,0*u
+	line to Here + 0*u,-29*u
+	line to Here + -30*u,0*u
+	line to Here + 0*u,31*u
+	line to Here + 32*u,0*u
+	line to Here + 0*u,-33*u
+	line to Here + -34*u,0*u
+	line to Here + 0*u,35*u
+	line to Here + 36*u,0*u
+	line to Here + 0*u,-37*u
+	line to Here + -38*u,0*u
+	line to Here + 0*u,39*u
+	line to Here + 40*u,0*u
+	line to Here + 0*u,-41*u
+	line to Here + -42*u,0*u
+	line to Here + 0*u,43*u
+	line to Here + 44*u,0*u
+	line to Here + 0*u,-45*u
+	line to Here + -46*u,0*u
+	line to Here + 0*u,47*u
+	line to Here + 48*u,0*u
+	line to Here + 0*u,-49*u
+	line to Here + -50*u,0*u
+	line to Here + 0*u,51*u
+	line to Here + 52*u,0*u
+	line to Here + 0*u,-53*u
+	line to Here + -54*u,0*u
+	line to Here + 0*u,55*u
+	line to Here + 56*u,0*u
+	line to Here + 0*u,-57*u
+	line to Here + -58*u,0*u
+	line to Here + 0*u,59*u
+	line to Here + 60*u,0*u
+	line to Here + 0*u,-61*u
+	line to Here + -62*u,0*u
+	line to Here + 0*u,63*u
+	line to Here + 64*u,0*u
+	line to Here + 0*u,-65*u
+	line to Here + -66*u,0*u
+	line to Here + 0*u,67*u
+	line to Here + 68*u,0*u
+}
+.PE
+.PS
+b = 0.1i
+a = 1.5*b
+d = a+2*b
+define lleft % move down b left 2*b; line down 2*a+b left 2*d-b; move down b left b %
+define ldown % move down b; line down a; move down b %
+define lright % move down b right 2*b; line down 2*a+b right 2*d-b; move down b right b %
+
+"$expr$"; { move right b; "\f8 {\f1print\f8'-'}\fP" ljust; }
+{
+	ldown; "\f8-\fP";
+}
+{
+	lright;
+	"$term$"; { move right b; "\f8 {\f1print\f8'5'}\fP" ljust; }
+	ldown; "\f82\fP";
+}
+
+lleft;
+"$expr$"; { move right b; "\f8 {\f1print\f8'-'}\fP" ljust; }
+{
+	ldown; "\f8-\fP";
+}
+{
+	lright;
+	"$term$";"$term$"; { move right b; "\f8 {\f1print\f8'3'}\fP" ljust; }
+	ldown; "\f85\fP";
+}
+
+lleft;
+"$expr$";
+ldown; "$term$"; { move right b; "\f8 {\f1print\f8'2'}\fP" ljust; }
+ldown; "\f82\fP";
+.PE

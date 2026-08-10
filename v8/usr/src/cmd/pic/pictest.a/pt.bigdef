@@ -1,0 +1,42 @@
+.EQ
+delim $$
+.EN
+.PS
+define Flight2 %
+
+	# recompute eta because we now want to find the midpoint
+	# of the flight.  however, now the flight must take off
+	# in the direction of tau, not the direction given by h
+	# and eta, computed using sin(eta) and sin(tau)
+
+	eta = atan2(h,r/2);
+	seta = sin(eta); stau = sin(tau);
+	if seta*stau >= 0 then | side = 1 | else | side = -1 |
+	teta = h/seta; teta = max(teta,-teta);
+	ma = eta*side+theta;
+	O : "";
+	P : "" at O + px,py
+	G : "" at O + teta*cos(ma),teta*sin(ma);
+	if ctau*ceta >= 0 then
+	|
+		# take-off fly and land
+
+		ttau = h/stau; ttau = max(ttau,-ttau);
+		A : [	GuidePP(teta,eta*side+theta,ttau,tau+theta);
+		] with .O at O;
+		B : [	GuidePP(teta,pi-eta*side+theta,ttau,pi-tau+theta);
+		] with .O at Here + px,py;
+		spline $1 from A.B to A.G to B.G to B.B
+	|else
+	|
+		# take-off backwards
+
+		ceiling = max(h,-h);
+		A : [	GuidePP(ceiling,pi*side/2+theta,ceiling,tau+theta);
+		] with .O at O;
+		B : [	GuidePP(ceiling,pi*side/2+theta,ceiling,pi-tau+theta);
+		] with .O at Here + px,py;
+		spline $1 from A.B to A.G to G to B.G to B.B
+	|
+%
+.PE

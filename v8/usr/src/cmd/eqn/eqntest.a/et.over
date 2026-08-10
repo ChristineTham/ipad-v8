@@ -1,0 +1,35 @@
+.nf
+.EQ
++ a over b +
+.EN
+.EQ
++ ab over c +
+.EN
+.EQ
++ a over bc +
+.EN
+.EQ
++ ab over cd +
+.EN
+.EQ
++ abc over d
+.EN
+.EQ
++ a over bcd +
+.EN
+.EQ
++ ab over cdef +
+.EN
+.EQ
++ ab over cdefg +
+.EN
+.nf
+XXXXXX
+.EQ
+1 over 2
+.EN
+XXXXXX
+.EQ
+123 over 345
+.EN
+XXXXXXX

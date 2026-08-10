@@ -1,0 +1,227 @@
+.PS
+u = 0.08i;
+h = 3*u; hs = h+2*u;
+v = 2*u; vs = v+2*u;
+
+define ln %
+	{line $3 from Here to Here + $1*hs,$2*vs chop u*1.4;}
+	move to Here + $1*hs,$2*vs
+%
+define lf %
+	line $3 to Here + $1*hs,$2*vs
+%
+.PE
+.PS
+"$A$";	 { ln(-1,-1); "$X$";
+	}{ ln(0,-1); "$Y$";
+	}{ ln(1,-1); "$Z$";
+	}
+.PE
+.PS
+define uminus %
+	"$E$"; { ln(-1,-1); "$-$"; }; ln(1,-1);
+%
+define parens %
+	"$E$"; { ln(-1,-1); "\f8(\f1"; }{ ln(1,-1);  "\f8)\f1"; };
+	ln(0,-1);
+%
+define id %
+	"$E$"; ln(0,-1); "$ID$";
+%
+uminus();
+parens();
+"$E$";	 { ln(0,-1);  "$+$";
+	}{ ln(-1,-1); id();
+	}{ ln(1,-1);  id();
+	}
+.PE
+.PS
+{	move right 2*hs;
+	"$E$"
+}
+{	move right 5*hs; "$=>$"; move right 2*hs;
+	uminus(); "$E$";
+}
+move down 2*vs;
+{	"$=>$"; move right 2*hs;
+	uminus(); parens(); "$E$";
+}
+{	move right 5*hs; "$=>$"; move right 2*hs;
+	uminus(); parens();
+	"$E$";	 { ln(0,-1);  "$+$";
+		}{ ln(-1,-1); "$E$";
+		}{ ln(1,-1);  "$E$";
+		}
+}
+move down 4*vs;
+{	"$=>$"; move right 2*hs;
+	uminus(); parens();
+	"$E$";	 { ln(0,-1);  "$+$";
+		}{ ln(-1,-1); id();
+		}{ ln(1,-1);  "$E$";
+		}
+}
+{	move right 5*hs; "$=>$"; move right 2*hs;
+	uminus(); parens();
+	"$E$";	 { ln(0,-1);  "$+$";
+		}{ ln(-1,-1); id();
+		}{ ln(1,-1);  id();
+		}
+}
+.PE
+.PS
+{
+	"$E$";	 { ln(0,-1);  "$+$";
+		}{ ln(-1,-1); id();
+		}{ ln(1,-1);"$E$";
+			 { ln(0,-1);  "$star$";
+			}{ ln(-1,-1); id();
+			}{ ln(1,-1);  id();
+			}
+		}
+	move down 4*vs; "(a)"
+}
+move right 6*hs;
+{
+	"$E$";	 { ln(0,-1);  "$star$";
+		}{ ln(1,-1); id();
+		}{ ln(-1,-1);"$E$";
+			 { ln(0,-1);  "$+$";
+			}{ ln(-1,-1); id();
+			}{ ln(1,-1);  id();
+			}
+		}
+	move down 4*vs; "(b)"
+}
+.PE
+.PS
+u = 0.08i;
+h = 3*u; hs = h+2*u;
+v = 4*u; vs = v+2*u;
+
+define ln %
+	{line $3 from Here to Here + $1*hs,$2*vs chop u*(1.4 $4);}
+	move to Here + $1*hs,$2*vs
+%
+define lf %
+	line $3 to Here + $1*hs,$2*vs
+%
+.PE
+.PS
+define tree %
+	 { "`$1`";
+	}{ move down u left 0.5*u;
+	   line left 0.6*h down 1.75*u;
+	   line right 0.6*h+0.5*u;
+		 { move down 1.2*u; "`$2 sub $3`";
+		}
+	   line right 0.6*h+0.5*u;
+	   line left 0.6*h up 1.75*u;
+	}
+%
+define ifthen %
+	 "`stmt`";
+	 { ln(-1.5,-1); "`IF`";
+	}{ ln(-0.5,-1); tree(cond,C,$1);
+	}{ ln(0.5,-1); "`THEN`";
+	}
+	ln(1.5,-1);
+%
+define ifelse %
+	 "`stmt`";
+	 { ln(-1.5,-1); "`IF`";
+	}{ ln(-0.5,-1); tree(cond,C,$1);
+	}{ ln(0.5,-1); "`THEN`";
+	}{ ln(1.5,-1); 
+	}{ ln(2.5,-1); "`ELSE`";
+	}{ ln(3.5,-1); 
+	}
+	 { move right (3.5-$3*2)*hs down vs; tree(stmt,S,$2)
+	}
+	move right (1.5+$3*2)*hs down vs;
+%
+ifelse(1,1,1);
+ifelse(2,2,1);
+tree(stmt,S,3);
+.PE
+.PS
+ifthen(1);
+ifelse(2,1,1);
+tree(stmt,S,2);
+.PE
+.PS
+ifelse(1,2,0);
+ifthen(2);
+tree(stmt,S,1);
+.PE
+.PS
+define wiggle %
+	spline $1 to Here + u/2,u/2 to Here + u,-u/2 to Here + 3*u/2,0
+%
+ { circle radius 1.3*u at Here;
+}{ "$s sub 0$";
+}{ move up vs right 2*hs; "path labeled $a sup i$";
+}{ move down vs right 2*hs; "path labeled $a sup j$";
+}
+move right 4*hs;
+ { ellipse wid 1.5*hs ht vs at Here;
+}{ "$s sub i~=~s sub j$";
+}
+move right 0.75*hs;
+wiggle();wiggle();wiggle();wiggle();wiggle();wiggle();
+spline -> to Here + u/2,u/2 to Here + u,-u/2 to Here + 3*u/2,0 to Here + 2*u,0 to Here +5*u/2,0 to Here +7*u/2,0;
+move right 0.8*u;
+ { circle radius 1.2*u at Here;
+}{ circle radius 1.4*u at Here;
+}{ "$f$";
+}
+.PE
+.PS
+u = 0.08i;
+h = 3*u; hs = h+2*u;
+v = 4*u; vs = v+2*u;
+
+define ln %
+	{line $3 from Here to Here + $1*hs,$2*vs chop u*(1.4 $4);}
+	move to Here + $1*hs,$2*vs
+%
+define lf %
+	line $3 to Here + $1*hs,$2*vs
+%
+.PE
+.PS
+define ifthen %
+	 "`S`";
+	 { ln(-1.5,-1); "`i`";
+	}{ ln(-0.5,-1); "`C`"; $1
+	}{ ln(0.5,-1); "`t`";
+	}
+	ln(1.5,-1);
+%
+define ifelse %
+	 "`stmt`";
+	 { ln(-1.5,-1); "`i`";
+	}{ ln(-0.5,-1); "`C`"; $1
+	}{ ln(0.5,-1); "`t`";
+	}{ ln(1.5,-1); "`S`"; $2
+	}{ ln(2.5,-1); "`e`";
+	}{ ln(3.5,-1);  "`S`"; $3
+	}
+%
+ifthen(ln(0,-0.5);"`b`";);
+ifelse(ln(0,-0.5);"`b`";,ln(0,-0.5);"`a`";,ln(0,-0.5);"`a`";);
+.PE
+.PS
+ifthen(); "`S`";
+.PE
+.PS
+ifthen(ln(0,-0.5); "\f8b\f1";); "`S`";
+.PE
+.PS
+ifthen(ln(0,-0.5); "\f8b\f1";);
+ifelse();
+.PE
+.PS
+ifthen( ln(0,-0.5);"\f8b\f1"; );
+ifelse( ln(0,-0.5);"\f8a\f1"; );
+.PE

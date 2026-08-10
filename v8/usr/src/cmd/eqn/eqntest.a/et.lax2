@@ -1,0 +1,10 @@
+.EQ
+M sub { k prime k } sup { n prime n } ( r vec sub o ) ~=~
+1 over A int
+e sup { -i k vec prime cdot rho vec }
+F sub { n prime } (z) sup *
+{ e sup { - lambda ( r vec - r vec sub o ) } } over
+{ | r vec - r vec sub o | }
+e sup { i k vec cdot l vec }
+F sub n (z) d l vec dz
+.EN A2

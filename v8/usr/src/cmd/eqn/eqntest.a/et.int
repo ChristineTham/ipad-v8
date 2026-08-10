@@ -1,0 +1,107 @@
+.if n .ls 2
+.nf
+.EQ
+delim $$
+.EN
+.ta 1i
+.nf
+
+
+Gamma	$GAMMA (z) ~~=~~ int sub 0 sup inf  t sup {z-1} e sup -t dt$
+Error	$ roman erf (z) = 2 over sqrt pi int sub 0 sup z e sup {-t sup 2} dt$
+.nf
+.EQ
+int
+~~~~ int sub 0 sup pi ~~ int sub {- pi} sup pi ~~ int sub {-2 pi} sup {2 pi} f(x)dx
+.EN
+XXXXXX
+.EQ
+int sub 0 sup 1
+~~~~ int sub 0 sup pi ~~ int sub {- pi} sup pi ~~ int sub {-2 pi} sup {2 pi} f(x)dx
+.EN
+XXXXXXXXX
+.EQ
+int from 0 to 1
+~~~~ int sub 0 sup pi ~~ int sub {- pi} sup pi ~~ int sub {-2 pi} sup {2 pi} f(x)dx
+.EN
+XXXXXXXX
+.EQ
+= int int =
+~~~~ int sub 0 ~~ int sup pi ~~ int sub i ~~ int sup k f(x)dx
+.EN
+.EQ
+= int int =
+.EN
+xxxxx
+.EQ
+PI
+~~~~ PI sub 0 sup pi ~~ PI sub {- pi} sup pi ~~ PI sub {-2 pi} sup {2 pi} f(x)dx
+.EN
+xxxx
+.EQ
+PI sub x sup x ~~ PI sub 1 sup 1 ~~
+PI sub -1 sup 1 ~~ PI sub 1 sup 2 ~~ PI sub x sup 1
+.EN
+.ps 9
+.EQ
+gsize 9
+.EN
+.EQ L
+lineup + ~ sum ~ GAMMA sub r over 2 ~ PI sub
+{x sub n-k+1} sup
+{roman min left ( x sub n-k , x sub n + {2E sub n} over {GAMMA sub r} ~
+{a sub i} over {1-a sub i} right )} ~dx
+.EN
+xxxxx
+.if n .ls 2
+.nf
+.EQ
+delim $$
+.EN
+.ta 1i
+.nf
+Gamma	$GAMMA (z) ~~=~~ PI sub 0 sup inf  t sup {z-1} e sup -t dt$
+Error	$ roman erf (z) = 2 over sqrt pi PI sub 0 sup z e sup {-t sup 2} dt$
+.nf
+.EQ
+PI
+~~~~ PI sub 0 sup pi ~~ PI sub {- pi} sup pi ~~ PI sub {-2 pi} sup {2 pi} f(x)dx
+.EN
+XXXXXX
+.EQ
+PI sub 0 sup 1
+~~~~ PI sub 0 sup pi ~~ PI sub {- pi} sup pi ~~ PI sub {-2 pi} sup {2 pi} f(x)dx
+.EN
+XXXXXXXXX
+.EQ
+PI from 0 to 1
+~~~~ PI sub 0 sup pi ~~ PI sub {- pi} sup pi ~~ PI sub {-2 pi} sup {2 pi} f(x)dx
+.EN
+XXXXXXXX
+.EQ
+= PI PI =
+~~~~ PI sub 0 sup pi ~~ PI sub {- pi} sup pi ~~ PI sub {-2 pi} sup {2 pi} f(x)dx
+.EN
+.EQ
+= PI PI =
+.EN
+xxxxx
+.EQ
+PI
+~~~~ PI sub 0 sup pi ~~ PI sub {- pi} sup pi ~~ PI sub {-2 pi} sup {2 pi} f(x)dx
+.EN
+xxxx
+.EQ
+PI sub x sup x ~~ PI sub 1 sup 1 ~~
+PI sub -1 sup 1 ~~ PI sub 1 sup 2 ~~ PI sub x sup 1
+.EN
+.ps 9
+.EQ
+gsize 9
+.EN
+.EQ L
+lineup + ~ sum ~ GAMMA sub r over 2 ~ PI sub
+{x sub n-k+1} sup
+{roman min left ( x sub n-k , x sub n + {2E sub n} over {GAMMA sub r} ~
+{a sub i} over {1-a sub i} right )} ~dx
+.EN

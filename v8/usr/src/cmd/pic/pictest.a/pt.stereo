@@ -1,0 +1,67 @@
+.sp 1i
+.po .3i
+.ps 12
+.vs 14p
+.PS 7
+lpicx=2
+rpicx=0
+gs=3.8
+planez=-.5
+eyey=.5
+eyez=-1
+leyex=.44
+reyex=1-leyex
+
+define bullet X "\s-4\(bu\s+4" X
+define circle X "\s-4\(de\s+4" X
+
+define p X
+  tx=$1; ty=$2; tz=$3
+  sf=gs*(planez-eyez)/(tz-eyez)
+  bullet at (lpicx,0) + (sf*(tx-leyex),sf*(ty-eyey))
+  bullet at (rpicx,0) + (sf*(tx-reyex),sf*(ty-eyey))
+X
+
+define l X
+  ax=$1; ay=$2; az=$3; bx=$4; bby=$5; bz=$6
+  sfa=gs*(planez-eyez)/(az-eyez)
+  sfb=gs*(planez-eyez)/(bz-eyez)
+  line $7 from (lpicx,0)+(sfa*(ax-leyex),sfa*(ay-eyey))\
+	  to   (lpicx,0)+(sfb*(bx-leyex),sfb*(bby-eyey))
+  line $7 from (rpicx,0)+(sfa*(ax-reyex),sfa*(ay-eyey))\
+	  to   (rpicx,0)+(sfb*(bx-reyex),sfb*(bby-eyey))
+X
+
+define frame Y
+  l(0,0,0, 0,1,0)
+  l(0,1,0, 1,1,0)
+  l(1,1,0, 1,0,0)
+  l(1,0,0, 0,0,0)
+
+  l(0,0,1, 0,1,1, dashed)
+  l(0,1,1, 1,1,1, dashed)
+  l(1,1,1, 1,0,1, dashed)
+  l(1,0,1, 0,0,1, dashed)
+
+  l(0,0,0, 0,0,1, dashed)
+  l(0,1,0, 0,1,1, dashed)
+  l(1,0,0, 1,0,1, dashed)
+  l(1,1,0, 1,1,1, dashed)
+Y
+frame
+
+tp=2*3.1415926535
+dx=.05
+ub=3
+if 1 then Y
+  for x=0 to ub by dx do X
+    p(.5+.5*cos(tp*x),x/ub,.5+.5*sin(tp*x))
+  X
+Y
+if 1 then Y
+  for x=0 to ub-dx by dx do X
+    l(.5+.5*cos(tp*x),     x/ub,     .5+.5*sin(tp*x), \
+      .5+.5*cos(tp*(x+dx)),(x+dx)/ub,.5+.5*sin(tp*(x+dx)))
+  X
+Y
+.PE

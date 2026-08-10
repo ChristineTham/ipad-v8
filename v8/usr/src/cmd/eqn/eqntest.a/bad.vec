@@ -1,0 +1,5 @@
+.nf
+.EQ (5)
+psi sub {nu k vec } ~=~ sum from ljm ~ C sub ljm sup {nu k vec } ~
+phi sub ljm ~ ( r vec , E sub {nu k vec }) ~.
+.EN

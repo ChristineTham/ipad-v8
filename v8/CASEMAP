@@ -1,0 +1,24 @@
+# Paths the V8 tape distinguishes only by case, which macOS and git
+# cannot both hold.  The loser of each group is stored percent-escaped;
+# v8/mk/stage.sh restores the true name in the guest, whose filesystem
+# is case-sensitive.  Escaping a directory de-collides everything under it.
+#
+# true-path<TAB>stored-path
+
+blit/src/maze/Mazewar.c	blit/src/maze/%4Dazewar.c
+jerq/bin/3CC	jerq/bin/3%43%43
+jerq/lib/libC.a	jerq/lib/lib%43.a
+jerq/src/lib/C	jerq/src/lib/%43
+usr/bin/WWB	usr/bin/%57%57%42
+usr/lib/ideal/lib/ARC	usr/lib/ideal/lib/%41%52%43
+usr/lib/ideal/lib/Arc	usr/lib/ideal/lib/%41rc
+usr/lib/ideal/lib/CIRCLE	usr/lib/ideal/lib/%43%49%52%43%4C%45
+usr/lib/term/tab300S	usr/lib/term/tab300%53
+usr/lib/term/tab300S-12	usr/lib/term/tab300%53-12
+usr/man/man1/Mail.1	usr/man/man1/%4Dail.1
+usr/src/cmd/Mail	usr/src/cmd/%4Dail
+usr/src/cmd/Mail/manual/cmds/Reply	usr/src/cmd/%4Dail/manual/cmds/%52eply
+usr/src/cmd/ideal/lib/ARC	usr/src/cmd/ideal/lib/%41%52%43
+usr/src/cmd/ideal/lib/Arc	usr/src/cmd/ideal/lib/%41rc
+usr/src/cmd/ideal/lib/CIRCLE	usr/src/cmd/ideal/lib/%43%49%52%43%4C%45
+usr/src/cmd/troff/devaps/Cw	usr/src/cmd/troff/devaps/%43w
