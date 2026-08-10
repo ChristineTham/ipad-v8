@@ -63,13 +63,36 @@ rm -rf $SYS
 mkdir $BLD 2>/dev/null
 mkdir $SYS || { echo "buildkernel: cannot make $SYS" 1>&2; exit 1; }
 
-# One level of subdirectories, all flat.  V8 has no cp -r and no mkdir -p, and
-# a tar pipe would work but hides which file failed.
+# TWO levels.  The first version of this said "one level, all flat" and that
+# was asserted rather than checked: usr/sys has three second-level
+# directories -- h/inet, boot/bb and boot/stand -- and the kernel includes
+# ../h/inet/in.h, so a one-level copy fails at
+#
+#	Make:  Don't know how to make ../h/inet/in.h.  Stop.
+#
+# after config has succeeded and most of sys/ has compiled.  Nothing on the
+# tape goes deeper than two, and the check below says so out loud rather than
+# silently missing a third if one ever appears.
+#
+# V8 has no cp -r and no mkdir -p.  A tar pipe would do it in one line and
+# hide which file failed; this names the directory.  The 2>/dev/null is for
+# cp complaining about the subdirectories caught by the glob.
 for d in `cd $SRC/usr/sys; echo *`
 do
 	test -d $SRC/usr/sys/$d || continue
 	mkdir $SYS/$d || { echo "  cannot make $SYS/$d"; exit 1; }
 	cp $SRC/usr/sys/$d/* $SYS/$d 2>/dev/null
+	for e in `cd $SRC/usr/sys/$d; echo *`
+	do
+		test -d $SRC/usr/sys/$d/$e || continue
+		mkdir $SYS/$d/$e || { echo "  cannot make $SYS/$d/$e"; exit 1; }
+		cp $SRC/usr/sys/$d/$e/* $SYS/$d/$e 2>/dev/null
+		for f in `cd $SRC/usr/sys/$d/$e; echo *`
+		do
+			test -d $SRC/usr/sys/$d/$e/$f || continue
+			echo "buildkernel: $d/$e/$f is a THIRD level and was not copied" 1>&2
+		done
+	done
 done
 echo "copied: `ls $SYS | wc -l` directories, `find $SYS -type f -print | wc -l` files"
 
