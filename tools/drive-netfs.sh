@@ -16,10 +16,11 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LIMIT="${1:-2400}"
 PORT="${2:-9200}"
-# Cap on each NREAD reply. A short but non-zero reply is legal --
-# naread() loops while (u_count != 0 && n > 0) -- so this costs round
-# trips and nothing else. 0 means "as much as was asked".
-MAXREAD="${3:-0}"
+# Cap on each NREAD reply, matching netfsd's own default. A short but non-zero
+# reply is legal -- naread() loops while (u_count != 0 && n > 0) -- so this
+# costs round trips and nothing else. Pass 0 to remove the cap and watch a file
+# bigger than a couple of blocks fail to arrive at all.
+MAXREAD="${3:-512}"
 SHARE="$ROOT/work/netfs-share"
 NETFSD="$ROOT/netfs/.build/release/netfsd"
 

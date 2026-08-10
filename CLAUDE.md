@@ -463,18 +463,29 @@ transfer is proven end to end — [docs/media-exchange.md](docs/media-exchange.m
 `tools/tapeio.py`, `work/mediatest.sh` — including a VAX binary compiled inside V8 and
 carried back out. The golden image's missing `lost+found` was fixed at the same time.
 
-**B0.5 (the N track) is under way** — plan in
+**B0.5 — the N track — is complete** (N0–N7, 2026-08-09/10). Plan in
 [docs/networking-plan.md](docs/networking-plan.md), results in
-[docs/n-track-notes.md](docs/n-track-notes.md). **N0 is done** (2026-08-09):
-`work/myv8/rp07v8.golden` is a 516 MB RP07 that boots on its own with `/usr` at
-459,905 KB / 408,364 free, built by `work/rp07mig.sh`. The app still ships the RP06.
-The courier moves 8.1 MB a load against a 243 MB V10 tree, so before B1 the plan is a
-**516 MB RP07 disk** (SIMH and V8 agree on the geometry exactly; `/usr` on partition
-`f` = 475 MB), **real TCP/IP** via a new SIMH model of the Interlan NI1010 that V8
-already has a driver for (SIMH offers only DEUNA, which V8 cannot drive) against SIMH's
-already-compiled-in **NAT/SLiRP** — sandbox-safe, so it works on iOS too — and then
-Weinberger's **netfs over TCP**, whose in-kernel client is already `standard` in every
-V8 kernel and whose mount takes any file descriptor.
+[docs/n-track-notes.md](docs/n-track-notes.md), wire format in
+[docs/netfs-protocol.md](docs/netfs-protocol.md).
+
+**A macOS folder is mounted inside Research Unix 8th Edition, read/write.**
+`work/myv8/rp07v8.net` boots a 516 MB RP07 with an Interlan NI1010 we modelled
+for SIMH, reaches the real Internet through SLiRP's NAT, and mounts a host
+directory at `/n/macos` over TCP using Weinberger's netfs — whose client has
+been compiled into every V8 kernel since 1985 and has had nothing to talk to
+since Datakit was switched off. Proven both directions with checksums: a
+13,200-byte file reads out byte-exact, and 65,385 bytes written *by V8* land
+byte-identical on APFS (`tools/drive-netfs.sh`, `tools/drive-netfs-rw.sh`).
+
+The server is `netfs/`, a SwiftPM package whose `NetFS` target compiles
+unchanged into both app targets — `app/ipnx/FileShare.swift` runs it behind a
+folder picker. The guest reaches it at 10.0.2.2, which SLiRP aliases to the
+host's loopback, so it needs no forwarding and works inside the iOS sandbox.
+
+**What is not done**: the app still ships the RP06, which has neither the `il0`
+kernel nor the netfs stream fix, so nothing in the guest can mount the share
+yet. That is C3/B0.6 image work with an App Store size decision attached, not
+netfs work.
 
 Next: **submit** — the remaining steps need the Apple account and a final name
 decision, all listed in [docs/app-store.md](docs/app-store.md) — and **Track B**,
