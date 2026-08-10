@@ -1276,6 +1276,39 @@ STAGE6 = [
     # switched off (phase N6; docs/n-track-notes.md).  It lives in
     # usr/src/cmd like any other command and is distinguishable from the
     # tape's files by not being in v8/MANIFEST.
+    # The shell.  Nothing boots without it -- init execs /etc/rc, and /etc/rc
+    # is a shell script -- so it is the first entry here that exists because
+    # of stage 8 rather than because of stage 7.
+    #
+    # ctype.o is `special' for the same reason libc's errlst.o is: it is
+    # compiled to ASSEMBLY, edited to move its table out of .data and into
+    # shared text, and then assembled.  The tape does it through
+    # usr/src/cmd/sh/:fix, which is :errfix under another name and reads $CC,
+    # $CFLAGS and $AS out of the environment.  We inline the three steps
+    # instead of invoking :fix, because :fix passes its argument to both cc
+    # and as -- and out of tree those need different paths: the source is on
+    # the read-only share, the .s and .o are in the object directory.
+    #
+    # CFLAGS is the tape's -gd2 verbatim even though the preamble puts -O in
+    # front of it.  cc.c does `if (gflag) { warning; oflag = 0; }', so -O -gd2
+    # and -gd2 produce the same code and differ only by a warning -- which
+    # keeps a byte comparison against the shipped /bin/sh available.
+    dict(name="sh", dir="usr/src/cmd/sh",
+         objs=["setbrk.c", "blok.c", "stak.c", "cmd.c", "fault.c", "main.c",
+               "word.c", "string.c", "name.c", "args.c", "xec.c", "service.c",
+               "error.c", "io.c", "print.c", "macro.c", "expand.c", "ctype.c",
+               "msg.c", "defs.c", "pathserv.c", "func.c", "spname.c"],
+         special={"ctype.o": [
+             "$(CC) $(CFLAGS) $(INCS) -S %s",
+             "sed '/^[ 	]*\\.data/s/data/text/' ctype.s > ctype.t",
+             "mv ctype.t ctype.s",
+             "$(AS) -o ctype.o ctype.s",
+             "rm -f ctype.s"]},
+         cflags="-gd2", dest="DESTDIR",
+         product="sh", install="bin/sh",
+         note="cmd/sh/makefile: OFILES (23), CFLAGS=-gd2, ctype.o via ./:fix, "
+              "installs to /bin/sh after moving the old one to /bin/osh"),
+
     dict(name="nmount", dir="usr/src/cmd", objs=["nmount.c"],
          libs=["usr/lib/libin.a"], dest="DESTDIR",
          product="nmount", install="etc/nmount",
