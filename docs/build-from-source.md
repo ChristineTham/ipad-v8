@@ -464,15 +464,49 @@ block 0 and starts it at `0xC`.
 - [x] **Stage 1 builds the toolchain from the repo's source**, compiled straight
       off the share into `/b`. `tools/drive-stage1.sh` runs it end to end in
       about ten minutes.
-- [x] **Stage 2: libc builds from our source** — 104,810 bytes, 229 members,
-      against the tape's 104,770
-- [x] **Stage 3: the system reproduces itself** — the toolchain rebuilt with
-      our compiler *and* our libc is byte-identical to stage 1, all fourteen
-- [ ] `cc -B` extended to `as`, `ld`, `crt0.o`
-- [ ] Stages 2–3, with the fixpoint comparison
-- [ ] Stages 4–7
+- [x] **Stage 2: libc builds from our source** — **104,770 bytes, exactly the
+      tape's**, compiled by our `ccom`, assembled by our `as`, stripped by our
+      `ld` and archived by our `ar`. It was 40 bytes larger until `abs` and
+      `fabs` were resolved to the hand-written VAX assembly in `sys/` rather
+      than the portable C in `gen/` and `math/`
+- [x] **Stage 3: the system reproduces itself** — `same=14 differ=0`, and it
+      has now reproduced on four consecutive runs
+- [x] **`cc -B` extended to `as`, `ld`, `crt0.o` and `libc.a`** — `-t02palc`.
+      `cmp-sealed-vs-oldcc=0`, so our assembler and loader reproduce the
+      tape's output on the same input too
+- [x] **Stage 4** — 224 headers, first run
+- [x] **Stage 5** — 19 libraries; `curses-ok` proves it with stage 4 together
+- [x] **Stage 6, partially** — `config`(8), `nmount`, `sh`, plus the whole
+      toolchain installed into `DESTDIR`, which is what stage 9 needs. The
+      other ~274 commands are the remaining work
+- [ ] Stage 7 — `config ipnx` succeeds and most of `sys/` compiles; the last
+      failure was a missing per-machine `sparam.h`, now written
 - [ ] Stage 8, and a boot
 - [ ] Stage 9 — the new system rebuilds itself under `chroot`
+
+### The include path is where out-of-tree building actually bites
+
+Three stage-5/6 failures, one root cause, three different readings. V8's cpp searches
+`dirs[0]` — the directory of the file being *compiled* — for the `"..."` form only;
+`<...>` starts at `dirs[1]`; and the current directory is on the path in neither case
+unless the source happens to be in it. In-tree none of this shows, because source and
+object are one directory.
+
+| | asks for | header is in | why it failed |
+|---|---|---|---|
+| `libI77` | `<nan.h>` | its own directory | angle brackets skip `dirs[0]` |
+| `libdk` | `"dkdial.h"` | `../cmd/` | not in the including file's directory |
+| `config` | `"y.tab.h"` | the **object** directory | `main.c` is read off the share |
+
+`config` is the exact mirror of `libI77`, and `lex.yy.c` compiled fine in the same
+directory precisely because *it* lives there. `libdk` is the interesting one: the tape's
+`dk/libc/makefile` has `CFLAGS = -O` and no `-I` at all, so `cd dk/libc; make` could not
+have worked in-tree either — the same family as the `:yyfix` contradiction.
+
+A prediction that was wrong and is recorded rather than dropped: the seven plot
+libraries look like they should fail the same way, since they say `"tek.h"` and `tek.h`
+sits in the parent beside the `.c.a` directory. They all built first time — each archive
+carries its own copy, byte-identical to the parent's.
 
 ### The clock: not the TODR
 
