@@ -1,2 +1,3 @@
 config	usr/src/cmd/config	etc/config
+sh	usr/src/cmd/sh	bin/sh
 nmount	usr/src/cmd	etc/nmount

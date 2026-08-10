@@ -37,6 +37,15 @@ test -f $SRC/usr/sys/$MACHINE/conf || {
 	echo "buildkernel: no $SRC/usr/sys/$MACHINE/conf" 1>&2
 	exit 1
 }
+# A machine directory is TWO files, not one.  Every one on the tape carries a
+# sparam.h beside its conf, and nine kernel sources include it -- so without
+# one the build stops at "Don't know how to make sparam.h" after config has
+# already succeeded, which reads like a config bug and is a missing file.
+test -f $SRC/usr/sys/$MACHINE/sparam.h || {
+	echo "buildkernel: no $SRC/usr/sys/$MACHINE/sparam.h" 1>&2
+	echo "buildkernel: a machine directory needs conf AND sparam.h" 1>&2
+	exit 1
+}
 test -f $T3/bin/cc || {
 	echo "buildkernel: no $T3/bin/cc -- stage 3 first" 1>&2
 	exit 1
