@@ -91,9 +91,11 @@ redefines the same names *per layer, from the layer's rectangle*:
 #define XMAX	(((P->rect.corner.x - (P->rect.origin.x +3 +XMARGIN))/CW)  -1)
 ```
 
-so every `mux` layer sizes itself at runtime and gets the full screen for free.
-What still needs doing is the host side — muxterm and jim carry their own
-`display` from V8's `libj` (see [Remaining work](#remaining-work)).
+so every `mux` layer sizes itself at runtime and gets the full screen for free —
+and so does every program *running in* a layer, because `mux.h` makes `display`
+a pointer rather than an object. The one program that still needs widening by
+hand is `muxterm` itself, which owns the screen rather than borrowing a layer
+of it (see [Remaining work](#remaining-work)).
 
 ## Where the framebuffer goes, and why RAM is not a problem
 
@@ -397,11 +399,53 @@ about a toolbar.
 
 ## Remaining work
 
-- **muxterm and jim.** They carry their own `display` from V8's `libj`
-  (`src/lib/j/display.c`, `{0x700000, 25, 0,0, XMAX, YMAX, 0}`). Either rebuild
-  them inside V8 with new `XMAX`/`YMAX`, or patch the same 20-byte structure in
-  the `/usr/jerq/lib/muxterm` and `jim` binaries — the technique that works on
-  the ROM works on them.
+- **muxterm — done as a mechanism, not yet driven.** *(2026-08-10; this bullet
+  used to say "muxterm and jim", and that was wrong — see below.)*
+  `tools/widen-jerq.exp` copies `/usr/jerq/lib/muxterm` to `muxterm.w` and
+  rewrites the same 20-byte `Bitmap` the ROM patch rewrites: word stride
+  25 → 36, `rect.corner.x` 800 → 1152, found at file offset 50512, exactly one
+  hit. Verified both ways — the stock pattern is gone from the copy and still
+  present in the original. Selection uses AT&T's own hook: `mux` honours
+  `$MUXTERM` (`jerq/src/mux/mux.c`), so `/usr/jerq/bin/wmux` is a three-line
+  wrapper and the stock binaries are left untouched.
+
+  The stock ones **must** stay untouched, because the guest cannot see which
+  screen preset the app is running. Stock muxterm on a wide screen merely
+  leaves the right-hand 352 pixels unused; wide muxterm on an 800-pixel screen
+  computes a 36-word stride against a 25-word framebuffer and writes off the
+  end of it. Safe is the default, wide is opt-in.
+
+  **Still to do: run it.** The patch is verified byte-wise but no layer has
+  been swept on a widened muxterm. Either retarget `tools/dmdbridge` (it
+  already scripts login, typing, button-3 menu and sweep, and takes
+  framebuffer snapshots — it needs a 1152 screen and `wmux` instead of `mux`),
+  or drive the app's 5620 window by hand. `work/myv8/rp06v8.wide` holds the
+  patched image; it is deliberately **not** promoted to golden until then.
+
+- **jim needs nothing, and cannot be patched.** The assumption that it carries
+  its own `display` was wrong. `3nm` settles it:
+
+  ```
+  muxterm:  display    | 7514000|extern|                |    | |.data
+  jim.m:    Jdisplayp  |   12660|extern|  *struct-Bitmap|  20| |.data
+  ```
+
+  jim has no `display` object — it has a *pointer*, because
+  `jerq/include/mux.h` says
+
+  ```c
+  extern Bitmap *Jdisplayp;
+  #define display (*Jdisplayp)
+  ```
+
+  so every layer client resolves `display` at runtime to the Bitmap its layer
+  was handed, which `mux` computes from the layer rectangle — the same
+  mechanism as `windowproc.c`'s per-layer `XMAX`/`YMAX` above. jim therefore
+  follows a resized screen for free. muxterm is the outlier precisely because
+  it *is* the layer system: it replaces the ROM terminal and owns the screen,
+  so it is the one program that carries a real Bitmap. `tools/find-bitmaps.exp`
+  found no (800,1024) rectangle anywhere in `jim.m`, which is the same fact
+  seen from the other side.
 - **The ROM's 88 columns before `mux`.** Only fixable by patching immediates in
   the instruction stream, or by rebuilding the firmware — which is the GPL
   decision recorded in [licensing.md](licensing.md) and deliberately not taken.

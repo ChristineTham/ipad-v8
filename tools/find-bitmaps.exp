@@ -1,0 +1,115 @@
+#!/usr/bin/env expect
+#
+# Why does /usr/jerq/mbin/jim.m contain no 800x1024 screen Bitmap when
+# /usr/jerq/lib/muxterm does?
+#
+# widen-jerq.exp found the 16-byte initialised Bitmap in muxterm at offset
+# 50512 and patched it, but the identical search over jim.m returned zero
+# hits -- even though jerq/src/jim/term/main.c plainly uses `display` and
+# `Drect`. Something differs, and "probably cprs compresses it" is a guess.
+# Ask the bytes instead.
+#
+# Searches for each field of the structure separately, so a Bitmap that is
+# present but differently *valued* (another base, another size) is
+# distinguishable from one that is not there at all:
+#
+#	00 70 00 00	base   = 0x700000
+#	00 00 00 19	width  = 25 words
+#	03 20 04 00	rect.corner = (800, 1024)
+#
+# Read-only. Run: tools/run-v8exp.sh find-bitmaps 480
+
+set timeout 300
+log_file -a find-bitmaps.log
+proc sendline {x} { send "$x\r" }
+
+proc must {pat {t 0}} {
+    global timeout
+    set use [expr {$t > 0 ? $t : $timeout}]
+    expect -timeout $use "$pat" {
+    } timeout {
+        send_user "\n*** FAILED: never saw '$pat' after ${use}s ***\n"; exit 3
+    } eof {
+        send_user "\n*** FAILED: simulator exited waiting for '$pat' ***\n"; exit 4
+    }
+}
+proc sh   {cmd {t 0}} { must "# "   $t; sendline $cmd }
+proc simh {cmd {t 0}} { must "sim>" $t; sendline $cmd }
+proc add  {line} { sh "/bin/echo '$line' >> /tmp/f4.c" }
+
+spawn vax780
+simh "set noasynch"
+simh "set tto 7b"
+simh "set rp0 rp06"
+simh "at rp0 rp06v8.wide"
+simh "load -o bootV8 0"
+simh "run 2"
+
+must "login:" 240
+sendline "root"
+sh "echo FIND-START" 120
+
+sh "rm -f /tmp/f4.c /tmp/f4"
+add "#include <stdio.h>"
+add "char *malloc();"
+add "long lseek();"
+add "main(argc, argv)"
+add "int argc;"
+add "char **argv;"
+add "{"
+add "	int fd, i, j, k, hits;"
+add "	long sz;"
+add "	char *b;"
+add "	char pat\[4\];"
+add "	if(argc != 6) { printf(\"F4-USAGE\"); putchar(10); exit(1); }"
+add "	for(i = 0; i < 4; i++) pat\[i\] = atoi(argv\[i+2\]);"
+add "	fd = open(argv\[1\], 0);"
+add "	if(fd < 0) { printf(\"F4-OPEN-FAIL %s\", argv\[1\]); putchar(10); exit(1); }"
+add "	sz = lseek(fd, 0L, 2); lseek(fd, 0L, 0);"
+add "	b = malloc((int)sz);"
+add "	if(b == 0) { printf(\"F4-MALLOC-FAIL\"); putchar(10); exit(1); }"
+add "	if(read(fd, b, (int)sz) != (int)sz) { printf(\"F4-READ-FAIL\"); putchar(10); exit(1); }"
+add "	hits = 0;"
+add "	for(i = 0; i <= (int)sz - 4; i++) {"
+add "		if(b\[i\] != pat\[0\]) continue;"
+add "		if(b\[i+1\] != pat\[1\] || b\[i+2\] != pat\[2\] || b\[i+3\] != pat\[3\]) continue;"
+add "		hits++;"
+add "		if(hits > 4) continue;"
+add "		printf(\"F4-AT %d ctx\", i);"
+add "		k = i - 12; if(k < 0) k = 0;"
+add "		for(j = k; j < k + 24 && j < (int)sz; j++)"
+add "			printf(\" %d\", b\[j\] & 255);"
+add "		putchar(10);"
+add "	}"
+add "	printf(\"F4-HITS %s %d\", argv\[1\], hits); putchar(10);"
+add "	exit(0);"
+add "}"
+sh "cc -o /tmp/f4 /tmp/f4.c" 240
+
+# base 0x00700000
+sh "echo ---BASE-muxterm---"
+sh "/tmp/f4 /usr/jerq/lib/muxterm 0 112 0 0" 120
+sh "echo ---BASE-jim---"
+sh "/tmp/f4 /usr/jerq/mbin/jim.m 0 112 0 0" 120
+# rect.corner = 800,1024
+sh "echo ---CORNER-muxterm---"
+sh "/tmp/f4 /usr/jerq/lib/muxterm 3 32 4 0" 120
+sh "echo ---CORNER-jim---"
+sh "/tmp/f4 /usr/jerq/mbin/jim.m 3 32 4 0" 120
+# width 25 words
+sh "echo ---WIDTH-jim---"
+sh "/tmp/f4 /usr/jerq/mbin/jim.m 0 0 0 25" 120
+# is jim.m even a COFF like muxterm? compare the first bytes of each
+sh "echo ---MAGIC---"
+sh "/tmp/f4 /usr/jerq/lib/muxterm 0 0 0 0" 120
+sh "od -c /usr/jerq/lib/muxterm | sed 3q"
+sh "od -c /usr/jerq/mbin/jim.m | sed 3q"
+# and what the 3B tools make of them
+sh "echo ---3SIZE---"
+sh "/usr/jerq/bin/3size /usr/jerq/lib/muxterm /usr/jerq/mbin/jim.m 2>&1"
+
+sh "echo FIND-DONE"
+sh "rm -f /tmp/f4.c /tmp/f4"
+sh "cd /; sync; sync; sync"
+sh "/etc/halt" 60
+expect eof

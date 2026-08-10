@@ -1,0 +1,184 @@
+#!/usr/bin/env expect
+#
+# Widen muxterm to a 1152x1024 screen (task #42).
+#
+# ONLY muxterm. The task was written as "muxterm and jim", on the documented
+# assumption that both carry their own screen Bitmap from libj. Measurement
+# says otherwise, and jim needs nothing:
+#
+#	$ 3nm /usr/jerq/lib/muxterm | grep -i display
+#	display        | 7514000|extern|                |    |     |.data
+#	$ 3nm /usr/jerq/mbin/jim.m  | grep -i display
+#	Jdisplayp      |   12660|extern|  *struct-Bitmap|  20|     |.data
+#
+# jim has no `display` object at all -- it has a *pointer*. jerq/include/mux.h:
+#
+#	extern Bitmap *Jdisplayp;
+#	#define display (*Jdisplayp)
+#
+# so every layer client resolves `display` at runtime to whatever Bitmap its
+# layer was given, which mux computes from the layer rectangle (the same
+# mechanism as windowproc.c's per-layer XMAX/YMAX). jim therefore follows a
+# resized screen for free, and there is nothing in it to patch. muxterm is the
+# outlier because it *is* the layer system: it replaces the ROM terminal and
+# owns the screen, so it carries the one real Bitmap.
+#
+# muxterm is a WE32100 binary that runs *in* the terminal, downloaded over the
+# serial line by its host-side half. It links V8's libj, whose
+# src/lib/j/display.c defines the terminal's idea of its own screen:
+#
+#	Bitmap display = { (Word *)0x700000, 25, 0, 0, XMAX, YMAX };
+#
+# with XMAX/YMAX compiled in at 800/1024. So a resized 5620 still has muxterm
+# laying out layers in the left 800 pixels: the firmware's own Bitmap was
+# retargeted by dmd_resize_screen(), but these carry their own copy.
+#
+# jerq.h gives the shape, and it is 20 bytes:
+#
+#	typedef struct Bitmap {
+#		Word	*base;		/* 4 */
+#		unsigned width;		/* 4 -- stride in 32-bit words */
+#		Rectangle rect;		/* 8 -- four shorts */
+#		char	*_null;		/* 4 */
+#	} Bitmap;
+#
+# The WE32100 is big-endian, so the initialised structure is findable as a
+# literal byte string and only three bytes have to change: the word stride
+# (25 -> 36) and rect.corner.x (800 -> 1152). This is the same technique the
+# app already uses on the ROM's copy (tools/dmdbridge/patches/), applied to
+# .data in a COFF file instead of to .data linked into ROM.
+#
+# WHY THE STOCK BINARIES ARE LEFT ALONE. The screen shape is an app setting
+# with two presets, and the guest cannot see which one is in force. Wide
+# muxterm on an 800-pixel screen is not a cosmetic mismatch -- it computes
+# addresses with a 36-word stride against a 25-word framebuffer and writes off
+# the end of it. Stock muxterm on a wide screen merely leaves the right-hand
+# 352 pixels unused. So the safe one stays the default and the wide one is
+# opt-in, through the selection hooks AT&T already provided:
+# mux honours $MUXTERM (jerq/src/mux/mux.c), jim takes -f (jerq/src/jim/jim.c).
+#
+# Run: tools/run-v8exp.sh widen-jerq 600
+# Operates on work/myv8/rp06v8.wide -- promote it to golden only after the
+# result has been driven from the app.
+
+set timeout 300
+log_file -a widen-jerq.log
+proc sendline {x} { send "$x\r" }
+
+proc must {pat {t 0}} {
+    global timeout
+    set use [expr {$t > 0 ? $t : $timeout}]
+    expect -timeout $use "$pat" {
+    } timeout {
+        send_user "\n*** FAILED: never saw '$pat' after ${use}s ***\n"; exit 3
+    } eof {
+        send_user "\n*** FAILED: simulator exited waiting for '$pat' ***\n"; exit 4
+    }
+}
+proc sh   {cmd {t 0}} { must "# "   $t; sendline $cmd }
+proc simh {cmd {t 0}} { must "sim>" $t; sendline $cmd }
+
+# No backslash escapes anywhere in the C: 4.1BSD echo does not process them,
+# but depending on that would make the surgery hinge on an unrelated detail.
+# Newlines come from putchar(10).
+proc add {line {f /tmp/pb.c}} { sh "/bin/echo '$line' >> $f" }
+
+spawn vax780
+simh "set noasynch"
+simh "set tto 7b"
+simh "set rp0 rp06"
+simh "at rp0 rp06v8.wide"
+simh "load -o bootV8 0"
+simh "run 2"
+
+must "login:" 240
+sendline "root"
+sh "echo WIDEN-START" 120
+
+# --- what is actually installed -------------------------------------------
+sh "echo ---INVENTORY---"
+sh "ls -l /usr/jerq/lib /usr/jerq/mbin /usr/jerq/bin"
+
+# --- the patcher ----------------------------------------------------------
+sh "echo ---BUILD---"
+sh "rm -f /tmp/pb.c /tmp/pb"
+add "#include <stdio.h>"
+add "char *malloc();"
+add "long lseek();"
+add "main(argc, argv)"
+add "int argc;"
+add "char **argv;"
+add "{"
+add "	int fd, n, i, hits, w, words;"
+add "	char *b;"
+add "	long sz;"
+add "	char pat\[16\];"
+add "	char four\[4\];"
+add "	if(argc != 3) { printf(\"PB-USAGE\"); putchar(10); exit(1); }"
+add "	w = atoi(argv\[2\]);"
+add "	words = w / 32;"
+# base 0x00700000, width 25, origin 0,0, corner 800,1024 -- big endian
+add "	pat\[0\]=0; pat\[1\]=0x70; pat\[2\]=0; pat\[3\]=0;"
+add "	pat\[4\]=0; pat\[5\]=0; pat\[6\]=0; pat\[7\]=25;"
+add "	pat\[8\]=0; pat\[9\]=0; pat\[10\]=0; pat\[11\]=0;"
+add "	pat\[12\]=3; pat\[13\]=0x20; pat\[14\]=4; pat\[15\]=0;"
+add "	fd = open(argv\[1\], 2);"
+add "	if(fd < 0) { printf(\"PB-OPEN-FAIL %s\", argv\[1\]); putchar(10); exit(1); }"
+add "	sz = lseek(fd, 0L, 2);"
+add "	lseek(fd, 0L, 0);"
+add "	b = malloc((int)sz);"
+add "	if(b == 0) { printf(\"PB-MALLOC-FAIL %ld\", sz); putchar(10); exit(1); }"
+add "	if(read(fd, b, (int)sz) != (int)sz) { printf(\"PB-READ-FAIL\"); putchar(10); exit(1); }"
+add "	hits = 0;"
+add "	for(i = 0; i <= (int)sz - 16; i++) {"
+add "		for(n = 0; n < 16; n++)"
+add "			if(b\[i+n\] != pat\[n\]) break;"
+add "		if(n != 16) continue;"
+add "		hits++;"
+add "		printf(\"PB-AT %s %d\", argv\[1\], i); putchar(10);"
+add "		if(w == 0) continue;"
+add "		four\[0\]=0; four\[1\]=0; four\[2\]=(words>>8)&255; four\[3\]=words&255;"
+add "		lseek(fd, (long)(i+4), 0); write(fd, four, 4);"
+add "		four\[0\]=(w>>8)&255; four\[1\]=w&255;"
+add "		lseek(fd, (long)(i+12), 0); write(fd, four, 2);"
+add "		printf(\"PB-SET %s words %d cornerx %d\", argv\[1\], words, w); putchar(10);"
+add "	}"
+add "	printf(\"PB-HITS %s %d\", argv\[1\], hits); putchar(10);"
+add "	close(fd);"
+add "	exit(0);"
+add "}"
+sh "cc -o /tmp/pb /tmp/pb.c" 240
+
+# --- the wide variant -----------------------------------------------------
+sh "echo ---PATCH---"
+sh "rm -f /usr/jerq/mbin/jim.w /usr/jerq/bin/wjim"
+sh "cp /usr/jerq/lib/muxterm /usr/jerq/lib/muxterm.w"
+sh "/tmp/pb /usr/jerq/lib/muxterm.w 1152" 120
+
+# --- verify -----------------------------------------------------------------
+# A patch that silently found nothing looks exactly like one that worked, so
+# ask both halves: the stock pattern must be GONE from the copy and still
+# PRESENT in the original. jim.m is checked too, as the negative control that
+# established it has no Bitmap of its own.
+sh "echo ---VERIFY---"
+sh "/tmp/pb /usr/jerq/lib/muxterm.w 0" 120
+sh "/tmp/pb /usr/jerq/lib/muxterm 0" 120
+sh "/tmp/pb /usr/jerq/mbin/jim.m 0" 120
+
+# --- the wrapper ----------------------------------------------------------
+# $* rather than "$@": this is a 1985 Bourne shell and mux's arguments are
+# simple. There is deliberately no `wjim` -- jim already follows its layer.
+sh "echo ---WRAPPER---"
+sh "rm -f /usr/jerq/bin/wmux"
+add "MUXTERM=/usr/jerq/lib/muxterm.w" /usr/jerq/bin/wmux
+add "export MUXTERM" /usr/jerq/bin/wmux
+add "exec /usr/jerq/bin/mux \$*" /usr/jerq/bin/wmux
+sh "chmod 755 /usr/jerq/bin/wmux"
+sh "cat /usr/jerq/bin/wmux"
+sh "ls -l /usr/jerq/lib/muxterm* /usr/jerq/bin/wmux"
+
+sh "echo WIDEN-DONE"
+sh "rm -f /tmp/pb.c /tmp/pb"
+sh "cd /; sync; sync; sync"
+sh "/etc/halt" 60
+expect eof

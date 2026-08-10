@@ -177,7 +177,18 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   immediates (`6F 57`/`6F 58`) that hold it, **ceiling 127** because the operand is a
   sign-extended byte. It scrolls at pixel row 969, so a screen under 983 tall silently
   collapses its text. `mux` layers are exempt: `windowproc.c` recomputes the grid per
-  layer from the layer rect. **Three things will wedge or corrupt the power-on
+  layer from the layer rect — **and so is everything running *in* a layer**.
+  `jerq/include/mux.h` defines `display` as `(*Jdisplayp)`, a pointer the layer
+  system fills in at runtime, so `jim` and the rest of `/usr/jerq/mbin` follow a
+  resized screen for free and have nothing to patch (`3nm` shows jim exports
+  `Jdisplayp`, a `*struct-Bitmap`, and no `display` at all). **`muxterm` is the sole
+  exception** — it *is* the layer system, owns the screen, and carries a real 20-byte
+  Bitmap in `.data` at file offset 50512. `tools/widen-jerq.exp` copies it to
+  `muxterm.w` with stride 25→36 and `corner.x` 800→1152, and `/usr/jerq/bin/wmux`
+  selects it through `$MUXTERM`, which `mux` already honours. Never patch the stock
+  binaries: wide muxterm on an 800-px screen drives a 36-word stride into a 25-word
+  framebuffer, while stock muxterm on a wide screen merely wastes 352 px.
+  **Three things will wedge or corrupt the power-on
   self-test, all found the hard way**: it blanks screen memory at a hardcoded
   `0x700000` (so it must run at 800×1024 — resize *after*); it stalls in `t_kbd()`
   under "WAITING FOR KEYBOARD STATUS" with a *still screen*, so wait for the idle PC
