@@ -114,9 +114,12 @@ Runbook: [spike-a0.md](spike-a0.md)
       20-byte Bitmap at file offset 50512 (stride 25→36, `corner.x` 800→1152)
       into `muxterm.w`, selected by `/usr/jerq/bin/wmux` through `$MUXTERM`.
       Stock binaries deliberately untouched
-- [ ] **Drive it**: sweep a layer on a widened muxterm and confirm it uses the
-      full 1152. Patched image waits in `work/myv8/rp06v8.wide`, deliberately
-      not promoted to golden until this passes
+- [x] **Driven**: `tools/drive-widemux.sh` boots the image on the desktop SIMH
+      and runs `tools/dmdbridge` against a resized 5620 with `wmux`. Rightmost
+      lit pixel **x=1151 of 1152** (220,167 lit) against **x=648** for stock
+      muxterm, which turned out not to be narrow but *invisible* — it draws
+      into the framebuffer's old address. Evidence in
+      `work/shots-a4-wide-evidence/`; the image is now the golden one
 
 ### A5 — the interface, and the name *(2026-08-10; [ui-redesign.md](ui-redesign.md))*
 - [x] Rename the app from **Edition** to **ipnx** — project, both targets, both

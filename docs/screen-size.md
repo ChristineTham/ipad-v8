@@ -399,28 +399,55 @@ about a toolbar.
 
 ## Remaining work
 
-- **muxterm — done as a mechanism, not yet driven.** *(2026-08-10; this bullet
-  used to say "muxterm and jim", and that was wrong — see below.)*
-  `tools/widen-jerq.exp` copies `/usr/jerq/lib/muxterm` to `muxterm.w` and
-  rewrites the same 20-byte `Bitmap` the ROM patch rewrites: word stride
-  25 → 36, `rect.corner.x` 800 → 1152, found at file offset 50512, exactly one
-  hit. Verified both ways — the stock pattern is gone from the copy and still
-  present in the original. Selection uses AT&T's own hook: `mux` honours
-  `$MUXTERM` (`jerq/src/mux/mux.c`), so `/usr/jerq/bin/wmux` is a three-line
-  wrapper and the stock binaries are left untouched.
+- **muxterm — done and driven** *(2026-08-10; this bullet used to say "muxterm
+  and jim", and that was wrong — see below.)* `tools/widen-jerq.exp` copies
+  `/usr/jerq/lib/muxterm` to `muxterm.w` and rewrites the same 20-byte `Bitmap`
+  the ROM patch rewrites, at file offset 50512, exactly one hit:
 
-  The stock ones **must** stay untouched, because the guest cannot see which
-  screen preset the app is running. Stock muxterm on a wide screen merely
-  leaves the right-hand 352 pixels unused; wide muxterm on an 800-pixel screen
-  computes a 36-word stride against a 25-word framebuffer and writes off the
-  end of it. Safe is the default, wide is opt-in.
+  | field | stock | widened |
+  |---|---|---|
+  | `base` | `0x700000` | **`0x800000`** |
+  | `width` (32-bit Words) | 25 | 36 |
+  | `rect.corner.x` | 800 | 1152 |
 
-  **Still to do: run it.** The patch is verified byte-wise but no layer has
-  been swept on a widened muxterm. Either retarget `tools/dmdbridge` (it
-  already scripts login, typing, button-3 menu and sweep, and takes
-  framebuffer snapshots — it needs a 1152 screen and `wmux` instead of `mux`),
-  or drive the app's 5620 window by hand. `work/myv8/rp06v8.wide` holds the
-  patched image; it is deliberately **not** promoted to golden until then.
+  Selection uses AT&T's own hook: `mux` honours `$MUXTERM`
+  (`jerq/src/mux/mux.c`), so `/usr/jerq/bin/wmux` is a three-line wrapper and
+  the stock binaries are untouched. Driven end to end by
+  `tools/drive-widemux.sh`, which boots the image on the desktop SIMH and runs
+  `tools/dmdbridge` against it with a resized screen; measured on the
+  resulting framebuffer:
+
+  | | rightmost lit pixel | lit pixels |
+  |---|---|---|
+  | stock `muxterm` at 1152 | x = 648 | 22,589 |
+  | `muxterm.w` at 1152 | **x = 1151** | 220,167 |
+
+  ### `base` is the field that matters, and it is silent when wrong
+
+  The first attempt patched only the stride and the corner, and it crashed —
+  which was luckier than what the *control* did. A resized screen does not keep
+  its framebuffer at `0x700000`; it cannot (see above), so dmd_core moves it to
+  `0x800000` and retargets the ROM's Bitmap there. muxterm carries its own
+  copy, and with `base` left at `0x700000`:
+
+  - **Stock muxterm on a wide screen draws perfectly into memory nobody is
+    looking at.** The download completes — all 55,156 bytes, the documented
+    figure — mux is running, and the screen still shows the ROM terminal's last
+    text. It presents as a hang and is nothing of the kind. This is what the
+    control run above measured at x = 648: leftover `login:` text, no desktop.
+  - **Widened muxterm with the old base is worse**: a 36-word stride from
+    `0x700000` spans 144 KB, straight through `romterm` bss, the pcbs and the
+    stacks at `0x719000`+, and the firmware runs away and faults.
+
+  So: **on a resized screen, `mux` must be `wmux`.** Plain `mux` is not merely
+  narrow there — it is invisible. The stock binaries still must not be patched,
+  because `muxterm.w` hardcodes `0x800000` and is wrong at the Original preset,
+  where the framebuffer is back at `0x700000` and the reserve is undecoded.
+
+  Two dead ends recorded so they are not re-run: the fault address is always
+  exactly `RAM_BASE + ram_visible()`, which looks like a decode-window bug and
+  is not — widening `ram_visible()` to the whole reserve just moves the fault
+  from `0x824000` to `0x880000`. `ram_visible()` is correct as it stands.
 
 - **jim needs nothing, and cannot be patched.** The assumption that it carries
   its own `display` was wrong. `3nm` settles it:

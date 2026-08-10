@@ -137,11 +137,20 @@ add "		if(n != 16) continue;"
 add "		hits++;"
 add "		printf(\"PB-AT %s %d\", argv\[1\], i); putchar(10);"
 add "		if(w == 0) continue;"
+# base: a resized 5620 does not keep its framebuffer at 0x700000. The screen
+# cannot grow in place -- everything above it in the firmware's RAM map is at
+# a fixed address -- so dmd_core moves it to 0x800000 and retargets the ROM's
+# own Bitmap there. muxterm carries its own copy and must be moved to match.
+# Getting this wrong is not subtle but it IS silent: stock muxterm on a
+# resized screen draws perfectly into 0x700000, which is no longer displayed,
+# so mux looks like it hung with the ROM's text still on screen.
+add "		four\[0\]=0; four\[1\]=0x80; four\[2\]=0; four\[3\]=0;"
+add "		lseek(fd, (long)(i+0), 0); write(fd, four, 4);"
 add "		four\[0\]=0; four\[1\]=0; four\[2\]=(words>>8)&255; four\[3\]=words&255;"
 add "		lseek(fd, (long)(i+4), 0); write(fd, four, 4);"
 add "		four\[0\]=(w>>8)&255; four\[1\]=w&255;"
 add "		lseek(fd, (long)(i+12), 0); write(fd, four, 2);"
-add "		printf(\"PB-SET %s words %d cornerx %d\", argv\[1\], words, w); putchar(10);"
+add "		printf(\"PB-SET %s base 0x800000 words %d cornerx %d\", argv\[1\], words, w); putchar(10);"
 add "	}"
 add "	printf(\"PB-HITS %s %d\", argv\[1\], hits); putchar(10);"
 add "	close(fd);"

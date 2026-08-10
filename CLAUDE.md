@@ -184,10 +184,17 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   `Jdisplayp`, a `*struct-Bitmap`, and no `display` at all). **`muxterm` is the sole
   exception** — it *is* the layer system, owns the screen, and carries a real 20-byte
   Bitmap in `.data` at file offset 50512. `tools/widen-jerq.exp` copies it to
-  `muxterm.w` with stride 25→36 and `corner.x` 800→1152, and `/usr/jerq/bin/wmux`
-  selects it through `$MUXTERM`, which `mux` already honours. Never patch the stock
-  binaries: wide muxterm on an 800-px screen drives a 36-word stride into a 25-word
-  framebuffer, while stock muxterm on a wide screen merely wastes 352 px.
+  `muxterm.w` with **`base` 0x700000→0x800000**, stride 25→36 and `corner.x`
+  800→1152, and `/usr/jerq/bin/wmux` selects it through `$MUXTERM`, which `mux`
+  already honours. **`base` is the field that matters, and it fails silently**: a
+  resized screen moves the framebuffer to `0x800000`, so stock muxterm on a wide
+  screen downloads all 55,156 bytes, runs, and draws into the vacated `0x700000` —
+  presenting as a hang with the ROM's text still on screen. **On a wide screen
+  `mux` must be `wmux`**, and never patch the stock binaries: `muxterm.w`
+  hardcodes `0x800000` and is wrong at the Original preset. Proven end to end by
+  `tools/drive-widemux.sh` — rightmost lit pixel x=1151 of 1152, against x=648 for
+  stock. Do **not** chase the fault it throws when `base` is wrong: it is always
+  `RAM_BASE + ram_visible()`, which looks like a decode-window bug and is not.
   **Three things will wedge or corrupt the power-on
   self-test, all found the hard way**: it blanks screen memory at a hardcoded
   `0x700000` (so it must run at 800×1024 — resize *after*); it stalls in `t_kbd()`

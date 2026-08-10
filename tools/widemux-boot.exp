@@ -1,0 +1,28 @@
+#!/usr/bin/env expect
+#
+# Boot the widened image to multiuser on the desktop SIMH and hold it there, so
+# tools/dmdbridge can dial the DZ and drive a real 5620 against it.
+#
+# Started by tools/drive-widemux.sh, which owns the config, the watchdog and
+# the cleanup. Nothing here touches the disk.
+
+set timeout 300
+log_file -a widemux-boot.log
+
+spawn vax780 widemux.conf
+
+# The golden image autoboots straight to multiuser -- `/etc/rc` runs fsck and
+# init goes to `login:` with no single-user stop. Older images do stop, so a
+# `# ` gets a ^D and we keep waiting. Handling both means this script does not
+# silently hang on whichever image it is pointed at.
+expect {
+    "login:" { }
+    "# "     { send "\x04"; exp_continue }
+    timeout  { send_user "\n*** boot: no login: prompt in 300s ***\n"; exit 3 }
+    eof      { send_user "\n*** boot: simulator exited ***\n"; exit 4 }
+}
+send_user "\n*** V8 is at multiuser; holding for the bridge ***\n"
+
+# Hold the console open. The runner kills us.
+set timeout -1
+expect eof

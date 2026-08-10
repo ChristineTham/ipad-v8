@@ -12,9 +12,17 @@ use std::io::{ErrorKind, Read, Write};
 use std::net::TcpStream;
 use std::time::{Duration, Instant};
 
-const FB_W: usize = 800;
+/// The stock tube. Everything still boots at this size — the power-on
+/// self-test blanks screen memory at a hardcoded 0x700000 and must run against
+/// the pristine geometry — and a wider screen is applied afterwards.
 const FB_H: usize = 1024;
-const FB_BYTES: usize = FB_W * FB_H / 8;
+const STOCK_W: usize = 800;
+
+/// The firmware's idle PC window. Waiting for the framebuffer to go quiet does
+/// not work: the self-test stalls in t_kbd() under "WAITING FOR KEYBOARD
+/// STATUS" with a perfectly still screen. See docs/screen-size.md.
+const IDLE_PC_LO: u32 = 0x5354;
+const IDLE_PC_HI: u32 = 0x5389;
 
 const IAC: u8 = 255;
 const DONT: u8 = 254;
@@ -86,7 +94,7 @@ enum Act {
     Type(&'static str),
 }
 
-fn dump_png(dir: &str, n: u32, label: &str, secs: f64, fb: &[u8]) {
+fn dump_png(dir: &str, n: u32, label: &str, secs: f64, fb: &[u8], fb_w: usize) {
     let path = format!("{dir}/shot_{n:02}_{label}_t{secs:.1}.png");
     let file = match fs::File::create(&path) {
         Ok(f) => f,
@@ -95,14 +103,14 @@ fn dump_png(dir: &str, n: u32, label: &str, secs: f64, fb: &[u8]) {
             return;
         }
     };
-    let mut enc = png::Encoder::new(file, FB_W as u32, FB_H as u32);
+    let mut enc = png::Encoder::new(file, fb_w as u32, FB_H as u32);
     enc.set_color(png::ColorType::Grayscale);
     enc.set_depth(png::BitDepth::Eight);
     let mut writer = enc.write_header().expect("png header");
-    let mut pixels = Vec::with_capacity(FB_W * FB_H);
+    let mut pixels = Vec::with_capacity(fb_w * FB_H);
     for row in 0..FB_H {
-        for col in 0..FB_W / 8 {
-            let byte = fb[row * (FB_W / 8) + col];
+        for col in 0..fb_w / 8 {
+            let byte = fb[row * (fb_w / 8) + col];
             for bit in 0..8 {
                 // 1-bit = lit phosphor -> white on black
                 pixels.push(if byte & (0x80 >> bit) != 0 { 255 } else { 0 });
@@ -125,6 +133,20 @@ fn fb_hash(fb: &[u8]) -> u64 {
 fn main() {
     let shots_dir = std::env::args().nth(1).unwrap_or_else(|| "shots".into());
     fs::create_dir_all(&shots_dir).expect("mkdir shots");
+
+    // Both knobs default to the A0 configuration, so an unconfigured run is
+    // byte-for-byte the original proof. DMD_W widens the screen after the
+    // self-test; DMD_MUX picks which muxterm the host downloads -- the widened
+    // one lives behind /usr/jerq/bin/wmux, which sets $MUXTERM (see
+    // tools/widen-jerq.exp).
+    let fb_w: usize = std::env::var("DMD_W")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(STOCK_W);
+    assert!(fb_w >= STOCK_W && fb_w % 32 == 0, "DMD_W must be >= 800 and a multiple of 32");
+    let fb_bytes = fb_w * FB_H / 8;
+    let mux_cmd = std::env::var("DMD_MUX").unwrap_or_else(|_| "/usr/jerq/bin/mux".into());
+    println!("screen {fb_w}x{FB_H}, mux command: {mux_cmd}");
 
     // Connect (retry: SIMH may still be booting).
     let deadline = Instant::now() + Duration::from_secs(60);
@@ -165,8 +187,11 @@ fn main() {
     let mut last_rx_at = Instant::now();
     let mut download_done_at: Option<Instant> = None;
 
-    // Framebuffer snapshots.
-    let mut fbbuf = vec![0u8; FB_BYTES];
+    // Framebuffer snapshots. Sized to the *final* screen; nothing is captured
+    // before the resize lands, so a shot is never 800-wide data unpacked at a
+    // 1152-wide stride.
+    let mut fbbuf = vec![0u8; fb_bytes];
+    let mut resized = fb_w == STOCK_W;
     let mut last_hash: u64 = 0;
     let mut last_shot = Instant::now() - Duration::from_secs(10);
     let mut last_fb_check = Instant::now();
@@ -177,23 +202,51 @@ fn main() {
     // menuhit() pops the menu with the previously-selected item (initially
     // item 0 = "New") centered under the cursor, so releasing in place picks
     // New. The sweep that follows also uses button 3 (mux convention).
-    let gestures: Vec<(u64, Act)> = vec![
-        (0, Act::Move(400, 524)),
-        (300, Act::Down(2)),
-        (1200, Act::Shot("menu")),
-        (1500, Act::Up(2)),
-        (2300, Act::Shot("aftermenu")),
-        (2700, Act::Move(180, 764)),
-        (3000, Act::Down(2)),
-        (3400, Act::Move(340, 594)),
-        (3800, Act::Move(500, 414)),
-        (4200, Act::Move(620, 204)),
-        (4600, Act::Up(2)),
-        (8000, Act::Shot("layer")),
-        (8300, Act::Type("date\r")),
-        (11500, Act::Type("cat /etc/motd\r")),
-        (16000, Act::Shot("layer2")),
-    ];
+    //
+    // At the stock width the coordinates are the A0 literals, untouched. On a
+    // wider screen the sweep is rebuilt to finish well past x=800, because
+    // that is the whole question being asked: a muxterm that still believes
+    // the screen is 800 wide cannot put a layer edge beyond it.
+    let w = fb_w as u16;
+    let gestures: Vec<(u64, Act)> = if fb_w == STOCK_W {
+        vec![
+            (0, Act::Move(400, 524)),
+            (300, Act::Down(2)),
+            (1200, Act::Shot("menu")),
+            (1500, Act::Up(2)),
+            (2300, Act::Shot("aftermenu")),
+            (2700, Act::Move(180, 764)),
+            (3000, Act::Down(2)),
+            (3400, Act::Move(340, 594)),
+            (3800, Act::Move(500, 414)),
+            (4200, Act::Move(620, 204)),
+            (4600, Act::Up(2)),
+            (8000, Act::Shot("layer")),
+            (8300, Act::Type("date\r")),
+            (11500, Act::Type("cat /etc/motd\r")),
+            (16000, Act::Shot("layer2")),
+        ]
+    } else {
+        vec![
+            // Park mid-screen first: menuhit() pops the B3 menu centred on the
+            // cursor, and near an edge it clips and the selection is lost.
+            (0, Act::Move(w / 2, 512)),
+            (300, Act::Down(2)),
+            (1200, Act::Shot("menu")),
+            (1500, Act::Up(2)),
+            (2300, Act::Shot("aftermenu")),
+            (2700, Act::Move(w / 10, 820)),
+            (3000, Act::Down(2)),
+            (3400, Act::Move(w / 3, 640)),
+            (3800, Act::Move(w * 2 / 3, 420)),
+            (4200, Act::Move(w - w / 12, 200)),
+            (4600, Act::Up(2)),
+            (8000, Act::Shot("layer")),
+            (8300, Act::Type("date\r")),
+            (11500, Act::Type("cat /etc/motd\r")),
+            (16000, Act::Shot("layer2")),
+        ]
+    };
     let mut gest_i = 0usize;
     let mut gest_t0: Option<Instant> = None;
     // Mouse model: screen position the cursor is at, and the raw counter
@@ -231,6 +284,27 @@ fn main() {
             let real = pace_start.elapsed().as_secs_f64();
             if virt > real + 0.002 {
                 std::thread::sleep(Duration::from_micros(((virt - real) * 1e6) as u64));
+            }
+        }
+
+        // Widen the screen once the power-on self-test has finished.
+        //
+        // Gated on the firmware reaching its idle PC window, never on a timer
+        // and never on a quiet framebuffer: the self-test sits in t_kbd() with
+        // a completely still screen, so "nothing is changing" is exactly the
+        // wrong signal. Resizing early corrupts the test, which blanks screen
+        // memory at a hardcoded 0x700000.
+        if !resized {
+            let pc = dmd.get_pc();
+            if (IDLE_PC_LO..=IDLE_PC_HI).contains(&pc) {
+                match dmd.set_screen(fb_w, FB_H) {
+                    Ok(()) => println!(
+                        "[{:7.2}s] self-test done (pc {:#06x}); screen -> {}x{}",
+                        secs(Instant::now()), pc, fb_w, FB_H
+                    ),
+                    Err(e) => panic!("resize to {fb_w}x{FB_H} failed: {e:?}"),
+                }
+                resized = true;
             }
         }
 
@@ -355,7 +429,7 @@ fn main() {
                     phase_since = Instant::now();
                 } else if has(&scan, b"# ") {
                     println!("[{:7.2}s] shell prompt; starting mux", secs(Instant::now()));
-                    kbq.extend(b"cd /tmp; /usr/jerq/bin/mux 2>muxerr\r");
+                    kbq.extend(format!("cd /tmp; {mux_cmd} 2>muxerr\r").into_bytes());
                     scan.clear();
                     mux_t = Some(Instant::now());
                     phase = Phase::MuxRunning;
@@ -500,10 +574,10 @@ fn main() {
                                 Act::Type(s) => kbq.extend(s.as_bytes()),
                                 Act::Shot(label) => {
                                     let vram = dmd.video_ram();
-                                    let n = FB_BYTES.min(vram.len());
+                                    let n = fb_bytes.min(vram.len());
                                     fbbuf[..n].copy_from_slice(&vram[..n]);
                                     shot_n += 1;
-                                    dump_png(&shots_dir, shot_n, label, secs(now), &fbbuf);
+                                    dump_png(&shots_dir, shot_n, label, secs(now), &fbbuf, fb_w);
                                 }
                             }
                             gest_i += 1;
@@ -520,17 +594,17 @@ fn main() {
 
         // Periodic framebuffer-change snapshots.
         let now = Instant::now();
-        if now.duration_since(last_fb_check) > Duration::from_millis(150) {
+        if resized && now.duration_since(last_fb_check) > Duration::from_millis(150) {
             last_fb_check = now;
             let vram = dmd.video_ram();
-            let n = FB_BYTES.min(vram.len());
+            let n = fb_bytes.min(vram.len());
             fbbuf[..n].copy_from_slice(&vram[..n]);
             let h = fb_hash(&fbbuf);
             if h != last_hash {
                 last_hash = h;
                 if now.duration_since(last_shot) > Duration::from_millis(1200) && shot_n < 300 {
                     shot_n += 1;
-                    dump_png(&shots_dir, shot_n, "fb", secs(now), &fbbuf);
+                    dump_png(&shots_dir, shot_n, "fb", secs(now), &fbbuf, fb_w);
                     last_shot = now;
                 }
             }
@@ -549,10 +623,10 @@ fn main() {
 
     // Final snapshot + summary.
     let vram = dmd.video_ram();
-    let n = FB_BYTES.min(vram.len());
+    let n = fb_bytes.min(vram.len());
     fbbuf[..n].copy_from_slice(&vram[..n]);
     shot_n += 1;
-    dump_png(&shots_dir, shot_n, "final", secs(Instant::now()), &fbbuf);
+    dump_png(&shots_dir, shot_n, "final", secs(Instant::now()), &fbbuf, fb_w);
     println!(
         "summary: phase={phase:?} host_bytes={host_bytes_total} burst_bytes={burst_bytes} shots={shot_n}"
     );
