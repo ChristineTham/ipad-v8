@@ -1309,6 +1309,52 @@ STAGE6 = [
          note="cmd/sh/makefile: OFILES (23), CFLAGS=-gd2, ctype.o via ./:fix, "
               "installs to /bin/sh after moving the old one to /bin/osh"),
 
+    # ---------------------------------------------------------- the boot path
+    #
+    # Everything below is here because a disk without it does not come up, and
+    # every install path is MEASURED rather than inferred:
+    #
+    #	/etc/init	sys/main.c's own comment -- "loop at loc 13 (0xd) in
+    #			user mode -- /etc/init cannot be executed"
+    #	/etc/fsck	named by /etc/rc, with its exit status switched on
+    #	/etc/mount	/etc/rc: `/etc/mount -a'
+    #	/etc/update	/etc/rc
+    #	/etc/login	cmd/login/makefile: `cp login /etc' -- NOT /bin,
+    #			which is what guessing would have given
+    #
+    # getty has no makefile and is not named by rc, but init execs it per
+    # /etc/ttys and every other thing init runs lives in /etc.
+    #
+    # Still missing and deliberately not guessed: date, rm, cat, ls, echo,
+    # chmod and sync are called by bare name from /etc/rc, so rc says they are
+    # on PATH and does not say which of /bin and /usr/bin holds them.  That is
+    # what tools/harvest-paths.sh is for -- /usr is a separate filesystem, so
+    # the difference decides whether the system can repair itself.
+    dict(name="init", dir="usr/src/cmd", objs=["init.c"], dest="DESTDIR",
+         product="init", install="etc/init",
+         note="loose init.c; sys/main.c execs /etc/init"),
+    dict(name="getty", dir="usr/src/cmd", objs=["getty.c"], dest="DESTDIR",
+         product="getty", install="etc/getty",
+         note="loose getty.c; init execs it per /etc/ttys"),
+    dict(name="login", dir="usr/src/cmd/login", objs=["login.c"],
+         dest="DESTDIR", product="login", install="etc/login",
+         note="cmd/login/makefile: cp login /etc -- /etc, not /bin"),
+    dict(name="fsck", dir="usr/src/cmd", objs=["fsck.c"], dest="DESTDIR",
+         product="fsck", install="etc/fsck",
+         note="loose fsck.c; /etc/rc runs /etc/fsck -p and switches on $?"),
+    dict(name="mount", dir="usr/src/cmd", objs=["mount.c"], dest="DESTDIR",
+         product="mount", install="etc/mount",
+         note="loose mount.c; /etc/rc runs /etc/mount -a"),
+    dict(name="umount", dir="usr/src/cmd", objs=["umount.c"], dest="DESTDIR",
+         product="umount", install="etc/umount",
+         note="loose umount.c; the pair of /etc/mount"),
+    dict(name="mkfs", dir="usr/src/cmd", objs=["mkfs.c"], dest="DESTDIR",
+         product="mkfs", install="etc/mkfs",
+         note="loose mkfs.c; /etc, with fsck and mount"),
+    dict(name="update", dir="usr/src/cmd", objs=["update.c"], dest="DESTDIR",
+         product="update", install="etc/update",
+         note="loose update.c; /etc/rc runs /etc/update"),
+
     dict(name="nmount", dir="usr/src/cmd", objs=["nmount.c"],
          libs=["usr/lib/libin.a"], dest="DESTDIR",
          product="nmount", install="etc/nmount",
