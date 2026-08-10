@@ -128,10 +128,31 @@ line 1` on the tab labelled `tty01`.
   <id>` captures a window even when it is behind something else, and the window
   IDs come from `CGWindowListCopyWindowInfo` filtered on owner `ipnx`.
 
+## Verified
+
+Evidence in `work/shots-a5/`.
+
+| | |
+|---|---|
+| Console holds the whole boot transcript | macOS, before anyone looked at the tab |
+| `tty01` is line 1 | *"Connected to the VAX 11/780 simulator DZ device, line 1"* |
+| Auto-login | `login: root` → motd → `#`, on both platforms |
+| `tty02` is line 2 | and stops at `login:` — auto-login is tty01 only |
+| Two windows, one VAX | `ipnx` + `ipnx — DMD 5620`, one `cold boot` in the log |
+| CRT window shaped to the tube | `crt 877x780` inside a `897x852` window |
+| 5620 still works | self-test, 1152×1024, 127 columns, `login:` on the raster |
+| iPad | same tab bar, the `+` menu listing tty02..tty06 and the other shapes |
+
 ## Still to do
 
-- iPad has been built but not run — the tab bar's inline actions and the
-  multi-scene path (`UIApplicationSupportsMultipleScenes`) want a simulator run.
 - Closing the 5620 window to reclaim its CPU is implemented but unverified.
-- `tty02`..`tty06` are reachable and untested; nothing about them differs from
-  `tty01` except the port and the absence of auto-login.
+- `tty03`..`tty07` are reachable and untested; nothing about them differs from
+  `tty02` except the port, and `tty07` its shape.
+- The 80×24 grid leaves a lot of black above and below on a portrait iPad.
+  That is honest — the grid cannot grow — but the empty field may deserve
+  something better than black.
+- A container provisioned before `config.exp` was applied keeps its old
+  `v8.disk` forever, because provisioning only copies the bundled image when
+  there is none. That is deliberate (the disk is the user's), but it means a
+  stale simulator still says `v8generi` and shows AT&T's original motd.
+  Settings ▸ Reset to pristine V8 is the cure.

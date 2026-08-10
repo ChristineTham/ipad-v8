@@ -125,7 +125,10 @@ Runbook: [spike-a0.md](spike-a0.md)
       raster
 - [x] App icon restyled as a stylised licence plate: `ipnx` over LIVE FREE OR
       DIE, after the plate Armando Stettner gave away at USENIX
-- [ ] Run the iPad build in the simulator *(built, not yet exercised)*
+- [x] Verified on both platforms — evidence in `work/shots-a5/`: the console
+      holds the whole boot transcript, `tty01` reports **line 1** and logs in,
+      `tty02` reports **line 2** and stops at `login:`, two windows run one VAX,
+      and the iPad shows the same tab bar and `+` menu
 - [ ] Verify closing the 5620's window reclaims its CPU
 
 ## Track B — the V10 restoration *(desktop SIMH until it boots; see [v10-restoration.md](v10-restoration.md))*
