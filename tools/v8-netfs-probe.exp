@@ -1,0 +1,137 @@
+#!/usr/bin/env expect
+#
+# What is the netfs wire format's exact byte layout?
+#
+# `send()` in sys/sys/neta.c writes `struct senda` and reads `struct rcva` as
+# raw memory -- no marshalling, no byte-order conversion, no length prefix. So
+# the wire format *is* whatever V8's own compiler lays those structs out as,
+# and a host server has to match it byte for byte.
+#
+# That layout must be measured, not reasoned about. The structs mix char,
+# short, long and a pointer, and both carry hand-written `rsvd` padding fields
+# -- which is itself evidence the author was working around alignment rules
+# rather than relying on them. Guessing whether 1985 VAX pcc aligns a long to
+# 4 bytes after a short is exactly the kind of assumption that has already been
+# wrong once in this project (see the libc probe).
+#
+# Read-only with respect to the shipped image: operates on a scratch copy.
+#
+# Run: tools/run-v8exp.sh v8-netfs-probe 420
+# Expects work/myv8/rp06v8.probe to exist (cp from rp06v8.golden).
+
+set timeout 300
+log_file -a v8-netfs-probe.log
+proc sendline {x} { send "$x\r" }
+
+proc must {pat {t 0}} {
+    global timeout
+    set use [expr {$t > 0 ? $t : $timeout}]
+    expect -timeout $use "$pat" {
+    } timeout {
+        send_user "\n*** FAILED: never saw '$pat' after ${use}s ***\n"; exit 3
+    } eof {
+        send_user "\n*** FAILED: simulator exited waiting for '$pat' ***\n"; exit 4
+    }
+}
+proc sh   {cmd {t 0}} { must "# "   $t; sendline $cmd }
+proc simh {cmd {t 0}} { must "sim>" $t; sendline $cmd }
+
+# Append one line to the probe source.
+#
+# Single-quoted so V8's sh passes it through untouched, and the C is written
+# with NO backslash escapes anywhere: 4.1BSD echo does not process them, but
+# depending on that would make the whole probe hinge on a detail that has
+# nothing to do with what is being measured. Newlines come from putchar(10).
+proc add {line} { sh "/bin/echo '$line' >> /tmp/p.c" }
+
+spawn vax780
+simh "set noasynch"
+simh "set tto 7b"
+simh "set rp0 rp06"
+simh "at rp0 rp06v8.probe"
+simh "load -o bootV8 0"
+simh "run 2"
+
+must "login:" 240
+sendline "root"
+
+sh "echo PROBE-START" 120
+
+# --- is the shipped header the same one we have been reading? -------------
+sh "echo ---HEADER---"
+sh "ls -l /usr/sys/h/neta.h"
+sh "sum /usr/sys/h/neta.h"
+sh "cat /usr/sys/h/neta.h"
+
+# --- the layout program ---------------------------------------------------
+sh "echo ---BUILD---"
+sh "rm -f /tmp/p.c /tmp/p"
+add "#include <sys/types.h>"
+add "#include \"/usr/sys/h/neta.h\""
+add "p(s, v)"
+add "char *s;"
+add "{"
+add "	printf(\"%s %d\", s, v);"
+add "	putchar(10);"
+add "}"
+add "main()"
+add "{"
+add "	struct senda x;"
+add "	struct rcva y;"
+add "	p(\"SENDA-SIZE\", sizeof(struct senda));"
+add "	p(\"RCVA-SIZE\", sizeof(struct rcva));"
+add "	p(\"LONG\", sizeof(long));"
+add "	p(\"SHORT\", sizeof(short));"
+add "	p(\"PTR\", sizeof(char *));"
+add "	p(\"TIME_T\", sizeof(time_t));"
+add "	p(\"S-version\", (char *)&x.version - (char *)&x);"
+add "	p(\"S-cmd\", (char *)&x.cmd - (char *)&x);"
+add "	p(\"S-flags\", (char *)&x.flags - (char *)&x);"
+add "	p(\"S-rsvd\", (char *)&x.rsvd - (char *)&x);"
+add "	p(\"S-trannum\", (char *)&x.trannum - (char *)&x);"
+add "	p(\"S-uid\", (char *)&x.uid - (char *)&x);"
+add "	p(\"S-gid\", (char *)&x.gid - (char *)&x);"
+add "	p(\"S-dev\", (char *)&x.dev - (char *)&x);"
+add "	p(\"S-tag\", (char *)&x.tag - (char *)&x);"
+add "	p(\"S-mode\", (char *)&x.mode - (char *)&x);"
+add "	p(\"S-newuid\", (char *)&x.newuid - (char *)&x);"
+add "	p(\"S-newgid\", (char *)&x.newgid - (char *)&x);"
+add "	p(\"S-ino\", (char *)&x.ino - (char *)&x);"
+add "	p(\"S-count\", (char *)&x.count - (char *)&x);"
+add "	p(\"S-offset\", (char *)&x.offset - (char *)&x);"
+add "	p(\"S-buf\", (char *)&x.buf - (char *)&x);"
+add "	p(\"S-ta\", (char *)&x.ta - (char *)&x);"
+add "	p(\"S-tm\", (char *)&x.tm - (char *)&x);"
+add "	p(\"R-trannum\", (char *)&y.trannum - (char *)&y);"
+add "	p(\"R-errno\", (char *)&y.errno - (char *)&y);"
+add "	p(\"R-flags\", (char *)&y.flags - (char *)&y);"
+add "	p(\"R-dev\", (char *)&y.dev - (char *)&y);"
+add "	p(\"R-size\", (char *)&y.size - (char *)&y);"
+add "	p(\"R-mode\", (char *)&y.mode - (char *)&y);"
+add "	p(\"R-uid\", (char *)&y.uid - (char *)&y);"
+add "	p(\"R-gid\", (char *)&y.gid - (char *)&y);"
+add "	p(\"R-tag\", (char *)&y.tag - (char *)&y);"
+add "	p(\"R-nlink\", (char *)&y.nlink - (char *)&y);"
+add "	p(\"R-rsvd\", (char *)&y.rsvd - (char *)&y);"
+add "	p(\"R-ino\", (char *)&y.ino - (char *)&y);"
+add "	p(\"R-count\", (char *)&y.count - (char *)&y);"
+add "	p(\"R-tm\", (char *)&y.tm - (char *)&y);"
+add "}"
+
+sh "cc -o /tmp/p /tmp/p.c" 180
+sh "echo ---LAYOUT---"
+sh "/tmp/p" 120
+
+# --- what the kernel and the shipped server agree on ----------------------
+# BUFSIZE bounds every NREAD/NWRT payload; DIRSIZ is the fixed NNAMI payload.
+sh "echo ---LIMITS---"
+sh "grep -n 'define.*BUFSIZE' /usr/sys/h/param.h"
+sh "grep -n 'define.*DIRSIZ' /usr/sys/h/dir.h"
+sh "echo ---NETFS-BINARIES---"
+sh "ls -l /usr/net 2>&1 | head -20"
+
+sh "echo PROBE-DONE"
+sh "rm -f /tmp/p.c /tmp/p"
+sh "cd /; sync; sync; sync"
+sh "/etc/halt" 60
+expect eof
