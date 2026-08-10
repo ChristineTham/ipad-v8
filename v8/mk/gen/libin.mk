@@ -26,7 +26,7 @@ RANLIB = /usr/bin/ranlib
 # stage 4 is a stage.
 INCDIR = $(DESTDIR)/usr/include
 
-CFLAGS = -O -I$(SRC)/usr/src/cmd/inet/h -I$(INCDIR)
+CFLAGS = -O -I$(SRC)/usr/src/cmd/inet/libin -I$(SRC)/usr/src/cmd/inet/h -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) -c
 TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
 

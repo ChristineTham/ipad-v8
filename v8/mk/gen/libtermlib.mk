@@ -26,7 +26,7 @@ RANLIB = /usr/bin/ranlib
 # stage 4 is a stage.
 INCDIR = $(DESTDIR)/usr/include
 
-CFLAGS = -O -DCM_N -DCM_GT -DCM_B -DCM_D -I$(INCDIR)
+CFLAGS = -O -DCM_N -DCM_GT -DCM_B -DCM_D -I$(SRC)/usr/src/lib/libtermlib -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) -c
 TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
 

@@ -26,7 +26,7 @@ RANLIB = /usr/bin/ranlib
 # stage 4 is a stage.
 INCDIR = $(DESTDIR)/usr/include
 
-CFLAGS =  -I$(INCDIR)
+CFLAGS =  -I$(SRC)/usr/src/lib/libmp -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) -c
 TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
 

@@ -6,7 +6,7 @@
 # stage 4 installed.  Source is read-only on the share; objects land in the
 # current directory, which the driver makes per-library on the build disk.
 #
-# From the tape: dk/libc/makefile: LIB (7)
+# From the tape: dk/libc/makefile: LIB (7), CFLAGS=-O -- and dkdial.h is in ../cmd, which that -O cannot reach
 
 SRC     = /n/src
 TOOLDIR = /b/tools3
@@ -26,7 +26,7 @@ RANLIB = /usr/bin/ranlib
 # stage 4 is a stage.
 INCDIR = $(DESTDIR)/usr/include
 
-CFLAGS = -O -I$(INCDIR)
+CFLAGS = -O -I$(SRC)/usr/src/dk/libc -I$(SRC)/usr/src/dk/cmd -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) -c
 TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
 
@@ -54,7 +54,7 @@ dkproto.o: $(SRC)/usr/src/dk/libc/dkproto.c $(INCDIR)/sys/ioctl.h $(TOOLS)
 pwsearch.o: $(SRC)/usr/src/dk/libc/pwsearch.c $(INCDIR)/pwd.h $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/stat.h $(INCDIR)/sys/types.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/dk/libc/pwsearch.c
 
-tdkdial.o: $(SRC)/usr/src/dk/libc/tdkdial.c $(INCDIR)/dk.h $(INCDIR)/dkerr.h $(INCDIR)/errno.h $(INCDIR)/sgtty.h $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/ioctl.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h $(TOOLS)
+tdkdial.o: $(SRC)/usr/src/dk/libc/tdkdial.c $(INCDIR)/dk.h $(INCDIR)/dkerr.h $(INCDIR)/errno.h $(INCDIR)/sgtty.h $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/ioctl.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h $(SRC)/usr/src/dk/cmd/dkdial.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/dk/libc/tdkdial.c
 
 tdkexec.o: $(SRC)/usr/src/dk/libc/tdkexec.c $(INCDIR)/dk.h $(INCDIR)/stdio.h $(INCDIR)/sys/ioctl.h $(TOOLS)

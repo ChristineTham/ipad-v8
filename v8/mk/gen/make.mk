@@ -51,7 +51,7 @@ LIBC = /lib/libc.a
 INCDIR = $(SRC)/usr/include
 
 CFLAGS = -O -DASCARCH -DVERSION8
-INCS   = -I$(SRC)/usr/src/cmd/make -I$(INCDIR)
+INCS   = -I. -I$(SRC)/usr/src/cmd/make -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) $(INCS) -c
 TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
 

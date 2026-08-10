@@ -51,7 +51,7 @@ LIBC = /lib/libc.a
 INCDIR = $(SRC)/usr/include
 
 CFLAGS = -O -Dunix=1 -Dvax=1 -DFLEXNAMES -DMTIME
-INCS   = -I$(SRC)/usr/src/cmd/cpp -I$(INCDIR)
+INCS   = -I. -I$(SRC)/usr/src/cmd/cpp -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) $(INCS) -c
 TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
 

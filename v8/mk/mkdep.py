@@ -350,9 +350,24 @@ def emit(c):
             return "$(INCDIR)/" + rel(path, incdir)
         return srcdir + "/" + rel(path, d)
 
+    # A component that GENERATES A HEADER needs -I. as well, and it is the
+    # mirror image of libI77's problem.  cpp searches dirs[0] -- the directory
+    # of the file being compiled -- and never the current directory unless the
+    # source happens to be in it.  y.tab.h is written by `yacc -d' into the
+    # OBJECT directory, while config's main.c is read off the share, so
+    #
+    #	main.c:14: Can't find include file y.tab.h
+    #
+    # even though y.tab.h was made correctly a moment earlier.  lex.yy.c
+    # compiles fine in the same directory precisely because IT lives there
+    # too.  An in-tree build never sees this: source and object are one
+    # directory, so dirs[0] covers both.
+    incflags = ["-I$(SRC)/" + os.path.normpath(os.path.join(c["dir"], i))
+                for i in incs]
+    if gen or sidegen:
+        incflags.insert(0, "-I.")
     out = [PREAMBLE % dict(name=c["name"], cflags=c.get("cflags", ""),
-                           incs=" ".join("-I$(SRC)/" + os.path.normpath(
-                               os.path.join(c["dir"], i)) for i in incs))]
+                           incs=" ".join(incflags))]
     out.append("OBJS = " + " ".join(sorted(objmap)) + "\n")
     out.append("\nall: %s\n" % c["product"])
 
@@ -1010,12 +1025,23 @@ def emit_lib(l):
             return "$(INCDIR)/" + rel(path, incdir)
         return "$(SRC)/" + rel(path, V8)
 
-    # The same extra directories go on the command line as -I, so the compiler
-    # and the dependency scan agree about where a header lives.  Stating them
-    # in one place is the point: they disagreed once already, in stage 1,
-    # and the symptom was a rule that never fired rather than an error.
+    # -I the library's OWN directories, then any extras, then $(INCDIR) from
+    # the preamble.  The own-directory -I is not redundant with cpp searching
+    # the source file's directory, and libI77 is the case that proves it:
+    #
+    #	ecvt.c:12: Can't find include file nan.h
+    #
+    # nan.h is right there in usr/src/libI77 -- but ecvt.c asks for it as
+    # <nan.h>, and cpp searches dirs[0] (the file's own directory) only for
+    # the "..." form; <...> starts at dirs[1].  That is exactly why libcurses
+    # finds its "curses.h" with no -I at all and libI77 does not find its
+    # <nan.h>, and why the tape's libI77 makefile says CFLAGS = -I. -g.
+    #
+    # Order matters and follows the tape: the library's own directory comes
+    # FIRST, so libI77's own stdio.h and values.h shadow the system ones
+    # exactly as they do in an in-tree build.
     cflags = l.get("cflags", "-O") + "".join(
-        " -I$(SRC)/" + i for i in l.get("incs", []))
+        " -I$(SRC)/" + i for i in list(l["dirs"]) + list(l.get("incs", [])))
     # An assembled library has no objects.  Emitting an OBJS list and a
     # per-object rule for one anyway produced a makefile that described work
     # it never does -- dbxxx.o had a rule, nothing depended on it, and `clean`
@@ -1157,11 +1183,19 @@ STAGE5 = [
          note="cmd/inet/libin/makefile: OBJS (8), CFLAGS=-g -I ../h -- -O "
               "here instead of -g, matching every other library"),
 
+    # incs reaches ../cmd, and the tape could not have built this in-tree
+    # either.  tdkdial.c says #include "dkdial.h", dkdial.h is in
+    # usr/src/dk/cmd, and dk/libc/makefile has CFLAGS = -O with no -I of any
+    # kind -- so even `cd dk/libc; make' fails, because "..." searches the
+    # including file's directory and dkdial.h is not in it.  Same family as
+    # cpp's :yyfix, where the tape contradicts itself between two makefiles.
     dict(name="libdk", dirs=["usr/src/dk/libc"],
          objs=["tdkdial.c", "tdkexec.c", "tdklogin.c", "tdkmgr.c",
                "dkproto.c", "dkctlchan.c", "pwsearch.c"],
+         incs=["usr/src/dk/cmd"],
          cflags="-O", product="libdk.a", install="usr/lib/libdk.a",
-         note="dk/libc/makefile: LIB (7)"),
+         note="dk/libc/makefile: LIB (7), CFLAGS=-O -- and dkdial.h is in "
+              "../cmd, which that -O cannot reach"),
 ]
 
 # The plot libraries all have the same shape: the sources arrived as an ar
@@ -1173,11 +1207,19 @@ for _n, _d in [("libplot", "libplot/plot.c.a"), ("lib2621", "lib2621/hp.c.a"),
                ("lib4014", "lib4014/tek.c.a"), ("lib5620", "lib5620/blit.c.a"),
                ("libblit", "libblit/blit.c.a"), ("libpen", "libpen/pen.c.a"),
                ("libtr", "libtr/tr.c.a")]:
+    # No `incs' here, and that was worth checking rather than assuming.  The
+    # sources say #include "tek.h", and tek.h also sits in the PARENT
+    # directory beside the archive -- which looked like it would need the
+    # parent on the include path, the way libI77 and libdk do.  It does not:
+    # the archive carries its own copy, byte-identical to the parent's, so
+    # cpp finds it in dirs[0] like any other local include.  All seven built
+    # first time.
     STAGE5.append(dict(
         name=_n, dirs=["usr/src/libplot/" + _d], cflags="-O",
         product=_n + ".a", install="usr/lib/" + _n + ".a",
-        note="libplot/%s/makefile: cp %s/* . ; cc -cO *.c ; ar rc %s.a *.o"
-             % (_d.split("/")[0], _d.split("/")[1], _n)))
+        note="libplot/%s/makefile: cp %s/* . ; cc -cO *.c ; ar rc %s.a *.o "
+             "-- the archive contains its own header, so out of tree needs "
+             "no -I" % (_d.split("/")[0], _d.split("/")[1], _n)))
 
 
 # ================================================================ stage 6

@@ -6,7 +6,7 @@
 # stage 4 installed.  Source is read-only on the share; objects land in the
 # current directory, which the driver makes per-library on the build disk.
 #
-# From the tape: libplot/lib2621/makefile: cp hp.c.a/* . ; cc -cO *.c ; ar rc lib2621.a *.o
+# From the tape: libplot/lib2621/makefile: cp hp.c.a/* . ; cc -cO *.c ; ar rc lib2621.a *.o -- the archive contains its own header, so out of tree needs no -I
 
 SRC     = /n/src
 TOOLDIR = /b/tools3
@@ -26,7 +26,7 @@ RANLIB = /usr/bin/ranlib
 # stage 4 is a stage.
 INCDIR = $(DESTDIR)/usr/include
 
-CFLAGS = -O -I$(INCDIR)
+CFLAGS = -O -I$(SRC)/usr/src/libplot/lib2621/hp.c.a -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) -c
 TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
 
