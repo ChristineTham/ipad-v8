@@ -22,7 +22,7 @@ struct	stdata streams[NSTREAM];
 struct  stdata *stenter();
 int	strput(), stwsrv(), nulldev(), nilput(), nilopen();
 
-struct	qinit strdata = { strput, NULL, nulldev, nulldev, 512, 256 };
+struct	qinit strdata = { strput, NULL, nulldev, nulldev, 8192, 4096 };
 struct	qinit stwdata = { nulldev, stwsrv, nulldev, nulldev, 0, 0};
 struct	qinit nilw = { nilput, NULL, nilopen, nulldev, 1, 0 };
 struct	streamtab nilinfo = { &nilw, &nilw };
@@ -285,13 +285,36 @@ caddr_t addr;
 	register n;
 	register s, nc = 0;
 
-	if ((stq = stenter(ip)) == NULL)
+	if ((stq = stenter(ip)) == NULL) {
+		printf("istread: no stream\n");
 		return(-1);
+	}
+	/*
+	 * A byte-stream reader (ipnx, phase N6).  Three changes from the
+	 * 1985 original, all of them forced by TCP not being Datakit:
+	 *
+	 *   - a zero-length read returns 0, rather than waiting for the
+	 *     M_DELIM that a Datakit zero-length write produced and a byte
+	 *     stream never will;
+	 *   - a partly consumed block is put back rather than freed, so the
+	 *     bytes past `count' are no longer silently discarded;
+	 *   - an empty queue with `count' unsatisfied waits for more instead
+	 *     of returning short.
+	 *
+	 * Safe because sys/neta.c -- netfs -- is the only caller of istread
+	 * and istwrite in the whole kernel.  usr/src/netfs/README expected
+	 * this: "The code here assumes it is talking to Datakit in several
+	 * places.  If you want to use another network, you'll have to fix
+	 * things."
+	 */
+	if (count == 0) {
+		stexit(ip);
+		return(0);
+	}
 	for (;;) {
 		s = spl6();
 		if ((bp = getq(RD(stq->wrq))) == NULL) {
-			if ((nc && (OTHERQ(stq->wrq->next)->flag&QDELIM)==0)
-			 || stq->flag&HUNGUP) {
+			if (stq->flag&HUNGUP) {
 				splx(s);
 				stexit(ip);
 				return(nc);
@@ -300,6 +323,7 @@ caddr_t addr;
 			n = tsleep((caddr_t)RD(stq->wrq), PRIBIO, 30);
 			splx(s);
 			if (n == TS_TIME) {
+				printf("istread: timeout, got %d want %d more\n", nc, count);
 				stexit(ip);
 				return(-1);
 			}
@@ -315,7 +339,15 @@ caddr_t addr;
 			addr += n;
 			nc += n;
 			count -= n;
-			freeb(bp);
+			bp->rptr += n;
+			if (bp->rptr < bp->wptr)
+				putbq(RD(stq->wrq), bp);
+			else
+				freeb(bp);
+			if (count == 0) {
+				stexit(ip);
+				return(nc);
+			}
 			continue;
 
 		case M_DELIM:
@@ -481,13 +513,16 @@ caddr_t addr;
 	register n;
 	register s;
 
-	if ((stq = stenter(ip)) == NULL)
+	if ((stq = stenter(ip)) == NULL) {
+		printf("istwrite: no stream\n");
 		return(-1);
+	}
 	while (count) {
 		s = spl6();
 		while (stq->wrq->next->flag&QFULL && (stq->flag&HUNGUP)==0) {
 			stq->flag |= WSLEEP;
 			if (tsleep((caddr_t)stq->wrq, PRIBIO, 30)==TS_TIME) {
+				printf("istwrite: QFULL timeout, %d left\n", count);
 				splx(s);
 				stexit(ip);
 				return(-1);
@@ -495,6 +530,7 @@ caddr_t addr;
 		}
 		splx(s);
 		if (stq->flag & HUNGUP) {
+			printf("istwrite: hungup, %d left\n", count);
 			stexit(ip);
 			return(-1);
 		}

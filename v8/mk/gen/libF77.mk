@@ -6,7 +6,7 @@
 # stage 4 installed.  Source is read-only on the share; objects land in the
 # current directory, which the driver makes per-library on the build disk.
 #
-# From the tape: libF77/Makefile: ar r libF77.a $? -- no object macro, so all of its .c
+# From the tape: libF77/Makefile: ar r libF77.a $? -- no object macro, so all of its .c, main.c included
 
 SRC     = /n/src
 TOOLDIR = /b/tools3

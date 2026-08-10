@@ -185,6 +185,34 @@ do
 	fi
 done
 
+# A later stage's tool directory has to be complete enough to COMPILE with,
+# and the C library is part of that.  libc is not a per-stage artefact -- stage
+# 2 builds one and every stage from 3 on links against it -- but -B names ONE
+# directory, so each stage's lib/ needs its own copy.  Without this, stage 5
+# stops at
+#	buildlibs: /b/tools3/lib is missing: crt0.o libc.a
+# and, if that check were not there, at "ld: /b/tools3/lib/crt0.o: cannot
+# open" -- which reads like a broken toolchain and is a missing file.
+#
+# ranlib after the copy is not tidiness.  cp updates the archive's mtime, and
+# that alone makes __.SYMDEF stale: ld.c's getfile() then returns 3, falls
+# back to a single sequential pass and prints a warning.  See
+# docs/build-from-source.md.
+if test "$STAGE" != 1
+then
+	echo ""
+	echo "=== stage$STAGE: the C library, from stage 2 ==="
+	for f in libc.a crt0.o mcrt0.o
+	do
+		if test -f $T1/lib/$f
+		then cp $T1/lib/$f $TOOLDIR/lib/$f
+		else echo "  missing $T1/lib/$f -- run buildlibc.sh first"; fail=1
+		fi
+	done
+	test -f $TOOLDIR/lib/libc.a && $T1/usr/bin/ranlib $TOOLDIR/lib/libc.a
+	ls -l $TOOLDIR/lib/libc.a $TOOLDIR/lib/crt0.o $TOOLDIR/lib/mcrt0.o
+fi
+
 echo ""
 echo "=== stage$STAGE: what got built ==="
 ls -l $TOOLDIR/bin $TOOLDIR/lib $TOOLDIR/usr/bin

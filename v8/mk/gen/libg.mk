@@ -30,19 +30,15 @@ CFLAGS = -O -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) -c
 TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
 
-OBJS = dbxxx.o
 
 all: libg.a
 
 libg.a: $(SRC)/usr/src/lib/libg/dbxxx.s $(AS)
 	$(AS) $(SRC)/usr/src/lib/libg/dbxxx.s -o libg.a
 
-dbxxx.o: $(SRC)/usr/src/lib/libg/dbxxx.s $(TOOLS)
-	$(COMPILE) $(SRC)/usr/src/lib/libg/dbxxx.s
-
 install: libg.a
 	-mkdir $(DESTDIR)/usr/lib
 	cp libg.a $(DESTDIR)/usr/lib/libg.a
 
 clean:
-	-rm -f $(OBJS) libg.a
+	-rm -f libg.a

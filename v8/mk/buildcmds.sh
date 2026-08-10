@@ -58,6 +58,47 @@ echo "stage 6: commands -> $DEST, compiled with $T3"
 
 fail=0
 n=0
+
+# Step 0: the toolchain is part of the SYSTEM, not just the machinery that
+# built it.  A DESTDIR with no compiler cannot rebuild itself, which is the
+# whole of stage 9.
+#
+# No second rule is needed for this and that is the neat part: the stage-1
+# makefiles install into $(TOOLDIR) using the system's own layout -- bin, lib,
+# usr/bin, usr/lib -- so aiming TOOLDIR at DESTDIR installs them as part of
+# the system.  The stage-3 object directories still exist (build1.sh removes a
+# component's directory only at the START of building it) and everything in
+# them is up to date, so this is fourteen cp's and no compilation.
+#
+# One thing to know before stage 9 runs: -B is a RUNTIME option.  The cc that
+# lands in $DEST/bin still has /lib/ccom compiled in as its default pass
+# directory.  Under chroot that is right -- $DEST/lib/ccom becomes /lib/ccom.
+# Run from the host it is wrong, and silently uses the running system's
+# passes.  That is a reason for the chroot rather than an inconvenience of it.
+echo ""
+echo "=== stage6: the toolchain, into the system ==="
+for t in `sed 's/	.*//' $MK/stage1.order`
+do
+	if test -d $BLD/obj3/$t
+	then
+		cd $BLD/obj3/$t || { fail=1; continue; }
+		$T3/bin/make -f $MK/$t.mk SRC=$SRC TOOLDIR=$DEST \
+			$STAGEMACS "$MACROS" install > /dev/null \
+		    || { echo "  INSTALL FAILED $t"; fail=1; }
+	else
+		echo "  no $BLD/obj3/$t -- run build1.sh 3 first"; fail=1
+	fi
+done
+if test -d $BLD/objlibc
+then
+	cd $BLD/objlibc
+	$T3/bin/make -f $MK/libc.mk SRC=$SRC TOOLDIR=$DEST \
+		$STAGEMACS "$MACROS" install > /dev/null \
+	    || { echo "  INSTALL FAILED libc"; fail=1; }
+else
+	echo "  no $BLD/objlibc -- run buildlibc.sh first"; fail=1
+fi
+echo "  toolchain in the system: `ls $DEST/bin | wc -l` in bin, `ls $DEST/lib | wc -l` in lib"
 for c in `sed 's/	.*//' $MK/stage6.order`
 do
 	echo ""

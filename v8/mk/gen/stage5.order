@@ -8,6 +8,7 @@ libcbt	usr/src/lib/libcbt	usr/lib/libcbt.a
 libdbm	usr/src/libdbm	usr/lib/libdbm.a
 libF77	usr/src/libF77	usr/lib/libF77.a
 libI77	usr/src/libI77	usr/lib/libI77.a
+libin	usr/src/cmd/inet/libin	usr/lib/libin.a
 libdk	usr/src/dk/libc	usr/lib/libdk.a
 libplot	usr/src/libplot/libplot/plot.c.a	usr/lib/libplot.a
 lib2621	usr/src/libplot/lib2621/hp.c.a	usr/lib/lib2621.a
