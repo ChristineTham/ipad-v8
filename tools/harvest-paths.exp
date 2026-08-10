@@ -1,0 +1,89 @@
+#!/usr/bin/env expect
+#
+# Ask the golden image where every command lives.
+#
+#	expect tools/harvest-paths.exp [port]
+#
+# Stage 6 has to install 277 commands and the source does not say where any of
+# them go.  113 directories have a makefile, and two thirds of those install
+# into the running system with a bare `cp x /bin` -- but 164 commands are loose
+# .c files in usr/src/cmd with no makefile of any kind, and for those the tree
+# is silent.
+#
+# /bin versus /usr/bin is not a detail.  /usr is a separate filesystem, so
+# everything needed to fsck and mount it has to be on the root, and a command
+# put in the wrong one produces a system that works until the day it has to
+# repair itself.  The manual pages do not settle it either: man1 covers both.
+#
+# So the authority is the machine.  This walks /bin, /usr/bin, /etc, /usr/lib,
+# /usr/games and /lib on the shipped image and writes one line per file, which
+# tools/harvest-paths.sh turns into v8/mk/where.txt.
+#
+# Read-only, on a COPY of the golden: it logs in, lists, and halts.  Nothing is
+# written inside the guest.
+
+set timeout 300
+log_file -a harvest-paths.log
+proc sendline {x} { send "$x\r" }
+
+proc must {pat {t 0}} {
+    global timeout
+    set use [expr {$t > 0 ? $t : $timeout}]
+    expect -timeout $use "$pat" {
+    } timeout {
+        send_user "\n*** FAILED: never saw '$pat' after ${use}s ***\n"; exit 3
+    } eof {
+        send_user "\n*** FAILED: simulator exited waiting for '$pat' ***\n"; exit 4
+    }
+}
+
+# Same marker discipline as the build driver: the tty echoes typed characters
+# into whatever is printing, so a literal marker can be matched in the echo of
+# the command that produces it.  Spell it through a shell variable.
+set SEQ 0
+proc sh {cmd {t 0}} {
+    global SEQ
+    incr SEQ
+    sendline "M=+ok$SEQ"
+    sendline "$cmd"
+    sendline "echo \$M+"
+    must "+ok$SEQ+" $t
+}
+proc simh {cmd {t 0}} { must "sim>" $t; sendline $cmd }
+
+set port [lindex $argv 0]
+if {$port == ""} { set port 9400 }
+
+spawn vax780
+simh "set cpu 4M" 60
+simh "set rp0 rp06"
+simh "at rp0 harvest.disk"
+simh "set dz lines=8"
+simh "set dz 8b"
+simh "att dz -m Line=0,127.0.0.1:$port"
+simh "set cpu idle=4.1BSD"
+simh "load -o bootV8 0"
+simh "run 2"
+
+must "login:" 300
+sendline "root"
+must "# " 120
+sh "OK=-ok" 120
+sh "stty erase '^H'" 60
+
+# One `echo` per file, via the shell's own globbing: V8's ls columnises to a
+# tty and there is no -1, so a glob is the only way to get one name per line
+# that is certain not to depend on terminal width.
+foreach d {/bin /usr/bin /etc /usr/lib /usr/games /lib} {
+    send_user "\n=== $d ===\n"
+    sh "for f in $d/*; do echo WHERE \$f; done" 300
+}
+
+sh "echo HARVEST-DONE\$OK"
+sh "cd /; sync; sync"
+sendline "/etc/halt"
+must "Infinite loop" 120
+simh "quit" 60
+expect eof
+wait
+send_user "\n=== HARVEST DONE ===\n"
