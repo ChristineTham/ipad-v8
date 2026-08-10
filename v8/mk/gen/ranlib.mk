@@ -60,7 +60,7 @@ OBJS = ranlib.o
 all: ranlib
 
 ranlib: $(OBJS) $(LD) $(LIBC)
-	$(CC) $(CFLAGS) -o ranlib $(OBJS)
+	$(CC) $(CFLAGS) -o ranlib $(OBJS) $(LIBC)
 
 ranlib.o: $(SRC)/usr/src/cmd/ranlib.c $(INCDIR)/a.out.h $(INCDIR)/ar.h $(INCDIR)/ranlib.h $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/ranlib.c

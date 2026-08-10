@@ -60,7 +60,7 @@ OBJS = cpp.o cpy.o rodata.o
 all: cpp
 
 cpp: $(OBJS) $(LD) $(LIBC)
-	$(CC) $(CFLAGS) -o cpp $(OBJS)
+	$(CC) $(CFLAGS) -o cpp $(OBJS) $(LIBC)
 
 cpy.c: $(SRC)/usr/src/cmd/cpp/cpy.y $(YACCPATH) $(SRC)/usr/src/cmd/cpp/yylex.c
 	$(YACC) $(SRC)/usr/src/cmd/cpp/cpy.y

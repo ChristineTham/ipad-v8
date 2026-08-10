@@ -60,7 +60,7 @@ OBJS = fcopy.o hash.o rdout.o shrink.o strip.o symwrite.o
 all: strip
 
 strip: $(OBJS) $(LD) $(LIBC)
-	$(CC) $(CFLAGS) -o strip $(OBJS)
+	$(CC) $(CFLAGS) -o strip $(OBJS) $(LIBC)
 
 fcopy.o: $(SRC)/usr/src/cmd/strip/fcopy.c $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/strip/fcopy.c

@@ -18,14 +18,16 @@
 # STAGE 1 builds with the running system's compiler -- that is what a bootstrap
 # is -- and installs into $BLD/tools.
 #
-# STAGE 2 builds the same sources again with the stage-1 toolchain and installs
-# into $BLD/tools2.  The point is the comparison afterwards: if stage 2's
-# binaries match stage 1's, the toolchain reproduces itself and is genuinely
-# self-hosting.  If they differ, stage 1 was built by a compiler that disagrees
-# with the one in our source, and every later stage inherits that.
+# STAGE 3 builds the same sources again with the stage-1 toolchain AND the libc
+# stage 2 produced, into $BLD/tools3.  That ordering is the whole point: every
+# stage-1 binary is linked against the TAPE's libc.a, because that is the only
+# one in existence when stage 1 runs.  Rebuilding the toolchain before libc
+# gives fourteen binaries still carrying the old library, which have to be
+# built again anyway -- a wasted round.  Stage 3 is the first set in which
+# every component came from our source.
 #
-# as, ld and crt0.o are NOT redirected in stage 2, because cc has no -B for
-# them (cc.c substitutes only passes 0, 2 and p).  So stage 2 is our cpp, ccom
+# as, ld and crt0.o are NOT redirected in later stages, because cc has no -B for
+# them (cc.c substitutes only passes 0, 2 and p).  So stage 3 is our cpp, ccom
 # and c2 driving the system's assembler and loader, and the macros below say
 # so rather than pretending otherwise -- a dependency on a binary the build
 # does not actually run is a lie make will act on.
@@ -59,6 +61,7 @@ then
 	OBJ=$BLD/obj
 	MAKE=make
 	MACROS=
+	NEWLIBC=/lib/libc.a
 else
 	TOOLDIR=$BLD/tools$STAGE
 	OBJ=$BLD/obj$STAGE
@@ -66,6 +69,10 @@ else
 	# One argv element per macro; V8's make takes NAME=value from the
 	# command line and it overrides the makefile's own assignment.
 	MACROS="CC=$T1/bin/cc -B$T1/lib/ -t02p"
+	# The point of a later stage: link against the libc WE built.  Without
+	# this the fourteen binaries would come out linked to the tape's
+	# /lib/libc.a again and the stage would prove nothing new.
+	NEWLIBC=$T1/lib/libc.a
 fi
 
 if test ! -f $MK/stage1.order
@@ -115,20 +122,20 @@ do
 			YACC=$T1/bin/yacc YACCPATH=$T1/bin/yacc \
 			LEX=$T1/usr/bin/lex LEXPATH=$T1/usr/bin/lex \
 			CCPATH=$T1/bin/cc CCOM=$T1/lib/ccom \
-			CPP=$T1/lib/cpp C2=$T1/lib/c2 \
+			CPP=$T1/lib/cpp C2=$T1/lib/c2 LIBC=$NEWLIBC \
 			"$MACROS" prepare 2>/dev/null
 		$MAKE -f $MK/$t.mk SRC=$SRC TOOLDIR=$TOOLDIR \
 			YACC=$T1/bin/yacc YACCPATH=$T1/bin/yacc \
 			LEX=$T1/usr/bin/lex LEXPATH=$T1/usr/bin/lex \
 			CCPATH=$T1/bin/cc CCOM=$T1/lib/ccom \
-			CPP=$T1/lib/cpp C2=$T1/lib/c2 \
+			CPP=$T1/lib/cpp C2=$T1/lib/c2 LIBC=$NEWLIBC \
 			"$MACROS"
 		rc=$?
 		test $rc = 0 && $MAKE -f $MK/$t.mk SRC=$SRC TOOLDIR=$TOOLDIR \
 			YACC=$T1/bin/yacc YACCPATH=$T1/bin/yacc \
 			LEX=$T1/usr/bin/lex LEXPATH=$T1/usr/bin/lex \
 			CCPATH=$T1/bin/cc CCOM=$T1/lib/ccom \
-			CPP=$T1/lib/cpp C2=$T1/lib/c2 \
+			CPP=$T1/lib/cpp C2=$T1/lib/c2 LIBC=$NEWLIBC \
 			"$MACROS" install
 		irc=$?
 	fi

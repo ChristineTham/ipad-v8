@@ -60,7 +60,7 @@ OBJS = doname.o dosys.o files.o gram.o ident.o main.o misc.o
 all: make
 
 make: $(OBJS) $(LD) $(LIBC)
-	$(CC) $(CFLAGS) -o make $(OBJS)
+	$(CC) $(CFLAGS) -o make $(OBJS) $(LIBC)
 
 gram.c: $(SRC)/usr/src/cmd/make/gram.y $(YACCPATH) 
 	$(YACC) $(SRC)/usr/src/cmd/make/gram.y

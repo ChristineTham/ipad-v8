@@ -60,7 +60,7 @@ OBJS = ascode.o asexpr.o asio.o asjxxx.o asmain.o asparse.o aspseudo.o asscan.o 
 all: as
 
 as: $(OBJS) $(LD) $(LIBC)
-	$(CC) $(CFLAGS) -o as $(OBJS)
+	$(CC) $(CFLAGS) -o as $(OBJS) $(LIBC)
 
 ascode.o: $(SRC)/usr/src/cmd/as/ascode.c $(INCDIR)/a.out.h $(INCDIR)/pagsiz.h $(INCDIR)/signal.h $(INCDIR)/stab.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h $(SRC)/usr/src/cmd/as/as.h $(SRC)/usr/src/cmd/as/assyms.h $(SRC)/usr/src/cmd/as/astoks.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/as/ascode.c

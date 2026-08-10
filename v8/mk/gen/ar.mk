@@ -60,7 +60,7 @@ OBJS = ar.o
 all: ar
 
 ar: $(OBJS) $(LD) $(LIBC)
-	$(CC) $(CFLAGS) -o ar $(OBJS)
+	$(CC) $(CFLAGS) -o ar $(OBJS) $(LIBC)
 
 ar.o: $(SRC)/usr/src/cmd/ar.c $(INCDIR)/ar.h $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/stat.h $(INCDIR)/sys/types.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/ar.c

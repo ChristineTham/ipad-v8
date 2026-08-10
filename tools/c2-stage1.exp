@@ -286,34 +286,35 @@ sh "date"
 sh "sh /n/src/mk/build1.sh /n/src /b 2>&1" 5400
 sh "date"
 
-# ---------------------------------------------------------- build stage 2
-# The same sources again, compiled by what stage 1 produced, into /b/tools2.
-# The comparison after it is the point: if stage 2 reproduces stage 1, the
-# compiler our source describes builds itself, which is the bootstrap fixpoint.
-# If it does not, the 1985 /lib/ccom and our ccom.c disagree about code
-# generation and every later stage silently inherits whichever one ran.
-send_user "\n=== stage 2: rebuild the toolchain with itself ===\n"
-sh "sh /n/src/mk/build1.sh /n/src /b 2 2>&1" 5400
-sh "date"
-sh "sh /n/src/mk/cmpstage.sh /n/src /b/tools /b/tools2 /b/cmp 2>&1" 900
-
 # ------------------------------------------------------------------- libc
-# The first library rather than a program, and the one the dependency rule is
-# really about: replacing libc.a invalidates every binary linked against it.
-# 233 objects across five directories, plus two startup files.
-send_user "\n=== libc from our source ===\n"
+# STAGE 2.  libc must come before the second toolchain: every stage-1 binary is
+# linked against the TAPE's libc.a, because that is the only one in existence
+# when stage 1 runs.  Rebuilding the toolchain first would give fourteen
+# binaries still carrying the old library, which have to be built again once
+# libc exists -- a round that buys nothing.
+send_user "\n=== stage 2: libc from our source ===\n"
 sh "date"
 sh "sh /n/src/mk/buildlibc.sh /n/src /b 1 2>&1" 7200
 sh "date"
 
-# Does anything actually link against it?  Cheapest proof: build a program
-# with our crt0.o and our libc.a, using our compiler, and run it.
+# Does anything link against it?  Cheapest proof: build a program with our
+# crt0.o and our libc.a, using our compiler, and run it.
 send_user "\n=== link something against our libc ===\n"
 sh "cd /tmp"
 sh "echo 'main(){printf(\"ourlibc%s\\n\", \"-ok\");}' > u.c"
 sh "/b/tools/bin/cc -B/b/tools/lib/ -t02p -c u.c" 300
 sh "ld -X /b/tools/lib/crt0.o u.o /b/tools/lib/libc.a -o u" 300
 sh "./u"
+
+# ---------------------------------------------------------- build stage 3
+# The same sources a third time, with the stage-1 toolchain AND the libc it
+# just produced.  Stage 3 is the first set of binaries in which every
+# component came from our source, so comparing it against stage 1 says whether
+# the system reproduces itself.
+send_user "\n=== stage 3: rebuild the toolchain against our libc ===\n"
+sh "sh /n/src/mk/build1.sh /n/src /b 3 2>&1" 5400
+sh "date"
+sh "sh /n/src/mk/cmpstage.sh /n/src /b/tools /b/tools3 /b/cmp 2>&1" 900
 
 # Did we build a compiler that works?  Cheapest possible proof: use it.
 #

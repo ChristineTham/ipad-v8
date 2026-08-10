@@ -60,7 +60,7 @@ OBJS = nm.o
 all: nm
 
 nm: $(OBJS) $(LD) $(LIBC)
-	$(CC) $(CFLAGS) -o nm $(OBJS)
+	$(CC) $(CFLAGS) -o nm $(OBJS) $(LIBC)
 
 nm.o: $(SRC)/usr/src/cmd/nm.c $(INCDIR)/a.out.h $(INCDIR)/ar.h $(INCDIR)/ctype.h $(INCDIR)/signal.h $(INCDIR)/stab.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/stat.h $(INCDIR)/sys/types.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/nm.c

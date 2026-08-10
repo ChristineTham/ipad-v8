@@ -132,7 +132,6 @@ disk.
 |---|---|---|---|---|
 | **0** | — | the tape's `/bin/cc`, `/bin/make`, `/lib/libc.a` | — | |
 | **1** | yacc, then make, lex, cpp, ccom, c2, as, ld, ar, ranlib, nm, size, strip, cc | stage 0 | `TOOLDIR` | ✅ |
-| **1b** | the whole toolchain **again**, everything else held constant | stage 1 | `TOOLDIR2` | ✅ |
 | **2** | libc | stage 1 | `TOOLDIR/lib` | ▶ |
 | **3** | the whole toolchain **again** | stage 1 + stage 2 libc | `TOOLDIR3` | |
 | **4** | headers | — | `DESTDIR/usr/include` |
@@ -142,16 +141,21 @@ disk.
 | **8** | a bootable disk | `mkfs` + `DESTDIR` + `hpboot` + `proto-dev` | a new RP06/RP07 image |
 | **9** | the whole system, again, from inside itself | `chroot DESTDIR` | the completeness proof |
 
-**1b was not in the original plan and earns its place.** It rebuilds the
-toolchain with *everything except the compiler held constant* — same libc, same
-`as`, same `ld` — so if the fourteen binaries come out identical, exactly one
-thing has been proved and it is the thing that matters most: the compiler our
-source describes reproduces itself. Stage 3 is the stronger claim (rebuilt
-against the *new* libc too) and is also the noisier experiment, because a
-difference there could come from libc rather than from `ccom`. Running the
-cheap, narrow one first means a stage-3 difference will already have a suspect.
+**libc must come before the second toolchain, and the order is not
+arbitrary.** Every stage-1 binary is linked against the *tape's* `libc.a`,
+because that is the only one that exists when stage 1 runs. Rebuilding the
+toolchain before libc therefore produces fourteen binaries that still carry the
+old library, and they have to be built a third time once libc exists — the
+round buys nothing. Build libc with stage 1, then rebuild the toolchain against
+it, and stage 3 is the first set of binaries in which *every* component came
+from our source.
 
-Measured: `same=14 differ=0 missing=0`.
+An earlier version of this ran the toolchain rebuild first and measured
+`same=14 differ=0` — the compiler does reproduce itself with libc held
+constant. That is a true result and a wasted round: it is not on the path to a
+system, and it cost ten minutes of every run. Recorded because the reasoning
+that produced it ("prove one variable at a time") sounds like good method and
+ignored what the pipeline is actually for.
 
 ### libc is where the tape stops being derivable
 

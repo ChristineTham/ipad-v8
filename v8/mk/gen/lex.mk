@@ -60,7 +60,7 @@ OBJS = header.o lmain.o sub1.o sub2.o y.tab.o
 all: lex
 
 lex: $(OBJS) $(LD) $(LIBC)
-	$(CC) $(CFLAGS) -o lex $(OBJS)
+	$(CC) $(CFLAGS) -o lex $(OBJS) $(LIBC)
 
 y.tab.c: $(SRC)/usr/src/cmd/lex/parser.y $(YACCPATH) $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/lex/ldefs.c
 	$(YACC) $(SRC)/usr/src/cmd/lex/parser.y

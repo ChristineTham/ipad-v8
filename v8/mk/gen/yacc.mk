@@ -60,7 +60,7 @@ OBJS = y1.o y2.o y3.o y4.o
 all: yacc
 
 yacc: $(OBJS) $(LD) $(LIBC)
-	$(CC) $(CFLAGS) -o yacc $(OBJS)
+	$(CC) $(CFLAGS) -o yacc $(OBJS) $(LIBC)
 
 y1.o: $(SRC)/usr/src/cmd/yacc/y1.c $(INCDIR)/ctype.h $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/yacc/dextern $(SRC)/usr/src/cmd/yacc/files $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/yacc/y1.c

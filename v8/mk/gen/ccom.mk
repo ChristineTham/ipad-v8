@@ -60,7 +60,7 @@ OBJS = catch2.o cgram.o common1.o debug.o genaux.o gencode.o lcatch2.o local.o l
 all: comp
 
 comp: $(OBJS) $(LD) $(LIBC)
-	$(CC) $(CFLAGS) -o comp $(OBJS)
+	$(CC) $(CFLAGS) -o comp $(OBJS) $(LIBC)
 
 cgram.c: $(SRC)/usr/src/cmd/ccom/vax/../common/cgram.y $(YACCPATH) $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/ccom/vax/../common/manifest.h $(SRC)/usr/src/cmd/ccom/vax/../common/mfile1.h $(SRC)/usr/src/cmd/ccom/vax/macdefs.h
 	$(YACC) $(SRC)/usr/src/cmd/ccom/vax/../common/cgram.y

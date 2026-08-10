@@ -60,7 +60,7 @@ OBJS = cc.o
 all: cc
 
 cc: $(OBJS) $(LD) $(LIBC)
-	$(CC) $(CFLAGS) -o cc $(OBJS)
+	$(CC) $(CFLAGS) -o cc $(OBJS) $(LIBC)
 
 cc.o: $(SRC)/usr/src/cmd/cc.c $(INCDIR)/ctype.h $(INCDIR)/dir.h $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/cc.c

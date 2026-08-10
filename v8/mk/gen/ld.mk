@@ -60,7 +60,7 @@ OBJS = ld.o
 all: ld
 
 ld: $(OBJS) $(LD) $(LIBC)
-	$(CC) $(CFLAGS) -o ld $(OBJS)
+	$(CC) $(CFLAGS) -o ld $(OBJS) $(LIBC)
 
 ld.o: $(SRC)/usr/src/cmd/ld.c $(INCDIR)/a.out.h $(INCDIR)/ar.h $(INCDIR)/ctype.h $(INCDIR)/pagsiz.h $(INCDIR)/ranlib.h $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/stat.h $(INCDIR)/sys/types.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/ld.c

@@ -60,7 +60,7 @@ OBJS = size.o
 all: size
 
 size: $(OBJS) $(LD) $(LIBC)
-	$(CC) $(CFLAGS) -o size $(OBJS)
+	$(CC) $(CFLAGS) -o size $(OBJS) $(LIBC)
 
 size.o: $(SRC)/usr/src/cmd/size.c $(INCDIR)/a.out.h $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/size.c

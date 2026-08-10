@@ -350,7 +350,13 @@ def emit(c):
     out.append("\nall: %s\n" % c["product"])
 
     # link
-    out.append("\n%s: $(OBJS) $(LD) $(LIBC)\n\t$(CC) $(CFLAGS) %s-o %s $(OBJS)\n"
+    # $(LIBC) is NAMED on the link line, not merely depended on.  cc appends an
+    # implicit -lc, which ld resolves from /lib/libc.a -- so a stage that has
+    # built its own libc would silently keep linking against the tape's unless
+    # the archive is on the command line ahead of it.  ld takes the first
+    # definition it finds, so ours wins and the implicit -lc adds nothing.
+    # In stage 1 this is /lib/libc.a either way and costs nothing.
+    out.append("\n%s: $(OBJS) $(LD) $(LIBC)\n\t$(CC) $(CFLAGS) %s-o %s $(OBJS) $(LIBC)\n"
                % (c["product"], (c["ldflags"] + " ") if c.get("ldflags") else "",
                   c["product"]))
 

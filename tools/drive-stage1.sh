@@ -105,23 +105,23 @@ for t in yacc make lex cpp ccom c2 as ld ar ranlib nm size strip cc; do
 done
 
 echo
-echo "== stage 2: does the toolchain reproduce itself? =="
+echo "== stage 2: libc from source =="
+ck "libc.a built and installed"    'LIBC OK'
+grep -E 'libc\.a' <<< "$LOGC" | grep -E '^-rw|rw-' | tail -1 | sed 's/^/  /'
+ck "a program links against it"    'ourlibc-ok'
+
+echo
+echo "== stage 3: toolchain rebuilt against our libc =="
 for t in yacc make lex cpp ccom c2 as ld ar ranlib nm size strip cc; do
-    if grep -qE "=== stage2: $t " <<< "$LOGC"; then
-        if grep -A40 "=== stage2: $t " <<< "$LOGC" | grep -qE 'BUILD FAILED|INSTALL FAILED'; then
+    if grep -qE "=== stage3: $t " <<< "$LOGC"; then
+        if grep -A40 "=== stage3: $t " <<< "$LOGC" | grep -qE 'BUILD FAILED|INSTALL FAILED'; then
             printf '  FAIL  %s\n' "$t"; fail=1
         else printf '  ok    %s\n' "$t"; fi
     else printf '  ----  %s (never reached)\n' "$t"; fail=1; fi
 done
 grep -E 'cmpstage: same=' <<< "$LOGC" | tail -1 | sed 's/^/  /'
-ck "stage1 == stage2, stripped"    'TOOLCHAIN-FIXPOINT-ok'
+ck "stage1 == stage3, stripped"    'TOOLCHAIN-FIXPOINT-ok'
 grep -E '  DIFFER ' <<< "$LOGC" | sed 's/^/  /' | head -20
-
-echo
-echo "== libc from source =="
-ck "libc.a built and installed"    'LIBC OK'
-grep -E 'libc.a$|libc\.a *$' <<< "$LOGC" | tail -1 | sed 's/^/  /'
-ck "a program links against it"    'ourlibc-ok'
 
 echo
 echo "== the new compiler =="

@@ -3,17 +3,24 @@
 #
 #	sh $SRC/mk/cmpstage.sh [srcdir] [treeA] [treeB] [scratch]
 #
-# Defaults: /n/src /b/tools /b/tools2 /b/cmp
+# Defaults: /n/src /b/tools /b/tools3 /b/cmp
 #
 # This is the fixpoint test, and it is the only one that can tell us the
 # toolchain in our repo is self-consistent rather than merely buildable.
 #
-# Stage 1 compiles our sources with the 1985 system compiler.  Stage 2 compiles
-# the SAME sources with the stage-1 result.  If the two agree, then the
-# compiler our source describes produces itself -- the classic bootstrap
-# fixpoint.  If they differ, the system's /lib/ccom and our ccom.c disagree
-# about code generation, and every binary in every later stage inherits
-# whichever one happened to run.
+# Stage 1 compiles our sources with the 1985 system compiler and links them
+# against the 1985 libc.  Stage 3 compiles the SAME sources with the stage-1
+# toolchain and links them against the libc stage 2 built -- so stage 3 is the
+# first set of binaries in which every component came from our source.
+#
+# If the two agree, the system reproduces itself: the compiler our source
+# describes, linked against the libc our source describes, produces the same
+# fourteen binaries as the ones Bell Labs' tools produced from the same input.
+# If they differ, something in our source disagrees with what built the tape's
+# binaries, and every later stage inherits whichever one happened to run.
+#
+# A difference here is not automatically wrong -- it could be libc rather than
+# ccom -- but it is always worth chasing before a userland is built on top.
 #
 # STRIP BOTH SIDES FIRST.  cc writes its temporary file names into the symbol
 # table --
@@ -27,7 +34,7 @@
 
 SRC=${1-/n/src}
 A=${2-/b/tools}
-B=${3-/b/tools2}
+B=${3-/b/tools3}
 W=${4-/b/cmp}
 MK=$SRC/mk/gen
 

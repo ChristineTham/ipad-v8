@@ -60,7 +60,7 @@ OBJS = c20.o c21.o c22.o
 all: c2
 
 c2: $(OBJS) $(LD) $(LIBC)
-	$(CC) $(CFLAGS) -z -o c2 $(OBJS)
+	$(CC) $(CFLAGS) -z -o c2 $(OBJS) $(LIBC)
 
 c20.o: $(SRC)/usr/src/cmd/c2/c20.c $(INCDIR)/ctype.h $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/c2/c2.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/c2/c20.c
