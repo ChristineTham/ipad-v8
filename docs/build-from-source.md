@@ -398,6 +398,34 @@ Two things about `config` that are not what they appear:
   `LD` (`dfltmacro[]` defines `CC`, `AS`, `AR`, `YACC`, `LEX` and stops), so without one
   the link line would begin with a space and fail at the last command.
 
+## Stage 9 needs a compiler inside `DESTDIR`, and that costs nothing
+
+A system that cannot compile is not self-hosting, so stage 9 — rebuild the world from
+inside the world — is impossible unless `DESTDIR` contains `cc`, `ccom`, `as`, `ld`,
+`make`, `yacc` and `libc.a`. Right now the toolchain only ever lands in `TOOLDIR`,
+because that is where build machinery belongs. But those fourteen binaries are *both*:
+machinery for this build, and part of the system it produces.
+
+**No new rule is needed.** Every stage-1 makefile installs into `$(TOOLDIR)` using the
+system's own layout — `bin/`, `lib/`, `usr/bin/`, `usr/lib/` — so installing the
+toolchain into the system is the same makefiles with `TOOLDIR` aimed at `DESTDIR`:
+
+```make
+cd $BLD/obj3/yacc && make -f $MK/yacc.mk TOOLDIR=$DESTDIR install
+```
+
+The stage-3 object directories still exist when stage 6 runs (`build1.sh` removes a
+component's directory only at the *start* of building it) and everything in them is up
+to date, so the second install is fourteen `cp`s and no compilation. `libc.mk` puts
+`libc.a`, `crt0.o` and `mcrt0.o` in `$(TOOLDIR)/lib` the same way.
+
+One subtlety worth knowing before stage 9 runs: **`-B` is a runtime option, not a
+build-time one.** The `cc` that ends up in `DESTDIR/bin` still has `/lib/ccom` compiled
+in as its default pass directory. Under `chroot` that is exactly right — `DESTDIR/lib/ccom`
+*is* `/lib/ccom`. Run from the host system it is exactly wrong, and it would silently use
+the running system's passes. Stage 9's `chroot` is the only place that binary is meant
+to be run from, and that is a reason for the chroot rather than an inconvenience of it.
+
 ## Stage 8: a disk, and what the tree already has for it
 
 Not built yet. Written down now because the survey came out better than expected:
