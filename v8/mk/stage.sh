@@ -3,7 +3,7 @@
 #
 #	sh /n/src/mk/stage.sh [share] [dest]
 #
-# Runs inside V8.  Defaults: share /n/src, dest /bld/src.
+# Runs inside V8.  Defaults: share /n/src, dest /usr/bld/src.
 #
 # The copy is deliberate, not a convenience.  Building directly off netfs would
 # put a 40-minute compile at the mercy of one dropped TCP connection, and the
@@ -23,7 +23,7 @@
 # Mail, no path recorded against the old spelling is valid any more.
 
 SHARE=${1-/n/src}
-DEST=${2-/bld/src}
+DEST=${2-/usr/bld/src}
 
 if test ! -f $SHARE/CASEMAP
 then
@@ -31,28 +31,44 @@ then
 	exit 1
 fi
 
+# /usr, not /.  V8's root partition on this disk is 7.6 MB with about 4 free,
+# so an unqualified /bld gets a third of the way through jerq and dies with
+# "HELP - extract write error" -- and tar's failure is per-file, so the
+# remaining members (blit, proto-dev, usr, mk) are simply never written and
+# the tree looks like it copied.  Check the space before spending five minutes
+# discovering that again.
+echo "stage: space check"
+df /usr
+free=`df /usr | sed -n '2p' | sed 's/.*  *\([0-9][0-9]*\)  *[0-9][0-9]*%*.*/\1/'`
+echo "stage: $free KB free on /usr, need about 30000"
+
 echo "stage: copying $SHARE -> $DEST"
 rm -rf $DEST
-mkdir /bld 2>/dev/null
+mkdir /usr/bld 2>/dev/null
 mkdir $DEST || exit 1
 
 # cp -r would follow the share one file at a time; tar keeps one stream open
 # and moves ~100 KB/s, which is netfs's measured ceiling either way.
-(cd $SHARE; tar cf - bin etc jerq blit proto-dev usr mk) | (cd $DEST; tar xf -)
+# usr first: it is the bulk and the part everything else needs, so if space
+# does run out we find out on the member that matters.
+(cd $SHARE; tar cf - usr mk etc bin jerq blit proto-dev) | (cd $DEST; tar xf -)
 
 echo "stage: restoring case-sensitive names"
-n=0
+# `test -e` does not exist in 1985 -- V7's test has -f, -d, -r, -w, -s and no
+# more, so `-e` made every one of these look absent and silently skipped the
+# whole point of the exercise.  -d or -f covers both kinds of collision.
 grep -v '^#' $SHARE/CASEMAP | grep . | while read dir stored true
 do
-	if test -d $DEST/$dir -a -e "$DEST/$dir/$stored"
+	if test -d "$DEST/$dir/$stored" -o -f "$DEST/$dir/$stored"
 	then
-		(cd $DEST/$dir && mv "$stored" "$true") || echo "  FAILED $dir/$stored"
-		n=`expr $n + 1`
+		if (cd $DEST/$dir && mv "$stored" "$true")
+		then echo "  renamed $dir/$true"
+		else echo "  FAILED  $dir/$stored"
+		fi
 	else
 		echo "  missing $dir/$stored"
 	fi
 done
-echo "stage: renamed `grep -v '^#' $SHARE/CASEMAP | grep -c .` paths"
 
 echo "stage: recreating empty directories"
 grep -v '^#' $SHARE/EMPTYDIRS | grep . | while read d

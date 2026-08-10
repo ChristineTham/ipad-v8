@@ -123,7 +123,7 @@ than a wrapper script fighting absolute paths.
 
 ## The stages
 
-`TOOLDIR=/bld/tools`, `DESTDIR=/bld/root`, `OBJDIR=/bld/obj`. **Nothing is ever
+`TOOLDIR=/usr/bld/tools`, `DESTDIR=/usr/bld/root`, `OBJDIR=/usr/bld/obj`. **Nothing is ever
 installed into `/`.** The running system stays the system that works, all the way to
 the end, and the new system is only ever a directory tree until `mkfs` turns it into a
 disk.
@@ -191,13 +191,13 @@ The failure mode to avoid is turning a working system into a non-working one hal
 through a build, leaving nothing to build with. The rules that prevent it:
 
 1. **Never install into `/`.** Not `/bin`, not `/lib`, not `/usr/lib`, not `/usr/include`.
-   The only writes outside `/bld` are to `/tmp`.
+   The only writes outside `/usr/bld` are to `/tmp`.
 2. **`PATH=$TOOLDIR/bin:/bin:/usr/bin`** — new tools win, old tools remain as a fallback
    the moment a new one is deleted.
 3. **The compiler is selected explicitly**, via `-B`, never by shadowing `/lib/ccom`.
 4. **The new system is a directory until the last step.** `mkfs` writes a *second* drive;
    the drive we booted from is never the drive we are building.
-5. A stage that fails leaves `/bld` in whatever state it reached and the running system
+5. A stage that fails leaves `/usr/bld` in whatever state it reached and the running system
    untouched, so the recovery is always "look at the log and run the stage again".
 
 ## Status

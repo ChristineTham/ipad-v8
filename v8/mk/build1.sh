@@ -1,9 +1,9 @@
 #!/bin/sh
 # Stage 1: build the bootstrap toolchain.  Runs inside V8.
 #
-#	sh /bld/src/mk/build1.sh [srcdir] [tooldir]
+#	sh /usr/bld/src/mk/build1.sh [srcdir] [tooldir]
 #
-# Defaults: /bld/src, /bld/tools.
+# Defaults: /usr/bld/src, /usr/bld/tools.
 #
 # Builds, in the order the source dictates and nothing else:
 #
@@ -27,8 +27,8 @@
 # with no way back if it is wrong.  We never run the tape's install targets;
 # v8/mk/gen/*.mk install into $(TOOLDIR) and nowhere else.
 
-SRC=${1-/bld/src}
-TOOLDIR=${2-/bld/tools}
+SRC=${1-/usr/bld/src}
+TOOLDIR=${2-/usr/bld/tools}
 MK=$SRC/mk/gen
 
 if test ! -f $MK/stage1.order
@@ -38,7 +38,7 @@ then
 fi
 
 # V8's mkdir makes one level at a time; there is no -p.
-mkdir /bld			2>/dev/null
+mkdir /usr/bld			2>/dev/null
 mkdir $TOOLDIR			2>/dev/null
 mkdir $TOOLDIR/bin		2>/dev/null
 mkdir $TOOLDIR/lib		2>/dev/null

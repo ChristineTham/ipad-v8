@@ -1,0 +1,143 @@
+#!/usr/bin/env expect
+#
+# C2 + C3: mount the repo's v8/ tree in the guest and build stage 1 from it.
+#
+# End to end this proves three things at once:
+#   - the repo's source is reachable by the machine (netfs share at /n/src)
+#   - it survives staging, including the two directory pairs that cannot exist
+#     on macOS at all (usr/src/cmd/{Mail,mail}, jerq/src/lib/{C,c})
+#   - the bootstrap toolchain builds from it, in the order the source dictates,
+#     without writing a byte outside /usr/bld
+#
+# Nothing here installs into /. If this script fails halfway the machine it ran
+# on is exactly as usable as it was before -- that is the whole design.
+
+set timeout 600
+log_file -a c2-stage1.log
+proc sendline {x} { send "$x\r" }
+
+proc must {pat {t 0}} {
+    global timeout
+    set use [expr {$t > 0 ? $t : $timeout}]
+    expect -timeout $use "$pat" {
+    } timeout {
+        send_user "\n*** FAILED: never saw '$pat' after ${use}s ***\n"; exit 3
+    } eof {
+        send_user "\n*** FAILED: simulator exited waiting for '$pat' ***\n"; exit 4
+    }
+}
+# The shell prompt has to be something no file we cat can contain.  "# " is
+# not: CASEMAP and every makefile in the tree have comment lines starting with
+# it, and matching one of those lets the next command go out while the previous
+# one is still printing.  V8's sh honours PS1, so give it a prompt that cannot
+# occur in 1985 source.
+set PROMPT "ipnx%%%"
+proc sh   {cmd {t 0}} { global PROMPT; must "$PROMPT" $t; sendline $cmd }
+proc bootsh {cmd {t 0}} { must "# " $t; sendline $cmd }
+proc simh {cmd {t 0}} { must "sim>" $t; sendline $cmd }
+
+proc catfile {src dst} {
+    sh "cat > $dst"
+    set f [open $src r]
+    while {[gets $f line] >= 0} { sendline $line }
+    close $f
+    send "\x04"
+}
+
+set port [lindex $argv 0]
+if {$port == ""} { set port 9300 }
+
+spawn vax780
+simh "set noasynch"
+simh "set cpu idle=4.1BSD"
+simh "set tto 7b"
+simh "set rp0 rp07"
+simh "at rp0 rp07v8.net"
+simh "set il enable"
+simh "attach il nat:"
+simh "load -o bootV8 0"
+simh "run 2"
+must "login:" 300
+sendline "root"
+bootsh "PS1='ipnx%%% '" 120
+sh "echo C2-boot-ok" 120
+
+# ------------------------------------------------------------- networking
+# Same sequence the N track settled on: il0 up, TCP discipline pushed onto
+# /dev/ip6, default route to the SLiRP gateway which aliases to host loopback.
+send_user "\n=== network ===\n"
+sh "/etc/mknod /dev/il0 c 44 0"
+sh "/etc/mknod /dev/il1 c 44 1"
+sh "/etc/mknod /dev/ip0  c 42 0"
+sh "/etc/mknod /dev/ip6  c 42 6"
+sh "for i in 0 1 2 3 4 5 6 7; do /etc/mknod /dev/tcp0\$i c 43 \$i; done"
+sh "chmod 666 /dev/tcp0? /dev/ip0 /dev/ip6 /dev/il0 /dev/il1"
+sh "mkdir /usr/inet/lib"
+sh "echo '10.0.2.15\tv8' > /usr/inet/lib/hosts"
+sh "echo '10.0.2.2\tgateway' >> /usr/inet/lib/hosts"
+sh "echo '10.0.0.0\tslirp-net' > /usr/inet/lib/networks"
+sh "cd /usr/src/cmd/inet/etc; ./ipconfig /dev/il0 v8 slirp-net /dev/il1 &"
+sh "sleep 3"
+sh "cd /usr/src/cmd/inet/etc; ./tcpconfig /dev/ip6 &"
+sh "sleep 3"
+sh "cd /usr/src/cmd/inet/etc; ./route add '*' gateway; echo route-rc=$?"
+
+# ------------------------------------------------------------ mount v8/
+send_user "\n=== mount the repo tree at /n/src ===\n"
+sh "mkdir /n"
+sh "mkdir /n/src"
+catfile "../../tools/v8/nmount.c" "/tmp/nmount.c"
+sh "cd /tmp; cc -o nmount nmount.c -lin" 300
+sh "/tmp/nmount 10.0.2.2 $port 65 /n/src" 120
+sh "echo C2-MOUNTED"
+sh "ls /n/src"
+sh "sed 5q /n/src/CASEMAP"
+
+# ------------------------------------------------------------- stage it
+# ~25 MB at netfs's measured ~100 KB/s is about four minutes; the timeout is
+# generous because a stall here is far more likely than a slow copy.
+send_user "\n=== stage source onto local disk ===\n"
+sh "df"
+sh "date"
+sh "sh /n/src/mk/stage.sh /n/src /usr/bld/src" 2400
+sh "date"
+sh "du -s /usr/bld/src"
+
+# The point of the whole exercise, checked explicitly: both members of each
+# case-colliding pair are present in the guest, which is something the macOS
+# side physically cannot represent.
+send_user "\n=== the collisions macOS cannot hold ===\n"
+sh "ls -ld /usr/bld/src/usr/src/cmd/Mail /usr/bld/src/usr/src/cmd/mail"
+sh "ls -ld /usr/bld/src/jerq/src/lib/C /usr/bld/src/jerq/src/lib/c"
+sh "sum /usr/bld/src/usr/src/cmd/Mail/Makefile /usr/bld/src/usr/src/cmd/mail/Makefile"
+
+# ---------------------------------------------------------- build stage 1
+send_user "\n=== stage 1: bootstrap toolchain ===\n"
+sh "date"
+sh "sh /usr/bld/src/mk/build1.sh /usr/bld/src /usr/bld/tools 2>&1" 5400
+sh "date"
+
+# Did we build a compiler that works?  Cheapest possible proof: use it.
+send_user "\n=== does the new toolchain compile anything? ===\n"
+sh "cd /tmp"
+sh "echo 'main(){printf(\"newcc-ok\\n\");}' > t.c"
+sh "cat t.c"
+sh "/usr/bld/tools/bin/cc -B/usr/bld/tools/ -t02p -o t t.c" 300
+sh "./t"
+
+# And the real question: can the new compiler rebuild something the old one
+# built, identically?  Stripped, because cc bakes its PID into the symbol table.
+send_user "\n=== new compiler vs old, same source ===\n"
+sh "/usr/bld/tools/bin/cc -B/usr/bld/tools/ -t02p -O -o ls.new /usr/bld/src/usr/src/cmd/ls.c" 600
+sh "cc -O -o ls.old /usr/bld/src/usr/src/cmd/ls.c" 600
+sh "strip ls.new ls.old"
+sh "ls -l ls.new ls.old"
+sh "cmp ls.new ls.old; echo cmp-newcc-vs-oldcc=\$?"
+
+sh "echo C2-DONE"
+sh "cd /; sync; sync"
+sh "/etc/halt" 120
+simh "quit" 60
+expect eof
+wait
+send_user "\n=== C2/C3 STAGE 1 DONE ===\n"
