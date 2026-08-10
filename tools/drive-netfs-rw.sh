@@ -121,8 +121,10 @@ fi
 
 # The integrity check. V8 summed /tmp/big.h before copying it out; we sum what
 # arrived. Equal means the write path is byte-exact over many round trips.
-guest_sum=$(sed -n '/RW-SUM-LOCAL/,$p' n7-netfs-rw.log | grep -oE '^[0-9]{5} +[0-9]+ /tmp/big.h' | head -1)
-guest_sum=$(sed -n 's/^\([0-9]\{5\}\) *\([0-9]*\) \/tmp\/big.h$/\1 \2/p' n7-netfs-rw.log | head -1)
+# The guest's console is a tty, so every line arrives CR LF and anchoring on
+# `$' after the filename never matches. Strip the CR first and then parse.
+guest_sum=$(tr -d '\r' < n7-netfs-rw.log \
+    | sed -n 's|^\([0-9][0-9]*\)  *\([0-9][0-9]*\) /tmp/big.h$|\1 \2|p' | head -1)
 if [[ -f "$SHARE/big.h" ]]; then
     host_sum=$(v7sum "$SHARE/big.h")
     echo "  guest sum of /tmp/big.h : ${guest_sum:-<not found>}"
@@ -134,6 +136,20 @@ if [[ -f "$SHARE/big.h" ]]; then
     fi
 else
     echo "  FAIL  big.h never arrived on the host"; fail=$((fail + 1))
+fi
+
+# Timestamps. V8 boots believing it is 1976, and netfs carries the skew, so a
+# file it writes must still land on APFS with a *host* time -- which only
+# happens if the server subtracts dtime rather than adding it, as the reference
+# server does. A century-old mtime in Finder is the symptom.
+if [[ -f "$SHARE/big.h" ]]; then
+    year=$(stat -f "%Sm" -t "%Y" "$SHARE/big.h")
+    now=$(date +%Y)
+    if [[ "$year" == "$now" ]]; then
+        echo "  ok    mtime is $year, not a century out"
+    else
+        echo "  FAIL  mtime year is $year, expected $now"; fail=$((fail + 1))
+    fi
 fi
 
 echo

@@ -186,10 +186,29 @@ The courier is too small and too manual to build V10 on: 8.1 MB a load against a
       and `dnsq` resolves **www.bell-labs.com → 184.24.254.233** over real DNS. The
       one-number bug: V8 is classful, so the interface's network is `10.0.0.0`, not
       SLiRP's `10.0.2.0` — [n-track-notes.md](n-track-notes.md)*
-- [ ] **N4** Derive and document the netfs wire format → `docs/netfs-protocol.md`
-- [ ] **N5** Host netfs server over TCP, read-only first
-- [ ] **N6** Guest client (~50 lines: socket, handshake, `gmount`)
-- [ ] **N7** Read/write; then port the server into the app for Files access
+- [x] **N4** Derive and document the netfs wire format → `docs/netfs-protocol.md` —
+      *done 2026-08-10: measured on the machine with `tools/v8-netfs-probe.exp`
+      rather than read off the struct, because both structures carry
+      hand-written padding.*
+- [x] **N5** Host netfs server over TCP — *done 2026-08-10: `netfs/`, a SwiftPM
+      package whose `NetFS` target is the whole server and depends on nothing an
+      iPhone lacks. `tools/netfs-probe.py` speaks the protocol exactly as
+      `neta.c` does and answers in a second what a cold boot answers in five
+      minutes.*
+- [x] **N6** Guest client + the kernel work it turned out to need — *done
+      2026-08-10: `tools/v8/nmount.c` is fifty lines, but netfs cannot run over
+      a byte stream unmodified. Four bugs in `istread`, all of them Datakit
+      assumptions; `tools/drive-streamfix.sh`. A macOS folder is mounted at
+      `/n/macos` and a 13,200-byte file reads byte-exact against V8's own
+      `sum(1)`.*
+- [x] **N7** Read/write; the server ported into the app — *done 2026-08-10: a
+      65,385-byte file written inside V8 lands byte-identical on APFS, checked
+      by V8's own `sum(1)` against the same algorithm on the host, with mkdir,
+      append, chmod, unlink and timestamps all verified host-side
+      (`tools/drive-netfs-rw.sh`). `netfs/Sources/NetFS` compiles into both app
+      targets, with a folder picker in `app/ipnx/FileShare.swift`. The one
+      thing still missing is a **bundled image** carrying the `il0` kernel and
+      the netfs stream fix — that is C3 below, not netfs work.*
 
 ### B0.6 — a machine to live in *(planned 2026-08-10, [machine-config.md](machine-config.md))*
 
@@ -204,7 +223,8 @@ new; stages 2 and 3 wait on N3-into-the-image and N4–N7 respectively.
       filenames and case-folding rule that out)*
 - [ ] **C3** Golden image rebuilt on the N3 `il0` kernel; `att il0 nat:` in both
       configs; `/etc/rc` brings the interface up *(blocked on N3 → image)*
-- [ ] **C4** `/n/macos` and `/n/home` mounted at boot *(blocked on N5–N7)*
+- [ ] **C4** `/n/macos` and `/n/home` mounted at boot *(N5–N7 done; now blocked
+      only on C3, the image)*
 
 ### B1 — toolchain
 - [ ] Import `v10src` + `v10blit` into the running V8

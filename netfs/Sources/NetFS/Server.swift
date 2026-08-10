@@ -33,17 +33,27 @@ public struct NetFSConfig: Sendable {
     public var verbose: Bool
     /// Largest `NREAD` payload to return, or 0 for "as much as was asked".
     ///
-    /// A short but non-zero reply is legal and the client simply comes back
-    /// for the rest -- `naread()` loops `while(u.u_error == 0 && u.u_count != 0
-    /// && n > 0)`, so only a *zero*-length reply ends a read. That makes this a
-    /// safe accommodation for a guest whose stream head cannot pass a large
-    /// reply in one piece, at the cost of one round trip per chunk. It should
-    /// not be needed against a kernel carrying the N6 queue-limit patch.
+    /// **Defaults to 512, and that default is load-bearing.** Measured against
+    /// V8: a reply of 48 + 512 bytes works indefinitely, and 48 + 1024 never
+    /// arrives at all -- the guest reports
+    ///
+    ///     istread: timeout, got 0 want 48 more
+    ///
+    /// with the server's log showing the reply written. The suspect is
+    /// `rbsize[] = { 4, 16, 64, 1024 }` in usr/sys/dev/stream.c: 1024 bytes is
+    /// the largest block V8 can allocate, and a 1072-byte reply is the first
+    /// thing netfs ever asks it to carry in one piece. Not yet proven, so it
+    /// is recorded as a bound rather than explained away.
+    ///
+    /// Capping is legal, not a hack: a short but non-zero reply just makes the
+    /// client come back, because `naread()` loops
+    /// `while(u.u_error == 0 && u.u_count != 0 && n > 0)` and only a *zero*
+    /// length reply ends a read. The cost is one round trip per 512 bytes.
     public var maxRead: Int32
 
     public init(root: String, port: UInt16 = 9200, readOnly: Bool = true,
                 mapUID: UInt16 = 0, mapGID: UInt16 = 0, verbose: Bool = false,
-                maxRead: Int32 = 0) {
+                maxRead: Int32 = 512) {
         self.root = root; self.port = port; self.readOnly = readOnly
         self.mapUID = mapUID; self.mapGID = mapGID; self.verbose = verbose
         self.maxRead = maxRead
@@ -317,7 +327,9 @@ final class Connection {
             export.describe(h, into: &y)
             return respond(&y, 0)
         }
-        let err = export.update(h, mode: x.mode, ta: x.ta + dtime, tm: x.tm + dtime,
+        // Raw client times; Export.update does the skew conversion, and does it
+        // in the direction the reference server got backwards.
+        let err = export.update(h, mode: x.mode, ta: x.ta, tm: x.tm,
                                 dtime: dtime, byRoot: x.uid == 0)
         export.describe(h, into: &y)
         return respond(&y, err)

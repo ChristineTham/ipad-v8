@@ -379,14 +379,25 @@ final class Export {
         return 0
     }
 
-    /// `doupdat()`. A `ta`/`tm` of 0 means "leave it", which the client
-    /// expresses as a timestamp equal to the clock skew once the server has
-    /// added `dtime` back on -- hence the comparison against `dtime` rather
-    /// than against zero.
+    /// `doupdat()`. `ta`/`tm` arrive in the *client's* clock and 0 means
+    /// "leave it alone".
+    ///
+    /// **The sign of the skew is corrected here, deliberately.** `dtime` is
+    /// `client_clock - server_clock`, so a client time converts to a host time
+    /// by *subtracting* it. The reference server adds:
+    ///
+    /// ```c
+    /// x->ta += dtime;         /* work.c, doupdat */
+    /// ```
+    ///
+    /// which yields `2*client - server` and is simply wrong. It goes unnoticed
+    /// on two machines whose clocks agree, where dtime is 0. Ours do not: V8
+    /// boots believing it is 1976, so every file it wrote landed on APFS dated
+    /// **1926** until this was flipped -- a century out, and visible in Finder.
     func update(_ h: Handle, mode: Int32, ta: Int32, tm: Int32,
                 dtime: Int32, byRoot: Bool) -> UInt8 {
-        let atime = ta == dtime ? Int(clamping: h.st.st_atimespec.tv_sec) : Int(ta)
-        let mtime = tm == dtime ? Int(clamping: h.st.st_mtimespec.tv_sec) : Int(tm)
+        let atime = ta == 0 ? Int(clamping: h.st.st_atimespec.tv_sec) : Int(ta - dtime)
+        let mtime = tm == 0 ? Int(clamping: h.st.st_mtimespec.tv_sec) : Int(tm - dtime)
         var ts = [timespec](repeating: timespec(), count: 2)
         ts[0].tv_sec = atime
         ts[1].tv_sec = mtime

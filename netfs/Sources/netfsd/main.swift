@@ -8,7 +8,7 @@
 //    -v  trace every request
 //    -u  uid to present every file as (default 0)
 //    -g  gid to present every file as (default 0)
-//    -m  cap each NREAD reply to this many bytes (0 = whatever was asked)
+//    -m  cap each NREAD reply to this many bytes (default 512; 0 = no cap)
 //
 //  The guest reaches this at 10.0.2.2:<port>. Nothing has to be forwarded:
 //  SLiRP redirects every address inside its virtual network to the host's
@@ -22,7 +22,9 @@ var readOnly = true
 var verbose = false
 var mapUID: UInt16 = 0
 var mapGID: UInt16 = 0
-var maxRead: Int32 = 0
+// Matches NetFSConfig's own default. Passing 0 here would silently
+// override it, which is exactly what happened the first time.
+var maxRead: Int32 = 512
 var root: String? = nil
 
 var args = Array(CommandLine.arguments.dropFirst())

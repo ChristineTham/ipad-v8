@@ -439,7 +439,137 @@ The edit is `tools/v8/streamio-istread.ed`, applied and rebuilt by
 `/usr/sys/sys/streamio.c.orig` the pristine source, so the script is
 idempotent and reversible.
 
-### Patch whole functions, not context
+### And a fourth: the stream head is 512 bytes wide
+
+`istread` fixed, small files worked and the first big one did not. The guest
+said
+
+```
+istread: timeout, got 0 want 48 more
+```
+
+— not a truncated reply but *no reply at all*, while the server's log showed it
+written. That is a different failure from the first three, and it needed the
+`printf`s: `send()` turns every stream failure into a bare `EIO` at the system
+call, so from userland a netfs read that dies has five possible causes and no
+way to tell them apart. Three one-line diagnostics in `istread`/`istwrite` —
+no logic change — named the path in one run, and they stay in.
+
+`q->count` on a stream queue is **bytes**, not blocks (`putq` adds
+`bsize[bp->class]`), and the stream head's read queue is declared
+
+```c
+struct	qinit strdata = { strput, NULL, nulldev, nulldev, 512, 256 };
+```
+
+so it goes `QFULL` at 512. `tcpdisrv` only moves data upward
+`while((q->next->flag&QFULL) == 0)`, so a reply larger than that cannot all
+reach the reader. Widened to 8192/4096 — a buffering limit on a read queue, so
+the cost is memory, and every stream gets more slack before flow control,
+which is not a behaviour anyone can observe on a tty.
+
+### The reply-size bound, and where it was left
+
+Widening the stream head was necessary and not sufficient. Measured:
+
+| Reply | Result |
+|---|---|
+| 48-byte header + **512** bytes | works; a 13,200-byte file reads byte-exact |
+| 48-byte header + **1024** bytes | never arrives at all |
+
+The suspect is `rbsize[] = { 4, 16, 64, 1024 }` in `usr/sys/dev/stream.c` —
+1024 bytes is the largest block V8 can allocate, and a 1072-byte reply is the
+first thing netfs ever asks the stream path to carry in one piece. **That is a
+hypothesis and it is recorded as a bound rather than a diagnosis**, because
+there was a working system to be had either way and the honest thing is to say
+which parts are measured.
+
+Capping is legal, not a workaround: `naread()` loops
+`while(u.u_error == 0 && u.u_count != 0 && n > 0)`, so a short but non-zero
+reply just makes the client come back — only a *zero*-length reply ends a
+read. `netfsd` defaults to `-m 512`; the cost is one round trip per 512 bytes.
+Chasing the last of this is worth doing before B1 moves 243 MB through it.
+
+### What it does, measured
+
+With that in place, `tools/drive-netfs.sh` passes all 23 checks:
+
+```
+# ls -l /n/macos
+total 3
+-rw-r--r--  1  root    0         23 Aug 10  2026 README
+-rw-r--r--  1  root    0         27 Aug 10  2026 a-name-that-is
+drwxr-xr-x  2  root    0         32 Aug 10  2026 empty
+-rw-r--r--  1L root    0         23 Aug 10  2026 link-to-readme
+drwxr-xr-x  5  root    0         80 Aug 10  2026 src
+# cat /n/macos/README
+hello from macOS, 2026
+```
+
+The one that matters is the checksum. V8's own `sum(1)` over a 13,200-byte
+file read through netfs agrees with the same V7 rotate-and-add computed on the
+host, both in place and after `cp`-ing it to local disk — so every 512-byte
+round trip carried exactly what it claimed to. The truncated name
+`a-name-that-is` opens and reads the file whose real name is 34 characters,
+the symlink is resolved by the client, and a write to the read-only export is
+refused with `EROFS`.
+
+## N7 — Research Unix writes to macOS *(2026-08-10)*
+
+The write half needed no new protocol work: `NWRT`, `NTRUNC`, `NUPDAT` and the
+`NNAMI` side effects (`NCREAT`, `NDEL`, `NLINK`) were written alongside the read
+side and gated behind one flag, so N7 was mostly a matter of turning it on and
+checking what actually landed. `tools/drive-netfs-rw.sh` asserts against the
+**host filesystem**, not against what the guest said:
+
+```
+== verdict: what actually landed on macOS ==
+  ok    from-v8 exists with its content
+  ok    the appended line is there
+  ok    fromv8dir/inner exists
+  ok    the unlinked file is gone from the host too
+  ok    chmod 600 reached APFS
+  guest sum of /tmp/big.h : 26092 64
+  host  sum of big.h      : 26092 64
+  ok    a 65385-byte file written by V8 is byte-identical on APFS
+  ok    mtime is 2026, not a century out
+```
+
+65,385 bytes assembled inside V8 (`cat /usr/include/*.h`), summed there by V8's
+own `sum(1)`, copied out through netfs, and summed again on the host with the
+same V7 rotate-and-add. Equal, so every round trip carried what it claimed to.
+
+### The century-old timestamps
+
+Files arrived on APFS dated **1926**. That is not a rounding error, it is a
+sign:
+
+```c
+/* usr/src/netfs/work.c, doupdat */
+x->ta += dtime;
+```
+
+`dtime` is `client_clock - server_clock` (`main.c`: `x->ta - time(...)`), so a
+client time converts to a host time by *subtracting* it. Adding gives
+`2*client - server`. On two machines whose clocks agree — which is every pair
+of machines the authors had — `dtime` is 0 and the bug is invisible. Ours are a
+half-century apart, because V8 boots believing it is 1976, so the error is the
+whole skew and it shows up in Finder.
+
+Corrected in `Export.update`, with the reference behaviour quoted next to it so
+nobody "fixes" it back. Worth noting how it was caught: not by a test that knew
+to look, but by the `ls -lR` the driver prints at the end for context. The
+check now exists.
+
+### What did not need doing
+
+Ownership is deliberately not forwarded. Every file is presented as the
+configured uid/gid, so a `chown` from the guest would be changing a mapping the
+guest cannot see — and applying it to the host would hand a 1985 machine
+control over macOS file ownership. `NUPDAT` accepts mode and times and stops
+there.
+
+## Patch whole functions, not context
 
 The first version of that edit was four small `ed` commands anchored on
 context — `/stenter(ip)) == NULL/`, `/nc && (OTHERQ/`, `/freeb(bp);/`. Every

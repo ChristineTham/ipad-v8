@@ -273,9 +273,9 @@ Results as phases land: [n-track-notes.md](n-track-notes.md).
 | **N1** | 4.3BSD under SIMH with `XU` + `nat:` reaching the Internet — control experiment | Low |
 | **N2** | `pdp11_il.c`: NI1010 model wired to `sim_ether` | **Highest** |
 | **N3** | V8 kernel rebuild with `il0`; ping the outside world | High |
-| **N4** | Derive and document the netfs wire format (`docs/netfs-protocol.md`) | Moderate |
-| **N5** | Host netfs server over TCP, read-only first | Moderate |
-| **N6** | Guest client (~50 lines: socket, handshake, `gmount`) | Low |
+| **N4** | Derive and document the netfs wire format (`docs/netfs-protocol.md`) — **done** | Moderate |
+| **N5** | Host netfs server over TCP — **done**, `netfs/` | Moderate |
+| **N6** | Guest client, plus the kernel work it needed — **done** | Low → *wrong* |
 | **N7** | Widen to read/write; then port the server into the app for Files access | Moderate |
 
 Order matters: N0 unblocks everything and cannot fail interestingly; N1 tests
@@ -291,3 +291,29 @@ rungs actually requires the network.
 bite. `neta.c`'s exact framing in N4 is unread. And no V8 kernel in this project
 has ever been configured with an Ethernet device, so N3's config line is
 untested.
+
+---
+
+## What this got wrong, recorded 2026-08-10
+
+**N6 was rated "Low: ~50 lines: socket, handshake, `gmount`", and the client
+really is fifty lines.** The estimate was still wrong by a wide margin, because
+it rested on a sentence in this document that is true and incomplete:
+
+> The transport is explicitly pluggable. […] *"The only true requirement is
+> that there be a stream driver for the network."*
+
+V8 has a stream driver for TCP, so the requirement is met — and netfs still
+does not work over it. `istread()`, the kernel routine netfs reads replies
+with, has four separate Datakit assumptions baked in: it discards the unread
+remainder of a stream block, returns short when a queue momentarily empties,
+waits forever for the `M_DELIM` that a zero-length Datakit write used to
+produce, and sits behind a stream head only 512 bytes wide. Each one is
+invisible until the one before it is fixed, and each presents as the same
+unhelpful `EIO`.
+
+The authors knew: `usr/src/netfs/README` says *"you'll have to fix things"* in
+the same paragraph. What this plan did was quote the encouraging half of that
+README and skip the warning. The lesson is narrow and useful — **"the interface
+exists" is not "the interface works"**, and a 1985 abstraction boundary is a
+place to expect assumptions, not to assume their absence.

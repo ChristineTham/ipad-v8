@@ -356,6 +356,46 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   `netstat`, `gettable`/`htable`, `tcpconfig`, `interlan.c`) and `ipc/libin/`. The API is
   `open("/dev/tcpNN")` then a `struct tcpuser` written to the fd — Plan 9's `/net` model,
   predating Plan 9. N3 already drove it end to end.
+- **Three things stand between you and a TCP connection out of V8**, none of them
+  obvious. `tcpconfig` must push the TCP line discipline onto `/dev/ip6`
+  (`./tcpconfig /dev/ip6 &`, exactly as N3 pushed UDP onto `/dev/ip17`) — without it
+  `open("/dev/tcp01")` succeeds, the `tcpuser` write succeeds, and the connect blocks
+  **forever with no diagnostic**, because there is nothing underneath the device. The
+  minor must be **odd**: `tcp_device.c` refuses an even one whose socket is not already
+  active (`if((dev&01) == 0 && (so->so_state&SS_ACTIVE) == 0) return(0);`) because even
+  minors are the accept side — libin's `tcp_sock()` encodes this as
+  `for(n = 01; n < 100; n += 2)` and never says why. And the guest reaches the host at
+  **10.0.2.2 = 127.0.0.1**: SLiRP rewrites every address inside its virtual network to
+  the host's loopback (`tcp_fconnect`, *"It's an alias"*), so nothing needs forwarding
+  and the same mechanism works inside the iOS sandbox.
+- **netfs does not run over a byte stream unmodified, and "there is a stream driver"
+  is not enough.** `usr/src/netfs/README` says so — *"you'll have to fix things"* — and
+  four separate Datakit assumptions live in `istread()` (`sys/streamio.c`), which is
+  netfs's *only* caller in the kernel and therefore safe to change: it discards the
+  unread remainder of a block, returns short when a queue momentarily empties, waits
+  forever for the `M_DELIM` a zero-length Datakit write used to produce (so every EOF
+  hangs), and sits behind a stream head only **512 bytes** wide
+  (`strdata`; `q->count` is bytes, and `tcpdisrv` only drains
+  `while((q->next->flag&QFULL) == 0)`). Each is invisible until the one before it is
+  fixed and each presents as the same bare `EIO`. `tools/drive-streamfix.sh` applies
+  all of it. **Even then, keep each reply under ~560 bytes** — 48+512 works, 48+1024
+  never arrives (suspect `rbsize[] = {4,16,64,1024}`, unproven); `netfsd` defaults to
+  `-m 512`. Capping is legal: `naread()` loops while `n > 0`, so only a *zero*-length
+  reply ends a read. Also **`doupdat`'s clock skew is applied backwards upstream**
+  (`x->ta += dtime` where dtime is `client - server`), harmless between machines whose
+  clocks agree and a century of error against a V8 that thinks it is 1976 — subtract.
+- **Patching guest sources: replace whole functions, and rehearse on the host.**
+  `streamio.c`'s `stread()` and `istread()` share whole lines verbatim, so
+  context-anchored `ed` edits landed in the wrong one and the kernel failed to compile
+  at a line number nowhere near the target — while a `sed -n '/^istread/,/^}/p'` of the
+  result looked perfect, because it only printed the function that was fine. Anchor on
+  the one unique line (`/^istread(ip, addr, count)/`), `.,/^}/d`, insert a known-good
+  body; that is also idempotent and repairs prior damage. macOS `ed` runs the same
+  script against `work/v8src/` in a second, against ten minutes for boot-and-build.
+  Two traps in the guest's own tools: a backup called `streamio.c.orig` is **15
+  characters** and fails with a bare `cp: cannot create` (14-byte names apply to *your*
+  filenames too), and V8's `grep` is 1985's, so `\|` is a literal and a pattern using
+  it matches nothing while looking like it asked a question — use `egrep`.
 - The golden image shipped **no `lost+found` on either filesystem**, so an autoboot
   `fsck` needing to reconnect an orphaned inode aborted to a single-user shell instead
   of `login:` ("Automatic reboot failed... help!") — reachable in the app whenever a

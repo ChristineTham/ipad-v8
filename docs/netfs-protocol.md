@@ -287,8 +287,20 @@ for a read `count` means "how much I want".
 
 **`count` is bounded by `BUFSIZE` = 4096** (`sys/h/param.h`), measured on the
 image. The kernel loops, issuing one request per 4 KB, until the user's
-`read`/`write` is satisfied. A short `NREAD` reply (`y.count` less than asked)
-ends the loop and is how EOF is signalled — there is no separate EOF.
+`read`/`write` is satisfied.
+
+**A short reply is not EOF — only a *zero-length* one is.** *(Corrected
+2026-08-10; the N4 reading of this was wrong and it matters.)* `naread()`'s
+loop is
+
+```c
+	} while(u.u_error == 0 && u.u_count != 0 && n > 0);
+```
+
+so a reply carrying fewer bytes than were asked for, but more than none, simply
+makes the client come back for the rest at the new offset. That is what makes
+it safe for a server to cap its replies — see the reply-size bound below — and
+it is the only signal for end of file: `y.count == 0`, nothing else.
 
 On a read where the server returns fewer bytes than its own header promised,
 the client writes a **zero-length message** and abandons the connection:
@@ -328,6 +340,41 @@ was not `"."`.
 Because resolution is per-component, a path of *n* components costs *n* round
 trips, each serialised by the connection lock. That, and not bandwidth, is what
 makes netfs feel slow on a high-latency link.
+
+## The reply-size bound: keep each reply under about 560 bytes
+
+Measured, not derived. Against a V8 carrying the N6 stream fixes:
+
+| Reply | Result |
+|---|---|
+| 48-byte header + **512** bytes | works indefinitely — a 13,200-byte file reads byte-exact |
+| 48-byte header + **1024** bytes | **never arrives at all** |
+
+The failure is silent on the wire and loud in the guest: the server's log shows
+the reply written, and the client says
+
+```
+istread: timeout, got 0 want 48 more
+```
+
+— it never saw even the header. Everything that worked before this was found
+(directory listings, small files) happened to be under the bound, which is why
+it only appeared on the first file bigger than a couple of blocks.
+
+The suspect is `usr/sys/dev/stream.c`:
+
+```c
+int	rbsize[] = { 4, 16, 64, 1024 };	/* real block sizes */
+```
+
+1024 bytes is the largest block V8 can allocate, and a 1072-byte reply is the
+first thing netfs ever asks the stream path to carry in one piece. That is a
+hypothesis, not a demonstration, so it is recorded here as a **bound** rather
+than explained away.
+
+Capping is legal rather than a workaround, for the reason in the payload rules
+above: a short but non-zero reply just makes the client come back. The cost is
+one round trip per chunk. `netfsd` therefore defaults to `-m 512`.
 
 ## Three things the structures do not tell you
 
