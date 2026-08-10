@@ -96,16 +96,10 @@ struct SettingsView: View {
 
     // MARK: Terminal
 
-    /// The plain glass tty. Deliberately its own section: it is a different
-    /// terminal on a different line, not a display mode of the 5620.
+    /// The glass ttys. Deliberately its own section: these are different
+    /// terminals on different lines, not a display mode of the 5620.
     private var glassSection: some View {
-        Section("Plain terminal") {
-            Picker("Terminal", selection: $settings.glassKind) {
-                ForEach(GlassTerminal.Kind.allCases) { Text($0.label).tag($0) }
-            }
-            Text(settings.glassKind.explanation)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+        Section("Glass terminals") {
             Picker("Colours", selection: $settings.glassTheme) {
                 ForEach(Settings.GlassTheme.allCases) { Text($0.label).tag($0) }
             }
@@ -113,14 +107,20 @@ struct SettingsView: View {
                 get: { settings.glassFontSize ?? 0 },
                 set: { settings.glassFontSize = $0 == 0 ? nil : $0 })) {
                 Text("Fit the window").tag(CGFloat(0))
-                ForEach(Settings.glassFontSizes, id: \.self) { size in
+                ForEach(TerminalMetrics.fontSizes, id: \.self) { size in
                     Text("\(Int(size)) pt").tag(size)
                 }
             }
-            Text("The grid stays \(settings.glassKind.cols)×\(settings.glassKind.rows) whatever size the text is — this kernel predates TIOCGWINSZ, so nothing can tell V8 how big the window is and the size comes from termcap. Bigger text means a bigger picture, not more of it.")
+            Text("The grid stays 80×24 — or 128×24 on tty07 — whatever size the text is. This kernel predates TIOCGWINSZ, so nothing can tell V8 how big a window is and the size comes from termcap. Bigger text means a bigger picture, not more of it.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-            Text("The plain terminal runs without the 5620, which is most of the app's CPU — a session here costs a fraction of the battery. Changes apply the next time it starts.")
+
+            Toggle("Log tty01 in as root", isOn: $settings.autoLoginRoot)
+            Text("root is the only account and has no password, so the first terminal opens straight into a shell. It waits for the login: prompt rather than typing on a timer, so a resumed session that is already logged in is left alone.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            Text("A glass tty runs without the 5620, which is most of the app's CPU — a session here costs a fraction of the battery.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -143,6 +143,7 @@ struct SettingsView: View {
 
             Button("Restart terminal") {
                 terminal.restart(dzPort: machine.blitPort,
+                                 screen: settings.activeScreen,
                                  nvram: settings.persistNVRAM ? machine.nvramURL : nil,
                                  stats: settings.statsURL(machine))
             }

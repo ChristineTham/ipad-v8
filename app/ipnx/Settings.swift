@@ -128,6 +128,17 @@ final class Settings: ObservableObject {
         }
 
         var caret: PlatformColor { foreground }
+
+        /// The tint the chrome picks up, so the glass around a terminal
+        /// belongs to the terminal it surrounds.
+        var accent: Color {
+            switch self {
+            case .green: return Color(red: 0.45, green: 1.00, blue: 0.60)
+            case .amber: return Color(red: 1.00, green: 0.72, blue: 0.30)
+            case .white: return Color(red: 0.92, green: 0.95, blue: 1.00)
+            case .paper: return Color(red: 0.35, green: 0.42, blue: 0.55)
+            }
+        }
     }
 
     /// Multiplier on the terminal CPU's 10 MHz clock. This is what makes the
@@ -174,25 +185,22 @@ final class Settings: ObservableObject {
     /// next such question will need it again.
     @Published var logTerminalStats: Bool { didSet { store.set(logTerminalStats, forKey: Key.stats) } }
 
-    // The plain glass tty.
-    @Published var glassKind: GlassTerminal.Kind { didSet { store.set(glassKind.rawValue, forKey: Key.glassKind) } }
+    // The plain glass ttys.
     @Published var glassTheme: GlassTheme { didSet { store.set(glassTheme.rawValue, forKey: Key.glassTheme) } }
+
+    /// Whether `tty01` logs itself in as root when it is first opened.
+    ///
+    /// On by default, and defensible only because of what this machine is:
+    /// root is the sole account until B0.6's first-boot provisioner exists,
+    /// it has no password, and the machine is a single-user emulator in the
+    /// user's own container with no network service listening. Revisit when
+    /// there are real accounts.
+    @Published var autoLoginRoot: Bool { didSet { store.set(autoLoginRoot, forKey: Key.autoLogin) } }
     /// Font size in points, or nil for "fit the window". Stored as 0 for fit,
     /// which is also what an absent default reads as.
     @Published var glassFontSize: CGFloat? {
         didSet { store.set(Double(glassFontSize ?? 0), forKey: Key.glassFont) }
     }
-
-    /// Which face the app was last showing. Restored on launch, and that is
-    /// what makes the 5620's lazy start worth anything: a user who lives in
-    /// the plain terminal never starts the dmd thread at all, rather than
-    /// starting it every launch and then switching away from it.
-    @Published var lastFace: MachineFace { didSet { store.set(lastFace.rawValue, forKey: Key.face) } }
-
-    /// The sizes the picker offers, plus "Fit". Anything finer is a slider
-    /// nobody wants: the grid is fixed at 80 or 128 columns either way, so
-    /// this only decides how big the picture is.
-    static let glassFontSizes: [CGFloat] = [10, 11, 12, 13, 14, 16, 18, 20, 24]
 
     private let store: UserDefaults
 
@@ -206,10 +214,9 @@ final class Settings: ObservableObject {
         static let nvram = "terminal.persistNVRAM"
         static let speed = "terminal.speed"
         static let stats = "terminal.logStats"
-        static let glassKind = "glass.kind"
         static let glassTheme = "glass.theme"
         static let glassFont = "glass.fontSize"
-        static let face = "machine.face"
+        static let autoLogin = "session.autoLoginRoot"
     }
 
     init(store: UserDefaults = .standard) {
@@ -224,20 +231,28 @@ final class Settings: ObservableObject {
         persistNVRAM = store.object(forKey: Key.nvram) as? Bool ?? true
         speed = Speed(rawValue: store.string(forKey: Key.speed) ?? "") ?? .fast
         logTerminalStats = store.bool(forKey: Key.stats)          // absent == false
-        glassKind = GlassTerminal.Kind(rawValue: store.string(forKey: Key.glassKind) ?? "") ?? .vt100
         glassTheme = GlassTheme(rawValue: store.string(forKey: Key.glassTheme) ?? "") ?? .green
         let pts = store.double(forKey: Key.glassFont)
         glassFontSize = pts > 0 ? CGFloat(pts) : nil              // 0 / absent == fit
-        // Default .blit: a first run should meet the 5620, which is the point
-        // of the app. After that the app follows the user.
-        lastFace = MachineFace(rawValue: store.string(forKey: Key.face) ?? "") ?? .blit
+        autoLoginRoot = store.object(forKey: Key.autoLogin) as? Bool ?? true
     }
 
-    /// Which DZ listener a glass session of this kind should dial. The kind
-    /// and the port are not independent: `/.profile` picks TERM from the tty
-    /// name, and the tty name is decided by which line the app connects to.
-    func glassPort(_ machine: Machine) -> UInt16 {
-        glassKind == .vt100w ? machine.wideGlassPort : machine.glassPort
+    /// A second window to open at launch, from `defaults` rather than a click.
+    ///
+    /// The testing seam docs/ui-redesign.md asks for: driving this app with
+    /// AppleScript is forbidden (both `activate` and `keystroke` resolve the
+    /// *bundle* through LaunchServices and can start a second copy, and two
+    /// VAXes sharing one v8.disk is a filesystem-corruption hazard), so a
+    /// check that needs the 5620 window presets it instead:
+    ///
+    ///     defaults write com.hellotham.ipnx debug.openWindow dmd
+    ///
+    /// Unset — which is every real launch — this does nothing.
+    static var debugOpenWindow: TerminalShape? {
+        guard let raw = UserDefaults.standard.string(forKey: "debug.openWindow") else {
+            return nil
+        }
+        return TerminalShape(rawValue: raw)
     }
 
     /// Where the terminal thread should write throughput stats, or nil to keep

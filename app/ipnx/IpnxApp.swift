@@ -10,8 +10,15 @@ import UIKit
 /// itself carries no trademark, which is the binding constraint (see
 /// docs/licensing.md); both expansions are jokes in the GNU tradition and stay
 /// out of the app's name and branding.
-/// Boots the bundled V8 disk, shows it on the operator console and the DMD 5620,
-/// and keeps the machine alive across app lifecycle via SIMH save/restore.
+/// Boots the bundled V8 disk, shows it on the operator console, seven glass
+/// ttys and the DMD 5620, and keeps the machine alive across app lifecycle via
+/// SIMH save/restore.
+///
+/// One window group, keyed by terminal shape. That is not a style choice: this
+/// kernel has `struct sgttyb` and no `TIOCGWINSZ`, so nothing can tell V8 how
+/// large a window is and a terminal's grid is whatever termcap says. The three
+/// shapes cannot be reflowed into one another, so each gets its own window and
+/// tabs group sessions that are already the same size.
 ///
 /// The two platforms take deliberately different suspend policies. iOS *must*
 /// snapshot on background — the OS freezes or kills the process. macOS must
@@ -20,10 +27,10 @@ import UIKit
 /// quit (which still buys instant-on) or when explicitly asked.
 @main
 struct IpnxApp: App {
-    @StateObject private var machine = Machine()
-    @StateObject private var terminal = Terminal5620()
-    @StateObject private var glass = GlassTerminal()
-    @StateObject private var settings = Settings()
+    @StateObject private var machine: Machine
+    @StateObject private var dmd: Terminal5620
+    @StateObject private var settings: Settings
+    @StateObject private var store: SessionStore
 
     #if os(macOS)
     @NSApplicationDelegateAdaptor(MacAppDelegate.self) private var appDelegate
@@ -32,175 +39,151 @@ struct IpnxApp: App {
     @Environment(\.scenePhase) private var scenePhase
     #endif
 
+    init() {
+        let machine = Machine()
+        let dmd = Terminal5620()
+        let settings = Settings()
+        _machine = StateObject(wrappedValue: machine)
+        _dmd = StateObject(wrappedValue: dmd)
+        _settings = StateObject(wrappedValue: settings)
+        // Built here rather than lazily in a view: the store starts the
+        // console session in its initialiser, and that has to happen before
+        // the VAX does or the boot transcript lands nowhere.
+        _store = StateObject(wrappedValue: SessionStore(machine: machine, dmd: dmd,
+                                                        settings: settings))
+    }
+
     var body: some Scene {
+        // The WindowGroup is spelled twice rather than once with the platform
+        // differences hung off it: `#if` inside a result builder has to bracket
+        // whole statements, and a bare `.defaultSize(…)` continuation is not one.
         #if os(macOS)
-        WindowGroup {
-            MachineView(machine: machine, terminal: terminal, glass: glass,
-                        settings: settings, capture: capture)
-                .onAppear {
-                    machine.start()
-                    appDelegate.machine = machine
-                    appDelegate.settings = settings
-                    appDelegate.terminal = terminal
-                }
+        WindowGroup(for: TerminalShape.self) { $shape in
+            window(shape)
+        } defaultValue: {
+            .vt100
         }
-        .defaultSize(width: 900, height: 1120)
-        .commands {
-            CommandMenu("Terminal") {
-                // The 5620's mouse is a relative device with free-running
-                // counters, so its cursor and the Mac's cannot stay in step
-                // once the Mac's hits a screen edge. Grabbing removes the
-                // second cursor entirely, which is the only reliable fix.
-                Button(capture.captured ? "Release Pointer" : "Grab Pointer") {
-                    capture.captured.toggle()
-                }
-                .keyboardShortcut("g", modifiers: [.command])
-            }
-            CommandMenu("Machine") {
-                Button("Suspend") { Task { await machine.background() } }
-                    .keyboardShortcut(".", modifiers: [.command])
-                Button("Resume") { machine.foreground() }
-                    .keyboardShortcut("r", modifiers: [.command, .shift])
-                Divider()
-                Button("Restart Terminal") {
-                    terminal.restart(dzPort: machine.blitPort,
-                                     screen: settings.activeScreen,
-                                     nvram: settings.persistNVRAM ? machine.nvramURL : nil,
-                                     stats: settings.statsURL(machine))
-                }
-            }
-        }
+        .defaultSize(width: 900, height: 700)
+        .commands { menus }
+
         // Qualified: our own preferences type is also called Settings, and the
         // scene builder would otherwise resolve to its initialiser.
         SwiftUI.Settings {
-            SettingsView(settings: settings, machine: machine, terminal: terminal)
-                .frame(width: 520, height: 620)
+            SettingsView(settings: settings, machine: machine, terminal: dmd)
+                .frame(width: 520, height: 640)
         }
         #else
-        WindowGroup {
-            MachineView(machine: machine, terminal: terminal, glass: glass, settings: settings)
-                .onAppear { machine.start() }
-        }
-        .onChange(of: scenePhase) { _, newPhase in
-            switch newPhase {
-            case .background:
-                // Snapshot inside a UIKit background task; iOS grants a few
-                // seconds, the save handshake needs well under one.
-                terminal.saveScreen(to: machine.screenURL)
-                let token = UIApplication.shared.beginBackgroundTask(withName: "simh-save")
-                Task {
-                    await machine.background()
-                    UIApplication.shared.endBackgroundTask(token)
-                }
-            case .active:
-                machine.foreground()
-            default:
-                break
-            }
+        WindowGroup(for: TerminalShape.self) { $shape in
+            window(shape)
+        } defaultValue: {
+            .vt100
         }
         #endif
     }
+
+    @ViewBuilder
+    private func window(_ shape: TerminalShape) -> some View {
+        #if os(macOS)
+        SessionWindow(shape: shape, store: store, machine: machine,
+                      settings: settings, dmd: dmd, capture: capture)
+            .onAppear { launch(shape) }
+        #else
+        SessionWindow(shape: shape, store: store, machine: machine,
+                      settings: settings, dmd: dmd)
+            .onAppear { launch(shape) }
+            .onChange(of: scenePhase) { _, newPhase in
+                switch newPhase {
+                case .background:
+                    // Snapshot inside a UIKit background task; iOS grants a
+                    // few seconds and the save handshake needs well under one.
+                    dmd.saveScreen(to: machine.screenURL)
+                    let token = UIApplication.shared.beginBackgroundTask(withName: "simh-save")
+                    Task {
+                        await machine.background()
+                        UIApplication.shared.endBackgroundTask(token)
+                    }
+                case .active:
+                    machine.foreground()
+                default:
+                    break
+                }
+            }
+        #endif
+    }
+
+    /// Start the VAX once, from whichever window opened first, and give the
+    /// default window its second tab.
+    private func launch(_ shape: TerminalShape) {
+        machine.start()
+        #if os(macOS)
+        appDelegate.machine = machine
+        appDelegate.settings = settings
+        appDelegate.terminal = dmd
+        #endif
+        if shape == .vt100 { store.openDefaults() }
+    }
+
+    #if os(macOS)
+    @CommandsBuilder
+    private var menus: some Commands {
+        WindowCommands()
+        CommandMenu("Terminal") {
+            // The 5620's mouse is a relative device with free-running
+            // counters, so its cursor and the Mac's cannot stay in step once
+            // the Mac's hits a screen edge. Grabbing removes the second cursor
+            // entirely, which is the only reliable fix.
+            Button(capture.captured ? "Release Pointer" : "Grab Pointer") {
+                capture.captured.toggle()
+            }
+            .keyboardShortcut("g", modifiers: [.command])
+            Button("Send BREAK") { dmd.sendBreak() }
+        }
+        CommandMenu("Machine") {
+            Button("Suspend") { Task { await machine.background() } }
+                .keyboardShortcut(".", modifiers: [.command])
+            Button("Resume") { machine.foreground() }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+            Divider()
+            Button("Restart Terminal") {
+                dmd.restart(dzPort: machine.blitPort,
+                            screen: settings.activeScreen,
+                            nvram: settings.persistNVRAM ? machine.nvramURL : nil,
+                            stats: settings.statsURL(machine))
+            }
+        }
+    }
+    #endif
 }
 
 #if os(macOS)
+/// File ▸ Open Terminal. Its own `Commands` type because `openWindow` is an
+/// environment value, and an App struct is not a view — it has no environment
+/// to read it from.
+struct WindowCommands: Commands {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandGroup(after: .newItem) {
+            Menu("Open Terminal") {
+                ForEach(TerminalShape.allCases) { shape in
+                    Button(shape.label) { openWindow(value: shape) }
+                }
+            }
+        }
+    }
+}
+
 /// Quit is the Mac's only forced suspend point. `applicationShouldTerminate`
 /// cannot await, so we defer the reply and let the save handshake finish —
 /// otherwise the process dies mid-`save` and the next launch cold-boots.
+///
+/// Window shaping used to live here and no longer can: with more than one
+/// window, `NSApp.windows.first` is a guess. It is `CRTWindow.shape` now,
+/// driven from the 5620's own window (Platform.swift).
 final class MacAppDelegate: NSObject, NSApplicationDelegate {
     weak var machine: Machine?
     weak var settings: Settings?
     weak var terminal: Terminal5620?
-
-    /// Open as large as the desk allows, short of full screen — and shaped so
-    /// the emulated CRT fills it exactly.
-    ///
-    /// The CRT is one of two fixed sizes, so this is simply: make the window
-    /// as big as the desk allows at that shape. The terminal is not the whole
-    /// window — the title bar and its toolbar come off the top, the bezel off
-    /// every edge — so sizing to `visibleFrame` outright would letterbox the
-    /// CRT by exactly that much.
-    ///
-    /// So: take the desk minus the menu bar and Dock (`visibleFrame`), take
-    /// the real chrome off that, and give the remainder the CRT's aspect.
-    /// Full screen is deliberately not used — it hides the menu bar and moves
-    /// the app to its own Space, which is a heavier thing to do to someone on
-    /// launch than they asked for.
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        // The window does not exist yet at this point -- SwiftUI creates it
-        // during the first update pass -- so this runs on the next turn of
-        // the runloop. (didBecomeMainNotification looked tidier and never
-        // fired: by the time the delegate is installed, the window is already
-        // main.)
-        DispatchQueue.main.async { self.shapeWindow(settle: true) }
-    }
-
-    private func shapeWindow(settle: Bool) {
-        guard let window = NSApp.windows.first(where: {
-                  $0.isVisible && $0.styleMask.contains(.titled)
-                      && $0.styleMask.contains(.resizable)
-              }) else { return }
-        DispatchQueue.main.async {
-            guard let screen = window.screen ?? NSScreen.main else { return }
-            let desk = screen.visibleFrame
-
-            // Real chrome, measured rather than assumed. `contentLayoutRect`
-            // is the part of the window neither the title bar nor the toolbar
-            // covers, so the difference is both of them together -- which
-            // matters now that the controls live in a real NSToolbar whose
-            // height is AppKit's business, not ours. (contentRect(forFrameRect:)
-            // was wrong here: it answers from the style mask alone and never
-            // knows about the toolbar.)
-            let chrome = window.frame.height - window.contentLayoutRect.height
-            let bezel = Blit5620View.bezel * 2
-
-            let crt = self.settings?.chooseScreen() ?? .stock
-            let aspect = CGFloat(crt.width) / CGFloat(crt.height)
-            var screenH = desk.height - chrome - bezel
-            var screenW = screenH * aspect
-            if screenW > desk.width - bezel {         // a wide, short desk
-                screenW = desk.width - bezel
-                screenH = screenW / aspect
-            }
-            let target = NSRect(x: desk.midX - (screenW + bezel) / 2,
-                                y: desk.maxY - (screenH + bezel + chrome),
-                                width: screenW + bezel,
-                                height: screenH + bezel + chrome)
-
-            // Stop the frame being restored over the top of ours. AppKit
-            // reapplies a remembered frame *after* this point, so setting it
-            // here alone looked like it worked -- setFrame reported success --
-            // and the window still came up at whatever size it was last time.
-            window.isRestorable = false
-            window.setFrameAutosaveName("")
-            window.setFrame(target, display: true)
-
-            // Lock the shape. The user can still resize — the picture scales —
-            // but the window can no longer be dragged into a shape the
-            // emulated CRT is not, which is what used to force the terminal to
-            // rebuild itself mid-session.
-            window.contentAspectRatio = NSSize(width: target.width,
-                                               height: target.height - chrome)
-
-            let got = window.frame
-            FileHandle.standardError.write(Data("""
-                ipnx: desk \(Int(desk.width))x\(Int(desk.height)) \
-                chrome \(Int(chrome)) bezel \(Int(bezel)) -> \
-                crt \(Int(screenW))x\(Int(screenH)), \
-                window wanted \(Int(target.width))x\(Int(target.height)), \
-                got \(Int(got.width))x\(Int(got.height))\n
-                """.utf8))
-
-            // And measure again a beat later. Not just because "reported
-            // success" turned out not to mean "kept it" -- the toolbar may not
-            // have been installed on the first pass, and a chrome height
-            // measured before it exists is short by the toolbar.
-            if settle {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    self.shapeWindow(settle: false)
-                }
-            }
-        }
-    }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         // Before anything else: the terminal always power-cycles, so the only

@@ -54,21 +54,36 @@ final class Machine: ObservableObject {
     private var consolePort: UInt16 { portBase }
     private var controlPort: UInt16 { portBase + 1 }
 
-    // Three DZ listeners, because *which line* a session lands on decides what
-    // terminal V8 thinks it is talking to. There is no /etc/ttytype and no
-    // TIOCGWINSZ on this machine, so /.profile picks TERM from the tty name
-    // (config.exp) — and that only works if the mapping is pinned rather than
-    // a race. tmxr_poll_conn skips any line with its own `master`, so giving
-    // lines 0 and 7 their own ports leaves the mux-wide listener handing out
-    // 1..6 and never those two. Connection order stops mattering, which it
-    // must: the 5620 now starts lazily and is usually last to dial.
+    /// The listen port for one DZ line. `tty00` is the 5620, `tty07` the wide
+    /// glass tty, `tty01`..`tty06` the plain ones.
+    ///
+    /// **One listener per line, not one mux-wide listener.** Which line a
+    /// session lands on decides what terminal V8 thinks it is talking to:
+    /// there is no `/etc/ttytype` and no `TIOCGWINSZ` here, so `/.profile`
+    /// runs `case \`tty\` in` and picks TERM from the device name. With a
+    /// single mux-wide listener `tmxr_poll_conn` hands each new connection to
+    /// the next *free* line, so the terminal you got depended on the order you
+    /// happened to open tabs — and a tab labelled `tty03` would be lying.
+    /// A per-line listen port makes the mapping a property of the port dialled.
+    /// `tmxr` supports this directly ("Each line can have a separate listen
+    /// port and the mux can have its own as well" — sim_tmxr.c), and
+    /// `tmxr_attach_ex` sets the polling unit on whichever attach comes first,
+    /// so no mux-wide attach is needed at all.
+    func dzPort(_ line: Int) -> UInt16 { portBase + 2 + UInt16(line) }
 
     /// DZ line 0 → `tty00` → `TERM=dmd`. The 5620's line, and only its.
-    var blitPort: UInt16 { portBase + 2 }
-    /// The mux-wide listener: lines 1..6 → `TERM=vt100`, 80×24.
-    var glassPort: UInt16 { portBase + 3 }
-    /// DZ line 7 → `tty07` → `TERM=vt100w`, 128×24. One session, reserved.
-    var wideGlassPort: UInt16 { portBase + 4 }
+    var blitPort: UInt16 { dzPort(0) }
+
+    /// The eight attach commands, in line order.
+    ///
+    /// `-m` rides the first one only: modem control is a device-wide setting
+    /// (`dz_mctl`), and it is what makes a dropped connection drop carrier so
+    /// V8 hangs up the session and getty starts over.
+    private var dzAttachments: String {
+        (0...7).map { line in
+            "att dz \(line == 0 ? "-m " : "")Line=\(line),Speed=*32,127.0.0.1:\(dzPort(line))"
+        }.joined(separator: "\n")
+    }
     private var simThread: Thread?
     private var restartedAfterFailedRestore = false
 
@@ -142,9 +157,7 @@ final class Machine: ObservableObject {
     set cpu idle=4.1BSD
     set tto 7b
     set dz lines=8
-    att dz -m Speed=*32,127.0.0.1:\(glassPort)
-    att dz Line=0,Speed=*32,127.0.0.1:\(blitPort)
-    att dz Line=7,Speed=*32,127.0.0.1:\(wideGlassPort)
+    \(dzAttachments)
     set rp0 rp06
     at rp0 v8.disk
     set tu0 te16
@@ -199,16 +212,30 @@ final class Machine: ObservableObject {
     restore -D -Q state.sav
     set cpu idle=4.1BSD
     set console telnet=127.0.0.1:\(consolePort)
-    att dz -m Speed=*32,127.0.0.1:\(glassPort)
-    att dz Line=0,Speed=*32,127.0.0.1:\(blitPort)
-    att dz Line=7,Speed=*32,127.0.0.1:\(wideGlassPort)
+    \(dzAttachments)
     cont
     """ }
 
     // MARK: - Lifecycle
 
+    /// Bring the machine up. Safe to call from every window that appears —
+    /// and it has to be, because any of them may be the first.
+    ///
+    /// `phase` cannot be the guard on its own, and that mistake crashed the
+    /// app the moment there was a second window. `start()` only *schedules*
+    /// `bringUp()`; the phase does not leave `.idle` until that task runs, so
+    /// two windows appearing in the same runloop turn both saw `.idle` and
+    /// both spawned a SIMH thread — two VAX-11/780s inside one process,
+    /// binding the same ports and attached to the same `v8.disk`. It died on
+    /// the spot, which was the lucky outcome: two simulators writing one RP06
+    /// is the filesystem-corruption hazard this project takes care to avoid
+    /// everywhere else. The flag is set synchronously, so the second caller
+    /// cannot get past it however the scheduler interleaves.
+    private var started = false
+
     func start() {
-        guard phase == .idle else { return }
+        guard !started else { return }
+        started = true
         Task { await bringUp() }
     }
 
@@ -218,7 +245,7 @@ final class Machine: ObservableObject {
             let resuming = try await provision()
             Machine.note("\(resuming ? "resuming a saved session" : "cold boot") "
                          + "— console \(consolePort), control \(controlPort), "
-                         + "dz blit \(blitPort) glass \(glassPort) wide \(wideGlassPort)")
+                         + "dz tty00..tty07 \(dzPort(0))..\(dzPort(7))")
             phase = .starting
             launchSimhThread(config: resuming ? "resume.conf" : "boot.conf")
             guard await console.connect(port: consolePort) else {
@@ -403,6 +430,7 @@ final class Machine: ObservableObject {
             restartedAfterFailedRestore = true
             consumeSnapshot()
             phase = .idle
+            started = false          // this is the one legitimate restart
             start()
             return
         }
