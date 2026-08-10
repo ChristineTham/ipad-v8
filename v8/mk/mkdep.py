@@ -1111,10 +1111,15 @@ STAGE5 = [
          cflags="-O", product="libdbm.a", install="usr/lib/libdbm.a",
          note="libdbm/Makefile: libdbm.a: dbm.o"),
 
+    # libF77/main.c defines main() and that is CORRECT, so do not "fix" it.
+    # It is headed "STARTUP PROCEDURE FOR UNIX FORTRAN PROGRAMS": the Fortran
+    # runtime supplies main(), sets up the signal handlers and then calls the
+    # compiled program.  It is the one library here that is supposed to
+    # contain an entry point.
     dict(name="libF77", dirs=["usr/src/libF77"],
          cflags="-O", product="libF77.a", install="usr/lib/libF77.a",
          note="libF77/Makefile: ar r libF77.a $? -- no object macro, so all "
-              "of its .c"),
+              "of its .c, main.c included"),
 
     dict(name="libI77", dirs=["usr/src/libI77"],
          objs=["Version.c", "backspace.c", "dfe.c", "due.c", "iio.c",
