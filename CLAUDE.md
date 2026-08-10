@@ -378,12 +378,21 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   (`strdata`; `q->count` is bytes, and `tcpdisrv` only drains
   `while((q->next->flag&QFULL) == 0)`). Each is invisible until the one before it is
   fixed and each presents as the same bare `EIO`. `tools/drive-streamfix.sh` applies
-  all of it. **Even then, keep each reply under ~560 bytes** — 48+512 works, 48+1024
-  never arrives (suspect `rbsize[] = {4,16,64,1024}`, unproven); `netfsd` defaults to
-  `-m 512`. Capping is legal: `naread()` loops while `n > 0`, so only a *zero*-length
-  reply ends a read. Also **`doupdat`'s clock skew is applied backwards upstream**
+  all of it. Also **`doupdat`'s clock skew is applied backwards upstream**
   (`x->ta += dtime` where dtime is `client - server`), harmless between machines whose
   clocks agree and a century of error against a V8 that thinks it is 1976 — subtract.
+- **The NI1010 must CHAIN a received frame across receive buffers**, and getting that
+  wrong looks like nothing at all. `ill.c` subtracts each buffer's programmed byte count
+  from `ilr_length` and waits for another interrupt while any remains, supplying the next
+  buffer from inside `ilrint` (`ILOUTSTANDING` is 1). `allocb()` caps a block at
+  `rbsize[3]` = **1024 bytes**, so every frame larger than that needs two buffers — and
+  our model delivered one and truncated, leaving the driver waiting for an interrupt that
+  never came. Not a dropped packet: the receive path *stops*, and every layer above
+  reports a timeout on something it never saw. It survived N2, N3 and most of N6 because
+  nothing before netfs ever sent a frame over 1024 bytes. Fixed by `il_rxpump()` in
+  `libsimh/patches/pdp11_il.c`. The general form is worth keeping: **a limit you measure
+  through an emulator is a property of your emulator until proven otherwise** — this one
+  spent a day written up as a netfs reply-size bound.
 - **Patching guest sources: replace whole functions, and rehearse on the host.**
   `streamio.c`'s `stread()` and `istread()` share whole lines verbatim, so
   context-anchored `ed` edits landed in the wrong one and the kernel failed to compile

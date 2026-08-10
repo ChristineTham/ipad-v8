@@ -168,6 +168,10 @@ static struct il_ctx {
     struct il_rxbuf     rxq[IL_RXQ];
     int                 rxq_head;
     int                 rxq_count;
+    uint8               rxframe[IL_MAXFRAME + IL_HDRLEN];   /* frame in flight */
+    uint32              rxtotal;                            /* bytes to hand over */
+    uint32              rxoff;                              /* handed over so far */
+    int                 rxbusy;                             /* mid-delivery */
     uint8               txbuf[IL_TXBUF];                /* accumulated by LDXMIT */
     uint32              txlen;
     ETH_MAC             mac;
@@ -198,6 +202,7 @@ int32 il_rint_ack (void);
 int32 il_cint_ack (void);
 static void il_command (uint16 data);
 static void il_deliver (const uint8 *frame, size_t len);
+static void il_rxpump (void);
 static void il_update_filter (void);
 
 DIB il_dib = {
@@ -220,6 +225,10 @@ REG il_reg[] = {
     { FLDATAD (CINT,    il.cint,    0,              "command interrupt pending") },
     { FLDATAD (RINT,    il.rint,    0,              "receive interrupt pending") },
     { DRDATAD (RXQ,     il.rxq_count, 8,            "queued receive buffers") },
+    { FLDATAD (RXBUSY,  il.rxbusy,  0,              "frame spanning buffers in flight") },
+    { DRDATAD (RXTOTAL, il.rxtotal, 32,             "bytes in the frame in flight") },
+    { DRDATAD (RXOFF,   il.rxoff,   32,             "bytes of it already delivered") },
+    { BRDATAD (RXFRAME, il.rxframe, 16, 8, sizeof (il.rxframe), "frame in flight") },
     { DRDATAD (IPKTS,   il.ipackets, 32,            "packets received") },
     { DRDATAD (OPKTS,   il.opackets, 32,            "packets sent") },
     { DRDATAD (IERRS,   il.ierrors,  32,            "receive errors") },
@@ -433,10 +442,14 @@ switch (cmd) {
         il.rxq[n].ba = ba;
         il.rxq[n].bc = il.bcr;
         il.rxq_count++;
+        /* ilrint() supplies the next buffer from inside the handler when a
+           frame has more to come, so this is where chaining continues. */
+        il_rxpump ();
         break;
 
     case ILC_FLUSH:
         il.rxq_head = il.rxq_count = 0;
+        il.rxbusy = 0;
         break;
 
     case ILC_LDXMIT:
@@ -586,20 +599,76 @@ memcpy (&buf[IL_HDRLEN], frame, len);
 memset (&buf[IL_HDRLEN + len], 0, IL_CRCLEN);           /* stand-in CRC */
 il.lost = 0;
 
-rb = &il.rxq[il.rxq_head];
-n = total + IL_HDRLEN;
-if (n > rb->bc)                                         /* truncate, as asked */
-    n = rb->bc;
-sim_debug (DBG_PKT, &il_dev, "receive %u bytes into 0%o (buffer %u, ilr_length %u)\n",
-           n, rb->ba, rb->bc, total);
 if (il.eth && DEBUG_PRI (il_dev, DBG_DAT))
     eth_packet_trace_ex (il.eth, frame, (int)len, "il-read", 1, DBG_DAT);
 
-if (Map_WriteB (rb->ba, (int32)n, buf) != 0) {
+memcpy (il.rxframe, buf, total + IL_HDRLEN);
+il.rxtotal = total + IL_HDRLEN;
+il.rxoff = 0;
+il.rxbusy = 1;
+il_rxpump ();
+}
+
+/* Hand over as much of the frame in flight as the buffer at the head of the
+   queue will take, and interrupt.  ONE buffer per call, which is not a
+   simplification but the contract.
+
+   ill.c expects the controller to CHAIN a frame across as many receive
+   buffers as it needs, one interrupt per buffer.  ilrint() reads ilr_length
+   out of the first buffer, then subtracts each buffer's *programmed byte
+   count* as the interrupts arrive, and only passes the packet upward once the
+   remainder reaches zero:
+
+        is->len -= (bp->wptr - bp->rptr);
+        if(is->len <= 0) goto done;
+        if((bp->wptr - bp->rptr) % 8) goto done;   // not chaining
+        if(is->nbp == 0) ilsetup(is, addr, is->len);
+        return;                                    // wait for the next one
+
+   ILOUTSTANDING is 1, so the driver supplies the next buffer from inside that
+   same handler -- which is why filling one buffer and interrupting, then
+   waiting for ILC_RCV, is exactly what the hardware did.
+
+   GETTING THIS WRONG DOES NOT LOOK LIKE A TRUNCATED PACKET.  A frame needing
+   two buffers that gets one leaves ilrint() with is->len > 0, waiting on an
+   interrupt that never comes: the receive path stops dead, and every read on
+   that connection times out with nothing to show for it.  allocb() caps a
+   block at rbsize[3] = 1024, so any frame over ~1024 bytes needs two buffers
+   -- and nothing this project sent before netfs was ever that big.  It
+   survived N2, N3 and most of N6 on 42-byte ARP and 130-byte DNS replies. */
+
+static void il_rxpump (void)
+{
+struct il_rxbuf *rb;
+uint32 chunk;
+
+if (!il.rxbusy || il.rxq_count == 0)
+    return;
+
+rb = &il.rxq[il.rxq_head];
+chunk = il.rxtotal - il.rxoff;
+if (chunk > rb->bc)
+    chunk = rb->bc;
+
+if (Map_WriteB (rb->ba, (int32)chunk, &il.rxframe[il.rxoff]) != 0) {
     il.ierrors++;
     il.csr = (il.csr & ~ILCSR_STATUS) | ILERR_NXM;
+    il.rxbusy = 0;
     }
-else il.ipackets++;
+else {
+    il.rxoff += chunk;
+    /* A byte count that is not a multiple of 8 is ilsetup()'s way of saying
+       "last buffer, truncate here" -- it shortens the final buffer by 2 when
+       the frame is larger than ETHERMTU. */
+    if ((il.rxoff >= il.rxtotal) || ((rb->bc % 8) != 0)) {
+        il.rxbusy = 0;
+        il.ipackets++;
+        }
+    }
+
+sim_debug (DBG_PKT, &il_dev, "receive %u bytes into 0%o (buffer %u, %u of %u)%s\n",
+           chunk, rb->ba, rb->bc, il.rxoff, il.rxtotal,
+           il.rxbusy ? ", more to come" : "");
 
 il.rxq_head = (il.rxq_head + 1) % IL_RXQ;
 il.rxq_count--;
@@ -613,14 +682,17 @@ t_stat il_svc (UNIT *uptr)
 int count;
 
 if (il.eth) {
+    il_rxpump ();                                       /* finish any chain */
     do {
         count = il.rxpkt.len = 0;
+        if (il.rxbusy)                                  /* one frame at a time */
+            break;
         eth_read (il.eth, &il.rxpkt, NULL);
         if (il.rxpkt.len > 0) {
             count = 1;
             il_deliver (il.rxpkt.msg, il.rxpkt.len);
             }
-        } while (count && il.rxq_count);
+        } while (count && il.rxq_count && !il.rxbusy);
     }
 sim_clock_coschedule (uptr, tmxr_poll);
 return SCPE_OK;

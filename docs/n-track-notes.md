@@ -468,29 +468,73 @@ reach the reader. Widened to 8192/4096 — a buffering limit on a read queue, so
 the cost is memory, and every stream gets more slack before flow control,
 which is not a behaviour anyone can observe on a tty.
 
-### The reply-size bound, and where it was left
+### The fifth bug was ours, and it was in the Ethernet controller
 
-Widening the stream head was necessary and not sufficient. Measured:
+Widening the stream head was necessary and not sufficient. Replies of 48+512
+bytes worked indefinitely; 48+1024 never arrived at all, with the server's log
+showing the reply written and the guest saying `istread: timeout, got 0 want 48
+more`. I capped the server at 512, wrote the limit up as a **measured bound**
+with `rbsize[] = { 4, 16, 64, 1024 }` named as a suspect, and said plainly that
+it was a hypothesis rather than a diagnosis.
 
-| Reply | Result |
-|---|---|
-| 48-byte header + **512** bytes | works; a 13,200-byte file reads byte-exact |
-| 48-byte header + **1024** bytes | never arrives at all |
+It was not a V8 limitation at all. It was `libsimh/patches/pdp11_il.c` — our
+own NI1010 model, written in N2 and exercised since only by 42-byte ARP
+requests and 130-byte DNS replies.
 
-The suspect is `rbsize[] = { 4, 16, 64, 1024 }` in `usr/sys/dev/stream.c` —
-1024 bytes is the largest block V8 can allocate, and a 1072-byte reply is the
-first thing netfs ever asks the stream path to carry in one piece. **That is a
-hypothesis and it is recorded as a bound rather than a diagnosis**, because
-there was a working system to be had either way and the honest thing is to say
-which parts are measured.
+`ill.c` expects the controller to **chain** a frame across as many receive
+buffers as it needs, one interrupt per buffer:
 
-Capping is legal, not a workaround: `naread()` loops
-`while(u.u_error == 0 && u.u_count != 0 && n > 0)`, so a short but non-zero
-reply just makes the client come back — only a *zero*-length reply ends a
-read. `netfsd` defaults to `-m 512`; the cost is one round trip per 512 bytes.
-Chasing the last of this is worth doing before B1 moves 243 MB through it.
+```c
+is->len -= (bp->wptr - bp->rptr);          /* this buffer's programmed size */
+if(is->len <= 0) goto done;                /* frame complete -- deliver */
+if((bp->wptr - bp->rptr) % 8) goto done;   /* "not chaining" marker */
+if(is->nbp == 0) ilsetup(is, addr, is->len);   /* ask for another buffer */
+return;                                    /* wait for the next interrupt */
+```
 
-### What it does, measured
+`ILOUTSTANDING` is **1**, so the driver supplies the next buffer from inside
+that same handler. Our model did this instead:
+
+```c
+n = total + IL_HDRLEN;
+if (n > rb->bc)                            /* truncate, as asked */
+    n = rb->bc;
+```
+
+— one buffer per frame, truncate the rest. And `allocb()` caps a block at
+`rbsize[3]` = 1024 bytes, so **every frame over ~1024 bytes needed two buffers
+and got one**. `ilrint()` was left with `is->len > 0`, waiting for an interrupt
+that was never coming. The receive path did not drop a packet; it stopped.
+
+That is why the symptom was so unhelpful. A truncating controller loses data
+and says so; a controller that forgets to chain simply goes quiet, and every
+layer above it reports a timeout on something it never saw.
+
+The comment in our own model is where the error is preserved: *"A frame longer
+than the supplied buffer is truncated rather than dropped: ilsetup() explicitly
+asks for truncation by shortening the last buffer."* That reads `ilsetup`
+backwards. It shortens a buffer by 2 — making its size not a multiple of 8,
+which is the "stop here" marker — **only** when the remaining length exceeds
+`ETHERMTU`, i.e. for a genuinely oversized frame. In the ordinary case it
+supplies full buffers and expects them to be filled in sequence.
+
+Fixed by `il_rxpump()`: hand over as much as the buffer at the head of the
+queue will take, interrupt, and continue when `ILC_RCV` supplies the next one.
+One buffer per call, which is not a simplification but the contract. The
+in-flight frame is in the register list, so a `save` mid-chain restores
+correctly.
+
+**With that fixed the cap is gone**: `netfsd` serves full `BUFSIZE` replies and
+all 23 checks pass with `-m 0`. The same read that took 241 requests at 512
+bytes takes 184 uncapped.
+
+The lesson is worth more than the fix. **A limit you measure through an
+emulator is a property of your emulator until proven otherwise** — and I had
+written it into the protocol document, where it would have misled anyone
+reimplementing netfs on real hardware. It is now recorded there as the mistake
+it was.
+
+### What it does, measured### What it does, measured
 
 With that in place, `tools/drive-netfs.sh` passes all 23 checks:
 

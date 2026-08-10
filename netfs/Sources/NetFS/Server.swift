@@ -31,29 +31,26 @@ public struct NetFSConfig: Sendable {
     public var mapUID: UInt16
     public var mapGID: UInt16
     public var verbose: Bool
-    /// Largest `NREAD` payload to return, or 0 for "as much as was asked".
+    /// Largest `NREAD` payload to return, or 0 -- the default -- for "as much
+    /// as was asked", which is `BUFSIZE` = 4096.
     ///
-    /// **Defaults to 512, and that default is load-bearing.** Measured against
-    /// V8: a reply of 48 + 512 bytes works indefinitely, and 48 + 1024 never
-    /// arrives at all -- the guest reports
+    /// This existed because replies over ~560 bytes never arrived, and it
+    /// defaulted to 512 for as long as that was true. **The cause turned out
+    /// to be ours**: `pdp11_il.c` handed a frame to exactly one receive buffer,
+    /// while `ill.c` expects the controller to chain across as many as it
+    /// needs. `allocb()` caps a block at 1024 bytes, so anything larger needed
+    /// two and got one, and the driver waited forever for the second
+    /// interrupt. Fixed in the device model, not worked around here.
     ///
-    ///     istread: timeout, got 0 want 48 more
-    ///
-    /// with the server's log showing the reply written. The suspect is
-    /// `rbsize[] = { 4, 16, 64, 1024 }` in usr/sys/dev/stream.c: 1024 bytes is
-    /// the largest block V8 can allocate, and a 1072-byte reply is the first
-    /// thing netfs ever asks it to carry in one piece. Not yet proven, so it
-    /// is recorded as a bound rather than explained away.
-    ///
-    /// Capping is legal, not a hack: a short but non-zero reply just makes the
-    /// client come back, because `naread()` loops
+    /// The knob stays because it is a useful bisector and costs nothing: a
+    /// short but non-zero reply is legal, since `naread()` loops
     /// `while(u.u_error == 0 && u.u_count != 0 && n > 0)` and only a *zero*
-    /// length reply ends a read. The cost is one round trip per 512 bytes.
+    /// length reply ends a read.
     public var maxRead: Int32
 
     public init(root: String, port: UInt16 = 9200, readOnly: Bool = true,
                 mapUID: UInt16 = 0, mapGID: UInt16 = 0, verbose: Bool = false,
-                maxRead: Int32 = 512) {
+                maxRead: Int32 = 0) {
         self.root = root; self.port = port; self.readOnly = readOnly
         self.mapUID = mapUID; self.mapGID = mapGID; self.verbose = verbose
         self.maxRead = maxRead

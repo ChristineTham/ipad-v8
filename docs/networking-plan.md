@@ -317,3 +317,12 @@ the same paragraph. What this plan did was quote the encouraging half of that
 README and skip the warning. The lesson is narrow and useful — **"the interface
 exists" is not "the interface works"**, and a 1985 abstraction boundary is a
 place to expect assumptions, not to assume their absence.
+
+**And the fifth bug was not in 1985 code at all.** After four genuine Datakit
+assumptions in `istread()`, replies over ~1024 bytes still vanished — because
+our own N2 device model handed each frame to one receive buffer, where `ill.c`
+expects chaining across several. Nothing this project had ever sent was big
+enough to notice: N2 and N3 were proven on 42-byte ARP requests and 130-byte
+DNS replies, and every netfs operation up to the first large file fitted in one
+buffer too. A device model is only as tested as the traffic you have put
+through it, and "it reached the Internet" is a weaker claim than it sounds.

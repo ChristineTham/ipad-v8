@@ -299,7 +299,7 @@ loop is
 
 so a reply carrying fewer bytes than were asked for, but more than none, simply
 makes the client come back for the rest at the new offset. That is what makes
-it safe for a server to cap its replies — see the reply-size bound below — and
+it safe for a server to cap its replies if it ever needs to, and
 it is the only signal for end of file: `y.count == 0`, nothing else.
 
 On a read where the server returns fewer bytes than its own header promised,
@@ -341,40 +341,22 @@ Because resolution is per-component, a path of *n* components costs *n* round
 trips, each serialised by the connection lock. That, and not bandwidth, is what
 makes netfs feel slow on a high-latency link.
 
-## The reply-size bound: keep each reply under about 560 bytes
+## There is no reply-size limit in the protocol
 
-Measured, not derived. Against a V8 carrying the N6 stream fixes:
+*(Recorded 2026-08-10, and then corrected the same day.)* This section used to
+say "keep each reply under about 560 bytes", with a table of measurements and a
+suspicion about `rbsize[]`. That was a real measurement of a real failure and
+it was **not a property of netfs**: replies over ~1024 bytes vanished because
+*our* SIMH NI1010 model handed each frame to exactly one receive buffer, while
+`ill.c` expects the controller to chain a frame across as many as it needs.
+`allocb()` caps a block at 1024 bytes, so any larger frame needed two buffers,
+got one, and left the driver waiting for an interrupt that never came.
 
-| Reply | Result |
-|---|---|
-| 48-byte header + **512** bytes | works indefinitely — a 13,200-byte file reads byte-exact |
-| 48-byte header + **1024** bytes | **never arrives at all** |
-
-The failure is silent on the wire and loud in the guest: the server's log shows
-the reply written, and the client says
-
-```
-istread: timeout, got 0 want 48 more
-```
-
-— it never saw even the header. Everything that worked before this was found
-(directory listings, small files) happened to be under the bound, which is why
-it only appeared on the first file bigger than a couple of blocks.
-
-The suspect is `usr/sys/dev/stream.c`:
-
-```c
-int	rbsize[] = { 4, 16, 64, 1024 };	/* real block sizes */
-```
-
-1024 bytes is the largest block V8 can allocate, and a 1072-byte reply is the
-first thing netfs ever asks the stream path to carry in one piece. That is a
-hypothesis, not a demonstration, so it is recorded here as a **bound** rather
-than explained away.
-
-Capping is legal rather than a workaround, for the reason in the payload rules
-above: a short but non-zero reply just makes the client come back. The cost is
-one round trip per chunk. `netfsd` therefore defaults to `-m 512`.
+It is written down here because the mistake is instructive for anyone
+reimplementing this protocol elsewhere: **a limit you measure through an
+emulator is a property of your emulator until proven otherwise.** The
+correction lives in [n-track-notes.md](n-track-notes.md); the fix is in
+`libsimh/patches/pdp11_il.c`. `netfsd` serves full `BUFSIZE` replies.
 
 ## Three things the structures do not tell you
 

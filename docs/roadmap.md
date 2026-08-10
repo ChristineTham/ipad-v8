@@ -200,7 +200,9 @@ The courier is too small and too manual to build V10 on: 8.1 MB a load against a
       a byte stream unmodified. Four bugs in `istread`, all of them Datakit
       assumptions; `tools/drive-streamfix.sh`. A macOS folder is mounted at
       `/n/macos` and a 13,200-byte file reads byte-exact against V8's own
-      `sum(1)`.*
+      `sum(1)`. A fifth bug was ours: the N2 device model did not chain a
+      received frame across receive buffers, which capped every reply at one
+      1024-byte block and looked like a netfs limit until it was found.*
 - [x] **N7** Read/write; the server ported into the app — *done 2026-08-10: a
       65,385-byte file written inside V8 lands byte-identical on APFS, checked
       by V8's own `sum(1)` against the same algorithm on the host, with mkdir,
