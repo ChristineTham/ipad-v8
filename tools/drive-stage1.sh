@@ -74,7 +74,7 @@ ck() {  # ck <label> <pattern>
 echo
 echo "== share =="
 ck "mounted /n/src"                'C2-MOUNTED-ok'
-ck "CASEMAP readable over netfs"   'usr/src/cmd.*%4Dail'
+ck "CASEMAP readable over netfs"   'C3-CASEMAP-ok'
 # The two directory pairs that cannot coexist on macOS at all.  netfsd's
 # CaseMap serves them under their true names, so the guest must see both --
 # and must never see an escaped one, which would not fit a 14-byte direct.

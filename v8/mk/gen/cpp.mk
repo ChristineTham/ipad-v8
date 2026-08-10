@@ -64,7 +64,7 @@ cpp: $(OBJS) $(LD) $(LIBC)
 
 cpy.c: $(SRC)/usr/src/cmd/cpp/cpy.y $(YACCPATH) $(SRC)/usr/src/cmd/cpp/yylex.c
 	$(YACC) $(SRC)/usr/src/cmd/cpp/cpy.y
-	:yyfix yyexca yyact yypact yypgo yyr1 yyr2 yychk yydef; mv y.tab.c cpy.c
+	sh $(SRC)/usr/src/cmd/cpp/:yyfix yyexca yyact yypact yypgo yyr1 yyr2 yychk yydef; mv y.tab.c cpy.c
 
 cpp.o: $(SRC)/usr/src/cmd/cpp/cpp.c $(INCDIR)/setjmp.h $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/stat.h $(INCDIR)/sys/types.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/cpp/cpp.c

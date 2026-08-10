@@ -108,8 +108,17 @@ STAGE1 = [
     # rodata.c so they can be linked read-only (-R).  Both are generated.
     dict(name="cpp", dir="usr/src/cmd/cpp",
          objs={"cpp.o": "cpp.c", "cpy.o": "cpy.c", "rodata.o": "rodata.c"},
+         # :yyfix is a script that lives in cpp's OWN source directory, and
+         # the tape's makefile invokes it bare -- which only resolves when you
+         # build in-tree with "." on PATH.  Off the share it is "sh: :yyfix:
+         # not found".  (pcc1's makefile says ./:yyfix, so the tape is
+         # inconsistent with itself here.)  Run it through sh with a full path:
+         # sh does not need the executable bit to have survived the wire, and
+         # the script itself is cwd-relative in the right way -- it rewrites
+         # the y.tab.c yacc just produced in the object directory.
          gen={"cpy.c": ("yacc", "cpy.y",
-                        ":yyfix yyexca yyact yypact yypgo yyr1 yyr2 yychk yydef; "
+                        "sh $(SRC)/usr/src/cmd/cpp/:yyfix "
+                        "yyexca yyact yypact yypgo yyr1 yyr2 yychk yydef; "
                         "mv y.tab.c cpy.c")},
          cflags="-Dunix=1 -Dvax=1 -DFLEXNAMES -DMTIME",
          oflags={"rodata.o": "-R"},
@@ -141,7 +150,12 @@ STAGE1 = [
              "lookup.o": "../common/lookup.c",
              "lcatch2.o": "lcatch2.c",
              "catch2.o": "../common/catch2.c",
-             "t2print.o": "t2print.c",
+             # common/, not vax/ -- the tape's makefile says
+             #     t2print.o: $M/mfile2.h $M/t2print.c
+             # and $M is the common directory.  In-tree this was masked
+             # by nothing; out-of-tree it is a hard "Don't know how to
+             # make .../vax/t2print.c".
+             "t2print.o": "../common/t2print.c",
          },
          # cgram.c is yacc's output with the #line directives commented out --
          # V8's cpp chokes on them in a generated file, hence the tape's sed.
@@ -149,7 +163,10 @@ STAGE1 = [
                           "sed 's_^# line .*_/* & */_' y.tab.c >cgram.c; rm -f y.tab.c")},
          incs=[".", "../common"], cflags="-DVAX -DYYDEBUG",
          # cgram.o wants y.debug present; the tape ships y.debug.sv for it.
-         pre=["cp y.debug.sv y.debug"],
+         # y.debug.sv ships in the source directory, so an out-of-tree
+         # build has to name it: bare "cp y.debug.sv y.debug" looks for
+         # it in the object directory and fails.
+         pre=["cp $(SRC)/usr/src/cmd/ccom/vax/y.debug.sv y.debug"],
          product="comp", install="lib/ccom"),
 
     dict(name="c2", dir="usr/src/cmd/c2", objs="*.c", cflags="-DCOPYCODE",

@@ -117,8 +117,8 @@ reader.o: $(SRC)/usr/src/cmd/ccom/vax/../common/reader.c $(INCDIR)/stdio.h $(SRC
 scan.o: $(SRC)/usr/src/cmd/ccom/vax/../common/scan.c $(INCDIR)/ctype.h $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/ccom/vax/../common/manifest.h $(SRC)/usr/src/cmd/ccom/vax/../common/mfile1.h $(SRC)/usr/src/cmd/ccom/vax/macdefs.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/ccom/vax/../common/scan.c
 
-t2print.o: $(SRC)/usr/src/cmd/ccom/vax/t2print.c $(TOOLS)
-	$(COMPILE) $(SRC)/usr/src/cmd/ccom/vax/t2print.c
+t2print.o: $(SRC)/usr/src/cmd/ccom/vax/../common/t2print.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/ccom/vax/../common/manifest.h $(SRC)/usr/src/cmd/ccom/vax/../common/mfile2.h $(SRC)/usr/src/cmd/ccom/vax/macdefs.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/ccom/vax/../common/t2print.c
 
 trees.o: $(SRC)/usr/src/cmd/ccom/vax/../common/trees.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/ccom/vax/../common/manifest.h $(SRC)/usr/src/cmd/ccom/vax/../common/mfile1.h $(SRC)/usr/src/cmd/ccom/vax/macdefs.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/ccom/vax/../common/trees.c
@@ -127,7 +127,7 @@ xdefs.o: $(SRC)/usr/src/cmd/ccom/vax/../common/xdefs.c $(INCDIR)/stdio.h $(SRC)/
 	$(COMPILE) $(SRC)/usr/src/cmd/ccom/vax/../common/xdefs.c
 
 prepare:
-	cp y.debug.sv y.debug
+	cp $(SRC)/usr/src/cmd/ccom/vax/y.debug.sv y.debug
 
 install: comp
 	-mkdir $(TOOLDIR)/lib

@@ -157,6 +157,10 @@ sh "/tmp/nmount 10.0.2.2 $port 65 /n/src" 120
 sh "echo C2-MOUNTED\$OK"
 sh "ls /n/src"
 sh "sed 5q /n/src/CASEMAP"
+# Grade on a marker, not on the file's contents: the header is prose and
+# grows, so "the mapping is in the first five lines" was true when written
+# and is not now.  The echo carries "Mail" but never "C3-CASEMAP-ok".
+sh "if grep Mail /n/src/CASEMAP > /dev/null; then echo C3-CASEMAP\$OK; fi"
 
 # ------------------------------------------------- the case-collision pairs
 # usr/src/cmd/{Mail,mail} and jerq/src/lib/{C,c} differ only in case, so macOS
