@@ -1,0 +1,161 @@
+#!/usr/bin/env expect
+#
+# N6: mount a macOS directory inside Research Unix 8th Edition, over TCP.
+#
+# Run by tools/drive-netfs.sh, which starts the host server first. Everything
+# up to "=== 3." is the proven N3 network bring-up, unchanged; the new work
+# starts there.
+#
+# The kernel half of this needs no code at all: `conf/files` has
+# `sys/neta.c standard`, so the netfs client is already compiled into the
+# kernel that N3 built. All that was missing was a way to hand it a connected
+# stream, which is what tools/v8/nmount.c does.
+
+set timeout 300
+log_file -a n6-netfs.log
+proc sendline {x} { send "$x\r" }
+
+proc must {pat {t 0}} {
+    global timeout
+    set use [expr {$t > 0 ? $t : $timeout}]
+    expect -timeout $use "$pat" {
+    } timeout {
+        send_user "\n*** FAILED: never saw '$pat' after ${use}s ***\n"; exit 3
+    } eof {
+        send_user "\n*** FAILED: simulator exited waiting for '$pat' ***\n"; exit 4
+    }
+}
+proc sh   {cmd {t 0}} { must "# "   $t; sendline $cmd }
+proc simh {cmd {t 0}} { must "sim>" $t; sendline $cmd }
+
+# Ship a host file into the guest over the console. Slow but dependency-free,
+# and the console is 7-bit clean for ASCII source.
+proc catfile {src dst} {
+    sh "cat > $dst"
+    set f [open $src r]
+    while {[gets $f line] >= 0} { sendline $line }
+    close $f
+    send "\x04"
+}
+
+set port [lindex $argv 0]
+if {$port == ""} { set port 9200 }
+
+spawn vax780
+simh "set noasynch"
+simh "set cpu idle=4.1BSD"
+simh "set tto 7b"
+simh "set rp0 rp07"
+simh "at rp0 rp07v8.net"
+simh "set il enable"
+simh "attach il nat:"
+simh "load -o bootV8 0"
+simh "run 2"
+must "login:" 300
+sendline "root"
+sh "echo N6-boot-ok" 120
+
+send_user "\n=== 1. devices ===\n"
+sh "/etc/mknod /dev/il0 c 44 0"
+sh "/etc/mknod /dev/il1 c 44 1"
+sh "/etc/mknod /dev/ip0  c 42 0"
+sh "/etc/mknod /dev/ip6  c 42 6"
+sh "/etc/mknod /dev/ip17 c 42 17"
+sh "for i in 0 1 2 3; do /etc/mknod /dev/udp0\$i c 50 \$i; done"
+# TCP wants more nodes than N3 made, and only the ODD minors can originate a
+# connection (tcp_device.c refuses an even minor whose socket is not already
+# active). Eight nodes is four usable outbound sockets.
+sh "for i in 0 1 2 3 4 5 6 7; do /etc/mknod /dev/tcp0\$i c 43 \$i; done"
+sh "chmod 666 /dev/udp0? /dev/tcp0? /dev/ip0 /dev/ip6 /dev/ip17 /dev/il0 /dev/il1"
+sh "mkdir /usr/inet/lib"
+sh "echo '10.0.2.15\tv8' > /usr/inet/lib/hosts"
+sh "echo '10.0.2.2\tgateway' >> /usr/inet/lib/hosts"
+sh "echo '10.0.2.3\tnameserver' >> /usr/inet/lib/hosts"
+# Classful, and it matters: in_netof() masks a 10.x address with IN_CLASSA_NET,
+# so the interface network must be 10.0.0.0 and not SLiRP's apparent 10.0.2.0.
+sh "echo '10.0.0.0\tslirp-net' > /usr/inet/lib/networks"
+sh "echo N6-devices"
+
+send_user "\n=== 2. push IP, then TCP ===\n"
+# ipconfig is not a one-shot: with an arp device it becomes the ARP daemon and
+# must keep running for as long as the interface is up.
+sh "cd /usr/src/cmd/inet/etc; ./ipconfig /dev/il0 v8 slirp-net /dev/il1 &"
+sh "sleep 3"
+# And TCP needs its own line discipline pushed onto IP protocol 6, exactly as
+# N3 pushed UDP onto protocol 17. Without this, opening /dev/tcp01 succeeds,
+# writing the tcpuser succeeds, and the connect then blocks forever with no
+# diagnostic anywhere -- there is simply nothing underneath the device. The
+# CSRC's own usr/src/cmd/inet/READ_ME prescribes it:
+#	###### push tcp line discipline
+#	./tcpconfig /dev/ip6 &
+sh "cd /usr/src/cmd/inet/etc; ./tcpconfig /dev/ip6 &"
+sh "sleep 3"
+sh "cd /usr/src/cmd/inet/etc; ./route add '*' gateway; echo route-rc=$?"
+sh "ps -a" 60
+sh "echo N6-ip-up"
+
+send_user "\n=== 3. build the mount program ===\n"
+sh "mkdir /n"
+sh "mkdir /n/macos"
+catfile "../../tools/v8/nmount.c" "/tmp/nmount.c"
+sh "cd /tmp; cc -o nmount nmount.c -lin" 300
+sh "ls -l /tmp/nmount"
+sh "echo N6-built"
+
+send_user "\n=== 4. warm the ARP cache ===\n"
+# Address resolution is asynchronous: arp_resolve drops the datagram that
+# triggered it. TCP would retransmit and recover, but a warm cache makes the
+# timing of this test deterministic rather than merely likely.
+catfile "../../tools/v8/arping.c" "/tmp/arping.c"
+sh "cd /tmp; cc -o arping arping.c -lin" 240
+sh "/tmp/arping 10.0.2.2" 60
+sh "echo N6-arp-warm"
+
+send_user "\n=== 5. mount macOS ===\n"
+sh "/tmp/nmount 10.0.2.2 $port 64 /n/macos" 120
+sh "echo N6-MOUNTED"
+
+send_user "\n=== 6. can we see it? ===\n"
+sh "ls -l /n/macos" 60
+sh "echo N6-LS-DONE"
+sh "cat /n/macos/README" 60
+sh "echo N6-CAT-DONE"
+
+send_user "\n=== 7. nested directories and a symlink ===\n"
+sh "ls -l /n/macos/src" 60
+sh "cat /n/macos/src/deep/leaf" 60
+sh "cat /n/macos/link-to-readme" 60
+sh "echo N6-NEST-DONE"
+
+send_user "\n=== 8. a file bigger than one BUFSIZE ===\n"
+# The client reads in BUFSIZE (4096) chunks and stops on a short reply, so a
+# 13200-byte file is four round trips and an EOF. Summing it in place and
+# again after a copy separates "the read loop works" from "the data survives".
+sh "sum /n/macos/src/big.dat" 120
+sh "echo N6-SUM-REMOTE"
+sh "cp /n/macos/src/big.dat /tmp/big.dat" 120
+sh "sum /tmp/big.dat" 60
+sh "echo N6-SUM-LOCAL"
+sh "wc -c /n/macos/src/big.dat" 60
+
+send_user "\n=== 9. the 14-byte name wall ===\n"
+sh "cat /n/macos/a-name-that-is; echo trunc-rc=$?" 60
+sh "echo N6-TRUNC-DONE"
+
+send_user "\n=== 10. is it really read-only? ===\n"
+sh "cp /etc/motd /n/macos/should-fail; echo write-rc=$?" 60
+sh "echo N6-RO-DONE"
+
+send_user "\n=== 11. unmount ===\n"
+sh "cd /"
+sh "/tmp/nmount -u 64" 60
+sh "ls /n/macos; echo after-umount-rc=$?" 60
+sh "echo N6-DONE"
+
+sh "sync; sync; sync"
+sh "/etc/halt" 60
+simh "quit" 60
+expect eof
+wait
+
+send_user "\n=== N6 NETFS TEST DONE ===\n"

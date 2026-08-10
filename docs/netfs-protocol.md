@@ -60,9 +60,62 @@ can split a header, and Nagle can deliver a header and its payload coalesced
 into one 66-byte read, which this server would reject and then `leave(3)`.
 
 So a TCP server must read *by length* — loop until 52 bytes are in hand, then
-loop for exactly the payload — and must never trust a read boundary. This is
-the single largest change N5 has to make, and it is invisible until it fails
-under load.
+loop for exactly the payload — and must never trust a read boundary.
+
+**And that is the easy half.** *(Corrected 2026-08-10, after N6 ran into the
+other half.)* The server can be made to read by length because we are writing
+it. The client cannot, because it is a 1985 kernel — and it does something
+strictly worse than mis-framing. `usr/sys/sys/streamio.c`:
+
+```c
+case M_DATA:
+        n = min(count, bp->wptr - bp->rptr);
+        if (n)
+                bcopy(bp->rptr, addr, n);
+        addr += n; nc += n; count -= n;
+        freeb(bp);              /* the whole block, not just the n copied */
+        continue;
+```
+
+`istread()` copies at most `count` bytes out of a stream block and then frees
+**the entire block**. Anything past `count` is discarded, silently. On Datakit
+that is not a bug but a definition — one write is one message is one block, and
+a short read of a message is a truncation. On TCP it is data loss, and it
+happens on the very first `NREAD`: the 48-byte reply header and its payload are
+two `write()`s on the server but arrive as one block, so `istread(y, 48)` keeps
+the header and throws the payload away. The guest reports
+
+```
+# ls -l /n/macos
+read -1 expected 112
+total 0
+```
+
+which is the client's own message from `send()`, after the follow-up read times
+out with nothing left to read.
+
+The same function has a second stream-hostile habit: with `count` unsatisfied
+and the queue momentarily empty it returns what it has, so any reply larger
+than one segment fails the caller's `n != y->count` test.
+
+**Conclusion: netfs cannot run over a byte stream unmodified, and no amount of
+server-side care fixes it.** Pacing the two writes far enough apart to land in
+separate segments is a race whose failure mode is silent corruption. The honest
+fix is four lines in `istread()` — keep the remainder of a partly consumed
+block, and keep waiting until `count` is satisfied — and it is safe precisely
+because `istread`/`istwrite` have exactly one caller in the entire kernel:
+
+```
+$ grep -rn 'istread\|istwrite' usr/sys/ | grep -v streamio.c
+usr/sys/sys/neta.c:654,662,668,673,677
+```
+
+netfs is the only user, so making it a byte-stream reader changes netfs and
+nothing else. This is the porting work the authors expected of anyone leaving
+Datakit — `usr/src/netfs/README`: *"The code here assumes it is talking to
+Datakit in several places. If you want to use another network, you'll have to
+fix things."* The edit is `tools/v8/streamio-istread.ed`, applied by
+`tools/drive-streamfix.sh`.
 
 **2. Exactly one transaction may be outstanding.** The kernel serialises with a
 per-connection lock (`cip->i_un.i_key`), commented "until demux works, use key
@@ -275,6 +328,81 @@ was not `"."`.
 Because resolution is per-component, a path of *n* components costs *n* round
 trips, each serialised by the connection lock. That, and not bandwidth, is what
 makes netfs feel slow on a high-latency link.
+
+## Three things the structures do not tell you
+
+These are not in `neta.h` and cost real time in N5. Each is load-bearing: get
+any of them wrong and the mount either fails outright or, worse, half-works.
+
+### The export root must be inode 2, and there is no other way to name it
+
+Nothing in the mount hands the client a root handle. `nadomount` records the
+mount point and the stream and stops. The root arrives later, from `iget()`,
+which crosses a mount by rewriting the request:
+
+```c
+/* usr/sys/sys/iget.c */
+if((ip->i_flag&IMOUNT) != 0) {
+        for(mp = &mount[0]; mp < &mount[NMOUNT]; mp++)
+                if(mp->m_inodp == ip) {
+                        dev = mp->m_dev;
+                        ino = ROOTINO;          /* <- always 2 */
+                        fstyp = mp->m_fstyp;
+                        goto loop;
+                }
+```
+
+So the first request on any fresh mount is `NGET(dev, 2)`, and a server whose
+export root is anything else is unreachable. The reference server gets this by
+accident — it exports host `/`, whose inode number on a 1985 filesystem *is* 2
+(`sys.c`: `dev = children[n].dev; newdev(statb.st_dev); newnetf("/", -1, 0);`).
+A server exporting a subdirectory has to map it deliberately.
+
+### Inode numbers are 16 bits, not 32
+
+The wire field is a 32-bit `long`, which is misleading. `usr/sys/h/types.h`:
+
+```c
+typedef	u_short	ino_t;
+typedef	u_short	dev_t;
+```
+
+and every inode number that survives a round trip through a directory is
+narrowed to 16 bits on the way. **A server cannot pass host inode numbers
+through.** APFS hands out 64-bit inode numbers as a matter of course, and even
+truncated to 32 they would collide in the directory field. A synthetic
+1…65535 namespace, stable for as long as the client holds a reference, is the
+only workable design.
+
+### There is no directory operation, so the server must forge directories
+
+Sixteen opcodes and not one of them reads a directory. That is not an omission:
+in 1985 a directory *is* a file, and `ls` opens it and `read(2)`s 16-byte
+records out of it. Those reads arrive as ordinary `NREAD`s on a directory
+handle.
+
+```c
+/* usr/sys/h/dir.h -- the whole format */
+#define	DIRSIZ	14
+struct	direct {
+	ino_t	d_ino;		/* 2 bytes, little-endian */
+	char	d_name[DIRSIZ];	/* 14 bytes, NUL-padded */
+};
+```
+
+A modern host server therefore has to **synthesise** the directory image: `.`,
+`..`, then one 16-byte record per entry. macOS will not let you `read(2)` a
+directory at all, so there is nothing to pass through even in principle. Two
+consequences follow. The `size` reported by `NGET`/`NSTAT` for a directory must
+be the size of the *synthesised* image, not the host's `st_size`, or the
+client's read loop stops in the wrong place; and because the image is a
+snapshot, it should be built once per handle so that size and content cannot
+disagree.
+
+The same 14 bytes bound lookup. `NNAMI` carries `DIRSIZ` bytes of name, so a
+host file whose name is longer can only ever be *named* by its truncation — and
+if the server does not match truncated names in lookup, every long-named file
+it lists is a file the guest can see and cannot open.
 
 ## Transaction numbers
 

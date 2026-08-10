@@ -1,0 +1,53 @@
+/^istwrite(ip, addr, count)/
+.,/^}/d
+i
+istwrite(ip, addr, count)
+register count;
+struct inode *ip;
+caddr_t addr;
+{
+	register struct stdata *stq;
+	register struct block *bp;
+	register n;
+	register s;
+
+	if ((stq = stenter(ip)) == NULL) {
+		printf("istwrite: no stream\n");
+		return(-1);
+	}
+	while (count) {
+		s = spl6();
+		while (stq->wrq->next->flag&QFULL && (stq->flag&HUNGUP)==0) {
+			stq->flag |= WSLEEP;
+			if (tsleep((caddr_t)stq->wrq, PRIBIO, 30)==TS_TIME) {
+				printf("istwrite: QFULL timeout, %d left\n", count);
+				splx(s);
+				stexit(ip);
+				return(-1);
+			}
+		}
+		splx(s);
+		if (stq->flag & HUNGUP) {
+			printf("istwrite: hungup, %d left\n", count);
+			stexit(ip);
+			return(-1);
+		}
+		if ((bp = allocb(QBSIZE)) == NULL) {
+			printf("istwrite can't alloc\n");
+			continue;		/* temp */
+		}
+		bp->type = M_DATA;
+		n = min(bp->lim - bp->wptr, count);
+		bcopy(addr, bp->wptr, n);
+		bp->wptr += n;
+		addr += n;
+		count -= n;
+		(*stq->wrq->next->qinfo->putp)(stq->wrq->next, bp);
+	}
+	putctl(stq->wrq->next, M_DELIM);
+	stexit(ip);
+	return(0);
+}
+.
+w
+q

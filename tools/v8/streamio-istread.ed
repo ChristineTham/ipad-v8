@@ -1,0 +1,96 @@
+/^istread(ip, addr, count)/
+.,/^}/d
+i
+istread(ip, addr, count)
+struct inode *ip;
+caddr_t addr;
+{
+	register struct stdata *stq;
+	register struct block *bp;
+	register n;
+	register s, nc = 0;
+
+	if ((stq = stenter(ip)) == NULL) {
+		printf("istread: no stream\n");
+		return(-1);
+	}
+	/*
+	 * A byte-stream reader (ipnx, phase N6).  Three changes from the
+	 * 1985 original, all of them forced by TCP not being Datakit:
+	 *
+	 *   - a zero-length read returns 0, rather than waiting for the
+	 *     M_DELIM that a Datakit zero-length write produced and a byte
+	 *     stream never will;
+	 *   - a partly consumed block is put back rather than freed, so the
+	 *     bytes past `count' are no longer silently discarded;
+	 *   - an empty queue with `count' unsatisfied waits for more instead
+	 *     of returning short.
+	 *
+	 * Safe because sys/neta.c -- netfs -- is the only caller of istread
+	 * and istwrite in the whole kernel.  usr/src/netfs/README expected
+	 * this: "The code here assumes it is talking to Datakit in several
+	 * places.  If you want to use another network, you'll have to fix
+	 * things."
+	 */
+	if (count == 0) {
+		stexit(ip);
+		return(0);
+	}
+	for (;;) {
+		s = spl6();
+		if ((bp = getq(RD(stq->wrq))) == NULL) {
+			if (stq->flag&HUNGUP) {
+				splx(s);
+				stexit(ip);
+				return(nc);
+			}
+			stq->flag |= RSLEEP;
+			n = tsleep((caddr_t)RD(stq->wrq), PRIBIO, 30);
+			splx(s);
+			if (n == TS_TIME) {
+				printf("istread: timeout, got %d want %d more\n", nc, count);
+				stexit(ip);
+				return(-1);
+			}
+			continue;
+		}
+		splx(s);
+		switch (bp->type) {
+
+		case M_DATA:
+			n = min(count, bp->wptr - bp->rptr);
+			if (n)
+				bcopy(bp->rptr, addr, n);
+			addr += n;
+			nc += n;
+			count -= n;
+			bp->rptr += n;
+			if (bp->rptr < bp->wptr)
+				putbq(RD(stq->wrq), bp);
+			else
+				freeb(bp);
+			if (count == 0) {
+				stexit(ip);
+				return(nc);
+			}
+			continue;
+
+		case M_DELIM:
+			freeb(bp);
+			stexit(ip);
+			return(nc);
+
+		case M_PASS:
+			putbq(RD(stq->wrq), bp);
+			return(nc);
+
+		default:
+			printf("istread: msg %d\n", bp->type);
+			freeb(bp);
+			continue;
+		}
+	}
+}
+.
+w
+q

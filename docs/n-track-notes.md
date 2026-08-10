@@ -288,6 +288,193 @@ Other things worth knowing:
   the IP stack, so a failure points at the device model.
 - **V8's userland libc has no `bcopy`.** It is a kernel routine.
 
+## N4/N5/N6 — a macOS folder mounted inside V8 *(2026-08-10)*
+
+The wire format is [netfs-protocol.md](netfs-protocol.md) (N4). This is the
+implementation and what it cost.
+
+### Getting there needs nothing forwarded, on either platform
+
+The guest dials **10.0.2.2** and lands on the host's **127.0.0.1**. That is not
+a coincidence or a SIMH feature — it is SLiRP's alias rule, `tcp_fconnect()` in
+`slirp/tcp_subr.c`:
+
+```c
+if ((so->so_faddr.s_addr & slirp->vnetwork_mask.s_addr) ==
+    slirp->vnetwork_addr.s_addr) {
+  /* It's an alias */
+  if (so->so_faddr.s_addr == slirp->vnameserver_addr.s_addr) { ... }
+  else addr.sin_addr = loopback_addr;
+}
+```
+
+Any address inside the virtual network that is not the nameserver is rewritten
+to loopback. So the server binds `127.0.0.1` and needs no port forwarding, no
+host interface, and no entitlement — **which is what makes this work inside the
+iOS sandbox unchanged**, where an app may talk to its own loopback and nothing
+else. The same mechanism the DZ terminal lines already rely on.
+
+### The server: Swift, and shared with the app from the start
+
+`netfs/` is a SwiftPM package with two targets. `NetFS` is the whole server and
+depends on Foundation and POSIX sockets only — no Network.framework, no
+Dispatch assumptions — because N7 compiles these same files into the iPad app.
+`netfsd` is a thin `main()` so the desktop can drive it.
+
+Four decisions came out of V8's headers rather than out of taste:
+
+- **Synthetic inode numbers.** `types.h` has `typedef u_short ino_t`, and every
+  inode number that passes through a directory is 16 bits wide. APFS hands out
+  64-bit ones. The server keeps a 1…65535 namespace with a stable
+  host(dev,ino) → ours map.
+- **The export root is inode 2.** `iget()` crosses a mount by rewriting `ino`
+  to `ROOTINO` and re-looking-up, so `NGET(dev, 2)` is the first request on
+  every fresh mount and there is no other way to name the root.
+- **Directories are forged.** There is no readdir opcode; `ls` `read(2)`s
+  16-byte `struct direct` records out of the directory as if it were a file.
+  macOS will not let you read a directory at all, so the server builds the
+  image itself, once per handle, so that the size it reports and the bytes a
+  later `NREAD` returns cannot disagree.
+- **14-byte names, in lookup as well as listing.** A host file whose name is
+  longer can only be *named* by its truncation, so `NNAMI` matches truncated
+  names too. Otherwise every long-named file is one the guest can see and
+  cannot open.
+
+`tools/netfs-probe.py` speaks the protocol exactly as `neta.c` does and answers
+a dozen questions in under a second, against five minutes for a cold boot. It
+found every framing bug before a VAX was involved, and it doubles as the
+executable form of the protocol document.
+
+### The client: fifty lines, and two traps
+
+`tools/v8/nmount.c` is the whole guest side. `gmount` is **syscall 49** and has
+been in libc since 1985 (`usr/src/libc/sys/gmount.s`), `/dev/tcp*` is a stream
+device (`&tcpdinfo` in `conf.c`'s cdevsw), and `nadomount` only wants a
+connected stream — so there is no new file system code anywhere in this phase.
+
+Two things cost time:
+
+- **`tcpconfig` is not optional.** N3 pushed the UDP line discipline onto
+  `/dev/ip17`; TCP needs the same onto `/dev/ip6` (`./tcpconfig /dev/ip6 &`,
+  prescribed in `usr/src/cmd/inet/READ_ME`). Without it, opening `/dev/tcp01`
+  succeeds, writing the `tcpuser` succeeds, and the connect then blocks
+  forever with no diagnostic anywhere — there is simply nothing underneath the
+  device.
+- **The `/dev/tcp` minor must be odd.** `tcp_device.c` refuses an even minor
+  whose socket is not already active, because even minors are the accept side:
+
+  ```c
+  if((dev&01) == 0 && (so->so_state&SS_ACTIVE) == 0)
+          return(0);
+  ```
+
+  libin's `tcp_sock()` encodes this as `for(n = 01; n < 100; n += 2)` and never
+  says why. The CSRC's own READ_ME shows it in the file modes: `/dev/tcp00` is
+  `crw-------`, `/dev/tcp01` is `crw-rw-rw-`.
+
+### The real work: netfs cannot run over a byte stream unmodified
+
+The mount succeeded on the first try and `ls` immediately failed:
+
+```
+# ls -l /n/macos
+read -1 expected 112
+total 0
+```
+
+That is the client's own message, from `send()` in `neta.c`. The cause is four
+lines in `usr/sys/sys/streamio.c`:
+
+```c
+case M_DATA:
+        n = min(count, bp->wptr - bp->rptr);
+        if (n) bcopy(bp->rptr, addr, n);
+        addr += n; nc += n; count -= n;
+        freeb(bp);              /* the whole block, not just the n copied */
+        continue;
+```
+
+`istread()` copies at most `count` bytes out of a stream block and frees the
+**entire** block. On Datakit that is a definition, not a bug: one write is one
+message is one block. On TCP the 48-byte reply header and its payload are two
+`write()`s on the server that arrive as one block, so the header read keeps 48
+bytes and discards the payload, and the next read times out with nothing left.
+
+**No amount of server-side care fixes this.** Pacing the two writes far enough
+apart to land in separate segments is a race against SLiRP's poll, and its
+failure mode is silent data loss.
+
+Fixing that exposes a third bug behind it, and the message barely changes:
+
+```
+# ls -l /n/macos
+read -1 expected 0
+```
+
+`naread()` sends `NREAD` unconditionally and lets a short answer end the loop,
+so the last read of every file gets `y.count == 0` and `send()` calls
+`istread(cip, buf, 0)`. On Datakit that returned 0, because a zero-length
+`write()` arrives as an `M_DELIM` and `istread` has a case for it. TCP has no
+zero-length anything, so the read waits for a block that will never come and
+times out at −1. The count in that message is the only thing distinguishing
+this from the first bug, which is worth knowing before staring at it.
+
+The fix is to make `istread` a byte-stream reader — return 0 for a zero-length
+read, keep the remainder of a partly consumed block, and keep waiting until
+`count` is satisfied — and it is safe because the function has exactly one
+caller in the entire kernel:
+
+```
+$ grep -rn 'istread\|istwrite' usr/sys/ | grep -v streamio.c
+usr/sys/sys/neta.c:654,662,668,673,677
+```
+
+netfs is the only user, so this changes netfs and nothing else. It is also the
+porting work the authors expected — `usr/src/netfs/README`: *"The code here
+assumes it is talking to Datakit in several places. If you want to use another
+network, you'll have to fix things."*
+
+The edit is `tools/v8/streamio-istread.ed`, applied and rebuilt by
+`tools/drive-streamfix.sh`; `/unix.n3` keeps the pre-fix kernel and
+`/usr/sys/sys/streamio.c.orig` the pristine source, so the script is
+idempotent and reversible.
+
+### Patch whole functions, not context
+
+The first version of that edit was four small `ed` commands anchored on
+context — `/stenter(ip)) == NULL/`, `/nc && (OTHERQ/`, `/freeb(bp);/`. Every
+one of those lines appears **verbatim in `stread()` as well**, eighty lines
+earlier, because `stread` is the same loop written for user reads. One edit
+landed there instead, and since `stread` takes no `count` argument the kernel
+failed to compile with
+
+```
+"../sys/streamio.c":249:count undefined
+```
+
+at a line number nowhere near the one being aimed at — while a `sed -n
+'/^istread/,/^}/p'` of the result looked perfect, because it only ever printed
+the function that was fine.
+
+Two things came out of that. **Replace the whole function from its one unique
+anchor** (`/^istread(ip, addr, count)/` then `.,/^}/d` and insert), so the
+result cannot depend on what the rest of the file happens to look like. And
+**rehearse guest edits on the host**: `ed` on macOS runs the same script against
+`work/v8src/`'s copy in about a second, against ten minutes for a boot-and-
+build cycle, and a `diff` of the neighbouring function proves the edit stayed
+where it was put. The verification step now also prints `sum` of the pristine
+source, because "does the guest's copy match TUHS?" was the question the
+failure actually turned on and there was no way to answer it after the fact.
+
+### A test that fails honestly
+
+The first verdict run reported nine failures, of which several were the *test's*
+fault: `grep -E` matches a line at a time, so every check written as one
+multi-line regex (`'MARKER(.|\n)*README'`) could never match no matter what the
+guest did. A check that cannot pass looks exactly like a feature that does not
+work. Both drivers now cut the section out with `sed` first and grep single
+lines, which is the only way to spell this that fails for the right reason.
+
 ## Idling — one config line and three missing flags *(2026-08-09)*
 
 SIMH ships an idle pattern for **4.1BSD**, and V8's kernel is 4.1BSD-derived,

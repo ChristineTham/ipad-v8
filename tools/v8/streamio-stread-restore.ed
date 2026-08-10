@@ -1,0 +1,82 @@
+/^stread(ip)/
+.,/^}/d
+i
+stread(ip)
+struct inode *ip;
+{
+	register struct stdata *stq;
+	register struct block *bp;
+	register n;
+	register s, nc = 0;
+
+	if ((stq = stenter(ip)) == NULL) {
+		u.u_error = 0;			/* return EOF not error */
+		return;
+	}
+	/*
+	 * Read is complete when:
+	 * Q is empty and some data has been read and next Q might not generate
+	 * delimiters, or
+	 * There is data on Q and count has been satisfied, or
+	 * A delimiter is taken from the Q, or
+	 * There was an error.
+	 */
+	for (;;) {
+		s = spl6();
+		if ((bp = getq(RD(stq->wrq))) == NULL) {
+			if ((nc && (OTHERQ(stq->wrq->next)->flag&QDELIM)==0)
+			 || stq->flag&HUNGUP) {
+				splx(s);
+				stexit(ip);
+				return;
+			}
+			stq->flag |= RSLEEP;
+			n = tsleep((caddr_t)RD(stq->wrq), STIPRI, 0);
+			splx(s);
+			if (n == TS_SIG) {
+				stexit(ip);
+				longjmp(u.u_qsav);
+			}
+			continue;
+		}
+		splx(s);
+		switch (bp->type) {
+
+		case M_DATA:
+			n = min(u.u_count, bp->wptr - bp->rptr);
+			if (n)
+				iomove(bp->rptr, n, B_READ);
+			bp->rptr += n;
+			nc += n;
+			if (bp->rptr >= bp->wptr)
+				freeb(bp);
+			else {
+				putbq(RD(stq->wrq), bp);
+				if (u.u_count == 0)
+					goto out;
+			}
+			if (u.u_error)
+				goto out;
+			continue;
+
+		case M_DELIM:
+		case M_CTL:
+			freeb(bp);
+			goto out;
+
+		case M_PASS:
+			putbq(RD(stq->wrq), bp);
+			return;
+
+		default:
+			printf("stread: msg %d\n", bp->type);
+			freeb(bp);
+			continue;
+		}
+	}
+out:
+	stexit(ip);
+}
+.
+w
+q

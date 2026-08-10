@@ -1,0 +1,143 @@
+#!/usr/bin/env expect
+#
+# N7: write to macOS from inside Research Unix 8th Edition.
+#
+# N6 proved the read half. This proves the other one, and the interesting
+# question is not "does NWRT work" -- it is whether a file created, written,
+# appended to and chmod'ed by a 1985 kernel arrives on APFS byte-identical.
+# The check is a checksum computed on both sides: V8's own sum(1) against the
+# same V7 rotate-and-add reimplemented on the host by tools/drive-netfs-rw.sh.
+#
+# Run by tools/drive-netfs-rw.sh, which starts netfsd with -w.
+
+set timeout 300
+log_file -a n7-netfs-rw.log
+proc sendline {x} { send "$x\r" }
+
+proc must {pat {t 0}} {
+    global timeout
+    set use [expr {$t > 0 ? $t : $timeout}]
+    expect -timeout $use "$pat" {
+    } timeout {
+        send_user "\n*** FAILED: never saw '$pat' after ${use}s ***\n"; exit 3
+    } eof {
+        send_user "\n*** FAILED: simulator exited waiting for '$pat' ***\n"; exit 4
+    }
+}
+proc sh   {cmd {t 0}} { must "# "   $t; sendline $cmd }
+proc simh {cmd {t 0}} { must "sim>" $t; sendline $cmd }
+
+proc catfile {src dst} {
+    sh "cat > $dst"
+    set f [open $src r]
+    while {[gets $f line] >= 0} { sendline $line }
+    close $f
+    send "\x04"
+}
+
+set port [lindex $argv 0]
+if {$port == ""} { set port 9200 }
+
+spawn vax780
+simh "set noasynch"
+simh "set cpu idle=4.1BSD"
+simh "set tto 7b"
+simh "set rp0 rp07"
+simh "at rp0 rp07v8.net"
+simh "set il enable"
+simh "attach il nat:"
+simh "load -o bootV8 0"
+simh "run 2"
+must "login:" 300
+sendline "root"
+sh "echo RW-boot-ok" 120
+
+send_user "\n=== 1. network up ===\n"
+sh "/etc/mknod /dev/il0 c 44 0"
+sh "/etc/mknod /dev/il1 c 44 1"
+sh "/etc/mknod /dev/ip0  c 42 0"
+sh "/etc/mknod /dev/ip6  c 42 6"
+sh "/etc/mknod /dev/ip17 c 42 17"
+sh "for i in 0 1 2 3 4 5 6 7; do /etc/mknod /dev/tcp0\$i c 43 \$i; done"
+sh "chmod 666 /dev/tcp0? /dev/ip0 /dev/ip6 /dev/ip17 /dev/il0 /dev/il1"
+sh "mkdir /usr/inet/lib"
+sh "echo '10.0.2.15\tv8' > /usr/inet/lib/hosts"
+sh "echo '10.0.2.2\tgateway' >> /usr/inet/lib/hosts"
+sh "echo '10.0.0.0\tslirp-net' > /usr/inet/lib/networks"
+sh "cd /usr/src/cmd/inet/etc; ./ipconfig /dev/il0 v8 slirp-net /dev/il1 &"
+sh "sleep 3"
+sh "cd /usr/src/cmd/inet/etc; ./tcpconfig /dev/ip6 &"
+sh "sleep 3"
+sh "cd /usr/src/cmd/inet/etc; ./route add '*' gateway; echo route-rc=$?"
+sh "echo RW-ip-up"
+
+send_user "\n=== 2. mount, read/write this time ===\n"
+sh "mkdir /n"
+sh "mkdir /n/macos"
+catfile "../../tools/v8/nmount.c" "/tmp/nmount.c"
+sh "cd /tmp; cc -o nmount nmount.c -lin" 300
+sh "/tmp/nmount 10.0.2.2 $port 64 /n/macos" 120
+sh "echo RW-MOUNTED"
+
+send_user "\n=== 3. create a file and read it back ===\n"
+sh "echo 'written by Research Unix 8th Edition' > /n/macos/from-v8" 60
+sh "cat /n/macos/from-v8" 60
+sh "ls -l /n/macos/from-v8" 60
+sh "echo RW-CREATE-DONE"
+
+send_user "\n=== 4. append ===\n"
+# Append is a different path from create: the client seeks to i_size and
+# issues NWRT at a non-zero offset, so it exercises the offset handling that a
+# fresh create never touches.
+sh "echo 'second line' >> /n/macos/from-v8" 60
+sh "cat /n/macos/from-v8" 60
+sh "echo RW-APPEND-DONE"
+
+send_user "\n=== 5. a real file, bigger than one BUFSIZE ===\n"
+# Assemble something a few BUFSIZEs long inside the guest, sum it locally,
+# then copy it out. The host recomputes the same V7 checksum over what landed
+# on APFS: equal sums means every 4 KB round trip carried what it claimed to.
+sh "cat /usr/include/*.h > /tmp/big.h" 120
+sh "wc -c /tmp/big.h" 60
+sh "sum /tmp/big.h" 120
+sh "echo RW-SUM-LOCAL"
+sh "cp /tmp/big.h /n/macos/big.h" 600
+sh "sum /n/macos/big.h" 300
+sh "echo RW-SUM-REMOTE"
+sh "ls -l /n/macos/big.h" 60
+
+send_user "\n=== 6. mkdir, and a file inside it ===\n"
+sh "mkdir /n/macos/fromv8dir" 60
+sh "ls -ld /n/macos/fromv8dir" 60
+sh "echo nested-by-v8 > /n/macos/fromv8dir/inner" 60
+sh "cat /n/macos/fromv8dir/inner" 60
+sh "echo RW-MKDIR-DONE"
+
+send_user "\n=== 7. chmod (NUPDAT) ===\n"
+sh "chmod 600 /n/macos/from-v8" 60
+sh "ls -l /n/macos/from-v8" 60
+sh "echo RW-CHMOD-DONE"
+
+send_user "\n=== 8. unlink ===\n"
+sh "echo delete-me > /n/macos/doomed" 60
+sh "ls -l /n/macos/doomed" 60
+sh "rm /n/macos/doomed; echo rm-rc=$?" 60
+sh "cat /n/macos/doomed; echo gone-rc=$?" 60
+sh "echo RW-UNLINK-DONE"
+
+send_user "\n=== 9. the whole directory as V8 now sees it ===\n"
+sh "ls -l /n/macos" 60
+sh "echo RW-LS-DONE"
+
+send_user "\n=== 10. unmount ===\n"
+sh "cd /"
+sh "/tmp/nmount -u 64" 60
+sh "echo RW-DONE"
+
+sh "sync; sync; sync"
+sh "/etc/halt" 60
+simh "quit" 60
+expect eof
+wait
+
+send_user "\n=== N7 READ/WRITE TEST DONE ===\n"

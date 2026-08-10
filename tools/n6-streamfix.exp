@@ -1,0 +1,177 @@
+#!/usr/bin/env expect
+#
+# Make V8's netfs client survive a byte-stream transport.  Phase N6.
+#
+# THE BUG, which is 1985's and not ours. usr/sys/sys/streamio.c:
+#
+#	case M_DATA:
+#		n = min(count, bp->wptr - bp->rptr);
+#		if (n)
+#			bcopy(bp->rptr, addr, n);
+#		addr += n; nc += n; count -= n;
+#		freeb(bp);		/* <- the whole block, not just the n */
+#		continue;
+#
+# istread() copies at most `count` bytes out of a stream block and then frees
+# the entire block. Any bytes past `count` are gone. On Datakit that is not a
+# bug but a definition: one write is one message, one message is one block, and
+# a reader that asks for less than a message meant to truncate it.
+#
+# TCP has no messages. The netfs reply to NREAD is a 48-byte header followed by
+# the payload, written separately -- but SLiRP reads the host socket into one
+# buffer and forwards one segment, so both arrive as a single block. The
+# client's istread(y, 48) then keeps 48 bytes and discards the payload, and the
+# next istread times out:
+#
+#	# ls -l /n/macos
+#	read -1 expected 112
+#	total 0
+#
+# The second half of the same problem is short reads: with `count` unsatisfied
+# and the queue momentarily empty, istread returns what it has, and every read
+# larger than one segment would fail the caller's `n != y->count` test.
+#
+# And there is a third, which only appears once the first two are fixed: EOF.
+# naread() sends NREAD unconditionally and lets a short answer end the loop, so
+# the last read of every file gets y.count == 0 and send() calls
+# istread(cip, buf, 0). On Datakit that returned 0, because a zero-length write
+# arrives as an M_DELIM and istread has a case for it. TCP has no zero-length
+# anything, so the read waits for a block that will never come and times out
+# at -1 -- reported by the guest as
+#
+#	# ls -l /n/macos
+#	read -1 expected 0
+#
+# which is the same symptom as the first bug with a different number, and is
+# why the count in that message is worth reading carefully.
+#
+# THE FIX. Return 0 for a zero-length read; keep the remainder of a partly
+# consumed block; and keep waiting until `count` is satisfied -- i.e. make
+# istread a byte-stream reader, which is what a byte-stream transport
+# requires. It is safe to change because istread and istwrite have exactly one
+# caller in the whole kernel:
+#
+#	$ grep -rn 'istread\|istwrite' usr/sys/ | grep -v streamio.c
+#	usr/sys/sys/neta.c:654,662,668,673,677
+#
+# netfs is the only user. This is precisely the porting work the authors
+# expected of anyone leaving Datakit -- usr/src/netfs/README: "The code here
+# assumes it is talking to Datakit in several places. If you want to use
+# another network, you'll have to fix things."
+#
+# The edit is tools/v8/streamio-istread.ed. Run by tools/drive-netfs.sh --fix.
+
+set timeout 300
+log_file -a n6-streamfix.log
+proc sendline {x} { send "$x\r" }
+
+proc must {pat {t 0}} {
+    global timeout
+    set use [expr {$t > 0 ? $t : $timeout}]
+    expect -timeout $use "$pat" {
+    } timeout {
+        send_user "\n*** FAILED: never saw '$pat' after ${use}s ***\n"; exit 3
+    } eof {
+        send_user "\n*** FAILED: simulator exited waiting for '$pat' ***\n"; exit 4
+    }
+}
+proc sh   {cmd {t 0}} { must "# "   $t; sendline $cmd }
+proc simh {cmd {t 0}} { must "sim>" $t; sendline $cmd }
+
+proc catfile {src dst} {
+    sh "cat > $dst"
+    set f [open $src r]
+    while {[gets $f line] >= 0} { sendline $line }
+    close $f
+    send "\x04"
+}
+
+spawn vax780
+simh "set noasynch"
+simh "set cpu idle=4.1BSD"
+simh "set tto 7b"
+simh "set rp0 rp07"
+simh "at rp0 rp07v8.net"
+simh "load -o bootV8 0"
+simh "run 2"
+must "login:" 300
+sendline "root"
+sh "echo SFIX-boot-ok" 120
+
+send_user "\n=== 1. no backup, deliberately ===\n"
+# There was a `cp streamio.c streamio.c.orig' here and it never once ran:
+# that name is FIFTEEN characters, a V8 directory entry holds fourteen, and
+# the failure is a bare "cp: cannot create" that scrolls past. Every later
+# "restore the pristine copy before patching" then silently did nothing, which
+# is how one bad run's damage survived into the next and produced a compile
+# error eighty lines from anything this script had touched.
+#
+# A backup is not the fix. The two ed scripts below each replace a whole
+# function with known-good text found by a unique anchor, so they repair
+# damage rather than depending on its absence; the pristine source is in
+# work/v8src/ on the host where it cannot rot; and /unix.n3 is the way back to
+# a working kernel. A copy taken *after* damage is worse than none, because it
+# looks like a way back and is not -- so any stale one is removed here.
+sh "rm -f /usr/sys/sys/streamio.org /usr/sys/sys/streamio.c.ori"
+sh "ls -l /usr/sys/sys/streamio.c"
+
+send_user "\n=== 2. restore stread, then replace istread ===\n"
+# Neither script depends on the file being pristine, and neither depends on
+# the surrounding text: each finds its function by a unique anchor, deletes
+# through the next column-0 brace, and inserts a known-good body. So they are
+# idempotent, they repair the damage the earlier context-anchored version did
+# to stread(), and re-running them is always safe. Rehearsed on the host
+# against work/v8src/'s copy before ever being sent here.
+catfile "../../tools/v8/streamio-stread-restore.ed" "/tmp/rst.ed"
+sh "ed - /usr/sys/sys/streamio.c < /tmp/rst.ed" 120
+catfile "../../tools/v8/streamio-istread.ed" "/tmp/fix.ed"
+sh "ed - /usr/sys/sys/streamio.c < /tmp/fix.ed" 120
+# istwrite gets no logic change at all -- only three of its silent `return(-1)`
+# paths learn to say which one they were. Every failure in send() turns into a
+# bare EIO at the system call and nothing else, so a netfs read that dies has
+# five possible causes and no way to tell them apart from userland.
+catfile "../../tools/v8/streamio-istwrite.ed" "/tmp/wrt.ed"
+sh "ed - /usr/sys/sys/streamio.c < /tmp/wrt.ed" 120
+sh "echo SFIX-edited"
+
+send_user "\n=== 3. show what it now says ===\n"
+# Three separate proofs, because the first attempt at this patch used four
+# small context-anchored edits and one of them landed in stread() instead of
+# istread() -- the two functions share whole lines verbatim, and stread has no
+# `count', so the kernel failed to compile with "count undefined" at a line
+# number nowhere near the one being aimed at. Replacing the whole function
+# from its one unique anchor removes that entire class of mistake, and these
+# checks confirm it rather than assuming it.
+#
+# TUHS's pristine streamio.c sums to 11850, 21 blocks -- worth knowing,
+# because "does the guest's source still match?" was the question the earlier
+# failure actually turned on and there was no way to answer it after the fact.
+sh "sum /usr/sys/sys/streamio.c" 60
+# V8's grep is the 1985 one: basic regular expressions, so `\|' is not
+# alternation but a literal, and a pattern using it matches nothing while
+# looking like it asked a question. egrep is the one that alternates.
+sh "egrep -n '^istread|^stread|^istwrite' /usr/sys/sys/streamio.c" 60
+sh "grep -n 'count == 0' /usr/sys/sys/streamio.c" 60
+sh "sed -n '/^istread/,/^}/p' /usr/sys/sys/streamio.c" 60
+sh "echo SFIX-shown"
+
+send_user "\n=== 4. rebuild the kernel ===\n"
+sh "cd /usr/sys/alice; make" 3000
+sh "ls -l /usr/sys/alice/unix"
+sh "echo SFIX-made"
+
+send_user "\n=== 5. install it ===\n"
+# /ounix already holds the pre-N3 kernel; keep the pre-fix one separately so
+# there are two ways back.
+sh "test -f /unix.n3 || cp /unix /unix.n3"
+sh "cp /usr/sys/alice/unix /unix"
+sh "ls -l /unix /unix.n3 /ounix"
+sh "sync; sync; sync"
+sh "echo SFIX-DONE"
+
+sh "/etc/halt" 60
+simh "quit" 60
+expect eof
+wait
+
+send_user "\n=== STREAM FIX DONE ===\n"
