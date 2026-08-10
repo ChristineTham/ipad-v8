@@ -241,8 +241,24 @@ sh "if date | grep '[exec date -u +%Y]' > /dev/null; then echo C3-CLOCK\$OK; els
 send_user "
 === build filesystem on rp1 ===
 "
-sh "/etc/mknod /dev/rp1g b 2 14"
+# hp is BLOCK major 0 and CHAR major 4 -- the two are unrelated tables and the
+# numbers do not match (sys/dev/conf.c).  Block major 2 is `up`, a Unibus disk
+# this machine does not have, so `mknod /dev/rp1g b 2 14` built a node pointing
+# at upstrategy on absent hardware and mount died on a wild pointer:
+#
+#	type 8 ... code xae50d144 pc x800022b9
+#	panic: trap
+#
+# It cost two runs because it does not look like a device-number mistake.  fsck
+# passed immediately beforehand -- through the RAW node, c 4 14, which was
+# right -- so the filesystem was provably fine and the panic read as a
+# filesystem or mount-table problem.  Whenever raw works and block does not,
+# suspect the majors before anything else.
+sh "/etc/mknod /dev/rp1g b 0 14"
 sh "/etc/mknod /dev/rrp1g c 4 14"
+# record the majors next to a node that is known-good, so a repeat is one
+# glance rather than another two runs
+sh "ls -l /dev/rp0a /dev/rp1g /dev/rrp1g"
 sh "/etc/mkfs /dev/rrp1g 60000" 1800
 # Do not mount an unverified filesystem.  Mounting the failed one panicked the
 # kernel outright -- "type 8 ... panic: trap" -- which costs a repair cycle on
