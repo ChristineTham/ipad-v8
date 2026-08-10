@@ -1,0 +1,156 @@
+#!/usr/bin/env expect
+#
+# Repair rp07v8.net after a run was killed mid-write.
+#
+#	PATH=work/opensimh/BIN:$PATH expect tools/fsck-repair.exp [image]
+#
+# A hard kill of the simulator leaves the guest's filesystems as they were in
+# the buffer cache, not on disk.  /etc/rc's autoboot fsck -p repairs the easy
+# cases by itself, but anything needing a question answered aborts to
+#
+#	UNEXPECTED INCONSISTENCY; RUN fsck MANUALLY.
+#	Automatic reboot failed... help!
+#
+# and drops to a single-user shell -- so the machine never reaches login:, and
+# a driver waiting for it just times out, which looks nothing like the truth.
+#
+# Two things make the sequence safe, and both matter:
+#
+#   /usr is NOT mounted when we get there.  /etc/rc runs `mount -a` only after
+#   the fsck block, and the failing fsck exits 1 first.  So fsck -y on the raw
+#   /usr device has no mounted filesystem underneath it.
+#
+#   The reboot must be `reboot -n`.  fsck -p already repaired the *mounted*
+#   root (it printed ROOT MODIFIED), so the kernel's in-core superblock is now
+#   stale and a sync would write it back over the repair.  This is exactly why
+#   /etc/rc answers fsck's exit status 4 with `/etc/reboot -n`.
+
+set timeout 600
+log_file -a fsck-repair.log
+proc sendline {x} { send "$x\r" }
+
+proc must {pat {t 0}} {
+    global timeout
+    set use [expr {$t > 0 ? $t : $timeout}]
+    expect -timeout $use "$pat" {
+    } timeout {
+        send_user "\n*** FAILED: never saw '$pat' after ${use}s ***\n"; exit 3
+    } eof {
+        send_user "\n*** FAILED: simulator exited waiting for '$pat' ***\n"; exit 4
+    }
+}
+# Output-anchored markers, not the prompt: V8 echoes typed characters
+# interleaved with output, so a prompt matcher matches its own echo.  '+' is
+# inert to the tty; '@' would not be, it is the line-kill character.  See the
+# long note in tools/c2-stage1.exp.
+set SEQ 0
+proc sh {cmd {t 0}} {
+    global SEQ
+    incr SEQ
+    sendline "M=+ok$SEQ"
+    sendline "$cmd"
+    sendline "echo \$M+"
+    must "+ok$SEQ+" $t
+}
+proc simh {cmd {t 0}} { must "sim>" $t; sendline $cmd }
+
+set img [lindex $argv 0]
+if {$img == ""} { set img rp07v8.net }
+
+send_user "\n=== boot 1: how bad is it? ===\n"
+# Not wrapped in a proc: `spawn` sets spawn_id in the calling scope, so a proc
+# would leave the global one unset and every later expect would have no
+# process to talk to.
+spawn vax780
+simh "set noasynch"
+simh "set cpu idle=4.1BSD"
+simh "set tto 7b"
+simh "set rp0 rp07"
+simh "at rp0 $img"
+simh "load -o bootV8 0"
+simh "run 2"
+
+set damaged 0
+expect {
+    -timeout 300
+    "Automatic reboot failed" { set damaged 1 }
+    "login:"                  { set damaged 0 }
+    timeout { send_user "\n*** neither login: nor a failed autoboot ***\n"; exit 3 }
+    eof     { send_user "\n*** simulator exited during boot ***\n"; exit 4 }
+}
+
+if {$damaged == 0} {
+    send_user "\n=== image is already clean; nothing to repair ===\n"
+    sendline "root"
+    must "# " 120
+    sh "df" 120
+    sh "sync"
+    sendline "/etc/halt"
+    simh "quit" 120
+    expect eof
+    wait
+    send_user "\nFSCK-REPAIR: CLEAN\n"
+    exit 0
+}
+
+send_user "\n=== single-user: repairing /usr ===\n"
+must "# " 120
+sh "echo repair-shell-ok" 120
+# /usr is unmounted here, so -y answers questions about a filesystem nothing
+# else is touching.  516 MB takes a while.
+sh "/etc/fsck -y /dev/rrp0f" 1800
+# The second pass is the check, not a retry: a filesystem fsck has finished
+# with must come back with nothing left to say.
+sh "/etc/fsck -y /dev/rrp0f" 1800
+
+# Stop the machine dead rather than rebooting it from inside.
+#
+# /etc/reboot -n is what /etc/rc itself uses, and it does not work here:
+# "Reboot request failed, PC: 80004183" and the CPU halts to sim>.  The VAX780
+# reboot goes through a console-subsystem request our simulator does not
+# implement, so there is nothing to fix in the guest.
+#
+# Halting from SIMH is better than /etc/halt anyway.  fsck -p repaired the
+# *mounted* root through the block device, so the kernel's in-core superblock
+# is stale; halt syncs, which would write it back over the repair.  Dropping
+# to the console and quitting writes nothing at all -- the /usr repair is
+# already on disk because fsck went through the raw device -- and the next
+# boot gets a fresh kernel that reads root off the disk as fsck left it.
+#
+# ^E reaches sim> only because this is a local-tty console; it would be an
+# inert data byte on a telnet console.  See docs/a1-notes.md.
+send_user "\n=== halt to the console (no sync) and restart the machine ===\n"
+send "\x05"
+simh "quit" 120
+expect eof
+wait
+
+send_user "\n=== boot 2: does it reach login: ? ===\n"
+spawn vax780
+simh "set noasynch"
+simh "set cpu idle=4.1BSD"
+simh "set tto 7b"
+simh "set rp0 rp07"
+simh "at rp0 $img"
+simh "load -o bootV8 0"
+simh "run 2"
+expect {
+    -timeout 900
+    "Automatic reboot failed" {
+        send_user "\n*** STILL DAMAGED after fsck ***\n"; exit 5
+    }
+    "login:" { }
+    timeout { send_user "\n*** second boot never reached login: ***\n"; exit 3 }
+    eof     { send_user "\n*** simulator exited during second boot ***\n"; exit 4 }
+}
+
+sendline "root"
+must "# " 120
+sh "df" 120
+sh "echo FSCK-REPAIR-DONE" 120
+sh "sync"
+sendline "/etc/halt"
+simh "quit" 120
+expect eof
+wait
+send_user "\nFSCK-REPAIR: REPAIRED\n"
