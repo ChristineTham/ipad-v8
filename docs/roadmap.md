@@ -106,6 +106,28 @@ Runbook: [spike-a0.md](spike-a0.md)
       chrome bar on iPad, and a plain bezel around the tube
 - [ ] Widen `muxterm` and `jim` to match *(they carry their own `display`)*
 
+### A5 — the interface, and the name *(2026-08-10; [ui-redesign.md](ui-redesign.md))*
+- [x] Rename the app from **Edition** to **ipnx** — project, both targets, both
+      schemes, the source folder and the `@main` struct. The product was always
+      `ipnx.app`; only the scaffolding lagged
+- [x] Raise the deployment targets to iOS 26 / macOS 26, so the glass is
+      unconditional and there is one visual design to test rather than two
+- [x] **One listen port per DZ line**, replacing the single mux-wide listener —
+      *without this a tab labelled `tty03` is a guess, because `tmxr_poll_conn`
+      assigns by connection order and `/.profile` picks TERM from the tty*
+- [x] Nine sessions — console + `tty00`..`tty07` — each lazily started, each
+      keeping its scrollback, replacing the three-face picker
+- [x] Windows grouped by terminal shape (vt100 / vt100w / dmd), tabs within a
+      shape *(forced by the missing `TIOCGWINSZ`, not chosen)*
+- [x] Console read-only behind a lock; `tty01` logs itself in as root, gated on
+      seeing `login:` rather than on a timer
+- [x] Liquid Glass on the chrome only — nothing composites over the emulated
+      raster
+- [x] App icon restyled as a stylised licence plate: `ipnx` over LIVE FREE OR
+      DIE, after the plate Armando Stettner gave away at USENIX
+- [ ] Run the iPad build in the simulator *(built, not yet exercised)*
+- [ ] Verify closing the 5620's window reclaims its CPU
+
 ## Track B — the V10 restoration *(desktop SIMH until it boots; see [v10-restoration.md](v10-restoration.md))*
 
 ### B0 — the ingest path *(done 2026-08-09, before any V10 source exists)*

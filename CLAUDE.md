@@ -268,6 +268,24 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
 - NWConnection to loopback parks in `.waiting(ECONNREFUSED)` forever when it races the
   listener (no reachability change is coming) — treat `.waiting` as a failed attempt and
   redial fresh.
+- **Every DZ line gets its own listen port; never one mux-wide listener.**
+  `tmxr_poll_conn` hands a connection on the shared port to the next *free* line, so the
+  tty a session lands on would depend on the order tabs were opened — and `/.profile`
+  picks TERM from `` `tty` ``, so connection order would decide what terminal V8 thinks
+  you are. `att dz Line=N,...` per line makes it a property of the port dialled
+  (`Machine.dzPort(_:)`); `sim_tmxr.c` supports this explicitly and `tmxr_attach_ex` sets
+  the polling unit on whichever attach comes first, so no mux-wide attach is needed.
+  `-m` rides the **first** attach only — modem control is device-wide (`dz_mctl`).
+- **`Machine.start()` must guard on its own flag, not on `phase`.** It only *schedules*
+  `bringUp()`, so two windows appearing in one runloop turn both saw `.idle` and both
+  spawned a SIMH thread — two VAX-11/780s in one process, binding the same ports and
+  attached to the same `v8.disk`. It crashed immediately, which was the lucky outcome.
+- The app's UI is **nine sessions in windows grouped by terminal shape** — forced by the
+  missing `TIOCGWINSZ`, not chosen. A session owns its `TerminalView` (scrollback lives
+  there, so SwiftUI owning it makes a tab switch a silent `clear`), the console session
+  starts before the VAX so the boot transcript has somewhere to land, and a window holding
+  one terminal hangs up its line when closed. Full record, including the traps:
+  [docs/ui-redesign.md](docs/ui-redesign.md).
 - `libsimh` compiles without `SIM_ASYNCH_IO`, so `set noasynch` errors ("Command not
   allowed") and is unnecessary — the V8-safe synchronous mode is a build-time guarantee.
   **The desktop `work/opensimh/BIN/vax780` is the opposite**: it *is* built with async
@@ -362,6 +380,18 @@ the fix for what looked like a mute restore); area-average sampling in the fragm
 shader so fractional scale no longer shimmers, driven off `MTKView.drawableSize` so
 Retina panels are actually used; controls out of the terminal field into a real
 `NSToolbar` (Mac) or a chrome bar (iPad), with a plain bezel around the tube.
+
+**A5 — the interface** (2026-08-10, [docs/ui-redesign.md](docs/ui-redesign.md)): the
+three-face picker is gone. The app is now the machine as it actually is — an operator
+console plus a getty on `tty00`..`tty07`, each openable and independent, in windows
+grouped by terminal shape (vt100 / vt100w / dmd) because nothing can be reflowed on a
+kernel with no `TIOCGWINSZ`. Every DZ line has its own listen port, so a tab labelled
+`tty03` *is* `tty03`. The console is read-only behind a lock, `tty01` logs itself in as
+root on seeing `login:`, chrome is Liquid Glass (never over the emulated raster), and the
+deployment targets are iOS 26 / macOS 26. The app was renamed from **Edition** to
+**ipnx** at the same time — project, targets, schemes, folder, `@main` struct — and the
+icon is now a stylised licence plate reading `ipnx` over LIVE FREE OR DIE, after the
+plate Armando Stettner handed out at USENIX (`tools/gen-icons.swift`).
 
 **B0.6 — a machine to live in** is planned but not started:
 [docs/machine-config.md](docs/machine-config.md). `fix-identity.exp` becomes

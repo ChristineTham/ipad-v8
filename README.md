@@ -1,4 +1,13 @@
-# ipnx
+<p align="center">
+  <img src="app/ipnx/Assets.xcassets/AppIcon.appiconset/icon-mac-512@2x.png"
+       alt="The ipnx icon: a stylised licence plate reading ipnx above LIVE FREE OR DIE"
+       width="176">
+</p>
+
+<h1 align="center">ipnx</h1>
+
+<p align="center"><em>iPad is not Unix. Intellectual Property is not Unix.<br>
+Bell Labs Research Unix, booted and carried forward.</em></p>
 
 **Research Unix, restored and running.** Genuine Bell Labs Research Unix — Eighth Edition
 today, Tenth Edition as the destination — booted on an emulated VAX-11/780 inside a native
@@ -9,10 +18,12 @@ The goal is not a shell prompt that looks old. It is to reproduce the original R
 environments *faithfully* — the real kernel, the real terminal, the real wire between them —
 on hardware you already carry.
 
-> **Status (2026-08-10):** the app is real and works. V8 boots to `login:` in ~25–30 s with
+> **Status (2026-08-10):** the app is real and works. V8 boots to `login:` with
 > save/restore instant-on; `mux` and `jim` run on the 5620 on both iPad and Mac; V8 has
-> reached the Internet. Track A is complete through A4; Track B — the V10 restoration — is
-> under way. Details: [docs/roadmap.md](docs/roadmap.md).
+> reached the Internet. The interface is now the machine as it actually is — the operator
+> console plus a getty on `tty00`..`tty07`, each one openable, in windows grouped by
+> terminal shape. Track A is complete through A5; Track B — the V10 restoration — is under
+> way. Details: [docs/roadmap.md](docs/roadmap.md).
 
 ## The name
 
@@ -42,6 +53,23 @@ The code came back on 7 March 2017, when Alcatel-Lucent/Nokia stated it would no
 copyright against non-commercial use of Editions 8, 9 and 10. ipnx is what that permission
 is *for*: not a museum piece behind glass, but Bell Labs Unix booted, usable, and carried
 forward into a world that never got to have it.
+
+### The plate
+
+The icon is the argument in one picture. In 1980 Bill Shannon, a DEC engineer, put a New
+Hampshire vanity plate reading **UNIX** on his Datsun 280ZX. His colleague Armando Stettner
+— who would go on to lead Ultrix, DEC's own VAX Unix — needed a giveaway for a USENIX
+conference, had 3,000 replicas printed, and they went instantly. The state motto stamped
+along the bottom was the whole joke: he thought *Live Free or Die* fitted, in his words,
+["the minimalistic and libertarian orientation of UNIX"][plate]. The real plate later passed
+to Jon "maddog" Hall, who kept it for twenty years.
+
+It reads differently now, which is why it is here. The system whose badge said *live free*
+spent the next thirty years as an asset on a balance sheet, and Editions 8 to 10 sat
+unreleased through all of it. Ours is a **stylised** plate — no state, no seal, no
+registration, our own proportions — and it says `ipnx`.
+
+[plate]: https://www.unix.org/license-plate.html
 
 ## Why full-system emulation
 

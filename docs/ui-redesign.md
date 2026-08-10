@@ -1,23 +1,19 @@
-# The interface: many ttys, many windows, Liquid Glass
+# The interface: nine ttys, windows by shape, Liquid Glass
 
-**Status: plan, nothing built.** The tree at the time of writing is `523f336`,
-which has the three-face picker (Console / Terminal / 5620) this supersedes.
+**Status: built and verified on macOS, 2026-08-10** (`b08f86f`). Supersedes the
+three-face picker (Console / Terminal / 5620) that shipped through A4.
 
-## What was asked for
+## What was asked for, and what it became
 
 1. **Tabs for all eight lines**, not three faces. V8 runs a getty on `console`
-   and `tty00`..`tty07`, so nine sessions are available.
-2. **The console is read-only by default**, with a toggle to enable input.
-   Console messages are the reason to look at it; typing into it by accident
-   is not.
-3. **tty01 is logged in automatically** on first open.
-4. **Every session is lazily started**, the way the 5620 already is — opening a
-   tab is what dials its line.
-5. **Multiple windows, not just tabs.** The app opens as an 80×24 window with
-   Console and tty01. The 5620 opens its *own* window; so does a vt100w
-   (128×24). Tabs group sessions of the same shape; different shapes get
-   different windows.
-6. **Apple HIG, Liquid Glass.** The current interface is amateurish.
+   and `tty00`..`tty07`, so nine sessions are available. ✅
+2. **The console is read-only by default**, with a toggle to enable input. ✅
+   — a lock in the Mac toolbar, a glass lock on the iPad tab bar.
+3. **tty01 is logged in automatically** on first open. ✅ — gated on seeing
+   `login:`, never on a timer.
+4. **Every session is lazily started** — opening a tab is what dials it. ✅
+5. **Multiple windows, not just tabs.** ✅ — `WindowGroup(for: TerminalShape.self)`.
+6. **Apple HIG, Liquid Glass.** ✅ — on chrome only.
 
 ## Why windows-by-shape is forced, not a style choice
 
@@ -27,85 +23,94 @@ whatever its termcap entry says and nothing else:
 
 | session | termcap | grid | DZ line |
 |---|---|---|---|
-| 5620 | `dmd` | 1152×1024 px (127 cols) | 0, own listener |
-| plain | `vt100` | 80×24 | 1..6, mux listener |
-| wide | `vt100w` | 128×24 | 7, own listener |
+| 5620 | `dmd` | 1152×1024 px (127 cols) | 0 |
+| console | `vt100` | 80×24 | — (SIMH console) |
+| plain | `vt100` | 80×24 | 1..6 |
+| wide | `vt100w` | 128×24 | 7 |
 
-Three fixed, unequal shapes. They cannot be reflowed into one window, so tabs
+Three fixed, unequal shapes. They cannot be reflowed into one another, so tabs
 only make sense *within* a shape — which is exactly the requested behaviour,
 arrived at from the hardware rather than from taste.
 
-## Shape of the build
+The console falls in the `vt100` window because that is what it *is*: with no
+`/etc/ttytype`, `/.profile` runs `case \`tty\` in` and `/dev/console` takes the
+`*)` arm. Measured, not assumed — `work/myv8/config.log` records a fresh
+console login reporting `TERM=vt100`.
 
-- **`Session`** — one per line: `line`, `shape`, `port`, lazily started, owning
-  its transport. Generalises today's `GlassTerminal` (which is already this for
-  one line) and subsumes `Terminal5620` as the `dmd` case.
-- **`SessionStore`** — the app-level registry: which lines exist, which are
-  running, which window each belongs to. Survives window close/open.
-- **Windows** — `WindowGroup(for: Shape.self)` plus `@Environment(\.openWindow)`.
-  Default window = `.vt100`; opening the 5620 or a wide tty opens its own.
-  Each window carries a `TabView` over the sessions of its shape.
-- **Console** — `readOnly` defaults true; the toggle lives in the toolbar as a
-  lock, not a modal.
-- **Auto-login** — tty01 only, on first start, typing `root` at the `login:`
-  prompt. Must be gated on actually seeing the prompt, never on a timer.
+## The load-bearing change: one listen port per DZ line
 
-### Liquid Glass
+The old configuration attached **one mux-wide listener** and let
+`tmxr_poll_conn` hand each new connection to the next free line. That made the
+tty you landed on a function of the order you opened tabs — and since
+`/.profile` picks TERM from the device name, connection order decided what
+terminal V8 thought you were. A tab labelled `tty03` would have been lying.
 
-Verified to typecheck against the installed **MacOSX26.5** SDK:
+Every line now has its own listen port (`Machine.dzPort(_:)` = `portBase+2+n`),
+so the mapping is a property of the port dialled. This is supported directly —
+*"Each line can have a separate listen port and the mux can have its own as
+well"* (`sim_tmxr.c`) — and `tmxr_attach_ex` sets the polling unit on whichever
+attach comes first, so the mux-wide attach is gone entirely. `-m` rides the
+first attach only, because modem control is a device-wide setting.
 
-```swift
-GlassEffectContainer(spacing:) { … }
-.glassEffect(.regular.tint(.green).interactive(), in: .rect(cornerRadius:))
-.buttonStyle(.glass)
-```
+Verified from a live session: `Connected to the VAX 11/780 simulator DZ device,
+line 1` on the tab labelled `tty01`.
 
-**Decided 2026-08-10: raise the deployment targets to macOS 26 / iOS 26.**
-Christine chose this over gating the glass behind `if #available`. The app has
-not shipped, so there is no install base to strand; the cost is reach at launch
-and nothing else. The gain is that there is exactly one visual design to build
-and test rather than two, and no availability check in any chrome view.
+## What was built
 
-Do the bump **first**, and confirm both targets still build *before* any UI work
-— a target bump surfaces its own unrelated errors, and they should not be
-tangled up with the redesign's.
+- **`Session`** — one per line: the transport, the state, and the terminal
+  view. The `.dmd` case drives `Terminal5620`; the console rides `Machine`'s
+  own console socket; the rest each own a `ConsoleLink`.
+- **`SessionStore`** — app-level registry of all nine, plus which are open.
+  App-level rather than window-level so closing a window and reopening it finds
+  the sessions as they were rather than freshly logged out.
+- **`SessionView`** — the fixed-grid glass terminal, generalised from
+  `GlassTerminal`.
+- **`SessionWindow`** — tab strip, terminals, chrome. Replaces `MachineView`.
+- **`CRTWindow`** (Platform.swift) — window shaping, moved out of the app
+  delegate, which could no longer tell which window was the 5620's.
 
-Two smaller decisions, recorded so they are not re-derived:
+## Traps hit while building it, all of which cost a debugging cycle
 
-- **tty01 auto-logs in as `root`** — the only account until B0.6's first-boot
-  provisioner exists. Revisit when it does.
-- **Glass belongs to chrome only.** Nothing composites over the emulated raster:
-  the 5620's screen and the glass ttys' text are meant to be faithful, and a
-  translucency effect over a 1-bit phosphor display would be a lie about what
-  the hardware did.
-
-The emulated screens stay exactly as they are. Glass belongs to the chrome; the
-raster inside the bezel is meant to be a faithful 1985 display and nothing
-should be composited over it.
+- **`Machine.start()` cannot guard on `phase`.** It only *schedules*
+  `bringUp()`, so two windows appearing in the same runloop turn both saw
+  `.idle` and both spawned a SIMH thread — two VAX-11/780s in one process,
+  binding the same ports and attached to the same `v8.disk`. It crashed on the
+  spot, which was the lucky outcome. The guard is a synchronous `started` flag.
+- **A session must own its `TerminalView`.** Scrollback lives inside that
+  object, so letting SwiftUI own it makes switching tabs a silent `clear`.
+- **The console session must start before the VAX does**, or the boot
+  transcript lands nowhere. `SessionStore.init` starts it.
+- **A window holding one terminal is that terminal**, so closing it hangs up
+  the line — otherwise the 5620's non-idling WE32100 thread keeps burning most
+  of a core for a window nobody can see.
+- **Don't stack `.buttonStyle(.glass)` inside an `NSToolbar`.** AppKit already
+  draws glass there; a second one reads as a blob.
+- **`#if` inside a scene builder must bracket whole statements.** A bare
+  `.defaultSize(…)` continuation is not one, so the `WindowGroup` is spelled
+  once per platform.
 
 ## Facts the build depends on (all established, do not re-derive)
 
-- **Ports** (`Machine.swift`): `blitPort` = DZ `Line=0`; `glassPort` = the
-  mux-wide listener, which hands out lines 1..6; `wideGlassPort` = `Line=7`.
-  `tmxr_poll_conn` skips lines that have their own listener, so assignment does
-  not depend on connection order — which matters because every session is lazy.
-- **`/.profile` picks TERM from the tty** (`work/config.exp`): `tty00`→`dmd`,
-  `tty07`→`vt100w`, else `vt100`. There is no `/etc/ttytype` and no
-  `/etc/gettytab` on this image; the profile is the only place it can live.
+- **`/.profile` picks TERM from the tty** (`work/config.exp`, already applied to
+  the golden image): `tty00`→`dmd`, `tty07`→`vt100w`, else `vt100`. There is no
+  `/etc/ttytype` and no `/etc/gettytab` on this image.
+- **root has no password** — `login: root` goes straight to `#`
+  (`work/myv8/config.log`). That is what makes the tty01 auto-login one
+  exchange rather than two.
 - **Parity**: mask incoming bytes to 7 bits on the DZ lines. V8 puts parity in
   bit 7 and SwiftTerm renders it as Latin-1. Not fixable with `set dz 7b` —
-  mux's download on line 0 is genuinely 8-bit.
+  mux's download on `tty00` is genuinely 8-bit.
 - **Cell sizing**: compute it from the font the way SwiftTerm's
   `computeFontDimensions()` does. Measuring it as `frame ÷ grid` while sizing
   the frame as `cell × grid` is a fixed-point iteration with a floor in it and
   it *oscillates* — a visibly flickering terminal. The only feedback allowed is
-  the integer column headroom, which latches (at 2: the reserved scroller).
+  the integer column headroom, which latches.
 - **Pause hidden renderers.** An `MTKView` that is not on screen keeps its
   display link running: ~62% of a core versus ~22% with `isPaused`.
 - **Nothing speaks first.** getty prints `login:` once when it starts and then
-  blocks in `getname()`; a shell says nothing unasked. Every new session must
-  send a CR to make its line speak, and the 5620's must wait for the firmware's
-  idle PC window rather than a timer.
+  blocks in `getname()`; a shell says nothing unasked. Every new session sends
+  a CR to make its line speak, and the 5620's waits for the firmware's idle PC
+  window rather than a timer.
 
 ## Testing this without fooling yourself
 
@@ -113,8 +118,20 @@ should be composited over it.
   across runs and reads as concurrent instances.
 - Never drive the app with AppleScript `activate`/`keystroke`: both resolve the
   *bundle* through LaunchServices and can launch a second copy, and two VAXes
-  sharing one `v8.disk` is a corruption hazard. Target
-  `tell application id "…"`, and assert `pgrep -x ipnx | wc -l` is 1 at every
-  step.
-- Preset state in `defaults` (`machine.face`, `glass.kind`, …) instead of
-  clicking, so a test needs no GUI automation at all.
+  sharing one `v8.disk` is a corruption hazard. Assert
+  `pgrep -x ipnx | wc -l` is 1 at every step.
+- **Preset state in `defaults` instead of clicking.** `Settings.debugOpenWindow`
+  exists for exactly this: `defaults write com.hellotham.ipnx debug.openWindow
+  dmd` opens the 5620's window at launch, so the multi-window path can be
+  checked with no GUI automation at all. Unset on every real launch.
+- Screenshot a specific window rather than the screen — `screencapture -o -x -l
+  <id>` captures a window even when it is behind something else, and the window
+  IDs come from `CGWindowListCopyWindowInfo` filtered on owner `ipnx`.
+
+## Still to do
+
+- iPad has been built but not run — the tab bar's inline actions and the
+  multi-scene path (`UIApplicationSupportsMultipleScenes`) want a simulator run.
+- Closing the 5620 window to reclaim its CPU is implemented but unverified.
+- `tty02`..`tty06` are reachable and untested; nothing about them differs from
+  `tty01` except the port and the absence of auto-login.
