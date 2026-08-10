@@ -8,6 +8,53 @@ at that, and unlike a hand-maintained list it cannot be wrong.
 
 ---
 
+## 0.3.0 — 2026-08-10
+
+**libc builds from this tree, and the system reproduces itself.**
+
+The pipeline is now stage 1 (toolchain, with the tape's compiler) → stage 2
+(libc, with stage 1) → stage 3 (the toolchain again, with stage 1 *and* our
+libc). Stage 3 is the first set of binaries in which every component came from
+our source, and all fourteen are byte-identical to stage 1's:
+
+    cmpstage: same=14 differ=0 missing=0
+
+Our `libc.a` is **104,810 bytes over 229 members**, against the tape's
+**104,770**. Forty bytes apart, and the gap is accounted for below.
+
+### Added
+
+- **`mk/libc.mk`** — 233 objects across `crt/ gen/ math/ stdio/ sys/`, plus
+  `crt0.o` and `mcrt0.o`. Four steps of the tape's recipe are not derivable and
+  are carried across with the reason recorded: `errlst.c` is compiled to
+  assembly and then *edited* (`gen/:errfix` moves the error table from `.data`
+  to `.text`); `doprnt.S` is assembly needing cpp, so it is renamed to `.c` to
+  get `-E`; `ld -x -r` re-emits every object relocatable; and
+  `ar cr libc.a `lorder *.o | tsort`` plus two `ar m` fixups order the archive,
+  because **V8's `ld` is single-pass** and a member needing a symbol from a
+  later member never resolves.
+
+### Fixed
+
+- **Four libc basenames appear in two directories**, and all 233 objects share
+  one namespace: `cerror` and `mcount` are byte-identical in `crt/` and `sys/`,
+  but `abs` and `fabs` are a real choice — portable C in `gen/`/`math/` against
+  hand-written VAX assembly in `sys/` (`mnegl`, `movd`/`mnegd`). The tape
+  resolves this by *overwrite order* — it compiles `sys/` last — so the
+  assembly is intended. V8's `make` resolves a duplicate target the other way
+  (first rule wins, second reports `Too many command lines`), so generating
+  both rules silently linked the C versions. The generator now applies the
+  tape's order explicitly.
+- **`libc.a` could never be up to date.** `ld -x -r` rewrites every `.o` in
+  place *inside* the `libc.a` recipe, leaving all 233 prerequisites newer than
+  the target the moment it finishes — so `make install` rebuilt the whole
+  archive a second time and an incremental build would never converge. Split
+  into a `stripped` stamp target.
+- **`$(LIBC)` was a prerequisite but never on the link line.** `cc` appends an
+  implicit `-lc`, which `ld` resolves from `/lib/libc.a` — so a stage that had
+  built its own libc would have gone on linking against the tape's, and the
+  stage-3 comparison would have been measuring nothing.
+
 ## 0.2.0 — 2026-08-10
 
 **The bootstrap toolchain builds from this tree, and it is a fixpoint.** All fourteen stage-1

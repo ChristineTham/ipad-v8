@@ -29,14 +29,27 @@ INCDIR = $(SRC)/usr/include
 CFLAGS = -O -I$(INCDIR)
 TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
 
-OBJS = _exit.o abort.o abs.o abs.o access.o acct.o alarm.o alloca.o asin.o atan.o atof.o atoi.o atol.o calloc.o cerror.o cerror.o chdir.o chmod.o chown.o chroot.o chrtab.o cleanup.o close.o closedir.o clrerr.o creat.o crypt.o ctime.o cttyname.o ctype.o data.o dialout.o doprnt.o doscan.o dup.o ecvt.o erf.o errlst.o error.o execl.o execle.o execv.o execve.o execvp.o exit.o exp.o fabs.o fabs.o fchmod.o fchown.o fdopen.o fgetc.o fgets.o filbuf.o floor.o flsbuf.o fopen.o fork.o fprintf.o fputc.o fputs.o freopen.o frexp.o fseek.o fstab.o fstat.o ftell.o ftw.o galloc.o gamma.o gcd.o gcvt.o getchar.o getenv.o getgid.o getgrent.o getgrgid.o getgrnam.o getlogin.o getopt.o getpass.o getpid.o getpw.o getpwent.o getpwnam.o getpwuid.o gets.o getuid.o getw.o getwd.o gmount.o hypot.o index.o ioctl.o iread.o isatty.o itol.o j0.o j1.o jn.o kill.o l3tol.o lcm.o ldexp.o linedis.o link.o locv.o log.o lseek.o lstat.o ltod.o ltoi.o ltol3.o malloc.o max.o mcount.o mcount.o memccpy.o memchr.o memcmp.o memcpy.o memset.o min.o mkdir.o mknod.o mktemp.o modf.o mon.o mount.o nap.o nice.o nlist.o open.o opendir.o perror.o pipe.o popen.o pow.o printf.o prof.o ptopen.o putchar.o puts.o putw.o qsort.o rand.o rdwr.o read.o readdir.o readlink.o reboot.o regcomp.o regerror.o regex.o regexec.o regsub.o rew.o rin.o rindex.o rmdir.o sbrk.o scanf.o seekdir.o select.o setbuf.o setgid.o setjmp.o settod.o setuid.o sgn.o signal.o sin.o sinh.o sleep.o sprintf.o sqrt.o stat.o stime.o strcat.o strcatn.o strchr.o strcmp.o strcmpn.o strcpy.o strcpyn.o strcspn.o strdup.o strlen.o strncat.o strncmp.o strncpy.o strout.o strpbrk.o strrchr.o strspn.o strtok.o stty.o stuff.o swab.o swapon.o symlink.o sync.o syscall.o system.o tan.o tanh.o tell.o telldir.o time.o times.o timezone.o tmpnam.o tolower.o toupper.o ttyname.o ttyslot.o udiv.o umask.o umount.o uname.o ungetc.o unlink.o urem.o utime.o vadvise.o valloc.o vfork.o vlimit.o vtimes.o wait.o wait3.o write.o
+OBJS = _exit.o abort.o abs.o access.o acct.o alarm.o alloca.o asin.o atan.o atof.o atoi.o atol.o calloc.o cerror.o chdir.o chmod.o chown.o chroot.o chrtab.o cleanup.o close.o closedir.o clrerr.o creat.o crypt.o ctime.o cttyname.o ctype.o data.o dialout.o doprnt.o doscan.o dup.o ecvt.o erf.o errlst.o error.o execl.o execle.o execv.o execve.o execvp.o exit.o exp.o fabs.o fchmod.o fchown.o fdopen.o fgetc.o fgets.o filbuf.o floor.o flsbuf.o fopen.o fork.o fprintf.o fputc.o fputs.o freopen.o frexp.o fseek.o fstab.o fstat.o ftell.o ftw.o galloc.o gamma.o gcd.o gcvt.o getchar.o getenv.o getgid.o getgrent.o getgrgid.o getgrnam.o getlogin.o getopt.o getpass.o getpid.o getpw.o getpwent.o getpwnam.o getpwuid.o gets.o getuid.o getw.o getwd.o gmount.o hypot.o index.o ioctl.o iread.o isatty.o itol.o j0.o j1.o jn.o kill.o l3tol.o lcm.o ldexp.o linedis.o link.o locv.o log.o lseek.o lstat.o ltod.o ltoi.o ltol3.o malloc.o max.o mcount.o memccpy.o memchr.o memcmp.o memcpy.o memset.o min.o mkdir.o mknod.o mktemp.o modf.o mon.o mount.o nap.o nice.o nlist.o open.o opendir.o perror.o pipe.o popen.o pow.o printf.o prof.o ptopen.o putchar.o puts.o putw.o qsort.o rand.o rdwr.o read.o readdir.o readlink.o reboot.o regcomp.o regerror.o regex.o regexec.o regsub.o rew.o rin.o rindex.o rmdir.o sbrk.o scanf.o seekdir.o select.o setbuf.o setgid.o setjmp.o settod.o setuid.o sgn.o signal.o sin.o sinh.o sleep.o sprintf.o sqrt.o stat.o stime.o strcat.o strcatn.o strchr.o strcmp.o strcmpn.o strcpy.o strcpyn.o strcspn.o strdup.o strlen.o strncat.o strncmp.o strncpy.o strout.o strpbrk.o strrchr.o strspn.o strtok.o stty.o stuff.o swab.o swapon.o symlink.o sync.o syscall.o system.o tan.o tanh.o tell.o telldir.o time.o times.o timezone.o tmpnam.o tolower.o toupper.o ttyname.o ttyslot.o udiv.o umask.o umount.o uname.o ungetc.o unlink.o urem.o utime.o vadvise.o valloc.o vfork.o vlimit.o vtimes.o wait.o wait3.o write.o
 
 all: libc.a crt0.o mcrt0.o
 
 # The recipe below is the tape's, with the archive ordering intact.  See the
 # note in mkdep.py for why each step is here.
-libc.a: $(OBJS)
+# Two rules, not one, and the stamp file is the reason.
+#
+# `ld -x -r` REWRITES every .o in place (mv a.out $$i).  Done inside the
+# libc.a recipe, that leaves all 233 prerequisites newer than the target the
+# moment the recipe finishes, so libc.a is permanently out of date -- the
+# `install` pass rebuilt the whole archive a second time, and an incremental
+# build would never converge.
+#
+# Splitting it out fixes the ordering: `stripped` is written after the objects
+# it rewrote, so it is newer than all of them, and libc.a is newer than it.
+stripped: $(OBJS)
 	-for i in *.o ; do $(LD) -x -r $$i; mv a.out $$i; done
+	echo stripped > stripped
+
+libc.a: stripped
 	$(AR) cr libc.a `lorder *.o | tsort`
 	$(AR) ma flsbuf.o libc.a exit.o
 	$(AR) m libc.a cleanup.o
@@ -71,9 +84,6 @@ _exit.o: $(SRC)/usr/src/libc/sys/_exit.s $(TOOLS)
 abort.o: $(SRC)/usr/src/libc/gen/abort.c $(INCDIR)/signal.h $(TOOLS)
 	$(CC) $(CFLAGS) -c $(SRC)/usr/src/libc/gen/abort.c
 
-abs.o: $(SRC)/usr/src/libc/gen/abs.c $(TOOLS)
-	$(CC) $(CFLAGS) -c $(SRC)/usr/src/libc/gen/abs.c
-
 abs.o: $(SRC)/usr/src/libc/sys/abs.s $(TOOLS)
 	$(CC) $(CFLAGS) -c $(SRC)/usr/src/libc/sys/abs.s
 
@@ -106,9 +116,6 @@ atol.o: $(SRC)/usr/src/libc/gen/atol.c $(TOOLS)
 
 calloc.o: $(SRC)/usr/src/libc/gen/calloc.c $(TOOLS)
 	$(CC) $(CFLAGS) -c $(SRC)/usr/src/libc/gen/calloc.c
-
-cerror.o: $(SRC)/usr/src/libc/crt/cerror.s $(TOOLS)
-	$(CC) $(CFLAGS) -c $(SRC)/usr/src/libc/crt/cerror.s
 
 cerror.o: $(SRC)/usr/src/libc/sys/cerror.s $(TOOLS)
 	$(CC) $(CFLAGS) -c $(SRC)/usr/src/libc/sys/cerror.s
@@ -196,9 +203,6 @@ exit.o: $(SRC)/usr/src/libc/sys/exit.s $(TOOLS)
 
 exp.o: $(SRC)/usr/src/libc/math/exp.c $(INCDIR)/errno.h $(INCDIR)/math.h $(TOOLS)
 	$(CC) $(CFLAGS) -c $(SRC)/usr/src/libc/math/exp.c
-
-fabs.o: $(SRC)/usr/src/libc/math/fabs.c $(TOOLS)
-	$(CC) $(CFLAGS) -c $(SRC)/usr/src/libc/math/fabs.c
 
 fabs.o: $(SRC)/usr/src/libc/sys/fabs.s $(TOOLS)
 	$(CC) $(CFLAGS) -c $(SRC)/usr/src/libc/sys/fabs.s
@@ -403,9 +407,6 @@ malloc.o: $(SRC)/usr/src/libc/gen/malloc.c $(TOOLS)
 
 max.o: $(SRC)/usr/src/libc/gen/max.c $(TOOLS)
 	$(CC) $(CFLAGS) -c $(SRC)/usr/src/libc/gen/max.c
-
-mcount.o: $(SRC)/usr/src/libc/crt/mcount.s $(TOOLS)
-	$(CC) $(CFLAGS) -c $(SRC)/usr/src/libc/crt/mcount.s
 
 mcount.o: $(SRC)/usr/src/libc/sys/mcount.s $(TOOLS)
 	$(CC) $(CFLAGS) -c $(SRC)/usr/src/libc/sys/mcount.s
@@ -763,4 +764,4 @@ install: libc.a crt0.o mcrt0.o
 	cp mcrt0.o $(TOOLDIR)/lib/mcrt0.o
 
 clean:
-	-rm -f $(OBJS) libc.a crt0.o mcrt0.o
+	-rm -f $(OBJS) libc.a crt0.o mcrt0.o stripped

@@ -277,7 +277,8 @@ the safety rules are in [build-from-source.md](build-from-source.md).
       compiled off the share into a separate build filesystem. The compiler
       works and agrees with the 1985 one byte-for-byte on the same input
       *(2026-08-10; `tools/drive-stage1.sh`, `work/myv8/c2-stage1.log`)*
-- [ ] **S4** Stage 2–3: the toolchain rebuilds itself; fixpoint comparison
+- [x] **S4** Stage 2 (libc) then stage 3 (the toolchain again, against it) —
+      `same=14 differ=0`, so the system reproduces itself *(2026-08-10)*
 - [ ] **S5** `cc -B` extended to `as`, `ld`, `crt0.o`, and `yaccpar` behind an
       `#ifndef` — the hermeticity gaps
 - [ ] **S6** Stages 4–7: headers, libraries, then everything

@@ -132,8 +132,8 @@ disk.
 |---|---|---|---|---|
 | **0** | — | the tape's `/bin/cc`, `/bin/make`, `/lib/libc.a` | — | |
 | **1** | yacc, then make, lex, cpp, ccom, c2, as, ld, ar, ranlib, nm, size, strip, cc | stage 0 | `TOOLDIR` | ✅ |
-| **2** | libc | stage 1 | `TOOLDIR/lib` | ▶ |
-| **3** | the whole toolchain **again** | stage 1 + stage 2 libc | `TOOLDIR3` | |
+| **2** | libc | stage 1 | `TOOLDIR/lib` | ✅ |
+| **3** | the whole toolchain **again** | stage 1 + stage 2 libc | `TOOLDIR3` | ✅ |
 | **4** | headers | — | `DESTDIR/usr/include` |
 | **5** | libraries | stage 3 | `DESTDIR/lib`, `DESTDIR/usr/lib` |
 | **6** | 113 makefile commands + 163 loose `.c` + 6 `.sh` | stage 3 | `DESTDIR/bin`, `DESTDIR/usr/bin`, `DESTDIR/etc` |
@@ -276,6 +276,10 @@ the design.*
 - [x] **Stage 1 builds the toolchain from the repo's source**, compiled straight
       off the share into `/b`. `tools/drive-stage1.sh` runs it end to end in
       about ten minutes.
+- [x] **Stage 2: libc builds from our source** — 104,810 bytes, 229 members,
+      against the tape's 104,770
+- [x] **Stage 3: the system reproduces itself** — the toolchain rebuilt with
+      our compiler *and* our libc is byte-identical to stage 1, all fourteen
 - [ ] `cc -B` extended to `as`, `ld`, `crt0.o`
 - [ ] Stages 2–3, with the fixpoint comparison
 - [ ] Stages 4–7

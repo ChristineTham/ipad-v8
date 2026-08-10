@@ -520,7 +520,30 @@ def emit_libc():
 
     # (object, source-relative-path).  Order of directories follows the tape's
     # recipe; within a directory, sorted, so the output is stable.
-    members = []
+    # FOUR basenames appear in two directories each, and all objects share one
+    # namespace, so the duplicate has to be resolved -- by us, explicitly.
+    #
+    #   cerror   crt/cerror.s == sys/cerror.s      byte-identical
+    #   mcount   crt/mcount.s == sys/mcount.s      byte-identical
+    #   abs      gen/abs.c    vs sys/abs.s         C vs VAX assembly
+    #   fabs     math/fabs.c  vs sys/fabs.s        C vs VAX assembly
+    #
+    # The tape resolves it by overwrite order -- it compiles crt, gen, math,
+    # stdio, then sys, all into one directory, so sys/ wins every time.  For
+    # cerror and mcount that is a coin toss between identical files.  For abs
+    # and fabs it is a real choice and clearly the intended one: sys/abs.s uses
+    # mnegl and sys/fabs.s uses movd/mnegd, hand-written VAX instructions that
+    # exist precisely to beat the portable C.
+    #
+    # We must state it, because V8's make resolves a duplicate target the OTHER
+    # way -- doname.c keeps the FIRST rule with commands and reports
+    # "Too many command lines" for the second -- so generating both rules would
+    # have silently linked the C versions of abs and fabs and been an error
+    # message rather than a decision.
+    #
+    # A dict keyed on the object name, filled in the tape's compile order, gets
+    # the same answer the tape gets and says why.
+    seen = {}
     for sub in ("crt", "gen", "math", "stdio", "sys"):
         p = os.path.join(d, sub)
         if not os.path.isdir(p):
@@ -530,11 +553,11 @@ def emit_libc():
                 continue
             if not (f.endswith(".c") or f.endswith(".s")):
                 continue
-            members.append((f[:-2] + ".o", sub + "/" + f))
+            seen[f[:-2] + ".o"] = sub + "/" + f      # later directory wins
     # the two with hand-written rules
-    members.append(("errlst.o", "gen/errlst.c"))
-    members.append(("doprnt.o", "stdio/doprnt.S"))
-    members.sort()
+    seen["errlst.o"] = "gen/errlst.c"
+    seen["doprnt.o"] = "stdio/doprnt.S"
+    members = sorted(seen.items())
 
     out = [LIBC_PREAMBLE]
     out.append("OBJS = " + " ".join(o for o, _ in members) + "\n")
@@ -544,8 +567,21 @@ all: libc.a crt0.o mcrt0.o
 
 # The recipe below is the tape's, with the archive ordering intact.  See the
 # note in mkdep.py for why each step is here.
-libc.a: $(OBJS)
+# Two rules, not one, and the stamp file is the reason.
+#
+# `ld -x -r` REWRITES every .o in place (mv a.out $$i).  Done inside the
+# libc.a recipe, that leaves all 233 prerequisites newer than the target the
+# moment the recipe finishes, so libc.a is permanently out of date -- the
+# `install` pass rebuilt the whole archive a second time, and an incremental
+# build would never converge.
+#
+# Splitting it out fixes the ordering: `stripped` is written after the objects
+# it rewrote, so it is newer than all of them, and libc.a is newer than it.
+stripped: $(OBJS)
 	-for i in *.o ; do $(LD) -x -r $$i; mv a.out $$i; done
+	echo stripped > stripped
+
+libc.a: stripped
 	$(AR) cr libc.a `lorder *.o | tsort`
 	$(AR) ma flsbuf.o libc.a exit.o
 	$(AR) m libc.a cleanup.o
@@ -598,7 +634,7 @@ install: libc.a crt0.o mcrt0.o
 	cp mcrt0.o $(TOOLDIR)/lib/mcrt0.o
 
 clean:
-	-rm -f $(OBJS) libc.a crt0.o mcrt0.o
+	-rm -f $(OBJS) libc.a crt0.o mcrt0.o stripped
 """)
     return "".join(out)
 
