@@ -200,16 +200,53 @@ through a build, leaving nothing to build with. The rules that prevent it:
 5. A stage that fails leaves `/usr/bld` in whatever state it reached and the running system
    untouched, so the recovery is always "look at the log and run the stage again".
 
+## How the build is laid out
+
+**Source is never copied.** It stays on the netfs share at `/n/src`, read-only,
+served straight out of the repo's `v8/`. netfsd applies `CASEMAP` so the guest
+sees `usr/src/cmd/Mail` and `usr/src/cmd/mail` as the distinct directories they
+are — which is not a nicety: a `struct direct` name field is 14 bytes and the
+escaped spelling of `CIRCLE` is 18, so the repo's on-disk names cannot appear in
+a V8 directory entry at all.
+
+**Only products touch disk**, on `/b` — rp1, its own filesystem, `mkfs`'d per
+run. Real Unix mounted `/usr/src` as a separate disk for exactly this reason.
+Here the source needs no disk, but objects do, and V8 fixes a filesystem's inode
+count at `mkfs` time: dropping a build tree into `/usr` (8,799 files' worth)
+exhausted them and V7 `mkdir` began answering `cannot access .`.
+
+Each component builds in `/b/obj/<name>`, compiling `$(SRC)/…` off the wire.
+The share being read-only enforces the out-of-tree build rather than us policing
+it.
+
+*An earlier version of this copied the whole tree to local disk first. That was
+a mistake — 25 minutes a run, and every disk problem above was downstream of it.
+It is recorded here because the reasoning that produced it («a long compile
+should not depend on a live mount») sounds prudent and was wrong: the mount is
+the design.*
+
 ## Status
 
 - [x] Ordering derived from the source, not assumed
 - [x] Determinism measured: code generation reproducible, symbol table is not
+- [x] `v8/mk/mkdep.py` — dependency scanner and makefile generator, 14 components
+- [x] Source served, not staged; case collisions resolved in netfsd
+- [ ] **Stage 1 has never completed a run.** Five attempts, every failure
+      environmental rather than in the design: `/bld` on a 7.6 MB root; `test -e`
+      absent in V7; prompt-matching unusable because V8 echoes typed characters
+      into its output; `@` is the line-kill character; `cmd & ; echo` is a
+      syntax error. The driver is `tools/drive-stage1.sh`; it has not been run
+      since the share-only rework.
 - [ ] `cc -B` extended to `as`, `ld`, `crt0.o`
-- [ ] `v8/mk/mkdep.py` — dependency scanner and makefile generator
-- [ ] Stages 1–3, with the fixpoint comparison
+- [ ] Stages 2–3, with the fixpoint comparison
 - [ ] Stages 4–7
 - [ ] Stage 8, and a boot
 - [ ] Stage 9 — the new system rebuilds itself under `chroot`
+
+**The guest clock is a known blocker for anything incremental** (task #59). Its
+TODR starts in 1976 unless `attach TODR` is used and the date set once, so every
+object is older than its source and `make` can never converge. A first full
+build is unaffected, which is why stage 1 does not expose it.
 
 ## Sources
 
