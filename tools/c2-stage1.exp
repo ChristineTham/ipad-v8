@@ -26,11 +26,6 @@ proc must {pat {t 0}} {
         send_user "\n*** FAILED: simulator exited waiting for '$pat' ***\n"; exit 4
     }
 }
-# The shell prompt has to be something no file we cat can contain.  "# " is
-# not: CASEMAP and every makefile in the tree have comment lines starting with
-# it, and matching one of those lets the next command go out while the previous
-# one is still printing.  V8's sh honours PS1, so give it a prompt that cannot
-# occur in 1985 source.
 # DO NOT SYNCHRONISE ON THE PROMPT.  It cannot be made to work here.
 #
 # V8 echoes typed characters as they arrive, interleaved with whatever is still
@@ -47,16 +42,23 @@ proc must {pat {t 0}} {
 # So each command carries its own end marker and we wait for that, which is the
 # same output-anchored technique the SIMH remote console needs (see
 # docs/a1-notes.md).  The sequence number makes a stale match impossible, and
-# the quotes matter: the shell prints @@7@@ but what the tty echoes back is
-# @@'7'@@, so the marker can only match the command's *output*.
+# the timeout now bounds the command it is written on, with no bookkeeping.
 #
-# The timeout now bounds the command it is written on, with no bookkeeping.
+# The marker must contain no character the tty treats as editing.  "@@" was a
+# poor first choice: @ is the line-kill character on a V7-derived tty, so every
+# marker erased the line it was in and the shell only ever saw fragments,
+# ending at a continuation prompt.  '+' is inert.
+#
+# It also must not appear in the *echo* of the command, or we match our own
+# typing.  Building it from a shell variable does that: the tty sees "+ok7;"
+# and "echo $M+", neither of which contains "+ok7+", while the shell prints
+# exactly "+ok7+".
 set SEQ 0
 proc sh {cmd {t 0}} {
     global SEQ
     incr SEQ
-    sendline "$cmd; echo '@@'$SEQ'@@'"
-    must "@@$SEQ@@" $t
+    sendline "M=+ok$SEQ; $cmd; echo \$M+"
+    must "+ok$SEQ+" $t
 }
 proc bootsh {cmd {t 0}} { must "# " $t; sendline $cmd }
 proc simh {cmd {t 0}} { must "sim>" $t; sendline $cmd }
@@ -66,12 +68,12 @@ proc simh {cmd {t 0}} { must "sim>" $t; sendline $cmd }
 proc catfile {src dst} {
     global SEQ
     incr SEQ
-    sendline "cat > $dst; echo '@@'$SEQ'@@'"
+    sendline "M=+ok$SEQ; cat > $dst; echo \$M+"
     set f [open $src r]
     while {[gets $f line] >= 0} { sendline $line }
     close $f
     send "\x04"
-    must "@@$SEQ@@" 300
+    must "+ok$SEQ+" 300
 }
 
 set port [lindex $argv 0]

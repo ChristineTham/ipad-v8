@@ -1,0 +1,21 @@
+# ipnx base system release -- the single source of truth for the version.
+#
+# tools/ipnx-release.py generates usr/include/ipnx.h and the version lines of
+# usr/sys/conf/newvers.sh from this file, and `--check` fails if either has
+# drifted.  FreeBSD maintains its equivalents (newvers.sh and sys/param.h) by
+# hand and they do occasionally disagree; generating is cheaper than remembering.
+#
+# Policy -- what each number means, and what counts as a release at all:
+# docs/releases.md
+#
+# EDITION is Bell Labs' and is not ours to increment.  MAJOR breaks
+# compatibility for anything built against the base; MINOR adds functionality
+# without breaking it; PATCH is fixes only.  BRANCH is CURRENT between releases
+# and RELEASE at a tag.
+
+EDITION=8
+MAJOR=0
+MINOR=1
+PATCH=0
+BRANCH=CURRENT
+DATE=2026-08-10
