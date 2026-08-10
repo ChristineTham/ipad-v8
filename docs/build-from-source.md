@@ -498,6 +498,26 @@ configured zone against the host's — then `sync`s, so the superblock carries
 the year to every later boot. Jumping fifty years while the machine runs is
 safe: `cron`'s `slp()` resynchronises on any delta over an hour.
 
+### Why out-of-tree building works at all
+
+Two accidents of 1985 design, and without either the whole approach would be
+impossible rather than merely awkward:
+
+- **`cc -c $(SRC)/x/y.c` writes `y.o` into the current directory.** `setsuf()`
+  returns the *basename* with the suffix replaced, so the object lands where you
+  are rather than beside the source — which matters when the source is on a
+  read-only mount.
+- **`#include "x.h"` searches the directory of the file being compiled**, not the
+  current directory. `cpp.c` sets `dirnams[0] = dirs[0] = trmdir(copy(fnames[0]))`
+  at startup and re-points `dirs[0]` on entering each included file. So a library
+  compiled as `$(SRC)/usr/src/lib/libcurses/addch.c` finds its own `curses.h`
+  with no `-I` at all, and `libin`'s `"../h/config.h"` resolves relative to the
+  source rather than to the object directory.
+
+The generator still emits `-I` for those directories, because the *dependency
+scan* has to agree with the compiler about where a header lives, and a scan that
+silently fails to find one produces a rule that never fires rather than an error.
+
 ### What out-of-tree building actually costs
 
 Every stage-1 failure after the environment was sorted came from the same
