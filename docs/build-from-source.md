@@ -348,6 +348,34 @@ It is recorded here because the reasoning that produced it («a long compile
 should not depend on a live mount») sounds prudent and was wrong: the mount is
 the design.*
 
+## Stage 8: a disk, and what the tree already has for it
+
+Not built yet. Written down now because the survey came out better than expected:
+**every ingredient is in `v8/`, including the boot program.**
+
+| need | where it is |
+|---|---|
+| the kernel | stage 7 → `DESTDIR/unix` |
+| userland | stages 4–6 → `DESTDIR` |
+| a filesystem | `mkfs` on a fresh image, sized per `hp6_sizes` |
+| device nodes | `v8/proto-dev` — 395 lines of `ls -l /dev`, so major, minor, owner and mode are all recoverable |
+| empty directories | `v8/EMPTYDIRS` — 79 of them, listed because git cannot store an empty directory |
+| `/etc` config | `v8/etc/` — `rc`, `ttys`, `passwd`, `group`, `fstab`, `termcap`, … |
+| the **boot program** | `usr/sys/boot/stand/` |
+| a boot block | `usr/sys/boot/bb/hpboot.s` |
+
+That last pair is the surprise. The app never uses a boot block — the harness does
+`load -o bootV8 0` then `run 2`, and `bootV8` reads `hp(0,0)unix`. `bootV8` is an
+8,904-byte artefact sitting in `work/`, and it is exactly what `boot/stand` builds. So
+a from-source disk needs **no third-party binary at all**: the secondary boot program
+can come out of the tree like everything else, and `boot/bb/hpboot.s` is there for a
+disk that has to boot without the harness.
+
+`boot/README` is worth reading before starting: on a 780 the console `BOOT` command
+runs a command file from the floppy that loads `boot` and starts it, which is why the
+780 path never needed the disk's block 0 — a difference from the 750, where a ROM reads
+block 0 and starts it at `0xC`.
+
 ## Status
 
 - [x] Ordering derived from the source, not assumed

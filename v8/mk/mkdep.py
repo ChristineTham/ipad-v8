@@ -867,7 +867,13 @@ def emit_lib(l):
             objmap[os.path.splitext(f)[0] + ".o"] = d + "/" + f
 
     incdir = os.path.join(V8, "usr/include")
-    incdirs = [os.path.join(V8, d) for d in l["dirs"]] + [incdir]
+    # `incs` names extra include directories, relative to V8.  libin is the
+    # first library that needs one: its sources include "../h/config.h",
+    # which is outside its own directory, so without this the scan misses it
+    # and touching config.h rebuilds nothing.
+    incdirs = ([os.path.join(V8, d) for d in l["dirs"]]
+               + [os.path.join(V8, i) for i in l.get("incs", [])]
+               + [incdir])
 
     def dep(path):
         path = os.path.normpath(path)
@@ -875,8 +881,14 @@ def emit_lib(l):
             return "$(INCDIR)/" + rel(path, incdir)
         return "$(SRC)/" + rel(path, V8)
 
+    # The same extra directories go on the command line as -I, so the compiler
+    # and the dependency scan agree about where a header lives.  Stating them
+    # in one place is the point: they disagreed once already, in stage 1,
+    # and the symptom was a rule that never fired rather than an error.
+    cflags = l.get("cflags", "-O") + "".join(
+        " -I$(SRC)/" + i for i in l.get("incs", []))
     out = [LIB_PREAMBLE % dict(name=l["name"], note=l.get("note", "-"),
-                               cflags=l.get("cflags", "-O"))]
+                               cflags=cflags)]
     out.append("OBJS = " + " \\\n\t".join(sorted(objmap)) + "\n")
     out.append("\nall: %s\n" % l["product"])
 
@@ -987,6 +999,20 @@ STAGE5 = [
          cflags="-O", product="libI77.a", install="usr/lib/libI77.a",
          note="libI77/makefile: OBJ (26)"),
 
+    # The Internet library.  It is the reason nmount(8) can be built from
+    # source at all: nmount calls in_address() and tcp_sock(), and until this
+    # was looked at properly the assumption was that /usr/lib/libin.a had no
+    # source and the whole netfs mount path depended on a 1985 binary.  It
+    # does have source -- filed under cmd/, not lib/, which is why it reads
+    # as missing.
+    dict(name="libin", dirs=["usr/src/cmd/inet/libin"],
+         objs=["tcp_lib.c", "udp_lib.c", "in_service.c", "in_address.c",
+               "in_host.c", "in_subrs.c", "in_ntoa.c", "in_ntoh.s"],
+         incs=["usr/src/cmd/inet/h"],
+         cflags="-O", product="libin.a", install="usr/lib/libin.a",
+         note="cmd/inet/libin/makefile: OBJS (8), CFLAGS=-g -I ../h -- -O "
+              "here instead of -g, matching every other library"),
+
     dict(name="libdk", dirs=["usr/src/dk/libc"],
          objs=["tdkdial.c", "tdkexec.c", "tdklogin.c", "tdkmgr.c",
                "dkproto.c", "dkctlchan.c", "pwsearch.c"],
@@ -1057,6 +1083,18 @@ STAGE6 = [
          product="config", install="etc/config",
          note="cmd/config/makefile: OBJS (8), LDFLAGS=-ll, installs to "
               "$(DESTDIR)/etc -- we name libl.a by path instead of -ll"),
+
+    # OURS, not the tape's.  It is the command that mounts a host directory
+    # over TCP using the netfs client that has been compiled into every V8
+    # kernel since 1985 and has had nothing to talk to since Datakit was
+    # switched off (phase N6; docs/n-track-notes.md).  It lives in
+    # usr/src/cmd like any other command and is distinguishable from the
+    # tape's files by not being in v8/MANIFEST.
+    dict(name="nmount", dir="usr/src/cmd", objs=["nmount.c"],
+         libs=["usr/lib/libin.a"], dest="DESTDIR",
+         product="nmount", install="etc/nmount",
+         note="ipnx, phase N6: needs in_address() and tcp_sock() from libin, "
+              "which stage 5 now builds from cmd/inet/libin"),
 ]
 
 # ---------------------------------------------------------------- notes on
