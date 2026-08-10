@@ -12,6 +12,16 @@ char	*ld = "/bin/ld";
 char	*crt0 = "/lib/crt0.o";
 char	*instrcnt = "/lib/instrcnt";
 
+/*
+ * ipnx: the C library to link against.  Null means "let ld find it", which
+ * is the historical behaviour -- cc appends -lc and ld searches /lib,
+ * /usr/lib and /usr/local/lib in that order (getfile() in ld.c, which walks
+ * the three by rewriting one template string).  There is no -L in this ld,
+ * so a build that must not touch the running system's library has no choice
+ * but to name the archive.  -t c sets this; see below.
+ */
+char	*libc;
+
 char	tmp0[30];		/* big enough for /tmp/ctm%05.5d */
 char	*tmp1, *tmp2, *tmp3, *tmp4, *tmp5;
 char	*outfile;
@@ -165,10 +175,43 @@ main(argc, argv)
 		case 'p':
 			cpp = strspl(npassname, "cpp");
 			continue;
+		/*
+		 * ipnx: three more, so -B can seal everything cc executes and
+		 * not just the three passes.  Stock -t reaches ccom, c2 and
+		 * cpp; as, ld, crt0.o and the C library stayed hardwired at
+		 * the top of this file, so a "staged" compile still assembled
+		 * with the running system's as, linked with its ld, and
+		 * pulled crt0.o and libc.a out of its /lib.  Three quarters of
+		 * a stage boundary is not a stage boundary.
+		 *
+		 *	a	as
+		 *	l	ld
+		 *	c	crt0.o, mcrt0.o and libc.a -- the C library and
+		 *		its startup file, which are one release and
+		 *		must move together
+		 *
+		 * All of them hang off the same -B prefix, so the prefix names
+		 * one directory holding every program cc drives.  That is why
+		 * the build installs as and ld into TOOLDIR/lib as well as
+		 * TOOLDIR/bin: bin is for people and makefiles, lib is the
+		 * compiler's own pass directory.
+		 */
+		case 'a':
+			as = strspl(npassname, "as");
+			continue;
+		case 'l':
+			ld = strspl(npassname, "ld");
+			continue;
+		case 'c':
+			crt0 = strspl(npassname, "crt0.o");
+			libc = strspl(npassname, "libc.a");
+			continue;
 		}
 	}
+	/* libc is non-null exactly when -t c was given, so the profiling
+	   startup file follows the ordinary one out of the same directory. */
 	if (proflag)
-		crt0 = "/lib/mcrt0.o";
+		crt0 = libc? strspl(npassname, "mcrt0.o"): "/lib/mcrt0.o";
 	if (nc==0)
 		goto nocom;
 	if (signal(SIGINT, SIG_IGN) != SIG_IGN)
@@ -279,7 +322,15 @@ nocom:
 			av[na++] = llist[i++];
 		if (gflag)
 			av[na++] = "-lg";
-		av[na++] = "-lc";
+		/*
+		 * ipnx: name the archive when -t c gave us one.  -lc would
+		 * send ld to /lib, /usr/lib, /usr/local/lib -- the running
+		 * system's library -- and it would do it silently, resolving
+		 * whatever our archive happened to be missing.  A stage that
+		 * quietly borrows from the system it is meant to replace
+		 * reports success and proves nothing.
+		 */
+		av[na++] = libc? libc: "-lc";
 		av[na++] = 0;
 		eflag |= callsys(ld, av);
 		if (nc==1 && nxo==1 && eflag==0)

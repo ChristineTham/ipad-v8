@@ -92,6 +92,8 @@ assyms.o: $(SRC)/usr/src/cmd/as/assyms.c $(INCDIR)/a.out.h $(INCDIR)/ctype.h $(I
 install: as
 	-mkdir $(TOOLDIR)/bin
 	cp as $(TOOLDIR)/bin/as
+	-mkdir $(TOOLDIR)/lib
+	cp as $(TOOLDIR)/lib/as
 
 clean:
 	-rm -f $(OBJS) as 

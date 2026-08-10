@@ -75,13 +75,13 @@ STAGE1 = [
     # links a generated rodata.c that does not exist until yacc has run.
     dict(name="yacc", dir="usr/src/cmd/yacc", objs="*.c", cflags="-DWORD32",
          product="yacc", install="bin/yacc",
-         # /usr/lib, not /lib: yacc/files has
-         #     # define PARSER "/usr/lib/yaccpar"
-         # unconditionally, so a yacc we build reads that absolute path
-         # whatever TOOLDIR says.  Installing our copy there keeps the
-         # tape's layout; making the build properly hermetic needs
-         # PARSER behind an #ifndef, which is a change to our source and
-         # a later stage's problem.
+         # /usr/lib, not /lib, because that is where the tape puts it and
+         # yacc/files still compiles that path in as the DEFAULT.  It is no
+         # longer the only answer: y1.c now reads $YACCPAR first (S5), so a
+         # staged build points each stage's yacc at its own parser text
+         # without changing the binary -- which matters, because a compiled-in
+         # path would make stage 1's yacc and stage 3's yacc differ by an
+         # embedded string and fail the fixpoint test for no real reason.
          data=[("yaccpar", "usr/lib/yaccpar")],
          note="yacc/Makefile: y?.o, CFLAGS=-O -DWORD32"),
 
@@ -175,12 +175,19 @@ STAGE1 = [
          product="c2", install="lib/c2",
          note="c2/Makefile: c20.o c21.o c22.o, c22 with -R, link -z"),
 
+    # `also` puts a second copy in lib/, which is the directory cc's -B prefix
+    # names.  cc executes as and ld; with S5's -t a and -t l they come out of
+    # the pass directory alongside ccom, cpp, c2, crt0.o and libc.a, so one
+    # prefix seals everything the compiler runs.  bin/ is for people and for
+    # makefiles that invoke the assembler directly.  Two copies of a 60 KB
+    # program on a scratch filesystem is not a cost worth designing around.
     dict(name="as", dir="usr/src/cmd/as", objs="*.c",
          cflags="-DUNIX -DUNIXDEVEL -DFLEXNAMES",
-         product="as", install="bin/as",
+         product="as", install="bin/as", also=["lib/as"],
          note="as/Makefile: OBJS, CFLAGS=-DUNIX -DUNIXDEVEL -DFLEXNAMES"),
 
-    dict(name="ld", dir="usr/src/cmd", objs=["ld.c"], product="ld", install="bin/ld"),
+    dict(name="ld", dir="usr/src/cmd", objs=["ld.c"], product="ld",
+         install="bin/ld", also=["lib/ld"]),
     dict(name="ar", dir="usr/src/cmd", objs=["ar.c"], product="ar", install="bin/ar"),
     dict(name="ranlib", dir="usr/src/cmd", objs=["ranlib.c"], product="ranlib",
          install="usr/bin/ranlib"),
@@ -415,6 +422,10 @@ def emit(c):
     inst = c["install"]
     out.append("\t-mkdir $(TOOLDIR)/%s\n" % os.path.dirname(inst))
     out.append("\tcp %s $(TOOLDIR)/%s\n" % (c["product"], inst))
+    # a second home for the same binary -- see `also` in the component table
+    for dst in c.get("also", []):
+        out.append("\t-mkdir $(TOOLDIR)/%s\n" % os.path.dirname(dst))
+        out.append("\tcp %s $(TOOLDIR)/%s\n" % (c["product"], dst))
     for src, dst in c.get("data", []):
         out.append("\t-mkdir $(TOOLDIR)/%s\n" % os.path.dirname(dst))
         out.append("\tcp %s/%s $(TOOLDIR)/%s\n" % (srcdir, src, dst))

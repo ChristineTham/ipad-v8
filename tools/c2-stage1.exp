@@ -294,16 +294,36 @@ sh "date"
 # libc exists -- a round that buys nothing.
 send_user "\n=== stage 2: libc from our source ===\n"
 sh "date"
-sh "sh /n/src/mk/buildlibc.sh /n/src /b 1 2>&1" 7200
+sh "sh /n/src/mk/buildlibc.sh /n/src /b 2 2>&1" 7200
 sh "date"
 
-# Does anything link against it?  Cheapest proof: build a program with our
-# crt0.o and our libc.a, using our compiler, and run it.
-send_user "\n=== link something against our libc ===\n"
+# S5: the pass directory should now hold everything cc executes.  If as or ld
+# is missing here, -t02palc below fails with "cannot load", which is a clear
+# error but a slow one -- 40 minutes into stage 3.
+#
+# The count is done in the guest and reported as one marker.  Doing it host
+# side meant grepping an `ls -l` out of the transcript for eight filenames,
+# which is a lot of regex standing between us and a yes/no that the guest can
+# simply answer.
+send_user "\n=== S5: is the pass directory complete? ===\n"
+sh "ls -l /b/tools/lib"
+sh "n=0; for f in as ld crt0.o mcrt0.o libc.a ccom cpp c2; do if test -f /b/tools/lib/\$f; then n=`expr \$n + 1`; else echo missing \$f; fi; done; test \$n = 8 && echo S5-PASSDIR\$OK"
+
+# Is OUR yaccpar the file the tape installed?  It matters because yaccpar is
+# copied verbatim into every y.tab.c: if the two differ, every parser stage 3
+# generates differs from stage 1's and the fixpoint fails for a reason that
+# has nothing to do with the compiler.  Cheaper to know now than to diagnose
+# from a table of DIFFERs.
+sh "if cmp /usr/lib/yaccpar /n/src/usr/src/cmd/yacc/yaccpar; then echo YACCPAR-same\$OK; fi"
+
+# Does anything link against it?  Cheapest proof: build a program the sealed
+# way -- our cpp, ccom, c2, as, ld, crt0.o and libc.a, in one cc command --
+# and run it.  This is the whole of S5 in a single line: if any of the six is
+# missing or wrong, this fails.
+send_user "\n=== link something against our libc, sealed ===\n"
 sh "cd /tmp"
 sh "echo 'main(){printf(\"ourlibc%s\\n\", \"-ok\");}' > u.c"
-sh "/b/tools/bin/cc -B/b/tools/lib/ -t02p -c u.c" 300
-sh "ld -X /b/tools/lib/crt0.o u.o /b/tools/lib/libc.a -o u" 300
+sh "/b/tools/bin/cc -B/b/tools/lib/ -t02palc -o u u.c" 300
 sh "./u"
 
 # ---------------------------------------------------------- build stage 3
@@ -314,7 +334,11 @@ sh "./u"
 send_user "\n=== stage 3: rebuild the toolchain against our libc ===\n"
 sh "sh /n/src/mk/build1.sh /n/src /b 3 2>&1" 5400
 sh "date"
-sh "sh /n/src/mk/cmpstage.sh /n/src /b/tools /b/tools3 /b/cmp 2>&1" 900
+# Not cmpstage directly: fixpoint.sh runs the strong test (stage 1 vs stage 3)
+# and, only if that fails, builds stage 3b and runs the classic bootstrap test
+# (stage 3 vs stage 3b).  The strong test is free and the weaker one costs
+# forty minutes, so it is worth asking in that order.
+sh "sh /n/src/mk/fixpoint.sh /n/src /b 2>&1" 5400
 
 # Did we build a compiler that works?  Cheapest possible proof: use it.
 #
@@ -330,21 +354,28 @@ sh "cat t.c"
 #	ccom = strspl(npassname, "ccom")
 # -- a bare string concatenation, no directory logic -- so the prefix has to
 # spell out the directory the passes are actually in, and ours install into
-# $(TOOLDIR)/lib like the system's /lib.  -t02p picks passes 0 (ccom), 2 (c2)
-# and p (cpp); as, ld and crt0.o stay hardcoded at /bin and /lib, so this is
-# our compiler driving the system's assembler and loader, which is all stage 1
-# claims.
-sh "/b/tools/bin/cc -B/b/tools/lib/ -t02p -o t t.c" 300
+# $(TOOLDIR)/lib like the system's /lib.  -t02palc picks passes 0 (ccom),
+# 2 (c2) and p (cpp) as the tape's cc always could, plus a (as), l (ld) and
+# c (crt0.o + libc.a), which are ours: S5.
+sh "/b/tools/bin/cc -B/b/tools/lib/ -t02palc -o t t.c" 300
 sh "./t"
 
 # And the real question: can the new compiler rebuild something the old one
 # built, identically?  Stripped, because cc bakes its PID into the symbol table.
+#
+# Two comparisons, and the difference between them is the point.  -t02p is our
+# three passes over the system's as/ld/libc, which is what we could measure
+# before S5; -t02palc is ours all the way down.  If the first matches and the
+# second does not, the disagreement is in our as, ld or libc rather than in
+# the compiler -- and that is a distinction no single number can make.
 send_user "\n=== new compiler vs old, same source ===\n"
 sh "/b/tools/bin/cc -B/b/tools/lib/ -t02p -O -o ls.new /n/src/usr/src/cmd/ls.c" 600
+sh "/b/tools/bin/cc -B/b/tools/lib/ -t02palc -O -o ls.seal /n/src/usr/src/cmd/ls.c" 600
 sh "cc -O -o ls.old /n/src/usr/src/cmd/ls.c" 600
-sh "strip ls.new ls.old"
-sh "ls -l ls.new ls.old"
+sh "strip ls.new ls.seal ls.old"
+sh "ls -l ls.new ls.seal ls.old"
 sh "cmp ls.new ls.old; echo cmp-newcc-vs-oldcc=\$?"
+sh "cmp ls.seal ls.old; echo cmp-sealed-vs-oldcc=\$?"
 
 sh "echo C2-DONE\$OK"
 sh "cd /; sync; sync"

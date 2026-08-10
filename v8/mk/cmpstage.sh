@@ -45,7 +45,7 @@ same=0
 diff=0
 miss=0
 
-echo "=== stage1 vs stage2, stripped ==="
+echo "=== $A vs $B, stripped ==="
 for p in `sed 's/^[^	]*	[^	]*	//' $MK/stage1.order`
 do
 	n=`echo $p | sed 's|.*/||'`
@@ -80,6 +80,6 @@ echo "cmpstage: same=$same differ=$diff missing=$miss"
 # is printed by a script, and the command that starts the script does not
 # contain it, so the tty echo cannot forge it.
 if test $diff = 0 -a $miss = 0 -a $same != 0
-then echo "TOOLCHAIN-FIXPOINT-ok"
-else echo "TOOLCHAIN-NOT-A-FIXPOINT"
+then echo "TOOLCHAIN-FIXPOINT-ok"; exit 0
+else echo "TOOLCHAIN-NOT-A-FIXPOINT"; exit 1
 fi

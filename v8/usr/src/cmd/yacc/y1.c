@@ -63,9 +63,21 @@ main(argc,argv) int argc; char *argv[]; {
 
 others(){ /* put out other arrays, copy the parsers */
 	register c, i, j;
+	char *parser, *getenv();
 
-	finput = fopen( PARSER, "r" );
-	if( finput == NULL ) error( "cannot find parser %s", PARSER );
+	/* ipnx: $YACCPAR overrides the compiled-in parser location.
+	   It has to be settable at RUN time, not build time: yaccpar is
+	   copied verbatim into every y.tab.c, so a staged build must be
+	   able to point each stage's yacc at that stage's parser text --
+	   and if the path were compiled in instead, stage 1's yacc and
+	   stage 3's yacc would differ by an embedded string and the
+	   fixpoint comparison would fail on a difference that means
+	   nothing.  The binary stays a pure function of the source. */
+	parser = getenv( "YACCPAR" );
+	if( parser == 0 || *parser == 0 ) parser = PARSER;
+
+	finput = fopen( parser, "r" );
+	if( finput == NULL ) error( "cannot find parser %s", parser );
 
 	warray( "yyr1", levprd, nprod );
 

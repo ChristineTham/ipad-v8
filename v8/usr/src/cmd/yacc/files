@@ -8,7 +8,17 @@
 #define WORD32
 #endif
 	/* location of the parser text file */
+	/* ipnx: overridable, so a staged build's yacc reads that stage's
+	/* yaccpar instead of the running system's.  yaccpar is not a data
+	/* file yacc merely consults -- it is copied verbatim into every
+	/* y.tab.c, so it is part of the output.  A yacc built from our
+	/* source that emits the tape's parser text is not our yacc.  The
+	/* file already invites this: its own comment says it "may contain
+	/* definitions to override various defaults", it just never made
+	/* the one that matters conditional.  Pass -DPARSER='"/path"'. */
+#ifndef PARSER
 # define PARSER "/usr/lib/yaccpar"
+#endif
 
 	/* basic size of the Yacc implementation */
 # define HUGE

@@ -68,6 +68,8 @@ ld.o: $(SRC)/usr/src/cmd/ld.c $(INCDIR)/a.out.h $(INCDIR)/ar.h $(INCDIR)/ctype.h
 install: ld
 	-mkdir $(TOOLDIR)/bin
 	cp ld $(TOOLDIR)/bin/ld
+	-mkdir $(TOOLDIR)/lib
+	cp ld $(TOOLDIR)/lib/ld
 
 clean:
 	-rm -f $(OBJS) ld 

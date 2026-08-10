@@ -1,9 +1,12 @@
 #!/bin/sh
 # Build the bootstrap toolchain.  Runs inside V8.
 #
-#	sh $SRC/mk/build1.sh [srcdir] [blddir] [stage]
+#	sh $SRC/mk/build1.sh [srcdir] [blddir] [stage] [withdir]
 #
-# Defaults: /n/src, /b, stage 1.
+# Defaults: /n/src, /b, stage 1, and $blddir/tools as the toolchain to build
+# WITH.  `stage` is a suffix, not a number: it names the output directory
+# ($BLD/tools3, $BLD/tools3b) and nothing else, so a comparison stage can be
+# added without colliding with the numbered stages in the doc's table.
 #
 # Builds, in the order the source dictates and nothing else:
 #
@@ -26,11 +29,20 @@
 # built again anyway -- a wasted round.  Stage 3 is the first set in which
 # every component came from our source.
 #
-# as, ld and crt0.o are NOT redirected in later stages, because cc has no -B for
-# them (cc.c substitutes only passes 0, 2 and p).  So stage 3 is our cpp, ccom
-# and c2 driving the system's assembler and loader, and the macros below say
-# so rather than pretending otherwise -- a dependency on a binary the build
-# does not actually run is a lie make will act on.
+# as, ld, crt0.o and libc.a USED to stay hardwired in later stages, because
+# stock cc substitutes only passes 0, 2 and p -- so "stage 3" was our cpp, ccom
+# and c2 driving the system's assembler and loader and quietly linking against
+# the system's C library.  S5 closed that: cc.c now takes -t a, -t l and -t c
+# as well, all off the same -B prefix, so -B$T1/lib/ -t02palc names one
+# directory holding every program cc executes plus crt0.o and libc.a.  See
+# docs/build-from-source.md, "Stage isolation".
+#
+# $YACCPAR is the same problem one level up.  yaccpar is copied verbatim into
+# every y.tab.c, so it is part of yacc's OUTPUT, and a stage whose yacc emits
+# the tape's parser text has borrowed from the tape.  y1.c reads $YACCPAR
+# ahead of the compiled-in default, so the path is a property of the run and
+# not of the binary -- which is what keeps stage 1's yacc and stage 3's yacc
+# byte-identical.
 #
 # NOTHING HERE WRITES OUTSIDE $TOOLDIR.
 #
@@ -52,12 +64,17 @@
 SRC=${1-/n/src}
 BLD=${2-/b}
 STAGE=${3-1}
+# T1 is the toolchain we compile WITH, which is stage 1 for stages 2 and 3 and
+# stage 3 for the 3b comparison.  It is a separate argument from the stage
+# because "which compiler" and "which output directory" are different
+# questions -- conflating them is exactly how stage 2 spent a week being built
+# by the tape's cc while the doc said stage 1.
+T1=${4-$BLD/tools}
 MK=$SRC/mk/gen
 
-T1=$BLD/tools
 if test "$STAGE" = 1
 then
-	TOOLDIR=$T1
+	TOOLDIR=$BLD/tools
 	OBJ=$BLD/obj
 	MAKE=make
 	MACROS=
@@ -67,13 +84,22 @@ else
 	OBJ=$BLD/obj$STAGE
 	MAKE=$T1/bin/make
 	# One argv element per macro; V8's make takes NAME=value from the
-	# command line and it overrides the makefile's own assignment.
-	MACROS="CC=$T1/bin/cc -B$T1/lib/ -t02p"
+	# command line and it overrides the makefile's own assignment.  This
+	# one has spaces in it, so it is the only one that must stay quoted.
+	MACROS="CC=$T1/bin/cc -B$T1/lib/ -t02palc"
 	# The point of a later stage: link against the libc WE built.  Without
 	# this the fourteen binaries would come out linked to the tape's
 	# /lib/libc.a again and the stage would prove nothing new.
 	NEWLIBC=$T1/lib/libc.a
+	# Read by our yacc; harmless to the tape's, which ignores it.
+	YACCPAR=$T1/usr/lib/yaccpar
+	export YACCPAR
 fi
+
+# The macros that are one word each.  Unquoted below, so the shell splits them
+# into separate argv elements -- which is what make wants, and why none of
+# them may ever contain a space.
+STAGEMACS="YACC=$T1/bin/yacc YACCPATH=$T1/bin/yacc LEX=$T1/usr/bin/lex LEXPATH=$T1/usr/bin/lex CCPATH=$T1/bin/cc CCOM=$T1/lib/ccom CPP=$T1/lib/cpp C2=$T1/lib/c2 AS=$T1/lib/as LD=$T1/lib/ld LIBC=$NEWLIBC"
 
 if test ! -f $MK/stage1.order
 then
@@ -94,6 +120,25 @@ mkdir $TOOLDIR/usr/lib/lex	2>/dev/null
 
 echo "build: stage $STAGE, tools -> $TOOLDIR, objects -> $OBJ"
 test "$STAGE" = 1 || echo "build: compiling with $T1"
+# Fail here, not fourteen times over.  Every component's $(TOOLS) names these,
+# so a missing one gives "Don't know how to make /b/tools/lib/as" on all of
+# them at once -- which reads like fourteen broken makefiles rather than one
+# absent file.  Seen for real: a stage-1 tree built before as and ld gained
+# their second install into lib/.
+if test "$STAGE" != 1
+then
+	miss=
+	for f in ccom cpp c2 as ld crt0.o libc.a
+	do
+		test -f $T1/lib/$f || miss="$miss $f"
+	done
+	if test -n "$miss"
+	then
+		echo "build: $T1/lib is missing:$miss" 1>&2
+		echo "build: stage $STAGE cannot run -- rebuild the stage before it" 1>&2
+		exit 1
+	fi
+fi
 
 fail=0
 for t in `sed 's/	.*//' $MK/stage1.order`
@@ -119,24 +164,12 @@ do
 		irc=$?
 	else
 		$MAKE -f $MK/$t.mk SRC=$SRC TOOLDIR=$TOOLDIR \
-			YACC=$T1/bin/yacc YACCPATH=$T1/bin/yacc \
-			LEX=$T1/usr/bin/lex LEXPATH=$T1/usr/bin/lex \
-			CCPATH=$T1/bin/cc CCOM=$T1/lib/ccom \
-			CPP=$T1/lib/cpp C2=$T1/lib/c2 LIBC=$NEWLIBC \
-			"$MACROS" prepare 2>/dev/null
+			$STAGEMACS "$MACROS" prepare 2>/dev/null
 		$MAKE -f $MK/$t.mk SRC=$SRC TOOLDIR=$TOOLDIR \
-			YACC=$T1/bin/yacc YACCPATH=$T1/bin/yacc \
-			LEX=$T1/usr/bin/lex LEXPATH=$T1/usr/bin/lex \
-			CCPATH=$T1/bin/cc CCOM=$T1/lib/ccom \
-			CPP=$T1/lib/cpp C2=$T1/lib/c2 LIBC=$NEWLIBC \
-			"$MACROS"
+			$STAGEMACS "$MACROS"
 		rc=$?
 		test $rc = 0 && $MAKE -f $MK/$t.mk SRC=$SRC TOOLDIR=$TOOLDIR \
-			YACC=$T1/bin/yacc YACCPATH=$T1/bin/yacc \
-			LEX=$T1/usr/bin/lex LEXPATH=$T1/usr/bin/lex \
-			CCPATH=$T1/bin/cc CCOM=$T1/lib/ccom \
-			CPP=$T1/lib/cpp C2=$T1/lib/c2 LIBC=$NEWLIBC \
-			"$MACROS" install
+			$STAGEMACS "$MACROS" install
 		irc=$?
 	fi
 
