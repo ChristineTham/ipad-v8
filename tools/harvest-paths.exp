@@ -79,6 +79,17 @@ foreach d {/bin /usr/bin /etc /usr/lib /usr/games /lib} {
     sh "for f in $d/*; do echo WHERE \$f; done" 300
 }
 
+# And /dev, in full, because v8/proto-dev is NOT this machine's.  proto-dev
+# has no hp or rp entries at all -- it is the `research' VAX-11/750's /dev,
+# whose disks are RA81s on MSCP -- so a /dev built from it has no root device
+# on our hardware.  A listing from a machine that actually boots is the check
+# on what mkdep.py's emit_makedev adds by derivation.
+send_user "\n=== /dev ===\n"
+sh "ls -l /dev" 300
+foreach d {/dev/dk /dev/fd /dev/pt} {
+    sh "echo DEVDIR $d; ls -l $d" 300
+}
+
 sh "echo HARVEST-DONE\$OK"
 sh "cd /; sync; sync"
 sendline "/etc/halt"
