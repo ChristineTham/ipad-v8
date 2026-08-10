@@ -298,6 +298,25 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   suspect**: `er1=5<RMR,ILF>` turned out to be the signature of a missing
   `set noasynch` during N0, and `work/rawwrite.exp` never set it either. Re-test
   before relying on the limit; the `tar` blocking trap is independent and real.
+- **V8's libc is more ANSI than its reputation; its compiler is not.** Measured with
+  `tools/v8-libc-probe.exp` (`nm /lib/libc.a` on a scratch boot): `strchr`, `strrchr`,
+  `strpbrk`, `strspn`, `strcspn`, `strtok`, `memcpy`, `memcmp`, `memset`, `qsort` and
+  `/usr/include/string.h` are all **present**; `strtol`, `strtod`, `strstr`, `memmove`,
+  `atexit`, `vprintf`, `vfprintf` and — counter-intuitively — **`bcopy`/`bzero`** are
+  not. So do *not* "port backwards" to `index`/`bcopy`: that is the wrong direction and
+  `bcopy` is the one that will not link. The genuine wall is `/bin/cc` (1985), which
+  rejects a prototype outright (`expected a NAME in list` / `saw TYPE`); there is no
+  `stdlib.h`/`stddef.h`/`unistd.h`, and variadics use `varargs.h`. **V10 differs on both
+  counts** — its `libc/gen` adds the missing seven, and its tree ships `cmd/lcc` (ANSI C,
+  with a `gen2/vax-v9` back end and an `lccmkfile` in `sys/inet`) plus `cmd/gcc`.
+- **Never write a sockets layer for Research Unix — it already has TCP/IP.** V8 carries
+  `/usr/include/sys/inet/` (`in.h`, `ip.h`, `tcp.h`, `tcp_user.h`, `udp_user.h`,
+  `mbuf.h`, its own `socket.h`, …) and `/usr/lib/libin.a`; V10 has the sources in
+  `sys/inet/` — including `tcp_ld.c`/`ip_ld.c`/`udp_ld.c`, i.e. the stack is built as
+  **stream line disciplines** — with the userland in `ipc/internet/` (`routed`, `arp`,
+  `netstat`, `gettable`/`htable`, `tcpconfig`, `interlan.c`) and `ipc/libin/`. The API is
+  `open("/dev/tcpNN")` then a `struct tcpuser` written to the fd — Plan 9's `/net` model,
+  predating Plan 9. N3 already drove it end to end.
 - The golden image shipped **no `lost+found` on either filesystem**, so an autoboot
   `fsck` needing to reconnect an orphaned inode aborted to a single-user shell instead
   of `login:` ("Automatic reboot failed... help!") — reachable in the app whenever a

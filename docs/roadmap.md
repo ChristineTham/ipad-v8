@@ -200,9 +200,12 @@ port is an act of translation and has to be readable as one.
 - [ ] **P0** Decide the shape: `ports/<category>/<name>/{Makefile,distinfo,patches/}`,
       what fetches (host side) and what builds (guest side), and how a port crosses
       the ingest path — courier disk today, netfs after N5–N7
-- [ ] **P1** `libcompat` — the ANSI-to-4.1BSD shim every port needs: `strchr`→`index`,
-      `memcpy`→`bcopy`, `strtol`, `void *`, and a prototype-eliding macro. Highest
-      leverage item on either track; get it wrong and every port re-solves it
+- [ ] **P1** `libcompat` — smaller than first assumed, because V8's libc was *measured*
+      rather than guessed (`tools/v8-libc-probe.exp`): `strchr`, `memcpy`, `memset` and
+      `qsort` are already there, and `bcopy`/`bzero` are the ones missing. What is
+      actually needed is a prototype-eliding macro, seven functions (`strtol`, `strtod`,
+      `strstr`, `memmove`, `atexit`, `vprintf`, `vfprintf` — several liftable from V10's
+      own `libc/gen/`), and `bcopy`/`bzero` wrappers
       ([v11-plan.md](v11-plan.md) *"The real cost"*)
 - [ ] **P2** First entries: **V10's own games that V8 lacks** (`adv`, `boggle`,
       `doctor`, `morse`, `pacman`, `rain`, `trek`, `wump`, …). Same copyright estate,

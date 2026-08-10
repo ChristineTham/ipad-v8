@@ -19,7 +19,9 @@ So the test for any candidate is one question:
 > **Does this change the system's model of itself?**
 
 - **Sockets, vnodes, a 4.4BSD VFS, a wholesale ANSI libc** — yes. Refuse. There are
-  a dozen good BSDs and this is not one of them.
+  a dozen good BSDs and this is not one of them. (And in the case of sockets the point
+  is stronger than taste: this system **already has TCP/IP**, with a better answer —
+  see below.)
 - **`snake`** — no. It reads a terminal and prints characters. Port it freely.
 
 Everything below sorts into three classes by that test:
@@ -58,6 +60,47 @@ Reconnecting that is restoration, not importation.
 The `netfs/README` makes the same point from the other side: the servers "may be
 compiled with any protocol library", and `libnetb` is merely the one Research used.
 A netfs server that speaks 9P instead of netb is a design the tree anticipated.
+
+### There is no sockets work to do — it is already done, and better
+
+The obvious "missing BSD feature" is sockets. It is not missing; it was answered
+differently, and the answer is one this project should be pleased to keep.
+
+**V8 already carries the whole Internet stack.** The probe found
+`/usr/include/sys/inet/` on the golden image — `in.h`, `ip.h`, `ip_var.h`, `tcp.h`,
+`tcp_var.h`, `tcp_fsm.h`, `tcp_seq.h`, `tcp_user.h`, `tcpip.h`, `tcpdebug.h`, `udp.h`,
+`udp_var.h`, `udp_user.h`, `mbuf.h`, and a `socket.h` of its own — plus
+`/usr/lib/libin.a`. N3 has already driven it: `ipconfig /dev/il0`, ARP to SLiRP, and a
+DNS answer back ([n-track-notes.md](n-track-notes.md)).
+
+**V10 has the sources for all of it.** `sys/inet/` holds `tcp_input.c`, `tcp_output.c`,
+`tcp_timer.c`, `tcp_subr.c`, `ip_input.c`, `ip_output.c`, `ip_arp.c`, the UDP set — and
+`tcp_ld.c`, `ip_ld.c`, `udp_ld.c`, which are **stream line disciplines**, so the stack is
+built out of Ritchie's streams rather than bolted alongside them. The userland is in
+`ipc/internet/`: `routed`, `arp`, `netstat`, `gettable`/`htable` (pre-DNS host tables),
+`tcpconfig`, `udpconfig`, `ipconfig`, `loopback`, `dkslip` — and `interlan.c`, for the
+same NI1010 board our N2 SIMH model emulates. `ipc/libin/` is the user library:
+`tcp_lib.c`, `udp_lib.c`, `in_host.c`, `in_service.c`, `in_address.c`, `in_ntoa.c`,
+`in_ntoh.s`.
+
+And the API is the interesting part. From `ipc/libin/tcp_lib.c`, a connection is
+obtained by *opening a file*:
+
+```c
+for(n = 01; n < 100; n += 2){
+        sprintf(name, "/dev/tcp%02d", n);
+        fd = open(name, 2);
+```
+
+then a `struct tcpuser` is written to the descriptor and the reply read back. That is
+Plan 9's `/net` — the network as a file system — running on Research Unix **years before
+Plan 9 shipped**. It is not a poor relation of sockets; it is the design sockets are
+usually contrasted *with*, and it is already here.
+
+The conclusion for this track: **do not port a sockets layer, and do not write one.**
+If a BSD program needs `socket()`/`connect()`, the compatibility shim is a small
+`libcompat` addition over `/dev/tcp` — and `hunt`, the one game that needs a network,
+becomes a test of that shim rather than a reason to import an API.
 
 ### The gap worth naming: sam's host side is missing
 
@@ -244,22 +287,60 @@ better memorial to Chambers, Becker and Wilks than any amount of engineering els
 
 ## The real cost, and it is not the games
 
-Every BSD or Plan 9 port lands on the same wall, and it is worth naming once so that no
-port has to rediscover it:
+An earlier draft of this document asserted that V8's libc was "4.1BSD-era" — `index` and
+`bcopy` native, `strchr` and `memcpy` absent — and that ports would need the *reverse* of
+the usual ANSI-ification pass. **That was wrong, and measuring it changed the plan.**
+`tools/v8-libc-probe.exp` boots a scratch copy of the golden image and asks
+`nm /lib/libc.a` directly (log: `work/myv8/v8-libc-probe.log`).
 
-- **The compiler is pre-ANSI.** No prototypes, no `void *`, no `<stdlib.h>`.
-- **The libc is 4.1BSD-era.** `index`/`rindex`/`bcopy`/`bzero` are native; `strchr`,
-  `memcpy`, `strtol` are not. Modern sources need the *reverse* of the usual
-  ANSI-ification pass.
-- **Filenames are 14 bytes.** `cfscores.c` is fine; anything with a long name is not.
-- **No symlinks, no `select`, no sockets** — V8 is 4.1BSD-derived and 4.2 never happened
-  here.
+### What V8's libc actually has
 
-The single highest-leverage deliverable across both Track C and Track D is therefore a
-shared compatibility layer in the ports infrastructure — a header and a small archive
-supplying the ANSI names in terms of the BSD ones, and a prototype-eliding macro. Get
-that right once and most of the games become an evening's work each; skip it and every
-port re-solves it slightly differently.
+| Present | Absent |
+|---|---|
+| `strchr` `strrchr` `strpbrk` `strspn` `strcspn` `strtok` | `strtol` `strtod` `strstr` |
+| `memcpy` `memcmp` `memset` `qsort` | `memmove` `atexit` `vprintf` `vfprintf` |
+| `index` `rindex` `strcpy` (and `/usr/include/string.h`) | **`bcopy` `bzero`** |
+
+So the string library is largely the ANSI one already, and the two functions the old
+draft named as "native" are the two that are missing. V10 closes most of the rest: its
+`libc/gen/` and `libc/stdio/` carry `strtol`, `strtod`, `memmove`, `atexit`, `vprintf`
+and `vfprintf`.
+
+### The wall is the compiler, and only the compiler
+
+```
+$ echo 'int f(int a, char *b){return a;} main(){exit(f(0,0));}' > /tmp/p.c; cc /tmp/p.c
+"/tmp/p.c":1: syntax error
+"/tmp/p.c":1: expected a NAME in list
+"/tmp/p.c":1: saw TYPE
+```
+
+V8's `cc` (1985, with `/lib/ccom`, `/lib/cpp`, `/lib/c2`) is **K&R and will not take a
+prototype**. There is no `stdlib.h`, no `stddef.h`, no `unistd.h`; variadic code uses
+`varargs.h`, not `stdarg.h`.
+
+**V10 is a different machine on this point.** Its tree ships `cmd/lcc/` — Fraser and
+Hanson's ANSI C compiler — including a `gen2/vax-v9/` back end, ANSI header sets, and
+`cmd/dist/v10/lcc-incl/` supplying V10's own `dirent.h`, `unistd.h` and `utime.h`. It
+also carries `cmd/gcc/` (145 files, an early 1.x). `sys/inet/` even has an `lccmkfile`,
+so lcc was building real system code, not sitting unused.
+
+### What this means for `libcompat`
+
+Much smaller than planned, and pointed at the right target:
+
+- **A prototype-eliding macro** and the K&R rewrite discipline. This is the whole job on
+  V8, and it is mechanical.
+- **Seven functions**, not a string library: `strtol`, `strtod`, `strstr`, `memmove`,
+  `atexit`, `vprintf`, `vfprintf` — several liftable from V10's own `libc/gen/`.
+- **`bcopy`/`bzero`** as one-line wrappers over `memcpy`/`memset`, for BSD sources that
+  assume them.
+- **14-byte filenames** remain a hard constraint on what a port may contain.
+
+And the strategic point: **on V10 the compiler problem may simply not exist.** If lcc
+builds, ANSI C is available, and the entire framing of "port backwards to K&R" applies
+only to V8. That single question is worth answering early because it decides how much
+post-1989 software is reachable at all.
 
 ## Where this sits relative to ipnx-ports
 

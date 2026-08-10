@@ -140,13 +140,14 @@ A subproject in this repository, in the spirit of the **FreeBSD ports tree**: a 
 recipe — upstream distfile, patch series, build and install rules — for bringing contemporary
 software back to a machine from 1985.
 
-This is harder than a normal port and interesting for exactly that reason. The target has a
-K&R C compiler and no ANSI prototypes, 14-byte filenames, no shared libraries, no POSIX, and
-an address space that a modern `configure` script would exhaust by itself. Sources need the
-*reverse* of the usual ANSI-ification pass — `strchr` back to `index`, `memcpy` back to
-`bcopy` — so the highest-leverage thing in the whole tree is a shared compatibility layer,
-and after that a port is not a build script but a documented act of translation, with the
-patch series as the artifact.
+This is harder than a normal port and interesting for exactly that reason — though measuring
+it made it less harsh than expected. V8's libc already has `strchr`, `memcpy`, `memset`,
+`qsort` and a `string.h`; what it lacks is `strtol`, `strtod`, `memmove`, `vfprintf` and,
+oddly, `bcopy`. **The real wall is the compiler**: V8's 1985 `cc` will not take a prototype,
+so a port is largely a K&R rewrite. V10 may not have that problem at all — its tree ships
+`lcc`, an ANSI compiler, with a VAX back end. So a port is not a build script but a
+documented act of translation, with the patch series as the artifact, and 14-byte filenames
+as the constraint that never goes away.
 
 The first entries won't be ports at all. V10's `games/` holds a dozen — `adv`, `boggle`,
 `doctor`, `pacman`, `rain`, `trek` — that V8 simply lacks, in the same copyright estate and
