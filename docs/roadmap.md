@@ -208,8 +208,29 @@ port is an act of translation and has to be readable as one.
       `doctor`, `morse`, `pacman`, `rain`, `trek`, `wump`, …). Same copyright estate,
       same compiler, no licence question — so the machinery gets debugged on work
       that cannot fail for interesting reasons
-- [ ] **P3** First true port, from 4.4BSD-Lite provenance: `robots` or `worms`
-- [ ] **P4** Reproducibility: a port builds the same way on a fresh golden image
+- [ ] **P3** Same trick for the **languages already sitting in the V10 tree**:
+      Berkeley Pascal is complete there (`cmd/pascal/{pi,px,pxp,pc0,libpc,eyacc}`),
+      Fortran is Feldman's own `f77` with `libF77`/`libI77`, and there are `hoc`,
+      `icon`, `sml`, `spitbol`, `snocone`, `matlab`, `bc`/`dc`. None of these is a
+      port; they are builds
+- [ ] **P4** First true port, from 4.4BSD-Lite provenance: `robots` or `worms`
+- [ ] **P5** **Franz Lisp** — the real one. `man/mana/lisp.1` proves `lisp`, `liszt`
+      and `lxref` ran on the Research machines, but the source is *not* in the tree,
+      and Franz Lisp was VAX-native, so it fits this hardware better than almost
+      anything else available. Licence is ambiguous (Berkeley origin, distributed with
+      BSD, later commercialised by Franz Inc.) — settle it before starting
+- [ ] **P6** `gcc` — V10 carries `cmd/gcc/` (145 files, an early 1.x). An ANSI compiler
+      on this machine is the key that unlocks everything written after 1989, so it is
+      worth knowing whether it builds long before anything depends on it
+- [ ] **P7** Reproducibility: a port builds the same way on a fresh golden image
+
+**Out of reach for now: S.** John Chambers', Rick Becker's and Allan Wilks' statistical
+language belongs on these machines more than almost anything — it *was* on them — but
+Bell Labs gave StatSci an exclusive licence in 1993 and it passed to Insightful and then
+TIBCO in 2008. It is not covered by the 2017 covenant and no free source exists. R is
+GPL but is a 1993 reimplementation wanting ANSI C, Fortran and far more memory than a
+780 has. Both stay open questions rather than plans; **S would need someone at TIBCO to
+say yes**, and that is a letter to write, not a task to schedule.
 
 ## Track D — ipnx-v11 *(speculative; behind V10, deliberately)*
 
@@ -225,22 +246,28 @@ Reconnaissance (2026-08-10) found that much of this is **restoration, not import
 V10's own tree carries `cmd/u9fs/` (an original-9P file server — `Tclone`, `Tclwalk`,
 `NAMELEN` 28), `cmd/mk/`, and a netfs explicitly designed to take any protocol library.
 
-- [ ] **D0** Licensing pass *first*: Plan 9 is MIT since March 2021 (Plan 9 Foundation);
-      Inferno's estate is Lucent → Vita Nuova with GPLv2 and MIT at different points.
-      A v11 image mixes three estates and that must be answered before code
+- [ ] **D0** Licensing pass *first*: Plan 9 is MIT since March 2021 (Plan 9 Foundation),
+      so that half is clean. A v11 image still mixes estates and that must be answered
+      before code
 - [ ] **D1** Build `cmd/u9fs` as it stands and see what it does — the cheapest possible
-      probe of the whole thread, and it settles D2
-- [ ] **D2** **The fork in the road, and it arrives before v11 does:** should netfs's
-      successor be **9P** rather than a documented netb? This is N4–N7's design
-      decision, not a v11 one — resolve it on the N track with D1's evidence
-- [ ] **D3** Restore `sam`'s host side. There is **no `cmd/sam/`** in the V10 tarball —
+      probe of the whole thread
+- [ ] **D2** Restore `sam`'s host side. There is **no `cmd/sam/`** in the V10 tarball —
       only the 630 terminal half, the man page and the paper. plan9port's sam is MIT and
       the terminal half is already on the disk, so there is a live target from day one
-- [ ] **D4** `rc` — Duff's shell; small, self-contained, the absence felt daily
-- [ ] **D5** Later, if at all: `acme` on the 5620 (genuinely interesting), `plumber`.
-      Inferno splits in two — **Styx is 9P**, so protocol interoperability is D1/D2 and
-      needs no VM; **Dis and Limbo** are a research question and plausibly their own
-      edition, not part of this one
+- [ ] **D3** `rc` — Duff's shell; small, self-contained, the absence felt daily
+- [ ] **D4** Later, if at all: `acme` on the 5620 (genuinely interesting), `plumber`
+
+**Deferred to Track B, deliberately.** Whether netfs's successor should be **9P** rather
+than a documented netb is a real fork in the road, and N4–N7 will reach it — but it is
+not worth resolving now, with V10 unbuilt and the interface unrebuilt. Take the netb
+route on the N track, keep 9P in view, and decide when Track B is actually there.
+
+**Inferno: parked as a maybe, depending on licensing.** Its estate runs Lucent → Vita
+Nuova with GPLv2 and MIT at different points, and until that is settled per component
+there is nothing to plan. Note for whoever picks it up: it splits cleanly — **Styx is
+9P**, so protocol interoperability needs no VM at all and folds into D1; **Dis and
+Limbo** are a research question and plausibly their own edition rather than part of
+this one.
 
 ## Post-1.0 (unscheduled)
 

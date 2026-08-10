@@ -155,6 +155,19 @@ work that can't fail for interesting reasons. Then the genuinely absent BSD game
 `worms`, `cribbage`, `battlestar`), taken from 4.4BSD-Lite provenance rather than 4.3BSD so
 the AT&T question never arises. The one to aim at is **`hunt`** — real-time multiplayer over
 a network, which turns the N track's `il0` interface into something you can actually play.
+`rogue` needs no porting at all: V8 ships three versions of it, plus **`rogomatic`**, the
+program that plays it.
+
+The languages tell the same story. Berkeley Pascal is already complete in V10
+(`pi`, `px`, `pxp`, `libpc`, and Berkeley's own error-recovering `eyacc`); Fortran is there
+as Feldman's `f77` with `libF77`/`libI77`; so are `hoc`, `icon`, `sml`, `spitbol` and
+`matlab`. None of those is a port — they are builds. **Franz Lisp** is the genuine one:
+`man/mana/lisp.1` documents `lisp`, `liszt` and `lxref` running on *alice*, a real Bell Labs
+machine, but the source is not in the tree — and being VAX-native, it fits this hardware
+better than almost anything else from its decade. **S** is the painful one. Chambers,
+Becker and Wilks wrote it here, it belongs here, and an exclusive licence in 1993 took it
+to StatSci, then Insightful, then TIBCO. It is the only thing this repository names that is
+out of reach for reasons that have nothing to do with engineering.
 
 ## Where things stand
 
@@ -231,14 +244,133 @@ purchases; "UNIX" does not appear in its name; and the disk images ship inside t
 stays self-contained. The full component table, and a precise account of how far we read
 AT&T's GPL-released 5620 ROM source, is in [docs/licensing.md](docs/licensing.md).
 
+## The people
+
+This project is a homage, so it should name the people it is a homage *to* — not just the
+two everyone can name. The Research Unix group was never on an organisation chart; it
+coalesced voluntarily, and the manual's own convention was to attribute programs to
+individuals so that questions went to the right desk. That convention is worth keeping.
+
+The attributions below follow Doug McIlroy's
+[*A Research Unix Reader*](https://www.cs.dartmouth.edu/~doug/reader.pdf), which remains
+the authoritative account of who did what. Any errors in compressing it are mine.
+
+### The foundation
+
+- **Ken Thompson** — built the system from the ground up, on a file system model worked out
+  with Ritchie and Canaday. Processors for B, `bas` and Fortran; the first shell and piles
+  of utilities with Ritchie — `ed`, `roff`, `sort`, `grep`, `uniq`, `plot`, `sa`, `dd`.
+  Also circuit-optimising tools, switching and network code, C compilers, and Belle.
+- **Dennis M. Ritchie** — the father of C; `fork`/`exec` and set-user-id; the first debugger
+  `db` and the definitive `ed`; the **stream** basis for I/O in V8 that this project depends
+  on; much of the networking. Made Unix portable with Steve Johnson.
+- **Rudd H. Canaday** — the file system model itself, worked out with Thompson and Ritchie.
+- **M. Douglas McIlroy** — pipes, and the department head who muscled in on the original
+  two-user PDP-7. `tmg`, `speak`, `diff`, `join`, `tr`; and the dictionaries with the tools
+  to use them — `look`, `dict`, `spell`.
+- **Joseph F. Ossanna** — equipped the first lab and drew the first outside users; `wc`;
+  and `nroff`/`troff`, which shaped Unix typesetting permanently.
+- **Robert Morris** — wherever mathematics was involved: `typo`, `dc`/`bc` with Cherry, most
+  of the math library, `primes` and `factor` with Thompson, and the `crypt` series that gave
+  the Center its lasting interest in cryptography.
+- **Lorinda L. Cherry** — `dc`/`bc` and `typo` with Morris; initiated `eqn`; invented
+  `parts`, the approximate parser behind the Writer's Workbench.
+- **Stephen C. Johnson** — `yacc`, which turned Aho's language theory into practice; the
+  portable C compiler that ported the system itself; the first `spell`; computer algebra;
+  VLSI layout languages.
+- **Alfred V. Aho** — the language theory and algorithms underneath `yacc`, `lex`, `cc`, the
+  Writer's Workbench and `sam`; and his own `awk`, `egrep`, `fgrep`.
+- **Lee E. McMahon** — `comm`, `qsort`, `sed`, the current `grep`, and the concordance
+  builders `index` and `cref`; later the prime software architect for Datakit.
+- **Brian W. Kernighan** — coined the name UNIX, popularised the tools philosophy, wrote the
+  best tutorials, and invented little languages prolifically: `ratfor`, `eqn`, `awk`, `pic`.
+  Produced device-independent `troff` after Ossanna's death.
+- **Stephen R. Bourne** — `adb` and the Bourne shell, both written in a C that looked
+  distinctly like Algol 68.
+- **Michael E. Lesk** — made formatting usable by everyone with the `-ms` macros, then
+  `tbl` and `refer`; `lex`; and **`uucp`**, which begat a global network. With Ruby Jane
+  Elliott, on-line phone books, `apnews`, `weather`; `learn` with Kernighan.
+- **Stuart I. Feldman** — `make`, and the `f77` Fortran compiler single-handedly; the `efl`
+  preprocessor with **Andrew D. Hall**. His Fortran is still in the V10 tree this project
+  builds from.
+- **Peter J. Weinberger** — the W of `awk`; f77's I/O library; `mp`, `qfactor`, the B-tree
+  library `cbt`, a new C code generator; and above all the **network file system** that
+  bound the lab's machines into one logical system.
+- **A. G. "Sandy" Fraser** — the Spider ring and the **Datakit** switch, which served the
+  lab for over a decade; the Unix Circuit Design System.
+- **Joseph H. Condon** — physicist and circuit designer; wire-routing and much of the Circuit
+  Design System; Belle with Thompson. Not usually listed as an author of Unix, and
+  indispensable to it.
+- **Gregory L. Chesson** — computer-to-computer communication in all its forms: `mpx`,
+  flow-controlled channels, protocols including uucp's, and Datakit's first software.
+- **Charles B. Haley** — the laboratory switching system, with Condon, Morris, Thompson,
+  McMahon and Cherry.
+- **Brenda S. Baker** — `struct`, which turns Fortran back into Ratfor.
+
+### The Research editions this app runs
+
+- **Bart N. Locanthi** — designed the bitmapped terminal known as jerq, Blit and **Teletype
+  DMD 5620** — the machine emulated on screen here — and programmed it too, from `bitblt`
+  upward.
+- **Rob Pike** — the multiprogramming system, host-terminal protocol, mouse control and
+  overlapping virtual terminals: `mpx`, and then **`mux`**, which is what runs when you
+  press B3 in this app. Visual editors culminating in **`sam`**; `p`.
+- **Thomas J. Killian** — **`/proc`**, the file system of running processes, and so one of
+  the ideas that made Plan 9 thinkable; the font editor `jf`; `blitblt`/`thinkblt` and the
+  `can` printer suite.
+- **David L. Presotto** — tamed networks: `upas` brought order to a Babel of mail addresses,
+  and his `ipc` primitives gave Internet, Ethernet and Datakit a common basis.
+- **Andrew G. Hume** — `proof`; parts of the Circuit Design System; and **`mk`**, which
+  supplanted `make` and which Plan 9 later adopted. It is in V10's `cmd/` with his initials
+  on the files.
+- **Norman Wilson** — reigning guru alongside Ritchie; ported V8 to a Cray; and waged a
+  personal campaign against entropy across the software and the manual, always making things
+  shorter. Without him the V8/V9/V10 materials would not exist to be run.
+- **William T. Marshall** — Datakit protocol code, with **Gerard Holzmann**, who verified
+  those protocols mechanically and later wrote `spin` and `pico`.
+- **Christopher J. Van Wyk** — `ideal`, a constraint language for line drawings.
+- **Jon L. Bentley** — `grap`, with Kernighan.
+- **Bjarne Stroustrup** — C++, whose `cfront` is in the V10 tree.
+- **Thomas A. Cargill** — `pi`, the multiview debugger that exercised it.
+- **Mark S. Manasse** — `lens` with Pike, and `tek4014`.
+- **Luca Cardelli** — an icon builder, `vismon`, and the crabs that eat your screen.
+- **Thomas B. London** and **John F. Reiser** — ported V7 to the VAX and introduced paging.
+  Their 32V, by way of Berkeley, is the ancestor of nearly every Research Unix since —
+  including the one in this app. Reiser also wrote a compile-and-execute `bitblt` for the
+  5620.
+- **Tom Duff** — `rc`, and Duff's device.
+
+### Keeping it running
+
+- **Berkley A. Tague** — the UNIX Support Group, which guaranteed the system had a future.
+- **Richard C. Haight** — `find`, `cpio`, `expr`. **Joseph F. Maranzano** — de facto adjunct
+  to the research group. **Theodore A. Dolotta** — did much to refine the manual.
+- **Andrew R. Koenig** — `asd`, the automatic software distribution that kept V9 current
+  across some fifty machines; `snocone`.
+- **Frederick T. Grampp** — computer security, and `quest`.
+- **Edward J. Sitar** — kept twenty machines housed, powered and actually working. The
+  manual credits him with devotion worthy of Ossanna, and no software at all.
+
+### And afterwards
+
+- **Ken Thompson**, **Rob Pike**, **Dave Presotto**, **Phil Winterbottom**, **Sean Dorward**,
+  **Howard Trickey**, **Russ Cox** and others — **Plan 9**, and UTF-8, which is why this
+  paragraph renders.
+- **John M. Chambers**, **Richard A. Becker** and **Allan R. Wilks** — **S**, the statistical
+  language, and so the ancestor of R. It ran on these machines; it is the one thing named in
+  this repository that licensing currently puts out of reach.
+
 ## Acknowledgements
 
-This project stands on work by others: **The Unix Heritage Society** (Warren Toomey) for
+For making any of it reachable today: **The Unix Heritage Society** (Warren Toomey) for
 preserving and hosting the Research Unix archives; **Dan Cross** and **Norman Wilson** for
-the V8/V9/V10 materials themselves; **Nokia/Alcatel-Lucent** for the 2017 statement that made
-any of this possible; **David du Colombier** and **Tim Newsham** for the V8-on-SIMH recipes;
-**Seth Morabito** for the DMD 5620 emulator and firmware preservation; **Dave Dykstra** and
-AT&T for releasing the 5620 ROM source in 1994; **Miguel de Icaza** for SwiftTerm; **aiju**
-and **aap** for the Blit emulators; and the **open-simh** project.
+the V8/V9/V10 materials themselves; **Nokia/Alcatel-Lucent** for the 2017 statement; the
+**Plan 9 Foundation** for the 2021 MIT relicensing; **David du Colombier** and **Tim
+Newsham** for the V8-on-SIMH recipes; **Seth Morabito** for the DMD 5620 emulator and
+firmware preservation; **Dave Dykstra** and AT&T for releasing the 5620 ROM source in 1994;
+**Miguel de Icaza** for SwiftTerm; **aiju** and **aap** for the Blit emulators; and the
+**open-simh** project.
 
-And, at one remove, the people who wrote the thing in the first place.
+The list above is certainly incomplete — McIlroy said as much about his own, noting the
+borrowings of style and the constant give-and-take that no credits list can capture.
+Corrections are welcome and will be made.
