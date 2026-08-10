@@ -613,6 +613,37 @@ guest cannot see — and applying it to the host would hand a 1985 machine
 control over macOS file ownership. `NUPDAT` accepts mode and times and stops
 there.
 
+## How fast is it, and what that means for B1
+
+`tools/drive-throughput.sh` times a multi-megabyte read out of the host and
+checks the bytes as well as the clock, because a fast wrong answer is not an
+answer. 4,194,304 bytes, arriving byte-exact (v7sum `07677 4096` on both
+sides):
+
+| | elapsed | rate |
+|---|---|---|
+| `cp /n/macos/bulk /tmp/bulk` | 42 s | **97.5 KB/s** |
+| `cat /n/macos/bulk > /dev/null` | 41 s | **99.9 KB/s** |
+
+One second in forty separates "read it and write it to the RP07" from "read it
+and throw it away", so **netfs is the bottleneck and the disk is not** — which
+is the useful thing to know, because it means the number does not improve by
+touching the guest's storage.
+
+Extrapolated:
+
+- **B1's 14.87 MB: about 2.5 minutes.**
+- The whole 243 MB V10 tree: about 40 minutes.
+
+Both are fine. For comparison the courier moved 8.1 MB per manual
+attach/extract cycle, so this is not merely faster but a different kind of
+activity — a mount you forget about rather than a procedure you schedule.
+
+Measured on the desktop `vax780` with SLiRP and the default 4096-byte
+`BUFSIZE` replies. V8's clock has one-second resolution and no shell can reach
+anything finer, which is why the test moves megabytes: whole seconds are only a
+usable ruler when there are enough of them.
+
 ## Patch whole functions, not context
 
 The first version of that edit was four small `ed` commands anchored on

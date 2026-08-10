@@ -4,6 +4,23 @@
 built artifacts back out. Written 2026-08-09, after testing every claim here
 against open-simh `vax780` + the A1 golden V8 image.*
 
+> **Superseded for Track B ingest, 2026-08-10.** The first sentence below is
+> still true of SIMH and always will be — there is no host-directory
+> passthrough. But V8 turns out not to need one: it has had a network file
+> system in its kernel since 1985, and the N track gave it a server to talk to.
+> A macOS folder now mounts at `/n/macos` read/write over TCP, so **B1 ingests
+> through netfs, not through this courier** —
+> [n-track-notes.md](n-track-notes.md), [netfs-protocol.md](netfs-protocol.md),
+> `tools/drive-netfs.sh`.
+>
+> This document stays because the courier still works, needs no networking, and
+> is the fallback if netfs is ever unavailable — and because the RP07 migration
+> and the `mkfs` arithmetic below are still the reference for anything that
+> touches emulated media. Note that its "raw transfers must be 512 bytes" rule
+> is **flagged as suspect** (see N0's gotchas: `er1=5<RMR,ILF>` turned out to be
+> the signature of a missing `set noasynch`) and has not been re-tested, since
+> the path it governs is no longer on Track B's critical path.
+
 ## There is no shared directory, and there cannot be
 
 SIMH has **no host-directory passthrough** — no 9p, no virtfs, no shared
