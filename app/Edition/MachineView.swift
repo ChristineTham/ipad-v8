@@ -1,34 +1,61 @@
 import SwiftUI
 import SwiftTerm
 
-/// The machine's screens: the SwiftTerm operator console and the DMD 5620
-/// (Blit) display, switchable — both stay mounted so the console transcript
-/// and its output binding survive. Auto-switches to the 5620 once the
-/// machine is up (the product experience: login happens on the terminal).
+/// Which of the machine's three faces is showing.
+///
+/// All three stay mounted, so the console transcript and its output binding
+/// survive a switch and neither terminal is torn down by looking away.
+///
+/// They are not three views of one thing: the console is `/dev/console` (boot
+/// messages, panics, the only thing alive before multiuser), the terminal is a
+/// plain glass tty on a DZ line, and the 5620 is the bitmap terminal this app
+/// exists for. All three can be logged in at once — V8 runs a getty on the
+/// console and on tty00..tty07 — so switching does not disturb the others.
+enum MachineFace: String, CaseIterable, Identifiable {
+    case console, glass, blit
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .console: return "Console"
+        case .glass: return "Terminal"
+        case .blit: return "5620"
+        }
+    }
+}
+
 struct MachineView: View {
     @ObservedObject var machine: Machine
     @ObservedObject var terminal: Terminal5620
+    @ObservedObject var glass: GlassTerminal
     @ObservedObject var settings: Settings
     #if os(macOS)
     @ObservedObject var capture: PointerCapture
     #endif
-    @State private var showBlit = false
+    @State private var face: MachineFace = .console
     @State private var autoSwitched = false
     @State private var showSettings = false
+
+    private var showBlit: Bool { face == .blit }
 
     var body: some View {
         ZStack(alignment: .top) {
             Color.black.ignoresSafeArea()
             ConsoleView(machine: machine)
                 .padding(.horizontal, 4)
-                .opacity(showBlit ? 0 : 1)
-                .allowsHitTesting(!showBlit)
+                .opacity(face == .console ? 1 : 0)
+                .allowsHitTesting(face == .console)
+            GlassTerminalView(session: glass, settings: settings)
+                .opacity(face == .glass ? 1 : 0)
+                .allowsHitTesting(face == .glass)
             #if os(macOS)
-            Blit5620View(terminal: terminal, settings: settings, capture: capture)
+            Blit5620View(terminal: terminal, settings: settings,
+                         isActive: showBlit, capture: capture)
                 .opacity(showBlit ? 1 : 0)
                 .allowsHitTesting(showBlit)
             #else
-            Blit5620View(terminal: terminal, settings: settings)
+            Blit5620View(terminal: terminal, settings: settings, isActive: showBlit)
                 .opacity(showBlit ? 1 : 0)
                 .allowsHitTesting(showBlit)
             #endif
@@ -53,13 +80,12 @@ struct MachineView: View {
         // menu, which is exactly the behaviour a hand-rolled strip lacked.
         .toolbar {
             ToolbarItem(placement: .navigation) {
-                Picker("Screen", selection: $showBlit) {
-                    Text("Console").tag(false)
-                    Text("5620").tag(true)
+                Picker("Screen", selection: $face) {
+                    ForEach(MachineFace.allCases) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(width: 150)
+                .frame(width: 220)
             }
             if showBlit {
                 ToolbarItem {
@@ -99,12 +125,12 @@ struct MachineView: View {
                 }
                 .buttonStyle(.bordered)
                 .tint(.green)
-                Button(showBlit ? "Console" : "5620") {
-                    showBlit.toggle()
+                Picker("", selection: $face) {
+                    ForEach(MachineFace.allCases) { Text($0.label).tag($0) }
                 }
-                .buttonStyle(.bordered)
-                .tint(.green)
-                .font(.system(.caption, design: .monospaced))
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 230)
             }
             .padding(14)
         }
@@ -123,20 +149,48 @@ struct MachineView: View {
         #endif
         .onReceive(machine.$phase) { phase in
             guard phase == .up else { return }
+            if !autoSwitched {
+                autoSwitched = true
+                face = settings.lastFace           // where they left off
+            }
+            startFace(face)
+        }
+        .onChange(of: face) { _, newFace in
+            settings.lastFace = newFace
+            guard machine.phase == .up else { return }
+            startFace(newFace)
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    /// Start whatever the visible face needs, and nothing else.
+    ///
+    /// The 5620 is deliberately lazy. Its thread is the app's entire CPU cost
+    /// — a WE32100 stepped in wall-clock time, ~63% of a core at 2×, against
+    /// patched SIMH's 2.7% at an idle prompt — so a session that never opens
+    /// it runs the same VAX at a twentieth of the power. That is the whole
+    /// point of the light terminal, and it only works if nothing starts the
+    /// dmd thread behind the user's back.
+    ///
+    /// Once started, both terminals stay up: V8 runs a getty per line, so the
+    /// sessions are independent and switching back should find things as they
+    /// were, not a fresh login.
+    private func startFace(_ face: MachineFace) {
+        switch face {
+        case .console:
+            break                                  // always live
+        case .glass:
+            if glass.state == .idle { glass.start(port: settings.glassPort(machine)) }
+        case .blit:
             if terminal.state == .idle {
                 terminal.speed.set(settings.speed.multiplier)
-                terminal.start(dzPort: machine.dzPort,
+                terminal.start(dzPort: machine.blitPort,
                                screen: settings.activeScreen,
                                nvram: settings.persistNVRAM ? machine.nvramURL : nil,
                                stats: settings.statsURL(machine),
                                screenSnapshot: machine.screenURL)
             }
-            if !autoSwitched {
-                autoSwitched = true
-                showBlit = true
-            }
         }
-        .preferredColorScheme(.dark)
     }
 
     private var isFailure: Bool {

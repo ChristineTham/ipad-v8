@@ -23,6 +23,11 @@ private struct FBUniforms {
 struct FramebufferView: PlatformViewRepresentable {
     let frames: FrameStore
     var phosphor: SIMD3<Float> = SIMD3(0.45, 1.0, 0.60)
+    /// False when the 5620 is not the visible face. A hidden MTKView keeps its
+    /// display link running and re-encodes a draw thirty times a second for a
+    /// picture nobody can see — which costs most in exactly the mode that
+    /// exists to cost little.
+    var isActive: Bool = true
 
     func makePlatformView(context: Context) -> MTKView {
         let view = MTKView(frame: .zero, device: MTLCreateSystemDefaultDevice())
@@ -45,6 +50,7 @@ struct FramebufferView: PlatformViewRepresentable {
 
     func updatePlatformView(_ view: MTKView, context: Context) {
         context.coordinator.phosphor = phosphor
+        view.isPaused = !isActive
     }
 
     func makeCoordinator() -> Renderer { Renderer(frames: frames, phosphor: phosphor) }

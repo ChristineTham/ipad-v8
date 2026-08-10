@@ -92,6 +92,44 @@ final class Settings: ObservableObject {
         }
     }
 
+    /// Colours for the plain glass tty. The first three are the 5620's own
+    /// phosphors, so switching between the two terminals does not feel like
+    /// switching machines; "Paper" is there because sometimes you are reading,
+    /// not pretending.
+    enum GlassTheme: String, CaseIterable, Identifiable {
+        case green, amber, white, paper
+
+        var id: String { rawValue }
+
+        var label: String {
+            switch self {
+            case .green: return "Green phosphor"
+            case .amber: return "Amber phosphor"
+            case .white: return "White"
+            case .paper: return "Paper"
+            }
+        }
+
+        private static func rgb(_ r: Double, _ g: Double, _ b: Double) -> PlatformColor {
+            PlatformColor(red: r, green: g, blue: b, alpha: 1)
+        }
+
+        var foreground: PlatformColor {
+            switch self {
+            case .green: return Self.rgb(0.45, 1.00, 0.60)
+            case .amber: return Self.rgb(1.00, 0.72, 0.30)
+            case .white: return Self.rgb(0.92, 0.95, 1.00)
+            case .paper: return Self.rgb(0.10, 0.10, 0.11)
+            }
+        }
+
+        var background: PlatformColor {
+            self == .paper ? Self.rgb(0.94, 0.93, 0.89) : Self.rgb(0, 0, 0)
+        }
+
+        var caret: PlatformColor { foreground }
+    }
+
     /// Multiplier on the terminal CPU's 10 MHz clock. This is what makes the
     /// 5620 *draw* faster (mux painting, scrolling, cursor tracking); it does
     /// not speed up the serial wire, which is paced in wall-clock time by the
@@ -136,6 +174,26 @@ final class Settings: ObservableObject {
     /// next such question will need it again.
     @Published var logTerminalStats: Bool { didSet { store.set(logTerminalStats, forKey: Key.stats) } }
 
+    // The plain glass tty.
+    @Published var glassKind: GlassTerminal.Kind { didSet { store.set(glassKind.rawValue, forKey: Key.glassKind) } }
+    @Published var glassTheme: GlassTheme { didSet { store.set(glassTheme.rawValue, forKey: Key.glassTheme) } }
+    /// Font size in points, or nil for "fit the window". Stored as 0 for fit,
+    /// which is also what an absent default reads as.
+    @Published var glassFontSize: CGFloat? {
+        didSet { store.set(Double(glassFontSize ?? 0), forKey: Key.glassFont) }
+    }
+
+    /// Which face the app was last showing. Restored on launch, and that is
+    /// what makes the 5620's lazy start worth anything: a user who lives in
+    /// the plain terminal never starts the dmd thread at all, rather than
+    /// starting it every launch and then switching away from it.
+    @Published var lastFace: MachineFace { didSet { store.set(lastFace.rawValue, forKey: Key.face) } }
+
+    /// The sizes the picker offers, plus "Fit". Anything finer is a slider
+    /// nobody wants: the grid is fixed at 80 or 128 columns either way, so
+    /// this only decides how big the picture is.
+    static let glassFontSizes: [CGFloat] = [10, 11, 12, 13, 14, 16, 18, 20, 24]
+
     private let store: UserDefaults
 
     private enum Key {
@@ -148,6 +206,10 @@ final class Settings: ObservableObject {
         static let nvram = "terminal.persistNVRAM"
         static let speed = "terminal.speed"
         static let stats = "terminal.logStats"
+        static let glassKind = "glass.kind"
+        static let glassTheme = "glass.theme"
+        static let glassFont = "glass.fontSize"
+        static let face = "machine.face"
     }
 
     init(store: UserDefaults = .standard) {
@@ -162,6 +224,20 @@ final class Settings: ObservableObject {
         persistNVRAM = store.object(forKey: Key.nvram) as? Bool ?? true
         speed = Speed(rawValue: store.string(forKey: Key.speed) ?? "") ?? .fast
         logTerminalStats = store.bool(forKey: Key.stats)          // absent == false
+        glassKind = GlassTerminal.Kind(rawValue: store.string(forKey: Key.glassKind) ?? "") ?? .vt100
+        glassTheme = GlassTheme(rawValue: store.string(forKey: Key.glassTheme) ?? "") ?? .green
+        let pts = store.double(forKey: Key.glassFont)
+        glassFontSize = pts > 0 ? CGFloat(pts) : nil              // 0 / absent == fit
+        // Default .blit: a first run should meet the 5620, which is the point
+        // of the app. After that the app follows the user.
+        lastFace = MachineFace(rawValue: store.string(forKey: Key.face) ?? "") ?? .blit
+    }
+
+    /// Which DZ listener a glass session of this kind should dial. The kind
+    /// and the port are not independent: `/.profile` picks TERM from the tty
+    /// name, and the tty name is decided by which line the app connects to.
+    func glassPort(_ machine: Machine) -> UInt16 {
+        glassKind == .vt100w ? machine.wideGlassPort : machine.glassPort
     }
 
     /// Where the terminal thread should write throughput stats, or nil to keep

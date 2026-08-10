@@ -21,6 +21,7 @@ import UIKit
 struct EditionApp: App {
     @StateObject private var machine = Machine()
     @StateObject private var terminal = Terminal5620()
+    @StateObject private var glass = GlassTerminal()
     @StateObject private var settings = Settings()
 
     #if os(macOS)
@@ -33,8 +34,8 @@ struct EditionApp: App {
     var body: some Scene {
         #if os(macOS)
         WindowGroup {
-            MachineView(machine: machine, terminal: terminal, settings: settings,
-                        capture: capture)
+            MachineView(machine: machine, terminal: terminal, glass: glass,
+                        settings: settings, capture: capture)
                 .onAppear {
                     machine.start()
                     appDelegate.machine = machine
@@ -61,7 +62,7 @@ struct EditionApp: App {
                     .keyboardShortcut("r", modifiers: [.command, .shift])
                 Divider()
                 Button("Restart Terminal") {
-                    terminal.restart(dzPort: machine.dzPort,
+                    terminal.restart(dzPort: machine.blitPort,
                                      screen: settings.activeScreen,
                                      nvram: settings.persistNVRAM ? machine.nvramURL : nil,
                                      stats: settings.statsURL(machine))
@@ -76,7 +77,7 @@ struct EditionApp: App {
         }
         #else
         WindowGroup {
-            MachineView(machine: machine, terminal: terminal, settings: settings)
+            MachineView(machine: machine, terminal: terminal, glass: glass, settings: settings)
                 .onAppear { machine.start() }
         }
         .onChange(of: scenePhase) { _, newPhase in

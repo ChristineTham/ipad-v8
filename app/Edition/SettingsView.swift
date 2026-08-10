@@ -19,6 +19,7 @@ struct SettingsView: View {
             screenSection
             inputSection
             terminalSection
+            glassSection
             sessionSection
             diskSection
             aboutSection
@@ -95,6 +96,36 @@ struct SettingsView: View {
 
     // MARK: Terminal
 
+    /// The plain glass tty. Deliberately its own section: it is a different
+    /// terminal on a different line, not a display mode of the 5620.
+    private var glassSection: some View {
+        Section("Plain terminal") {
+            Picker("Terminal", selection: $settings.glassKind) {
+                ForEach(GlassTerminal.Kind.allCases) { Text($0.label).tag($0) }
+            }
+            Text(settings.glassKind.explanation)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Picker("Colours", selection: $settings.glassTheme) {
+                ForEach(Settings.GlassTheme.allCases) { Text($0.label).tag($0) }
+            }
+            Picker("Text size", selection: Binding(
+                get: { settings.glassFontSize ?? 0 },
+                set: { settings.glassFontSize = $0 == 0 ? nil : $0 })) {
+                Text("Fit the window").tag(CGFloat(0))
+                ForEach(Settings.glassFontSizes, id: \.self) { size in
+                    Text("\(Int(size)) pt").tag(size)
+                }
+            }
+            Text("The grid stays \(settings.glassKind.cols)×\(settings.glassKind.rows) whatever size the text is — this kernel predates TIOCGWINSZ, so nothing can tell V8 how big the window is and the size comes from termcap. Bigger text means a bigger picture, not more of it.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Text("The plain terminal runs without the 5620, which is most of the app's CPU — a session here costs a fraction of the battery. Changes apply the next time it starts.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
     private var terminalSection: some View {
         Section("Terminal") {
             Picker("Terminal speed", selection: $settings.speed) {
@@ -111,7 +142,7 @@ struct SettingsView: View {
                 .font(.caption).foregroundStyle(.secondary)
 
             Button("Restart terminal") {
-                terminal.restart(dzPort: machine.dzPort,
+                terminal.restart(dzPort: machine.blitPort,
                                  nvram: settings.persistNVRAM ? machine.nvramURL : nil,
                                  stats: settings.statsURL(machine))
             }

@@ -22,10 +22,15 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 command -v vax780 >/dev/null || { echo "$NAME: vax780 not on PATH"; exit 1; }
-[[ -f "$ROOT/tools/$NAME.exp" ]] || { echo "$NAME: no such script"; exit 1; }
+# Probes live in tools/; image-editing scripts live in work/ beside the media
+# they operate on. Both want the same watchdog and the same pkill on the way
+# out, so accept either.
+SCRIPT="$ROOT/tools/$NAME.exp"
+[[ -f "$SCRIPT" ]] || SCRIPT="$ROOT/work/$NAME.exp"
+[[ -f "$SCRIPT" ]] || { echo "$NAME: no such script in tools/ or work/"; exit 1; }
 
 rm -f "$NAME.log"
-expect "$ROOT/tools/$NAME.exp" &
+expect "$SCRIPT" &
 EXP_PID=$!
 
 for ((i = 0; i < LIMIT; i++)); do

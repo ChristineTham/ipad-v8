@@ -53,8 +53,22 @@ final class Machine: ObservableObject {
     }()
     private var consolePort: UInt16 { portBase }
     private var controlPort: UInt16 { portBase + 1 }
-    /// The DZ11 mux listener — the 5620 terminal dials line 0 here.
-    var dzPort: UInt16 { portBase + 2 }
+
+    // Three DZ listeners, because *which line* a session lands on decides what
+    // terminal V8 thinks it is talking to. There is no /etc/ttytype and no
+    // TIOCGWINSZ on this machine, so /.profile picks TERM from the tty name
+    // (config.exp) — and that only works if the mapping is pinned rather than
+    // a race. tmxr_poll_conn skips any line with its own `master`, so giving
+    // lines 0 and 7 their own ports leaves the mux-wide listener handing out
+    // 1..6 and never those two. Connection order stops mattering, which it
+    // must: the 5620 now starts lazily and is usually last to dial.
+
+    /// DZ line 0 → `tty00` → `TERM=dmd`. The 5620's line, and only its.
+    var blitPort: UInt16 { portBase + 2 }
+    /// The mux-wide listener: lines 1..6 → `TERM=vt100`, 80×24.
+    var glassPort: UInt16 { portBase + 3 }
+    /// DZ line 7 → `tty07` → `TERM=vt100w`, 128×24. One session, reserved.
+    var wideGlassPort: UInt16 { portBase + 4 }
     private var simThread: Thread?
     private var restartedAfterFailedRestore = false
 
@@ -128,7 +142,9 @@ final class Machine: ObservableObject {
     set cpu idle=4.1BSD
     set tto 7b
     set dz lines=8
-    att dz -m Speed=*32,127.0.0.1:\(dzPort)
+    att dz -m Speed=*32,127.0.0.1:\(glassPort)
+    att dz Line=0,Speed=*32,127.0.0.1:\(blitPort)
+    att dz Line=7,Speed=*32,127.0.0.1:\(wideGlassPort)
     set rp0 rp06
     at rp0 v8.disk
     set tu0 te16
@@ -183,7 +199,9 @@ final class Machine: ObservableObject {
     restore -D -Q state.sav
     set cpu idle=4.1BSD
     set console telnet=127.0.0.1:\(consolePort)
-    att dz -m Speed=*32,127.0.0.1:\(dzPort)
+    att dz -m Speed=*32,127.0.0.1:\(glassPort)
+    att dz Line=0,Speed=*32,127.0.0.1:\(blitPort)
+    att dz Line=7,Speed=*32,127.0.0.1:\(wideGlassPort)
     cont
     """ }
 
@@ -199,7 +217,8 @@ final class Machine: ObservableObject {
             phase = .provisioning
             let resuming = try await provision()
             Machine.note("\(resuming ? "resuming a saved session" : "cold boot") "
-                         + "— console \(consolePort), control \(controlPort), dz \(dzPort)")
+                         + "— console \(consolePort), control \(controlPort), "
+                         + "dz blit \(blitPort) glass \(glassPort) wide \(wideGlassPort)")
             phase = .starting
             launchSimhThread(config: resuming ? "resume.conf" : "boot.conf")
             guard await console.connect(port: consolePort) else {

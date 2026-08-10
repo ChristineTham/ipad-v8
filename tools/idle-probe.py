@@ -56,6 +56,27 @@ set tu0 te16
 load -o bootV8 0
 run 2
 """,
+    # Three DZ listeners: the mux-wide one plus a dedicated port for line 0
+    # (the 5620) and line 7 (the 128-column glass tty). Pinning lines is what
+    # makes /.profile's TERM-by-tty mapping deterministic -- but every extra
+    # listener is another thing tmxr polls, and one periodic unit without
+    # UNIT_IDLE at the head of the event queue pins a core.
+    "threedz": """\
+set console telnet=127.0.0.1:{CON}
+set remote telnet=127.0.0.1:{REM}
+set remote timeout=600
+set cpu idle=4.1BSD
+set tto 7b
+set dz lines=8
+att dz -m Speed=*32,127.0.0.1:{DZ}
+att dz Line=0,Speed=*32,127.0.0.1:{DZ0}
+att dz Line=7,Speed=*32,127.0.0.1:{DZ7}
+set rp0 rp06
+at rp0 {DISK}
+set tu0 te16
+load -o bootV8 0
+run 2
+""",
     # No remote console.
     "norem": """\
 set console telnet=127.0.0.1:{CON}
@@ -265,7 +286,9 @@ def main():
 
     conf = "idle-probe.conf"
     with open(conf, "w") as f:
-        f.write(VARIANTS[args.variant].format(CON=con_p, REM=rem_p, DZ=dz_p, DISK=DISK))
+        f.write(VARIANTS[args.variant].format(CON=con_p, REM=rem_p, DZ=dz_p,
+                                             DZ0=free_port(), DZ7=free_port(),
+                                             DISK=DISK))
 
     log = open("idle-probe-%s.log" % args.variant, "w")
     proc = subprocess.Popen([CLI, conf], stdout=log, stderr=subprocess.STDOUT,

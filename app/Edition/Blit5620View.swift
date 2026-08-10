@@ -17,6 +17,8 @@ import UIKit
 struct Blit5620View: View {
     @ObservedObject var terminal: Terminal5620
     @ObservedObject var settings: Settings
+    /// Whether this is the face on screen. Drives the renderer's pause.
+    var isActive: Bool = true
     @Environment(\.displayScale) private var displayScale
     @State private var latchedButton: UInt8 = 0     // 0/1/2 = 5620 buttons 1/2/3
     #if os(macOS)
@@ -118,7 +120,8 @@ struct Blit5620View: View {
     private func screen(crt: FrameStore.Geometry, fitted: CGSize) -> some View {
         #if os(macOS)
         ZStack {
-            FramebufferView(frames: terminal.frames, phosphor: settings.phosphor.tint)
+            FramebufferView(frames: terminal.frames, phosphor: settings.phosphor.tint,
+                            isActive: isActive)
             // Transparent event surface over the Metal view: AppKit gives us
             // real button and pointer events, including hover.
             MacInputView(terminal: terminal, pixelScale: pixelScale(crt: crt, fitted: fitted),
@@ -127,7 +130,8 @@ struct Blit5620View: View {
         .frame(width: fitted.width, height: fitted.height)
         #else
         ZStack {
-            FramebufferView(frames: terminal.frames, phosphor: settings.phosphor.tint)
+            FramebufferView(frames: terminal.frames, phosphor: settings.phosphor.tint,
+                            isActive: isActive)
                 .contentShape(Rectangle())
                 .gesture(mouseDrag(crt: crt, fitted: fitted))
             KeyCaptureRepresentable(terminal: terminal)
