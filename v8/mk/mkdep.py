@@ -425,6 +425,7 @@ def emit(c):
 
     # objects, each with its transitive header closure
     oflags = c.get("oflags", {})
+    special = c.get("special", {})
     # A generated HEADER cannot be found by scanning, because it does not
     # exist on the share -- scan_includes silently drops "y.tab.h" and make
     # is then free to compile mkconf.o before yacc has run.  `objdeps` names
@@ -446,8 +447,20 @@ def emit(c):
         # prerequisite but not in the recipe just moves the error from
         # make ("Don't know how to make") to cc ("No source file").
         srcref = src if (src in gen or src in sidegen) else srcdir + "/" + src
-        out.append("\n%s: %s $(TOOLS)\n\t$(COMPILE) %s%s\n"
-                   % (obj, " ".join(deps), extra, srcref))
+        # `special` replaces the recipe for one object.  Several commands need
+        # it for the same reason libc needs it for errlst.o: the object is
+        # compiled to ASSEMBLY, edited, and then assembled, because something
+        # has to move out of .data and into shared text.  sh's ctype.o is the
+        # next one (usr/src/cmd/sh/:fix, which is :errfix under another name).
+        # %s in a recipe line is the source path, so the entry does not have
+        # to repeat it.
+        if obj in special:
+            out.append("\n%s: %s $(TOOLS)\n" % (obj, " ".join(deps)))
+            for line in special[obj]:
+                out.append("\t%s\n" % (line.replace("%s", srcref)))
+        else:
+            out.append("\n%s: %s $(TOOLS)\n\t$(COMPILE) %s%s\n"
+                       % (obj, " ".join(deps), extra, srcref))
 
     # pre-commands (ccom needs y.debug in place before cgram.o)
     if c.get("pre"):
