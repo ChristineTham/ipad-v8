@@ -39,7 +39,7 @@ MK=$SRC/mk/gen
 
 if test ! -f $MK/stage1.order
 then
-	echo "build1: no $MK/stage1.order -- did stage.sh run?" 1>&2
+	echo "build1: no $MK/stage1.order -- is $SRC really the share?" 1>&2
 	exit 1
 fi
 

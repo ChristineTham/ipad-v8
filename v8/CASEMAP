@@ -1,7 +1,11 @@
 # Paths the V8 tape distinguishes only by case, which macOS and git
 # cannot both hold.  The loser of each group is stored percent-escaped;
-# v8/mk/stage.sh restores the true name in the guest, whose filesystem
-# is case-sensitive.  Escaping a directory de-collides everything under it.
+# netfsd reads this file and serves the true name to the guest, whose
+# filesystem is case-sensitive (netfs/Sources/NetFS/CaseMap.swift).
+# Escaping a directory de-collides everything under it.
+#
+# The guest must never see the escaped spelling, and not for neatness:
+# a struct direct has 14 bytes of name and %43%49%52%43%4C%45 is 18.
 #
 # Written as (directory, stored name, true name) rather than as two full
 # paths, because the renames happen parents-first and a child's stored path

@@ -2,12 +2,13 @@
 #
 # C2 + C3: mount the repo's v8/ tree in the guest and build stage 1 from it.
 #
-# End to end this proves three things at once:
+# End to end this proves four things at once:
 #   - the repo's source is reachable by the machine (netfs share at /n/src)
-#   - it survives staging, including the two directory pairs that cannot exist
-#     on macOS at all (usr/src/cmd/{Mail,mail}, jerq/src/lib/{C,c})
-#   - the bootstrap toolchain builds from it, in the order the source dictates,
-#     without writing a byte outside /usr/bld
+#   - the two directory pairs that cannot coexist on macOS at all are visible
+#     under their true names (usr/src/cmd/{Mail,mail}, jerq/src/lib/{C,c})
+#   - a clock that make(1) can believe
+#   - the bootstrap toolchain builds from it, compiled straight off the share,
+#     in the order the source dictates, without writing a byte outside /b
 #
 # Nothing here installs into /. If this script fails halfway the machine it ran
 # on is exactly as usable as it was before -- that is the whole design.
@@ -147,6 +148,61 @@ sh "/tmp/nmount 10.0.2.2 $port 65 /n/src" 120
 sh "echo C2-MOUNTED"
 sh "ls /n/src"
 sh "sed 5q /n/src/CASEMAP"
+
+# ------------------------------------------------- the case-collision pairs
+# usr/src/cmd/{Mail,mail} and jerq/src/lib/{C,c} differ only in case, so macOS
+# can hold exactly one of each and the repo stores the loser percent-escaped.
+# netfsd's CaseMap serves the true name, which is not cosmetic: a struct direct
+# has 14 bytes for a name and "%43%49%52%43%4C%45" is 18, so the escaped
+# spelling physically cannot appear in a V8 directory.
+#
+# Both names existing is not the test -- a case-insensitive server would show
+# two names for one file and pass it.  The test is that they are DIFFERENT
+# files, so cmp must report a difference.
+#
+# Keep every line well under CANBSIZ (256, sys/h/param.h): the tty discards an
+# over-long canonical line, which would present as an unexplained hang rather
+# than as an error.  Hence the shell variables.
+send_user "\n=== case-collision pairs ===\n"
+sh "A=/n/src/usr/src/cmd/Mail/Makefile; B=/n/src/usr/src/cmd/mail/Makefile"
+sh "ls -l \$A \$B"
+sh "if test -f \$A -a -f \$B; then cmp -s \$A \$B || echo C3-CASE-Mail-ok; fi" 120
+sh "ls /n/src/jerq/src/lib"
+sh "if test -d /n/src/jerq/src/lib/C -a -d /n/src/jerq/src/lib/c; then echo C3-CASE-C-ok; fi"
+# and nothing escaped may leak into a listing
+sh "ls /n/src/usr/src/cmd /n/src/jerq/src/lib /n/src/usr/bin > /tmp/ls.out" 120
+sh "if grep '%' /tmp/ls.out > /dev/null; then echo C3-CASE-DIRTY; else echo C3-CASE-clean; fi"
+
+# --------------------------------------------------------------- the clock
+# make(1) compares mtimes, and the source mtimes arrive from the host over
+# netfs as real 2026 epochs.  A guest sitting in 1976 therefore thinks every
+# object it just produced is older than its source, so `make` followed by
+# `make install` rebuilds the whole component twice.
+#
+# V8 boots into 1976 for a specific reason: the kernel takes the *year* from
+# the root filesystem's superblock and only the position within the year from
+# the TODR (sys/sys/machdep.c, clkinit).  A superblock time below 5*SECYR
+# trips "preposterous time in file system", whose fallback is the hardcoded
+# 6*SECYR + 186*SECDAY -- mid-1976 exactly.
+#
+# And /bin/date cannot fix it: Berkeley's 1980 date.c does a bare
+# "year += 1900" on two digits, so 26 means 1926.  We own that source now and
+# it has the usual 69/70 window applied, so compile our copy off the share and
+# use it -- which also proves the share can feed the compiler before we bet a
+# five-figure-second build on it.
+#
+# -u throughout, with UTC digits: stime(2) takes GMT, and going through local
+# time would apply whatever zone the V8 kernel was configured with against
+# whatever zone this Mac is in.  Absolute epochs are what make compares, so
+# the zone only ever needed to be right for display.
+send_user "\n=== clock ===\n"
+sh "date"
+sh "cd /tmp; cc -o newdate /n/src/usr/src/cmd/date.c" 300
+sh "/tmp/newdate -u [exec date -u +%y%m%d%H%M.%S]"
+sh "date"
+# sync writes the superblock, which is what carries the year to the next boot
+sh "sync"
+sh "if date | grep '[exec date -u +%Y]' > /dev/null; then echo C3-CLOCK-ok; else echo C3-CLOCK-BAD; fi"
 
 # ------------------------------------- a filesystem for the build products
 # Real Unix mounted /usr/src as its own disk for exactly this reason.  Here the

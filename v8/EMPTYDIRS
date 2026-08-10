@@ -1,5 +1,6 @@
 # Directories the tape carries with no surviving source under them.
-# git cannot store an empty directory; stage.sh recreates these.
+# git cannot store an empty directory, so they are listed rather than
+# stored; a build that needs one must make it.
 
 blit/font/S.10
 blit/font/S.11

@@ -137,6 +137,20 @@ gtime()
 	if (hour<0 || hour>23)
 		return(1);
 	timbuf = 0;
+	/*
+	 * ipnx: window a two-digit year, so a date this side of 2000 can
+	 * actually be expressed.  gp() reads exactly two digits and the
+	 * original then did a bare "year += 1900", which makes "26" 1926 --
+	 * before YRREF, so the year loop in clkinit() contributes nothing and
+	 * the date lands in 1970.  That is a Y2K bug, not a period detail:
+	 * the kernel takes the *year* from the filesystem superblock and only
+	 * the position within it from the TODR (sys/sys/machdep.c clkinit),
+	 * so an unsettable year is an unsettable clock, and make(1) cannot
+	 * compare a 2026 source against a 1976 object.
+	 * The pivot is the usual one: 69 and below are 21st century.
+	 */
+	if (year < 70)
+		year += 100;
 	year += 1900;
 	for(i=1970; i<year; i++)
 		timbuf += dysize(i);

@@ -324,8 +324,12 @@ def write(kept, unpacked, excluded, collisions, dirs, meta_only=False):
 
     cm = ["# Paths the V8 tape distinguishes only by case, which macOS and git",
           "# cannot both hold.  The loser of each group is stored percent-escaped;",
-          "# v8/mk/stage.sh restores the true name in the guest, whose filesystem",
-          "# is case-sensitive.  Escaping a directory de-collides everything under it.",
+          "# netfsd reads this file and serves the true name to the guest, whose",
+          "# filesystem is case-sensitive (netfs/Sources/NetFS/CaseMap.swift).",
+          "# Escaping a directory de-collides everything under it.",
+          "#",
+          "# The guest must never see the escaped spelling, and not for neatness:",
+          "# a struct direct has 14 bytes of name and %43%49%52%43%4C%45 is 18.",
           "#",
           "# Written as (directory, stored name, true name) rather than as two full",
           "# paths, because the renames happen parents-first and a child's stored path",
@@ -344,7 +348,8 @@ def write(kept, unpacked, excluded, collisions, dirs, meta_only=False):
                    if not any(k[0] == d or k[0].startswith(d + "/") for k in kept))
     with open(os.path.join(DEST, "EMPTYDIRS"), "w") as f:
         f.write("# Directories the tape carries with no surviving source under them.\n"
-                "# git cannot store an empty directory; stage.sh recreates these.\n\n")
+                "# git cannot store an empty directory, so they are listed rather than\n"
+                "# stored; a build that needs one must make it.\n\n")
         f.write("\n".join(empty) + ("\n" if empty else ""))
     print("\nwrote %s (%d source files, %d manifest lines, %d empty dirs)"
           % (DEST, len(kept) + sum(len(u[6]) for u in unpacked), len(lines), len(empty)))

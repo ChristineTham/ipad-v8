@@ -3,9 +3,10 @@
 #
 #	tools/drive-stage1.sh [limit-seconds] [port]
 #
-# The share is the repo directory itself, read-only: the guest copies what it
-# needs to local disk and builds there, so nothing the build does can reach back
-# and touch our source.
+# The share is the repo directory itself, mounted read-only at /n/src and
+# compiled straight off the wire.  Nothing is copied to guest disk: only build
+# products land there, on their own filesystem.  The read-only mount is what
+# guarantees a failed build cannot reach back and touch our source.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -30,9 +31,6 @@ trap cleanup EXIT INT TERM
 python3 "$ROOT/v8/mk/mkdep.py" --check || {
     echo "regenerating..."; python3 "$ROOT/v8/mk/mkdep.py"; }
 python3 "$ROOT/tools/ipnx-release.py" --check || exit 1
-# tree.list is what makes staging incremental; it must describe the tree we are
-# about to serve, not the one from last time.
-python3 "$ROOT/tools/gen-tree-list.py" || exit 1
 
 cd "$ROOT/work/myv8" || exit 1
 # A blank RP06 for build products.  Recreated per run: it holds nothing we
@@ -66,13 +64,19 @@ echo
 echo "== share =="
 ck "mounted /n/src"                '^C2-MOUNTED'
 ck "CASEMAP readable over netfs"   '^usr/src/cmd.*%4Dail'
+# The two directory pairs that cannot coexist on macOS at all.  netfsd's
+# CaseMap serves them under their true names, so the guest must see both --
+# and must never see an escaped one, which would not fit a 14-byte direct.
+ck "Mail and mail both visible"    '^C3-CASE-Mail-ok'
+ck "C and c both visible"          '^C3-CASE-C-ok'
+# Not a blanket grep for '%': CASEMAP's own contents are full of escaped names
+# and we print them deliberately above.  This asks the guest to count them in a
+# *directory listing*, where the answer must be zero.
+ck "no escaped name in a listing"  '^C3-CASE-clean'
 
 echo
-echo "== staging =="
-ck "source copied"                 'stage: done'
-ck "Mail and mail both present"    'ok      usr/src/cmd/Mail'
-ck "C and c both present"          'ok      jerq/src/lib/C'
-grep -qE 'MISSING' <<< "$LOGC" && { echo "  FAIL  something did not survive staging"; fail=1; }
+echo "== clock =="
+ck "guest clock set past 2000"     '^C3-CLOCK-ok'
 
 echo
 echo "== stage 1 toolchain =="
