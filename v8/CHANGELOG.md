@@ -10,12 +10,20 @@ at that, and unlike a hand-maintained list it cannot be wrong.
 
 ## 0.2.0 — 2026-08-10
 
-**The bootstrap toolchain builds from this tree.** All fourteen stage-1
+**The bootstrap toolchain builds from this tree, and it is a fixpoint.** All fourteen stage-1
 components — `yacc make lex cpp ccom c2 as ld ar ranlib nm size strip cc` —
 compile straight off the read-only netfs share into a separate build
 filesystem, and the compiler they produce is a fixpoint: `cmp` of a binary
 built by our `ccom` against one built by the 1985 `/lib/ccom` returns **0**,
-byte for byte, stripped. Driver `tools/drive-stage1.sh`, evidence
+byte for byte, stripped.
+
+Stage 2 then rebuilds the same fourteen components *with* the stage-1 result,
+and all fourteen binaries are identical to stage 1's:
+
+    cmpstage: same=14 differ=0 missing=0
+
+So the compiler this tree describes builds itself, and agrees with the compiler
+Bell Labs shipped. Driver `tools/drive-stage1.sh`, evidence
 `work/myv8/c2-stage1.log`, method [docs/build-from-source.md](../docs/build-from-source.md).
 
 Still 0.x: a toolchain is not a system, and nothing here has produced a
@@ -56,7 +64,7 @@ The first numbered state of the tree, and the baseline every later claim is
 measured against. Still **0.x**: these sources have not yet built a bootable
 disk, so nothing here is a release in the sense
 [docs/releases.md](../docs/releases.md) defines. That is 1.0.0, and it is Track
-C's finish line.
+S's finish line (Track C is ports — see [docs/roadmap.md](../docs/roadmap.md)).
 
 ### Added
 
