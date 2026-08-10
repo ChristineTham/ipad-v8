@@ -286,6 +286,17 @@ sh "date"
 sh "sh /n/src/mk/build1.sh /n/src /b 2>&1" 5400
 sh "date"
 
+# ---------------------------------------------------------- build stage 2
+# The same sources again, compiled by what stage 1 produced, into /b/tools2.
+# The comparison after it is the point: if stage 2 reproduces stage 1, the
+# compiler our source describes builds itself, which is the bootstrap fixpoint.
+# If it does not, the 1985 /lib/ccom and our ccom.c disagree about code
+# generation and every later stage silently inherits whichever one ran.
+send_user "\n=== stage 2: rebuild the toolchain with itself ===\n"
+sh "sh /n/src/mk/build1.sh /n/src /b 2 2>&1" 5400
+sh "date"
+sh "sh /n/src/mk/cmpstage.sh /n/src /b/tools /b/tools2 /b/cmp 2>&1" 900
+
 # Did we build a compiler that works?  Cheapest possible proof: use it.
 #
 # The program prints its marker via %s so that the literal "newcc-ok" never

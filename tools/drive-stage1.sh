@@ -105,6 +105,19 @@ for t in yacc make lex cpp ccom c2 as ld ar ranlib nm size strip cc; do
 done
 
 echo
+echo "== stage 2: does the toolchain reproduce itself? =="
+for t in yacc make lex cpp ccom c2 as ld ar ranlib nm size strip cc; do
+    if grep -qE "=== stage2: $t " <<< "$LOGC"; then
+        if grep -A40 "=== stage2: $t " <<< "$LOGC" | grep -qE 'BUILD FAILED|INSTALL FAILED'; then
+            printf '  FAIL  %s\n' "$t"; fail=1
+        else printf '  ok    %s\n' "$t"; fi
+    else printf '  ----  %s (never reached)\n' "$t"; fail=1; fi
+done
+grep -E 'cmpstage: same=' <<< "$LOGC" | tail -1 | sed 's/^/  /'
+ck "stage1 == stage2, stripped"    'TOOLCHAIN-FIXPOINT-ok'
+grep -E '  DIFFER ' <<< "$LOGC" | sed 's/^/  /' | head -20
+
+echo
 echo "== the new compiler =="
 # t.c prints this via %s, so "newcc-ok" cannot appear in the echo of the line
 # that writes t.c -- which is how an earlier unanchored grep reported a working
