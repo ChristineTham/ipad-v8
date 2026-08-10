@@ -197,7 +197,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--report", action="store_true", help="decide, write nothing")
     ap.add_argument("--verify", action="store_true", help="check v8/ against the tapes")
-    ap.add_argument("--force", action="store_true", help="overwrite an existing v8/")
+    ap.add_argument("--force", action="store_true",
+                    help="overwrite an existing v8/ -- DESTROYS local work, see below")
+    ap.add_argument("--meta", action="store_true",
+                    help="rewrite only MANIFEST/CASEMAP/EMPTYDIRS, never the source")
     args = ap.parse_args()
 
     entries, dirs = read_tapes()
@@ -268,15 +271,27 @@ def main():
     if args.verify:
         return verify(kept, unpacked, excluded, collisions)
 
-    if os.path.exists(DEST) and not args.force:
+    if os.path.exists(DEST) and not args.force and not args.meta:
         sys.exit("%s already exists -- it is ours now, not a checkout.\n"
-                 "Use --verify to check it, or --force if you really mean to overwrite." % DEST)
+                 "  --verify  check it against the tapes\n"
+                 "  --meta    regenerate MANIFEST/CASEMAP/EMPTYDIRS only\n"
+                 "  --force   re-import, DESTROYING every edit made since\n"
+                 % DEST)
 
-    write(kept, unpacked, excluded, collisions, dirs)
+    # --force really does mean it: it once silently reverted nine committed
+    # makefile fixes.  Refuse unless git says there is nothing to lose.
+    if args.force and os.path.isdir(os.path.join(REPO, ".git")):
+        st = subprocess.run(["git", "-C", REPO, "status", "--porcelain", "v8"],
+                            capture_output=True, text=True).stdout.strip()
+        if st:
+            sys.exit("refusing --force: v8/ has uncommitted changes that would be lost:\n"
+                     + st + "\ncommit or stash them first.")
+
+    write(kept, unpacked, excluded, collisions, dirs, meta_only=args.meta)
     return 0
 
 
-def write(kept, unpacked, excluded, collisions, dirs):
+def write(kept, unpacked, excluded, collisions, dirs, meta_only=False):
     def put(rel, data, mode):
         p = os.path.join(DEST, rel)
         os.makedirs(os.path.dirname(p), exist_ok=True)
@@ -284,11 +299,12 @@ def write(kept, unpacked, excluded, collisions, dirs):
             f.write(data)
         os.chmod(p, 0o755 if mode & 0o111 else 0o644)
 
-    for _, sp, mode, _, data, _ in kept:
-        put(sp, data, mode)
-    for _, sp, mode, _, _, _, members in unpacked:
-        for name, body in members:
-            put(os.path.join(sp, name), body, 0o644)
+    if not meta_only:
+        for _, sp, mode, _, data, _ in kept:
+            put(sp, data, mode)
+        for _, sp, mode, _, _, _, members in unpacked:
+            for name, body in members:
+                put(os.path.join(sp, name), body, 0o644)
 
     lines = ["# Every file on the TUHS V8 tapes, and what we did with it.",
              "# Regenerate/check with: tools/v8-import.py --verify",
@@ -311,10 +327,16 @@ def write(kept, unpacked, excluded, collisions, dirs):
           "# v8/mk/stage.sh restores the true name in the guest, whose filesystem",
           "# is case-sensitive.  Escaping a directory de-collides everything under it.",
           "#",
-          "# true-path<TAB>stored-path",
+          "# Written as (directory, stored name, true name) rather than as two full",
+          "# paths, because the renames happen parents-first and a child's stored path",
+          "# stops being valid the moment its parent is renamed -- and because V8 has",
+          "# no dirname(1) to take the prefix apart with.",
+          "#",
+          "# directory<TAB>stored-name<TAB>true-name",
           ""]
     for tp, sp, _ in sorted(collisions):
-        cm.append("%s\t%s" % (tp, sp))
+        parent = tp.rsplit("/", 1)[0] if "/" in tp else "."
+        cm.append("%s\t%s\t%s" % (parent, sp.rsplit("/", 1)[-1], tp.rsplit("/", 1)[-1]))
     with open(os.path.join(DEST, "CASEMAP"), "w") as f:
         f.write("\n".join(cm) + "\n")
 
