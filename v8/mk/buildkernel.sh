@@ -77,16 +77,35 @@ mkdir $SYS || { echo "buildkernel: cannot make $SYS" 1>&2; exit 1; }
 # V8 has no cp -r and no mkdir -p.  A tar pipe would do it in one line and
 # hide which file failed; this names the directory.  The 2>/dev/null is for
 # cp complaining about the subdirectories caught by the glob.
+# FILE BY FILE, with `test -d' skipping directories, and NOT `cp $d/* $dst'.
+# The bulk form looks obviously right and is not: the glob includes the
+# subdirectories, and V8's cp does not refuse one -- it reads it as a file,
+# because directories are readable on this system.  So `cp boot/* /b/sys/boot'
+# created a FILE named bb out of the directory boot/bb, and the mkdir a moment
+# later then failed on a name that was already taken:
+#
+#	mkdir: cannot make directory /b/sys/boot/bb
+#
+# which reads as a permissions or path problem and is neither.  One cp per
+# file is slower -- about 350 forks -- and every failure names a file.
+copyfiles() {			# copyfiles <srcdir> <dstdir>
+	for f in `cd $1; echo *`
+	do
+		test -d $1/$f && continue
+		cp $1/$f $2/$f || { echo "  cannot copy $1/$f"; exit 1; }
+	done
+}
+
 for d in `cd $SRC/usr/sys; echo *`
 do
 	test -d $SRC/usr/sys/$d || continue
 	mkdir $SYS/$d || { echo "  cannot make $SYS/$d"; exit 1; }
-	cp $SRC/usr/sys/$d/* $SYS/$d 2>/dev/null
+	copyfiles $SRC/usr/sys/$d $SYS/$d
 	for e in `cd $SRC/usr/sys/$d; echo *`
 	do
 		test -d $SRC/usr/sys/$d/$e || continue
 		mkdir $SYS/$d/$e || { echo "  cannot make $SYS/$d/$e"; exit 1; }
-		cp $SRC/usr/sys/$d/$e/* $SYS/$d/$e 2>/dev/null
+		copyfiles $SRC/usr/sys/$d/$e $SYS/$d/$e
 		for f in `cd $SRC/usr/sys/$d/$e; echo *`
 		do
 			test -d $SRC/usr/sys/$d/$e/$f || continue

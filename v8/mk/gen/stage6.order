@@ -1,3 +1,11 @@
 config	usr/src/cmd/config	etc/config
 sh	usr/src/cmd/sh	bin/sh
+init	usr/src/cmd	etc/init
+getty	usr/src/cmd	etc/getty
+login	usr/src/cmd/login	etc/login
+fsck	usr/src/cmd	etc/fsck
+mount	usr/src/cmd	etc/mount
+umount	usr/src/cmd	etc/umount
+mkfs	usr/src/cmd	etc/mkfs
+update	usr/src/cmd	etc/update
 nmount	usr/src/cmd	etc/nmount
