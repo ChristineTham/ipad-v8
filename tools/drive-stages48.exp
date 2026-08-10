@@ -1,0 +1,123 @@
+#!/usr/bin/env expect
+#
+# Stages 4 to 8 only, against a build filesystem that already has stages 1 to 3.
+#
+#	expect tools/drive-stages48.exp [port]
+#
+# The full driver spends about fifty minutes rebuilding the toolchain before it
+# reaches anything you are actually iterating on.  The build filesystem is a
+# file -- work/myv8/rp06build -- and it survives the run that made it, so
+# stages 4 onward can be re-run against it directly.  Fifteen minutes instead
+# of eighty.
+#
+# It does NOT recreate rp06build and it does not mkfs.  If /b/tools3 is not
+# already populated the stage scripts say so up front and stop, which is the
+# same check they use in the full driver.
+#
+# Use tools/drive-stage1.sh when the toolchain itself has changed.  Use this
+# when only stages 4 to 8 have.
+
+set timeout 600
+log_file -a stages48.log
+proc sendline {x} { send "$x\r" }
+
+proc must {pat {t 0}} {
+    global timeout
+    set use [expr {$t > 0 ? $t : $timeout}]
+    expect -timeout $use "$pat" {
+    } timeout {
+        send_user "\n*** FAILED: never saw '$pat' after ${use}s ***\n"; exit 3
+    } eof {
+        send_user "\n*** FAILED: simulator exited waiting for '$pat' ***\n"; exit 4
+    }
+}
+
+# Same marker discipline as the full driver: the tty echoes typed characters
+# into whatever is printing, so every marker is spelled through a shell
+# variable and never appears literally in the command that produces it.
+set SEQ 0
+proc sh {cmd {t 0}} {
+    global SEQ
+    incr SEQ
+    sendline "M=+ok$SEQ"
+    sendline "$cmd"
+    sendline "echo \$M+"
+    must "+ok$SEQ+" $t
+}
+proc bootsh {cmd {t 0}} { must "# " $t; sendline $cmd }
+proc simh {cmd {t 0}} { must "sim>" $t; sendline $cmd }
+
+# cat waits for input, so this cannot use sh -- the marker would never arrive
+# until after the data has been fed and the ^D delivered.
+proc catfile {src dst} {
+    global SEQ
+    incr SEQ
+    sendline "M=+ok$SEQ"
+    sendline "cat > $dst"
+    set f [open $src r]
+    while {[gets $f line] >= 0} { sendline $line }
+    close $f
+    send "\x04"
+    sendline "echo \$M+"
+    must "+ok$SEQ+" 300
+}
+
+set port [lindex $argv 0]
+if {$port == ""} { set port 9370 }
+
+spawn vax780
+simh "set noasynch"
+simh "set cpu idle=4.1BSD"
+simh "set tto 7b"
+simh "set rp0 rp07"
+simh "at rp0 rp07v8.net"
+simh "set rp1 rp06"
+simh "at rp1 rp06build"
+# rp2 is the disk stage 8 builds.  Attached always, so a stage-8 run needs no
+# second configuration; builddisk.sh refuses to touch drive 0 regardless.
+simh "set rp2 rp07"
+simh "at rp2 rp07new"
+simh "set il enable"
+simh "attach il nat:"
+simh "load -o bootV8 0"
+simh "run 2"
+must "login:" 300
+sendline "root"
+bootsh "PS1='ipnx%%% '" 120
+sh "OK=-ok" 120
+sh "stty erase '^H'" 60
+
+# The share, exactly as the full driver builds it: nmount is compiled in the
+# guest from the repo's copy rather than assumed to exist, and minor 65 is odd
+# because tcp_device.c refuses an even one whose socket is not already active.
+# (Stage 6 now builds nmount into DESTDIR, but DESTDIR is not the running
+# system -- this machine still has to make its own.)
+sh "mkdir /n" 60
+sh "mkdir /n/src" 60
+catfile "../../tools/v8/nmount.c" "/tmp/nmount.c"
+sh "cd /tmp; cc -o nmount nmount.c -lin" 300
+sh "/tmp/nmount 10.0.2.2 $port 65 /n/src" 120
+sh "if test -f /n/src/mk/build1.sh; then echo S48-MOUNTED\$OK; fi"
+
+sh "mkdir /b" 60
+sh "if /etc/fsck -y /dev/rrp1g > /dev/null; then /etc/mount /dev/rp1g /b; fi" 900
+sh "df /b"
+sh "if test -f /b/tools3/bin/cc; then echo S48-STAGE3-present\$OK; fi"
+
+send_user "\n=== stages 4 to 8 ===\n"
+sh "date"
+sh "sh /n/src/mk/buildhdrs.sh /n/src /b/root 2>&1" 1800
+sh "sh /n/src/mk/buildlibs.sh /n/src /b /b/root /b/tools3 2>&1" 7200
+sh "sh /n/src/mk/buildcmds.sh /n/src /b /b/root /b/tools3 2>&1" 5400
+sh "sh /n/src/mk/buildkernel.sh /n/src /b /b/root ipnx /b/tools3 2>&1" 7200
+sh "sh /n/src/mk/builddisk.sh /n/src /b/root 2 rp07 /mnt 2>&1" 3600
+sh "date"
+
+sh "echo S48-DONE\$OK"
+sh "cd /; sync; sync"
+sendline "/etc/halt"
+must "Infinite loop" 120
+simh "quit" 60
+expect eof
+wait
+send_user "\n=== STAGES 4-8 DONE ===\n"
