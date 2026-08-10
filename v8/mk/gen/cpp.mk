@@ -66,13 +66,16 @@ cpy.c: $(SRC)/usr/src/cmd/cpp/cpy.y $(YACCPATH) $(SRC)/usr/src/cmd/cpp/yylex.c
 	$(YACC) $(SRC)/usr/src/cmd/cpp/cpy.y
 	sh $(SRC)/usr/src/cmd/cpp/:yyfix yyexca yyact yypact yypgo yyr1 yyr2 yychk yydef; mv y.tab.c cpy.c
 
+# written by the cpy.c rule above
+rodata.c: cpy.c
+
 cpp.o: $(SRC)/usr/src/cmd/cpp/cpp.c $(INCDIR)/setjmp.h $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/stat.h $(INCDIR)/sys/types.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/cpp/cpp.c
 
 cpy.o: cpy.c $(TOOLS)
 	$(COMPILE) cpy.c
 
-rodata.o: $(SRC)/usr/src/cmd/cpp/rodata.c $(TOOLS)
+rodata.o: rodata.c $(TOOLS)
 	$(COMPILE) -R $(SRC)/usr/src/cmd/cpp/rodata.c
 
 install: cpp

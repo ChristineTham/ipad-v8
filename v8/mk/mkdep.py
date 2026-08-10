@@ -116,6 +116,7 @@ STAGE1 = [
          # sh does not need the executable bit to have survived the wire, and
          # the script itself is cwd-relative in the right way -- it rewrites
          # the y.tab.c yacc just produced in the object directory.
+         sidegen={"rodata.c": "cpy.c"},
          gen={"cpy.c": ("yacc", "cpy.y",
                         "sh $(SRC)/usr/src/cmd/cpp/:yyfix "
                         "yyexca yyact yypact yypgo yyr1 yyr2 yychk yydef; "
@@ -314,6 +315,13 @@ def emit(c):
         objmap = dict(objs)
 
     gen = c.get("gen", {})
+    # Files produced as a SIDE EFFECT of another generated file's rule,
+    # mapped to the target that produces them.  cpp's :yyfix splits the
+    # parser tables out of y.tab.c into rodata.c while making cpy.c, so
+    # rodata.c exists only in the object directory and has no rule and no
+    # file on the share.  Without this it is looked for at
+    # $(SRC)/usr/src/cmd/cpp/rodata.c and make stops.
+    sidegen = c.get("sidegen", {})
     # a generated .c has no file on disk yet; its deps come from the grammar
     for g in gen:
         objmap.setdefault(g[:-2] + ".o", g)
@@ -365,11 +373,16 @@ def emit(c):
         elif target != "y.tab.c":
             out.append("\tmv y.tab.c %s\n" % target)
 
+    # side-effect files: a rule with prerequisites and no commands, which is
+    # exactly what make needs to know "build that, and this will be there".
+    for target, producer in sorted(sidegen.items()):
+        out.append("\n# written by the %s rule above\n%s: %s\n" % (producer, target, producer))
+
     # objects, each with its transitive header closure
     oflags = c.get("oflags", {})
     for obj in sorted(objmap):
         src = objmap[obj]
-        if src in gen:                       # generated: deps handled above
+        if src in gen or src in sidegen:     # generated: deps handled above
             deps = [src]
         else:
             deps = [srcdir + "/" + src] + [

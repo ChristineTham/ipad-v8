@@ -296,13 +296,21 @@ send_user "\n=== does the new toolchain compile anything? ===\n"
 sh "cd /tmp"
 sh "echo 'main(){printf(\"newcc%s\\n\", \"-ok\");}' > t.c"
 sh "cat t.c"
-sh "/b/tools/bin/cc -B/b/tools/ -t02p -o t t.c" 300
+# -B/b/tools/lib/, with the trailing lib/.  cc.c does
+#	ccom = strspl(npassname, "ccom")
+# -- a bare string concatenation, no directory logic -- so the prefix has to
+# spell out the directory the passes are actually in, and ours install into
+# $(TOOLDIR)/lib like the system's /lib.  -t02p picks passes 0 (ccom), 2 (c2)
+# and p (cpp); as, ld and crt0.o stay hardcoded at /bin and /lib, so this is
+# our compiler driving the system's assembler and loader, which is all stage 1
+# claims.
+sh "/b/tools/bin/cc -B/b/tools/lib/ -t02p -o t t.c" 300
 sh "./t"
 
 # And the real question: can the new compiler rebuild something the old one
 # built, identically?  Stripped, because cc bakes its PID into the symbol table.
 send_user "\n=== new compiler vs old, same source ===\n"
-sh "/b/tools/bin/cc -B/b/tools/ -t02p -O -o ls.new /n/src/usr/src/cmd/ls.c" 600
+sh "/b/tools/bin/cc -B/b/tools/lib/ -t02p -O -o ls.new /n/src/usr/src/cmd/ls.c" 600
 sh "cc -O -o ls.old /n/src/usr/src/cmd/ls.c" 600
 sh "strip ls.new ls.old"
 sh "ls -l ls.new ls.old"
