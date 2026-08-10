@@ -93,9 +93,29 @@ inside an App Store binary, which has a contested history. Take that decision
 deliberately, in the open, and only if the alternative (patching the existing image,
 as now) proves insufficient.
 
+## Looking ahead: v11 and ports would mix estates *(2026-08-10, nothing committed)*
+
+Everything above concerns one estate plus clean MIT dependencies. Tracks C and D
+([v11-plan.md](v11-plan.md)) would add more, so the position is recorded before any
+code rather than after:
+
+| Prospective component | Terms | Note |
+|---|---|---|
+| Plan 9 (`sam`, `rc`, `acme`) and plan9port | **MIT** since 23 March 2021, when Nokia Bell Labs transferred the copyright to the Plan 9 Foundation | Clean, and easier to reason about than the covenant. Earlier releases circulated under the Lucent Public License or GPLv2 — take the post-2021 sources, not older mirrors |
+| Inferno / Dis / Limbo | Lucent → Vita Nuova; GPLv2 and MIT terms at different points in its history | **Unresolved.** Answer per component before writing anything, not after |
+| BSD games | 3-clause BSD from 4.4BSD-Lite descendants (UCB dropped the advertising clause in 1999) | Take **4.4BSD-Lite provenance, never 4.3BSD** — Lite was constructed after the 1994 USL settlement precisely to contain no AT&T code |
+| V10 games moved to V8 | The same 2017 covenant | Not a port at all; no new estate |
+
+The rule that follows: a v11 image would carry code under the covenant, under MIT, and
+under 3-clause BSD simultaneously. That is workable — none of them conflict, and all
+three permit a free app — but the credits screen and any redistribution must enumerate
+them separately, and the covenant's non-commercial limit remains the binding constraint
+on the whole, since it is the most restrictive term present.
+
 ## Open items
 
 - [ ] Email Seth Morabito re: dmd_core license clarity (MIT repo vs. CC BY-NC-SA page footer)
+- [ ] Resolve Inferno's licence per component **before** any Track D work touches it
 - [ ] If a rebuilt 5620 ROM is ever wanted: decide the GPL question above **before**
       writing the build, not after
 - [ ] Decide bundled-vs-first-launch-download for disk images (legally equivalent under the

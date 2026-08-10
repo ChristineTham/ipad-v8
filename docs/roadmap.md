@@ -200,22 +200,47 @@ port is an act of translation and has to be readable as one.
 - [ ] **P0** Decide the shape: `ports/<category>/<name>/{Makefile,distinfo,patches/}`,
       what fetches (host side) and what builds (guest side), and how a port crosses
       the ingest path — courier disk today, netfs after N5–N7
-- [ ] **P1** First port end to end, chosen for smallness rather than usefulness, to
-      shake out the machinery
-- [ ] **P2** A handful that make V8 pleasant to live in rather than merely to boot
-- [ ] **P3** Reproducibility: a port builds the same way on a fresh golden image
+- [ ] **P1** `libcompat` — the ANSI-to-4.1BSD shim every port needs: `strchr`→`index`,
+      `memcpy`→`bcopy`, `strtol`, `void *`, and a prototype-eliding macro. Highest
+      leverage item on either track; get it wrong and every port re-solves it
+      ([v11-plan.md](v11-plan.md) *"The real cost"*)
+- [ ] **P2** First entries: **V10's own games that V8 lacks** (`adv`, `boggle`,
+      `doctor`, `morse`, `pacman`, `rain`, `trek`, `wump`, …). Same copyright estate,
+      same compiler, no licence question — so the machinery gets debugged on work
+      that cannot fail for interesting reasons
+- [ ] **P3** First true port, from 4.4BSD-Lite provenance: `robots` or `worms`
+- [ ] **P4** Reproducibility: a port builds the same way on a fresh golden image
 
 ## Track D — ipnx-v11 *(speculative; behind V10, deliberately)*
 
-The Eleventh Edition that never existed: Plan 9 and Inferno components backported into
-a Research Unix that already invented several of their preconditions (`/proc`, streams,
-the file system switch, netfs). Inspiration is Plan 9 from User Space, run backwards.
-Nothing is committed and nothing should start before B4.
+The Eleventh Edition that never existed. Scope framing and evidence:
+[v11-plan.md](v11-plan.md). Nothing is committed and nothing starts before B4.
 
-- [ ] **D0** Survey what is actually portable — start from V10's own `sam`, then 9P/Styx
-      against netfs, then `rc`
-- [ ] **D1** Licensing pass: Plan 9 (MIT since 2021, via the Plan 9 Foundation) and
-      Inferno terms against the 2017 covenant — a v11 image mixes estates
+The admission rule is one question — **does this change the system's model of itself?**
+Sockets, vnodes and a wholesale ANSI libc do, and are refused; programs do not. Track D
+is the *editorial* track (what belongs in the edition); Track C is the *mechanism*
+(how anything gets built). The games are chosen here and built there.
+
+Reconnaissance (2026-08-10) found that much of this is **restoration, not importation**:
+V10's own tree carries `cmd/u9fs/` (an original-9P file server — `Tclone`, `Tclwalk`,
+`NAMELEN` 28), `cmd/mk/`, and a netfs explicitly designed to take any protocol library.
+
+- [ ] **D0** Licensing pass *first*: Plan 9 is MIT since March 2021 (Plan 9 Foundation);
+      Inferno's estate is Lucent → Vita Nuova with GPLv2 and MIT at different points.
+      A v11 image mixes three estates and that must be answered before code
+- [ ] **D1** Build `cmd/u9fs` as it stands and see what it does — the cheapest possible
+      probe of the whole thread, and it settles D2
+- [ ] **D2** **The fork in the road, and it arrives before v11 does:** should netfs's
+      successor be **9P** rather than a documented netb? This is N4–N7's design
+      decision, not a v11 one — resolve it on the N track with D1's evidence
+- [ ] **D3** Restore `sam`'s host side. There is **no `cmd/sam/`** in the V10 tarball —
+      only the 630 terminal half, the man page and the paper. plan9port's sam is MIT and
+      the terminal half is already on the disk, so there is a live target from day one
+- [ ] **D4** `rc` — Duff's shell; small, self-contained, the absence felt daily
+- [ ] **D5** Later, if at all: `acme` on the 5620 (genuinely interesting), `plumber`.
+      Inferno splits in two — **Styx is 9P**, so protocol interoperability is D1/D2 and
+      needs no VM; **Dis and Limbo** are a research question and plausibly their own
+      edition, not part of this one
 
 ## Post-1.0 (unscheduled)
 

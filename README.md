@@ -114,11 +114,23 @@ There is no Eleventh Edition. There could have been: the Research line was visib
 somewhere, and the people who would have written it went off and wrote **Plan 9** and later
 **Inferno** instead.
 
-ipnx-v11 is the idea of finishing that sentence — backporting Plan 9 and Inferno components
-into a Research Unix that had already invented half of their preconditions. The inspiration
-is [Plan 9 from User Space](https://9fans.github.io/plan9port/), which brought Plan 9's tools
-*forward* to modern Unix; this would run the same trick *backward*, to the system they grew
-out of. Nothing here is committed, and it stays behind V10.
+ipnx-v11 is the idea of finishing that sentence. The inspiration is
+[Plan 9 from User Space](https://9fans.github.io/plan9port/), which brought Plan 9's tools
+*forward* to modern Unix; this runs the same trick *backward*, to the system they grew out
+of — plus whatever 4.3/4.4BSD had that is genuinely worth having, the games above all.
+
+The admission rule is one question: **does this change the system's model of itself?**
+Sockets and vnodes do — V8 answered those questions with streams and the file system switch,
+and swapping the answers would just produce another BSD. `snake` does not. Take programs,
+refuse personality.
+
+Reading V10's own source tree turned out to reframe the whole idea. It contains
+`cmd/u9fs/` — **a Plan 9 file server, speaking the original 9P** (`Tclone`, `Tclwalk`,
+`NAMELEN` 28, DES tickets) — along with `mk`, and a netfs deliberately built to take any
+protocol library. The Research machines were serving files to the Plan 9 machines down the
+corridor. So most of v11 is **restoration rather than importation**, which is both cheaper
+and much more defensible. Scope, evidence and the open questions:
+[docs/v11-plan.md](docs/v11-plan.md).
 
 ## ipnx-ports
 
@@ -130,11 +142,19 @@ software back to a machine from 1985.
 
 This is harder than a normal port and interesting for exactly that reason. The target has a
 K&R C compiler and no ANSI prototypes, 14-byte filenames, no shared libraries, no POSIX, and
-an address space that a modern `configure` script would exhaust by itself. So a port is not a
-build script; it is a documented act of translation, and the patch series *is* the artifact.
-Early candidates are the small, self-contained tools written before ANSI C settled — a
-compression utility, `patch`, a decent pager — plus whatever V8 needs to be pleasant to live
-in rather than merely to boot.
+an address space that a modern `configure` script would exhaust by itself. Sources need the
+*reverse* of the usual ANSI-ification pass — `strchr` back to `index`, `memcpy` back to
+`bcopy` — so the highest-leverage thing in the whole tree is a shared compatibility layer,
+and after that a port is not a build script but a documented act of translation, with the
+patch series as the artifact.
+
+The first entries won't be ports at all. V10's `games/` holds a dozen — `adv`, `boggle`,
+`doctor`, `pacman`, `rain`, `trek` — that V8 simply lacks, in the same copyright estate and
+built by the same compiler: intra-family transfers that let the machinery get debugged on
+work that can't fail for interesting reasons. Then the genuinely absent BSD games (`robots`,
+`worms`, `cribbage`, `battlestar`), taken from 4.4BSD-Lite provenance rather than 4.3BSD so
+the AT&T question never arises. The one to aim at is **`hunt`** — real-time multiplayer over
+a network, which turns the N track's `il0` interface into something you can actually play.
 
 ## Where things stand
 
@@ -149,6 +169,8 @@ in rather than merely to boot.
 | **B0.5** the N track | ◐ | RP07 disk, an Interlan NI1010 modelled for SIMH, and **V8 on the Internet** (`dnsq` resolves real names); netfs remains — [n-track-notes.md](docs/n-track-notes.md) |
 | **B0.6** a machine to live in | ○ | Identity, a real user account, host shares at `/n/macos` and `/n/home` — [machine-config.md](docs/machine-config.md) |
 | **B1–B4** V10 | ○ | Toolchain → world → kernel → first boot |
+| **C** ipnx-ports | ○ | Ports tree; `libcompat` first, then V10's games, then BSD's |
+| **D** ipnx-v11 | ○ | Mostly restoration — V10 already ships a 9P server — [v11-plan.md](docs/v11-plan.md) |
 | — | ○ | Interface rebuild: tabs per tty, windows by terminal shape, Liquid Glass — [ui-redesign.md](docs/ui-redesign.md) |
 | — | ○ | App Store submission (needs the Apple account) — [app-store.md](docs/app-store.md) |
 
