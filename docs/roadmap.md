@@ -300,15 +300,21 @@ the safety rules are in [build-from-source.md](build-from-source.md).
         stage 2 *(2026-08-11)*. `curses-ok` proves it together with stage 4:
         a program compiled against our headers, linked against our
         `libcurses` and `libtermcap`, and run
-  - [ ] **6** commands — starts with `config`(8), which stage 7 cannot run
-        without and which is the only tool in the build needing *both* yacc
-        and lex. The other 112 makefile directories, 164 loose `.c`, 2 loose
-        `.y` and 6 `.sh` follow; the loose files have no makefile of any kind,
-        so their install directory has to come from the golden image
-  - [ ] **7** the kernel — `usr/sys/ipnx/conf`, which is `alice`'s VAX-11/780
-        plus the Internet pseudo-devices `research` had. The only stage that
-        copies source, because `config` resolves its inputs as `"../conf/"`
-        by string concatenation
+  - [~] **6** commands — 11 of ~277 *(2026-08-11)*: `config`(8), `sh`, and
+        the boot path (`init` `getty` `login` `fsck` `mount` `umount` `mkfs`
+        `update`), plus `nmount`, plus **the whole toolchain installed into
+        `DESTDIR`** — a system with no compiler cannot rebuild itself, which
+        is the whole of stage 9. Every install path measured, not inferred:
+        `login` goes to `/etc`, not `/bin`. The remaining ~266 need
+        `tools/harvest-paths.sh`, because the 164 loose `.c` have no makefile
+        of any kind and `/bin` vs `/usr/bin` decides whether the system can
+        repair itself with `/usr` unmounted
+  - [x] **7** the kernel — **a 236,520-byte `unix`, built from our source
+        with our toolchain** *(2026-08-11)*. `usr/sys/ipnx/conf` is `alice`'s
+        VAX-11/780 plus the Internet pseudo-devices `research` had, and it is
+        the machine we actually emulate rather than either of the tape's. The
+        only stage that copies source, because `config` resolves its inputs as
+        `"../conf/"` by string concatenation
 - [ ] **S7** Stage 8: a disk built from source, and a boot from it
 - [ ] **S8** Stage 9: the new system rebuilds itself under `chroot` — the point
       at which `v8/` is demonstrably complete
