@@ -118,6 +118,12 @@ ck "stage1 == stage2, stripped"    'TOOLCHAIN-FIXPOINT-ok'
 grep -E '  DIFFER ' <<< "$LOGC" | sed 's/^/  /' | head -20
 
 echo
+echo "== libc from source =="
+ck "libc.a built and installed"    'LIBC OK'
+grep -E 'libc.a$|libc\.a *$' <<< "$LOGC" | tail -1 | sed 's/^/  /'
+ck "a program links against it"    'ourlibc-ok'
+
+echo
 echo "== the new compiler =="
 # t.c prints this via %s, so "newcc-ok" cannot appear in the echo of the line
 # that writes t.c -- which is how an earlier unanchored grep reported a working

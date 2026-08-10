@@ -297,6 +297,24 @@ sh "sh /n/src/mk/build1.sh /n/src /b 2 2>&1" 5400
 sh "date"
 sh "sh /n/src/mk/cmpstage.sh /n/src /b/tools /b/tools2 /b/cmp 2>&1" 900
 
+# ------------------------------------------------------------------- libc
+# The first library rather than a program, and the one the dependency rule is
+# really about: replacing libc.a invalidates every binary linked against it.
+# 233 objects across five directories, plus two startup files.
+send_user "\n=== libc from our source ===\n"
+sh "date"
+sh "sh /n/src/mk/buildlibc.sh /n/src /b 1 2>&1" 7200
+sh "date"
+
+# Does anything actually link against it?  Cheapest proof: build a program
+# with our crt0.o and our libc.a, using our compiler, and run it.
+send_user "\n=== link something against our libc ===\n"
+sh "cd /tmp"
+sh "echo 'main(){printf(\"ourlibc%s\\n\", \"-ok\");}' > u.c"
+sh "/b/tools/bin/cc -B/b/tools/lib/ -t02p -c u.c" 300
+sh "ld -X /b/tools/lib/crt0.o u.o /b/tools/lib/libc.a -o u" 300
+sh "./u"
+
 # Did we build a compiler that works?  Cheapest possible proof: use it.
 #
 # The program prints its marker via %s so that the literal "newcc-ok" never
