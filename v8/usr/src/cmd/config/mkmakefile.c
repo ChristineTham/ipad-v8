@@ -352,10 +352,21 @@ register FILE *f;
 	{
 		first = FALSE;
 		fprintf(f, "\t@sh ../conf/newvers.sh\n");
-		fprintf(f, "\t@cc $(CFLAGS) -c vers.c\n");
+		/*
+		 * ipnx: ${CC} and ${LD}, not literal cc and ld.  Everything
+		 * else config generates already goes through a macro --
+		 * ${CC}, ${C2}, ${AS} -- and only the two lines that produce
+		 * the kernel itself were hardwired, so a staged build
+		 * compiled every object with its own toolchain and then
+		 * linked the result with the running system's loader.  It is
+		 * the one command in the whole build whose output IS the
+		 * product.  conf/makefile now defaults both, so a hand-run
+		 * make in a machine directory behaves exactly as before.
+		 */
+		fprintf(f, "\t@${CC} $(CFLAGS) -c vers.c\n");
 	}
 	fprintf(f,
-	    "\t@ld -n -o %s -e start -x -T 80000000 locore.o ${OBJS} vers.o ioconf.o conf.o param.o swap%s.o\n",
+	    "\t@${LD} -n -o %s -e start -x -T 80000000 locore.o ${OBJS} vers.o ioconf.o conf.o param.o swap%s.o\n",
 	    fl->f_needs, fl->f_fn);
 	fprintf(f, "\t@size %s\n", fl->f_needs);
 	fprintf(f, "\t@chmod 755 %s\n\n", fl->f_needs);

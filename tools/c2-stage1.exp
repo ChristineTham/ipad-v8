@@ -377,6 +377,55 @@ sh "ls -l ls.new ls.seal ls.old"
 sh "cmp ls.new ls.old; echo cmp-newcc-vs-oldcc=\$?"
 sh "cmp ls.seal ls.old; echo cmp-sealed-vs-oldcc=\$?"
 
+# ---------------------------------------------------------- stages 4 to 7
+# The spine of a world build: headers, libraries, the one command later
+# stages need, and the kernel.  Everything from here compiles with the
+# stage-3 toolchain and against OUR headers, so a failure in this block is a
+# failure of our source and not of the machine it is running on.
+#
+# The order is forced and each step checks the one before it, because every
+# one of these failures otherwise presents as a pile of "Don't know how to
+# make" spread over dozens of components:
+#
+#	4 headers    -- nothing compiles against ours until they are installed
+#	5 libraries  -- needs 3 (a compiler) and 4 (headers)
+#	6 config     -- needs libl.a from 5, and both yacc and lex from 1
+#	7 kernel     -- needs config from 6
+send_user "\n=== stage 4: headers ===\n"
+sh "date"
+sh "sh /n/src/mk/buildhdrs.sh /n/src /b/root 2>&1" 1800
+sh "ls /b/root/usr/include/stdio.h /b/root/usr/include/sys/param.h"
+
+send_user "\n=== stage 5: the libraries ===\n"
+sh "date"
+sh "sh /n/src/mk/buildlibs.sh /n/src /b /b/root /b/tools3 2>&1" 7200
+sh "date"
+
+# Prove the point of stage 4 and 5 together: compile something against OUR
+# headers, link it against a library WE built, run it.  curses is the right
+# probe because it needs both a header of ours and an archive of ours, and
+# because a curses program that starts and stops proves termcap resolved too.
+send_user "\n=== does anything link against stage 5? ===\n"
+sh "cd /tmp"
+sh "echo '#include <curses.h>' > c.c"
+sh "echo 'main(){initscr();endwin();printf(\"curses%s\\n\",\"-ok\");}' >> c.c"
+sh "/b/tools3/bin/cc -B/b/tools3/lib/ -t02palc -I/b/root/usr/include -o c c.c /b/root/usr/lib/libcurses.a /b/root/usr/lib/libtermcap.a" 600
+sh "TERM=dumb ./c"
+
+send_user "\n=== stage 6: config(8) ===\n"
+sh "date"
+sh "sh /n/src/mk/buildcmds.sh /n/src /b /b/root /b/tools3 2>&1" 3600
+sh "ls -l /b/root/etc/config"
+
+send_user "\n=== stage 7: the kernel ===\n"
+sh "date"
+sh "sh /n/src/mk/buildkernel.sh /n/src /b /b/root ipnx /b/tools3 2>&1" 7200
+sh "date"
+sh "ls -l /b/root/unix"
+# size(1) on the result is the cheapest sanity check that it is a kernel and
+# not a 40-byte a.out header: a V8 VAX kernel is a few hundred KB of text.
+sh "size /b/root/unix"
+
 sh "echo C2-DONE\$OK"
 sh "cd /; sync; sync"
 # Not sh: halt never returns, so its marker never arrives and the run burns the

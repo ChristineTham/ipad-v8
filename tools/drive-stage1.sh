@@ -171,6 +171,32 @@ case "${s:-?}" in
 esac
 
 echo
+echo "== stage 4: headers =="
+ck "224 headers installed"         'STAGE4 OK'
+grep -E '^[0-9]+ headers installed' <<< "$LOGC" | tail -1 | sed 's/^/  /'
+
+echo
+echo "== stage 5: the libraries =="
+ck "all libraries built"           'STAGE5 OK'
+# Count what actually got there rather than asserting a list: stage5.order is
+# the list, and duplicating it here is how the two drift apart.
+n=$(grep -cE '^=== stage5: ' <<< "$LOGC")
+echo "  libraries attempted: $n (stage5.order has $(wc -l < v8/mk/gen/stage5.order))"
+grep -E '  BUILD FAILED |  INSTALL FAILED ' <<< "$LOGC" | sed 's/^/  /' | head -20
+# curses needs a header of ours AND two archives of ours, so this one probe
+# covers stage 4 and stage 5 together.
+ck "a curses program links + runs"  'curses-ok'
+
+echo
+echo "== stage 6: the commands =="
+ck "config(8) built"               'STAGE6 OK'
+
+echo
+echo "== stage 7: the kernel =="
+ck "unix linked from our source"   'STAGE7 OK'
+grep -E '^text[ 	]|^[0-9]+\+[0-9]+\+[0-9]+' <<< "$LOGC" | tail -2 | sed 's/^/  /'
+
+echo
 grep -E 'STAGE1 OK|STAGE1 INCOMPLETE' <<< "$LOGC" | tail -1 | sed 's/^/  /'
 echo
 if [[ $fail -eq 0 ]] && grep -q 'C2-DONE-ok' <<< "$LOGC"; then

@@ -19,6 +19,14 @@
 # -DTRACE	compile in kernel tracing hooks
 #
 C2=	/lib/c2
+# ipnx: LD has no built-in default in V8's make -- dfltmacro[] (cmd/make/files.c)
+# defines CC, AS, AR, YACC and LEX, and stops there.  config now emits ${LD}
+# for the kernel link rather than a literal `ld`, so without this the link
+# line would begin with a space and take the whole build down at the last
+# command.  CC has a built-in default of `cc' and is spelled out anyway,
+# because a macro you can see is one you can override deliberately.
+CC=	cc
+LD=	/bin/ld
 
 COPTS=	${IDENT} -DKERNEL
 CFLAGS=	-O ${COPTS}

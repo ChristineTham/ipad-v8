@@ -90,8 +90,19 @@ fi
 echo ""
 echo "=== stage 7: make ==="
 # The kernel is compiled by the stage-3 toolchain, sealed the same way
-# everything since stage 3 has been.  C2 is named separately because the
-# generated makefile invokes /lib/c2 by hand for the assembly passes.
+# everything since stage 3 has been.  C2, AS and LD are named separately
+# because the generated makefile drives them by hand for the assembly passes
+# and the final link, rather than going through cc.
+#
+# LD matters most and used to be impossible: config emitted a LITERAL `ld` for
+# the one command whose output is the kernel, so a fully staged build compiled
+# every object with our toolchain and then linked the result with the running
+# system's loader.  mkmakefile.c now emits ${LD} and ${CC}, and conf/makefile
+# defaults both -- V8's make has no built-in LD, only CC, AS, AR, YACC, LEX.
+#
+# STILL NOT SEALED HERE, and worth saying rather than implying: the generated
+# rules pipe through `sed` (../sys/asm.sed) and ../conf/newvers.sh runs `date`
+# and `sh`.  Those are the running system's until stage 6 grows past config.
 $T3/bin/make CC="$T3/bin/cc -B$T3/lib/ -t02palc" C2=$T3/lib/c2 \
 	AS=$T3/lib/as LD=$T3/lib/ld
 rc=$?
