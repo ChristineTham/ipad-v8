@@ -128,18 +128,55 @@ installed into `/`.** The running system stays the system that works, all the wa
 the end, and the new system is only ever a directory tree until `mkfs` turns it into a
 disk.
 
-| stage | builds | with | into |
-|---|---|---|---|
-| **0** | — | the tape's `/bin/cc`, `/bin/make`, `/lib/libc.a` | — |
-| **1** | yacc, then make, lex, cpp, ccom, c2, as, ld, ar, ranlib, nm, size, strip, cc | stage 0 | `TOOLDIR` |
-| **2** | libc | stage 1 | `TOOLDIR/lib` |
-| **3** | the whole toolchain **again** | stage 1 + stage 2 libc | `TOOLDIR2` |
+| stage | builds | with | into | |
+|---|---|---|---|---|
+| **0** | — | the tape's `/bin/cc`, `/bin/make`, `/lib/libc.a` | — | |
+| **1** | yacc, then make, lex, cpp, ccom, c2, as, ld, ar, ranlib, nm, size, strip, cc | stage 0 | `TOOLDIR` | ✅ |
+| **1b** | the whole toolchain **again**, everything else held constant | stage 1 | `TOOLDIR2` | ✅ |
+| **2** | libc | stage 1 | `TOOLDIR/lib` | ▶ |
+| **3** | the whole toolchain **again** | stage 1 + stage 2 libc | `TOOLDIR3` | |
 | **4** | headers | — | `DESTDIR/usr/include` |
 | **5** | libraries | stage 3 | `DESTDIR/lib`, `DESTDIR/usr/lib` |
 | **6** | 113 makefile commands + 163 loose `.c` + 6 `.sh` | stage 3 | `DESTDIR/bin`, `DESTDIR/usr/bin`, `DESTDIR/etc` |
 | **7** | the kernel, via `config` | stage 3 | `DESTDIR/unix` |
 | **8** | a bootable disk | `mkfs` + `DESTDIR` + `hpboot` + `proto-dev` | a new RP06/RP07 image |
 | **9** | the whole system, again, from inside itself | `chroot DESTDIR` | the completeness proof |
+
+**1b was not in the original plan and earns its place.** It rebuilds the
+toolchain with *everything except the compiler held constant* — same libc, same
+`as`, same `ld` — so if the fourteen binaries come out identical, exactly one
+thing has been proved and it is the thing that matters most: the compiler our
+source describes reproduces itself. Stage 3 is the stronger claim (rebuilt
+against the *new* libc too) and is also the noisier experiment, because a
+difference there could come from libc rather than from `ccom`. Running the
+cheap, narrow one first means a stage-3 difference will already have a suspect.
+
+Measured: `same=14 differ=0 missing=0`.
+
+### libc is where the tape stops being derivable
+
+Stage 2 is the first library rather than a program, and four steps of
+`usr/src/libc/Makefile` cannot be worked out from first principles. They are
+carried across verbatim, with the reason recorded in `mkdep.py`'s
+`emit_libc()`:
+
+- **`errlst.c` is compiled to assembly and then edited.** `gen/:errfix` moves
+  the error-message table from `.data` to `.text` so it lands in shared text.
+- **`doprnt.S` is assembly that needs the C preprocessor**, which `cc` will not
+  run on a `.s` — so the tape renames it to `.c` to get `-E` and pipes the
+  result to `as`.
+- **`ld -x -r` on every object** strips local symbols and re-emits it
+  relocatable. Skipping it fails nothing; it just inflates every binary that
+  links libc.
+- **`ar cr libc.a `lorder *.o | tsort`` and two `ar m` fixups.** V8's `ld` is
+  **single pass**: it walks an archive once, so a member needing a symbol
+  defined in a *later* member never resolves. Archive order is correctness, and
+  the two fixups are what the topological sort cannot know.
+
+The tape's `install` target is *not* carried across — it begins
+`cp $(DESTDIR)/lib/libc.a liboc.a; cp libc.a $(DESTDIR)/lib/libc.a`, replacing
+the C library you are compiling against, from a possibly half-built tree, with
+the old one saved under a name nothing looks for.
 
 ### Why stage 3 exists
 
