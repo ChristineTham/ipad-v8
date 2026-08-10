@@ -393,6 +393,23 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   `libsimh/patches/pdp11_il.c`. The general form is worth keeping: **a limit you measure
   through an emulator is a property of your emulator until proven otherwise** — this one
   spent a day written up as a netfs reply-size bound.
+- **The `/n/src` share is LIVE, so never edit `v8/` while a build is running.**
+  netfsd serves the working tree directly and the guest compiles straight off it, so
+  an edit to `v8/mk/build1.sh` lands in a run already in flight — that is excellent for
+  iteration and lethal for a two-hour build. Editing `build1.sh` mid-run once made
+  stage 3 fail on all fourteen components (`Don't know how to make /b/tools/lib/as`),
+  because the new script wanted a file that run's stage 1 had not been told to install.
+  During a run, `docs/`, `CLAUDE.md` and brand-new files are safe; `v8/**` and the
+  `tools/*.sh|*.exp` that bash is still reading are not.
+- **V8's `ld` is single-pass only without a valid `__.SYMDEF`** — archive member order
+  is *not* unconditionally correctness. `getfile()` returns 1 (no table of contents),
+  2 (current) or 3 (stale, because the archive's mtime is newer). Case 2 runs
+  `while (ldrand()) continue;` under the tape's own comment *"you can get away with
+  backward references when there is a table of contents!"*; cases 1 and 3 fall back to
+  one sequential pass **and warn on stderr naming `ranlib`**. Consequence worth
+  remembering: **any rule that copies an archive must re-`ranlib` it at the
+  destination**, since `cp` bumps the mtime and that alone demotes a good archive to
+  case 3. `lorder | tsort` on libc is defence against that, not a hard requirement.
 - **Patching guest sources: replace whole functions, and rehearse on the host.**
   `streamio.c`'s `stread()` and `istread()` share whole lines verbatim, so
   context-anchored `ed` edits landed in the wrong one and the kernel failed to compile

@@ -1,0 +1,99 @@
+#
+# Configuration file for ipnx -- the machine this project actually emulates.
+#
+# It is `alice' (usr/sys/alice/conf, the VAX-11/780 the tape was cut from)
+# with the networking that `research' (usr/sys/research/conf, the 1127 VAX-750)
+# had and alice did not.  Neither file on the tape describes our machine:
+# alice has the right hardware and no Internet, research has the Internet and
+# MSCP disks we do not emulate.
+#
+# What was added to alice, and why:
+#
+#	il0			the Interlan NI1010 we model in SIMH
+#				(libsimh/patches/pdp11_il.c).  csr 0164040
+#				is the address N3 proved, not research's
+#				0164000 -- ours has to match the SIMH device.
+#	pseudo-device inet	ip_device/ip_input/ip_ld/ip_output/ip_subr
+#	pseudo-device uarp	ip_arp.c -- ARP for the Internet stack, as
+#				opposed to `arp', which is the Datakit-era
+#				net/arpld.c and is a different thing entirely
+#	pseudo-device tcp	socket.c + tcp_*.c, the line discipline the
+#				stack is actually built as
+#	pseudo-device udp	udp_*.c
+#
+# Everything else is alice unchanged, including ht0/tu0: the tape drive
+# panics the kernel when it is USED (docs/media-exchange.md -- V8's ht driver
+# does a 16-bit read of a Massbus register mba_rdreg rejects), but the golden
+# image has always booted with it configured, so probing it is safe and
+# removing it would be a change we have no evidence for.
+#
+# timezone is left at Bell Labs' 5 dst.  It is wrong for this machine and it
+# is deliberately not fixed here: which timezone ipnx keeps is an identity
+# question that belongs to B0.6 (docs/machine-config.md) along with the
+# hostname and the first account, not to the kernel build.
+#
+cpu		"VAX780"
+options		DISKMON
+ident		IPNX
+timezone	5 dst
+maxusers	60
+
+# `alice', not `ipnx', and this is not a leftover.  config's two names are not
+# (machine, kernel) -- mkconf(dev, sysname) records the FIRST as f_fn and the
+# generated makefile then compiles ../dev/swap$(f_fn).c and links swap$(f_fn).o,
+# so the first name selects a SWAP CONFIGURATION that must exist as a file.
+# swapalice.c is the right one for a VAX-11/780 with hp disks: root hp0a, args
+# and dump hp0b, 20480 sectors of swap.  Its swdevt also lists hp11 and four ra
+# units we do not have, which is empirically harmless -- the golden image's
+# kernel is built from alice and boots.  A swapipnx.c naming only the hardware
+# we emulate would be tidier and is a refinement, not a fix.
+config	alice	unix
+
+controller	mba0	at nexus ?
+controller	mba1	at nexus ?
+controller	mba2	at nexus ?
+controller	uba0	at nexus ?
+controller	uba1	at nexus ?
+disk		hp0	at mba0 drive 0
+disk		hp1	at mba0 drive 1
+master		mt0	at mba? drive ?
+tape		mu0	at mt0 slave 0
+master		ht0	at mba? drive ?
+tape		tu0	at ht0 slave 0
+device		dk0	at uba? csr 0167600 vector dkrint dkrint
+device		dn0	at uba? csr 0175200 vector dnint
+device		dr0	at uba? csr 0167570 vector drrint drxint
+device		dz0	at uba? csr 0160100 vector dzrint dztint
+device		dz1	at uba? csr 0160110 vector dzrint dztint
+device		dz2	at uba? csr 0160120 vector dzrint dztint
+device		dz3	at uba? csr 0160130 vector dzrint dztint
+device		dz4	at uba? csr 0160140 vector dzrint dztint
+device		dz5	at uba? csr 0160150 vector dzrint dztint
+device		dz6	at uba? csr 0160160 vector dzrint dztint
+device		kmc0	at uba? csr 0160200 vector kmcrint kmcxint
+device		tri0	at uba? csr 0177534 vector triintr
+# Interlan NI1010 -- the one piece of hardware here that alice never had.
+device		il0	at uba? csr 0164040 vector ilrint ilcint
+# `stream pipe' (bad name: actually /dev/pt/pt??)
+pseudo-device	sp
+# message l.d.
+pseudo-device	mesg	128
+# ordinary tty l.d.
+pseudo-device	tty	256
+# almost-Berkeley l.d.
+pseudo-device	ntty	64
+# buffering l.d. for cu and uucp
+pseudo-device	bf	32
+# datakit URP protocol
+pseudo-device	dkp	256
+# datakit controller l.d.
+pseudo-device	cm
+# datakit KMC-11 driver
+pseudo-device	kdi	96
+# special l.d. for multiple connection to stream
+pseudo-device	connld
+# --- the Internet, from research/conf ---
+pseudo-device	inet	6
+pseudo-device	uarp	1
+pseudo-device	tcp	32
+pseudo-device	udp	32

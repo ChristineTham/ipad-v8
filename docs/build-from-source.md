@@ -116,10 +116,51 @@ case 'p': cpp  = strspl(npassname, "cpp");
 `cc -B$TOOLDIR/ -t02p` compiles with our `ccom`, `c2` and `cpp` instead of the running
 system's, touching nothing in `/lib`. That is stage isolation for free.
 
-It stops short of the whole toolchain: `as`, `ld` and `crt0.o` are still hardcoded to
-`/bin/as`, `/bin/ld`, `/lib/crt0.o`. Extending `-B` to cover them is our change, and it
-is the kind of change owning the source is for — a handful of lines in `cc.c` rather
-than a wrapper script fighting absolute paths.
+It stopped short of the whole toolchain: `as`, `ld` and `crt0.o` were hardcoded to
+`/bin/as`, `/bin/ld`, `/lib/crt0.o`. **Extended 2026-08-10 (S5)** — three more letters,
+all off the same `-B` prefix:
+
+| `-t` | sets | |
+|---|---|---|
+| `a` | `as` | |
+| `l` | `ld` | |
+| `c` | `crt0.o`, `mcrt0.o` **and `libc.a`** | the C library and its startup file are one release |
+
+so `-B$TOOLDIR/lib/ -t02palc` names one directory holding every program `cc` executes.
+`as` and `ld` therefore install into `TOOLDIR/lib` as well as `TOOLDIR/bin`: `bin` is
+for people and makefiles, `lib` is the compiler's pass directory.
+
+**`-t c` also stops `cc` appending `-lc`, and that half matters more than the other
+three.** V8's `ld` has no `-L` at all. `getfile()` builds the library name into one
+template string and tries three fixed directories by rewriting it — the `/lib` case is
+literally `filname+4`, skipping the `/usr` prefix by pointer arithmetic:
+
+```c
+filname = "/usr/lib/libxxxxxxxxxxxxxxx";
+...
+if ((infil = open(filname+4, 0)) >= 0)      /* /lib/libc.a     */
+    filname += 4;
+else if ((infil = open(filname, 0)) < 0)    /* /usr/lib/libc.a */
+    filname = locfilname;                   /* /usr/local/lib  */
+```
+
+So a hermetic build cannot use `-lc`; it has to name the archive. Quietly not doing so
+is how a stage borrows from the system it is replacing and still reports success.
+
+**Still open after S5: `lorder`.** It is a shell script (`usr/bin/lorder`, and it is in
+our tree) that pipes a bare `nm -g` through `sed`, `sort` and `join` — all resolved from
+`PATH`, so libc's archive order is computed by the *running system's* `nm`. This is a
+reproducibility gap rather than a correctness one: with a valid `__.SYMDEF` the order
+does not affect linking at all (see below), only whether `libc.a` comes out byte-identical.
+Closing it needs `PATH=$TOOLDIR/bin:$PATH` around the `lorder` call, and full closure
+waits on `sed`, `sort` and `join` from stage 6.
+
+**`yacc` had the same problem one level up.** `yaccpar` is copied verbatim into every
+`y.tab.c`, so it is part of yacc's *output* — a stage whose yacc emits the tape's parser
+text has borrowed from the tape. `y1.c` now reads `$YACCPAR` ahead of the compiled-in
+default. Deliberately a *runtime* override: compiling the path in would make stage 1's
+yacc and stage 3's yacc differ by an embedded string and fail the fixpoint test for a
+reason that means nothing.
 
 ## The stages
 
@@ -172,10 +213,28 @@ carried across verbatim, with the reason recorded in `mkdep.py`'s
 - **`ld -x -r` on every object** strips local symbols and re-emits it
   relocatable. Skipping it fails nothing; it just inflates every binary that
   links libc.
-- **`ar cr libc.a `lorder *.o | tsort`` and two `ar m` fixups.** V8's `ld` is
-  **single pass**: it walks an archive once, so a member needing a symbol
-  defined in a *later* member never resolves. Archive order is correctness, and
-  the two fixups are what the topological sort cannot know.
+- **`ar cr libc.a `lorder *.o | tsort`` and two `ar m` fixups.** Archive order,
+  and the two fixups are what the topological sort cannot know.
+
+  **Corrected 2026-08-10.** This used to say "V8's `ld` is single pass, so
+  archive order is correctness", full stop. That is only true for an archive
+  with no usable table of contents. `ld.c`'s `getfile()` returns **1** (no
+  `__.SYMDEF`), **2** (present and current) or **3** (present but the archive's
+  mtime is newer, so stale). Case 2 runs `while (ldrand()) continue;` — passes
+  until nothing changes — under the tape's own comment:
+
+  > you can get away with backward references when there is a table of contents!
+
+  Cases 1 and 3 fall back to one sequential pass *and print a warning naming
+  `ranlib`*. So order is load-bearing only when the table is missing or stale,
+  and `ld` tells you on stderr when that is. `lorder | tsort` is defence
+  against exactly that, which is worth keeping for libc and is why the smaller
+  libraries in stage 5 do not need it.
+
+  It has one consequence that is easy to get wrong: **any rule that copies an
+  archive must re-run `ranlib` at the destination**, because `cp` updates the
+  mtime and that alone turns a good table of contents into case 3. libc's
+  install has always done this and it was not obvious why.
 
 The tape's `install` target is *not* carried across — it begins
 `cp $(DESTDIR)/lib/libc.a liboc.a; cp libc.a $(DESTDIR)/lib/libc.a`, replacing
@@ -188,8 +247,31 @@ Stage 1's compiler was built by the *tape's* compiler. Stage 3's was built by st
 If the two are identical after stripping, the build is a **fixpoint**: the compiler our
 source describes reproduces itself exactly, which is the strongest evidence available
 that the source is complete and that nothing in the running system leaked into the
-result. It is the same three-stage comparison GCC has used for decades, and it costs one
-extra toolchain build.
+result. It costs one extra toolchain build.
+
+### There are two fixpoint tests, and only one of them is required
+
+`stage 1 == stage 3` is the **strong** test: our tools reproduce the *tape's* binaries.
+Since S5 sealed `as`, `ld` and `libc` into the stage boundary, that comparison now spans
+two different assemblers and two different loaders, so it can fail for reasons that have
+nothing to do with whether we have a working system.
+
+`stage 3 == stage 3b` is the **required** test — the same sources a fourth time,
+compiled by stage 3 instead of stage 1. This is the classic three-stage bootstrap
+comparison (GCC compares *stage2 with stage3*, not stage1 with stage2, for exactly this
+reason: stage 1 was built by a foreign compiler). It asks the weaker, sufficient
+question — are our tools a fixpoint *of themselves*? A compiler can be a perfectly good
+compiler and still not reproduce a 1985 assembler's byte layout.
+
+`v8/mk/fixpoint.sh` runs the strong test first, because stage 3 already exists and it is
+free, and only builds stage 3b if that fails. If the strong test passes, 3b is not just
+unnecessary but *implied*: the comparison is stripped, so it says stage 1 and stage 3
+have the same text and data, and the symbol table is not loaded at exec time — they are
+the same program. Stage 3 was built *by* stage 1. Building it again by stage 3 is
+building it by the same program from the same source.
+
+The distinction is worth keeping on the record either way: "we do not match the tape" is
+a curiosity, "we do not even match ourselves" means stage 4 must not be built on top.
 
 The comparison must be of **stripped** binaries. `cc.c` names its temporary files
 `sprintf(tmp0, "/tmp/ctm%05.5d", getpid())`, and that PID reaches the symbol table, so

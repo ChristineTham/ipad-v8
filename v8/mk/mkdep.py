@@ -363,16 +363,36 @@ def emit(c):
     # the archive is on the command line ahead of it.  ld takes the first
     # definition it finds, so ours wins and the implicit -lc adds nothing.
     # In stage 1 this is /lib/libc.a either way and costs nothing.
-    out.append("\n%s: $(OBJS) $(LD) $(LIBC)\n\t$(CC) $(CFLAGS) %s-o %s $(OBJS) $(LIBC)\n"
-               % (c["product"], (c["ldflags"] + " ") if c.get("ldflags") else "",
-                  c["product"]))
+    #
+    # `libs` names extra archives BY PATH, never with -l.  V8's ld has no -L:
+    # getfile() rewrites one template string to try /lib, /usr/lib and
+    # /usr/local/lib, so -ll would resolve out of the RUNNING system's
+    # /usr/lib in preference to the libl.a stage 5 just built -- silently, and
+    # the build would succeed.  config(8) is the first component that needs
+    # this and it will not be the last.
+    libdeps = "".join(" $(DESTDIR)/" + x for x in c.get("libs", []))
+    out.append("\n%s: $(OBJS) $(LD) $(LIBC)%s\n\t$(CC) $(CFLAGS) %s-o %s $(OBJS)%s $(LIBC)\n"
+               % (c["product"], libdeps,
+                  (c["ldflags"] + " ") if c.get("ldflags") else "",
+                  c["product"], libdeps))
 
     # generated sources
     for target, (tool, src, extra) in sorted(gen.items()):
-        toolmac = "$(YACC)" if tool == "yacc" else "$(LEX)"
+        # `tool` may carry flags -- "yacc -d", which config(8) needs because
+        # its grammar and mkconf.c share y.tab.h and nothing else generates
+        # it.  First word picks the macro pair, the rest rides on the command.
+        toolname = tool.split()[0]
+        toolflags = " ".join(tool.split()[1:])
         # command vs binary again: the recipe runs $(YACC), the
         # prerequisite must name the file whose mtime says it changed.
-        toolpath = "$(YACCPATH)" if tool == "yacc" else "$(LEXPATH)"
+        # `natural` is the filename the tool writes if you do not tell it
+        # otherwise, so a target that differs from it needs the mv -- and
+        # lex's is not yacc's, which the old "!= y.tab.c" test got wrong the
+        # moment a lex-generated source appeared.
+        if toolname == "yacc":
+            toolmac, toolpath, natural = "$(YACC)", "$(YACCPATH)", "y.tab.c"
+        else:
+            toolmac, toolpath, natural = "$(LEX)", "$(LEXPATH)", "lex.yy.c"
         deps = sorted(dep(p) for p in scan_includes(os.path.join(d, src), incdirs))
         # compare against the full path: deps hold "$(SRC)/dir/gram.y" while
         # src is the bare "gram.y", so a bare comparison never matched and the
@@ -380,19 +400,36 @@ def emit(c):
         self = "%s/%s" % (srcdir, src)
         out.append("\n%s: %s %s %s\n" % (target, self, toolpath,
                                          " ".join(x for x in deps if x != self)))
-        out.append("\t%s %s/%s\n" % (toolmac, srcdir, src))
+        out.append("\t%s%s %s/%s\n"
+                   % (toolmac, (" " + toolflags) if toolflags else "",
+                      srcdir, src))
         if extra:
             out.append("\t%s\n" % extra)
-        elif target != "y.tab.c":
-            out.append("\tmv y.tab.c %s\n" % target)
+        elif target != natural:
+            out.append("\tmv %s %s\n" % (natural, target))
 
-    # side-effect files: a rule with prerequisites and no commands, which is
-    # exactly what make needs to know "build that, and this will be there".
+    # Side-effect files: "build that, and this will be there."
+    #
+    # The @echo is not decoration.  A command-less target takes doname.c's
+    #     else if(keepgoing) printf("Don't know how to make %s\n", ...)
+    # branch whenever it is reached while the file still does not exist --
+    # and `exists()` returns 0 for a missing name, with ptime sampled on
+    # ENTRY, before the producer runs.  rodata.c has got away with it only
+    # because cpy.o sorts before rodata.o, so cpy.c (and therefore rodata.c)
+    # was always already made by the time make looked.  y.tab.h has no such
+    # luck: main.o and mkconf.o both sort before y.tab.o.  Rather than rely
+    # on alphabetical order, give every side-effect target a command.
     for target, producer in sorted(sidegen.items()):
-        out.append("\n# written by the %s rule above\n%s: %s\n" % (producer, target, producer))
+        out.append("\n# written by the %s rule above\n%s: %s\n\t@echo %s\n"
+                   % (producer, target, producer, target))
 
     # objects, each with its transitive header closure
     oflags = c.get("oflags", {})
+    # A generated HEADER cannot be found by scanning, because it does not
+    # exist on the share -- scan_includes silently drops "y.tab.h" and make
+    # is then free to compile mkconf.o before yacc has run.  `objdeps` names
+    # them, and they go on every object in the component.
+    objdeps = c.get("objdeps", [])
     for obj in sorted(objmap):
         src = objmap[obj]
         if src in gen or src in sidegen:     # generated: deps handled above
@@ -402,6 +439,7 @@ def emit(c):
                 x for x in sorted(dep(y) for y in
                                   scan_includes(os.path.join(d, src), incdirs))
                 if x != srcdir + "/" + src]
+        deps = deps + [x for x in objdeps if x != src]
         extra = (oflags[obj] + " ") if obj in oflags else ""
         # A generated or side-effect source is compiled from the object
         # directory, not from the share.  Getting this right in the
@@ -417,18 +455,23 @@ def emit(c):
         for cmd in c["pre"]:
             out.append("\t%s\n" % cmd)
 
-    # install -- into TOOLDIR only.  Never /bin, never /lib.
+    # install -- into TOOLDIR or DESTDIR.  Never /bin, never /lib.
+    #
+    # Stage 1's tools go to TOOLDIR because they are build machinery: the
+    # system being assembled must not contain them just because it needed
+    # them.  Stage 6's commands go to DESTDIR because they ARE the system.
+    dest = "$(%s)" % c.get("dest", "TOOLDIR")
     out.append("\ninstall: %s\n" % c["product"])
     inst = c["install"]
-    out.append("\t-mkdir $(TOOLDIR)/%s\n" % os.path.dirname(inst))
-    out.append("\tcp %s $(TOOLDIR)/%s\n" % (c["product"], inst))
+    out.append("\t-mkdir %s/%s\n" % (dest, os.path.dirname(inst)))
+    out.append("\tcp %s %s/%s\n" % (c["product"], dest, inst))
     # a second home for the same binary -- see `also` in the component table
     for dst in c.get("also", []):
-        out.append("\t-mkdir $(TOOLDIR)/%s\n" % os.path.dirname(dst))
-        out.append("\tcp %s $(TOOLDIR)/%s\n" % (c["product"], dst))
+        out.append("\t-mkdir %s/%s\n" % (dest, os.path.dirname(dst)))
+        out.append("\tcp %s %s/%s\n" % (c["product"], dest, dst))
     for src, dst in c.get("data", []):
-        out.append("\t-mkdir $(TOOLDIR)/%s\n" % os.path.dirname(dst))
-        out.append("\tcp %s/%s $(TOOLDIR)/%s\n" % (srcdir, src, dst))
+        out.append("\t-mkdir %s/%s\n" % (dest, os.path.dirname(dst)))
+        out.append("\tcp %s/%s %s/%s\n" % (srcdir, src, dest, dst))
 
     out.append("\nclean:\n\t-rm -f $(OBJS) %s %s\n"
                % (c["product"], " ".join(sorted(gen))))
@@ -650,6 +693,385 @@ clean:
     return "".join(out)
 
 
+
+# ================================================================ stage 4
+# Headers.
+#
+# Nothing is compiled here; the whole stage is 224 copies.  It exists as its
+# own stage because everything after it must compile against OUR headers
+# rather than the running system's, and that is a property of the -I that
+# stages 5, 6 and 7 use, not of anything they do.
+#
+# Rules per file, not one bulk copy, so that touching a header reinstalls it
+# and everything that includes it rebuilds.  That is the dependency rule the
+# whole build is organised around, and headers are where it bites hardest --
+# one line in <sys/param.h> invalidates the kernel and most of userland.
+#
+# The prerequisite lists are grouped by directory and split at 50 files.
+# V8's make reads a line into INMAX = 5000 bytes (cmd/make/defs) and expands
+# a target's prerequisites into tgsbuf[QBUFMAX], also 5000.  All 224 paths on
+# one line is about 7,800 characters, which overflows both.  Grouped, the
+# largest expansion is under 1,900.
+
+HEADERS_PREAMBLE = """\
+# Generated by v8/mk/mkdep.py -- do not edit; edit the generator.
+#
+#     make -f $SRC/mk/gen/headers.mk DESTDIR=... install
+#
+# Stage 4: install our headers into $(DESTDIR)/usr/include.  Stages 5, 6 and 7
+# compile with INCDIR=$(DESTDIR)/usr/include, so from here on the system is
+# built against the headers in this repo and not against the ones on the disk
+# it happens to be running.
+
+SRC     = /n/src
+DESTDIR = /b/root
+
+"""
+
+
+def emit_headers():
+    incroot = os.path.join(V8, "usr/include")
+    bydir = {}
+    for dirpath, _dirnames, filenames in os.walk(incroot):
+        d = rel(dirpath, V8)                      # e.g. usr/include/sys
+        for f in sorted(filenames):
+            bydir.setdefault(d, []).append(f)
+
+    out = [HEADERS_PREAMBLE]
+    groups = []
+    dirs = sorted(bydir)
+
+    # every directory that has to exist, parents before children
+    out.append("dirs:\n")
+    for d in dirs:
+        out.append("\t-mkdir $(DESTDIR)/%s\n" % d)
+    out.append("\n")
+
+    for d in dirs:
+        files = bydir[d]
+        # split at 50 -- see the INMAX note above
+        for i in range(0, len(files), 50):
+            chunk = files[i:i + 50]
+            gname = "H_" + d.replace("/", "_").replace("usr_include", "inc") \
+                    + ("" if len(files) <= 50 else "_%d" % (i // 50))
+            groups.append(gname)
+            out.append("%s = %s\n\n" % (
+                gname, " \\\n\t".join("$(DESTDIR)/%s/%s" % (d, f) for f in chunk)))
+
+    # One target per group, and `install` depends on those rather than on the
+    # macros directly.  Putting $(H_inc_0) $(H_inc_sys_0) ... on the install
+    # line would expand to all 224 paths at once -- about 7,800 characters
+    # into tgsbuf[QBUFMAX], which is 5000, which is the overflow the grouping
+    # exists to avoid.  This way the biggest expansion make ever performs is
+    # one group, under 1,800.
+    #
+    # Each one carries an `@echo` rather than being a bare command-less
+    # target.  doname.c reaches
+    #
+    #	else if(keepgoing) printf("Don't know how to make %s\n", ...)
+    #
+    # whenever a target has no explicit command, no implicit rule and no
+    # .DEFAULT -- and `exists()` returns 0 for a name with no file, so a
+    # phony group would take that path on the very first run.  Our own
+    # `all: <product>` lines have never tripped it, so something upstream
+    # of that branch evidently covers them; a stage that installs 224 files
+    # is not the place to find out exactly what.  A command settles it, and
+    # doubles as progress output.
+    for g in groups:
+        out.append("%s: $(%s)\n\t@echo %s\n\n" % (g.lower(), g, g.lower()))
+
+    out.append("install: dirs %s\n\t@echo %d headers installed\n\n"
+               % (" ".join(g.lower() for g in groups),
+                  sum(len(v) for v in bydir.values())))
+
+    for d in dirs:
+        for f in bydir[d]:
+            out.append("$(DESTDIR)/%s/%s: $(SRC)/%s/%s\n\tcp $(SRC)/%s/%s $(DESTDIR)/%s/%s\n\n"
+                       % (d, f, d, f, d, f, d, f))
+
+    return "".join(out), sum(len(v) for v in bydir.values())
+
+
+# ================================================================ stage 5
+# The libraries.
+#
+# libc is stage 2 and is not here: it is needed to build the toolchain, so it
+# cannot wait for one.  These are everything else, and every one of them is
+# an archive built the same way -- compile, ar, ranlib -- with the per-library
+# facts taken from the tape's own makefile and recorded in `note`.
+#
+# NO lorder | tsort HERE, and the reason is worth writing down because the
+# opposite is recorded elsewhere in this project.  V8's ld is only single-pass
+# for an archive with no usable table of contents.  ld.c's getfile() returns
+# 1 (no __.SYMDEF), 2 (current) or 3 (stale, because the archive's mtime is
+# newer); case 2 runs `while (ldrand()) continue;` -- repeated passes -- under
+# a comment that says "you can get away with backward references when there
+# is a table of contents!".  Cases 1 and 3 fall back to one sequential pass
+# AND print a warning naming ranlib.  So member order is correctness only
+# when the table is missing or stale, and ld says so on stderr when it is.
+#
+# What this does mean: every rule that COPIES an archive must re-ranlib it at
+# the destination, because cp updates the mtime and that alone turns a good
+# table of contents into case 3.  libc's install already did this and it was
+# not obvious why.
+LIB_PREAMBLE = """\
+# Generated by v8/mk/mkdep.py -- do not edit; edit the generator.
+#
+#     make -f $SRC/mk/gen/%(name)s.mk TOOLDIR=... DESTDIR=... install
+#
+# Stage 5: %(name)s, built with the stage-3 toolchain against the headers
+# stage 4 installed.  Source is read-only on the share; objects land in the
+# current directory, which the driver makes per-library on the build disk.
+#
+# From the tape: %(note)s
+
+SRC     = /n/src
+TOOLDIR = /b/tools3
+DESTDIR = /b/root
+
+CC       = cc
+CCPATH   = /bin/cc
+CPP  = /lib/cpp
+CCOM = /lib/ccom
+C2   = /lib/c2
+AS   = /bin/as
+LD   = /bin/ld
+AR   = /bin/ar
+RANLIB = /usr/bin/ranlib
+
+# Stage 4's headers, not the running system's.  This is the whole reason
+# stage 4 is a stage.
+INCDIR = $(DESTDIR)/usr/include
+
+CFLAGS = %(cflags)s -I$(INCDIR)
+COMPILE = $(CC) $(CFLAGS) -c
+TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
+
+"""
+
+
+def emit_lib(l):
+    """One library archive.  See STAGE5 for the shape of `l`."""
+    # resolve sources: each entry is a directory relative to V8, and we take
+    # its .c and .s files unless an explicit list is given.
+    objmap = {}                       # obj -> path relative to V8
+    for d in l["dirs"]:
+        full = os.path.join(V8, d)
+        names = l.get("objs")
+        if names is None:
+            names = sorted(f for f in os.listdir(full)
+                           if f.endswith(".c") or f.endswith(".s"))
+        for f in names:
+            if not os.path.exists(os.path.join(full, f)):
+                continue
+            objmap[os.path.splitext(f)[0] + ".o"] = d + "/" + f
+
+    incdir = os.path.join(V8, "usr/include")
+    incdirs = [os.path.join(V8, d) for d in l["dirs"]] + [incdir]
+
+    def dep(path):
+        path = os.path.normpath(path)
+        if path.startswith(incdir + os.sep):
+            return "$(INCDIR)/" + rel(path, incdir)
+        return "$(SRC)/" + rel(path, V8)
+
+    out = [LIB_PREAMBLE % dict(name=l["name"], note=l.get("note", "-"),
+                               cflags=l.get("cflags", "-O"))]
+    out.append("OBJS = " + " \\\n\t".join(sorted(objmap)) + "\n")
+    out.append("\nall: %s\n" % l["product"])
+
+    if l.get("assemble"):
+        # libg.a is not an archive at all -- it is one assembled object that
+        # happens to be named .a.  `as dbxxx.s -o libg.a`.  ld loads it as a
+        # plain file (getfile case 0), which is exactly right.
+        src = l["assemble"]
+        out.append("\n%s: $(SRC)/%s/%s $(AS)\n\t$(AS) $(SRC)/%s/%s -o %s\n"
+                   % (l["product"], l["dirs"][0], src, l["dirs"][0], src,
+                      l["product"]))
+    else:
+        out.append("\n%s: $(OBJS) $(AR)\n\t-rm -f %s\n\t$(AR) cr %s $(OBJS)\n\t$(RANLIB) %s\n"
+                   % (l["product"], l["product"], l["product"], l["product"]))
+
+    for obj in sorted(objmap):
+        src = objmap[obj]
+        deps = [dep(os.path.join(V8, src))] + [
+            x for x in sorted(dep(y) for y in
+                              scan_includes(os.path.join(V8, src), incdirs))
+            if x != dep(os.path.join(V8, src))]
+        out.append("\n%s: %s $(TOOLS)\n\t$(COMPILE) $(SRC)/%s\n"
+                   % (obj, " ".join(deps), src))
+
+    out.append("\ninstall: %s\n" % l["product"])
+    out.append("\t-mkdir $(DESTDIR)/%s\n" % os.path.dirname(l["install"]))
+    out.append("\tcp %s $(DESTDIR)/%s\n" % (l["product"], l["install"]))
+    if not l.get("assemble"):
+        # cp bumps the mtime, which makes __.SYMDEF stale -- ld case 3, one
+        # sequential pass and a warning.  Re-ranlib at the destination.
+        out.append("\t$(RANLIB) $(DESTDIR)/%s\n" % l["install"])
+    for extra in l.get("link", []):
+        out.append("\t-rm -f $(DESTDIR)/%s\n" % extra)
+        out.append("\tln $(DESTDIR)/%s $(DESTDIR)/%s\n" % (l["install"], extra))
+
+    out.append("\nclean:\n\t-rm -f $(OBJS) %s\n" % l["product"])
+    return "".join(out)
+
+
+STAGE5 = [
+    dict(name="libcurses", dirs=["usr/src/lib/libcurses"],
+         objs=["box.c", "clear.c", "initscr.c", "endwin.c", "mvprintw.c",
+               "mvscanw.c", "mvwin.c", "newwin.c", "overlay.c", "overwrite.c",
+               "printw.c", "scanw.c", "refresh.c", "touchwin.c", "erase.c",
+               "clrtobot.c", "clrtoeol.c", "cr_put.c", "cr_tty.c", "longname.c",
+               "delwin.c", "insertln.c", "deleteln.c", "scroll.c", "getstr.c",
+               "getch.c", "addstr.c", "addch.c", "move.c", "curses.c",
+               "unctrl.c", "standout.c", "tstp.c", "insch.c", "delch.c"],
+         cflags="-O", product="libcurses.a", install="usr/lib/libcurses.a",
+         note="lib/libcurses/makefile: OBJS (35), CFLAGS=-O; builds it as "
+              "`crlib` and installs that as libcurses.a -- we skip the rename"),
+
+    # Not an archive: one assembled object named .a.  See emit_lib().
+    dict(name="libg", dirs=["usr/src/lib/libg"], assemble="dbxxx.s",
+         product="libg.a", install="usr/lib/libg.a",
+         note="lib/libg/makefile: as dbxxx.s -o libg.a"),
+
+    dict(name="libjobs", dirs=["usr/src/lib/libjobs"],
+         objs=["getwd.c", "killpg.s", "setpgrp.s", "signal.s", "sigset.c",
+               "wait3.s"],
+         cflags="-O", product="libjobs.a", install="usr/lib/libjobs.a",
+         note="lib/libjobs/makefile: OBJS -- two .c and four .s"),
+
+    dict(name="libl", dirs=["usr/src/lib/libl"],
+         objs=["allprint.c", "main.c", "reject.c", "yyless.c", "yywrap.c"],
+         cflags="-O", product="libl.a", install="usr/lib/libl.a",
+         note="lib/libl/makefile: ar rvc libl.a allprint main reject yyless "
+              "yywrap -- the tape compiles yywrap separately, which changes "
+              "nothing since ar is given the order explicitly"),
+
+    dict(name="libmp", dirs=["usr/src/lib/libmp"],
+         objs=["pow.c", "gcd.c", "msqrt.c", "mdiv.c", "mout.c", "mult.c",
+               "madd.c", "util.c", "halloc.c", "primetab.c"],
+         cflags="", product="libmp.a", install="usr/lib/libmp.a",
+         note="lib/libmp/makefile: OBJS (10) -- prbits.c is present in the "
+              "directory and deliberately NOT a member"),
+
+    dict(name="libtermlib", dirs=["usr/src/lib/libtermlib"],
+         objs=["termcap.c", "tgoto.c", "tputs.c"],
+         cflags="-O -DCM_N -DCM_GT -DCM_B -DCM_D",
+         product="libtermcap.a", install="usr/lib/libtermcap.a",
+         link=["usr/lib/libtermlib.a"],
+         note="lib/libtermlib/makefile: builds termcap.a from three of its "
+              "six .c (tc1/tc2/tc3 are tests), installs as libtermcap.a and "
+              "hard-links libtermlib.a to it -- so -ltermlib and -ltermcap "
+              "are one file"),
+
+    # No makefile on the tape at all; every .c is a member.
+    dict(name="libcbt", dirs=["usr/src/lib/libcbt"],
+         cflags="-O", product="libcbt.a", install="usr/lib/libcbt.a",
+         note="no makefile on the tape -- all six .c"),
+
+    dict(name="libdbm", dirs=["usr/src/libdbm"], objs=["dbm.c"],
+         cflags="-O", product="libdbm.a", install="usr/lib/libdbm.a",
+         note="libdbm/Makefile: libdbm.a: dbm.o"),
+
+    dict(name="libF77", dirs=["usr/src/libF77"],
+         cflags="-O", product="libF77.a", install="usr/lib/libF77.a",
+         note="libF77/Makefile: ar r libF77.a $? -- no object macro, so all "
+              "of its .c"),
+
+    dict(name="libI77", dirs=["usr/src/libI77"],
+         objs=["Version.c", "backspace.c", "dfe.c", "due.c", "iio.c",
+               "inquire.c", "rewind.c", "rsfe.c", "rdfmt.c", "sue.c", "uio.c",
+               "wsfe.c", "sfe.c", "fmt.c", "nio.c", "lio.c", "lread.c",
+               "open.c", "close.c", "util.c", "endfile.c", "wrtfmt.c",
+               "err.c", "fmtlib.c", "ecvt.c", "ltostr.c"],
+         cflags="-O", product="libI77.a", install="usr/lib/libI77.a",
+         note="libI77/makefile: OBJ (26)"),
+
+    dict(name="libdk", dirs=["usr/src/dk/libc"],
+         objs=["tdkdial.c", "tdkexec.c", "tdklogin.c", "tdkmgr.c",
+               "dkproto.c", "dkctlchan.c", "pwsearch.c"],
+         cflags="-O", product="libdk.a", install="usr/lib/libdk.a",
+         note="dk/libc/makefile: LIB (7)"),
+]
+
+# The plot libraries all have the same shape: the sources arrived as an ar
+# archive (plot.c.a, tek.c.a, ...) which our importer unpacked into a
+# directory of the same name, so what the tape does with
+#	cp plot.c.a/* . ; cc -cO *.c ; ar rc libplot.a *.o
+# we do by compiling that directory in place off the share.
+for _n, _d in [("libplot", "libplot/plot.c.a"), ("lib2621", "lib2621/hp.c.a"),
+               ("lib4014", "lib4014/tek.c.a"), ("lib5620", "lib5620/blit.c.a"),
+               ("libblit", "libblit/blit.c.a"), ("libpen", "libpen/pen.c.a"),
+               ("libtr", "libtr/tr.c.a")]:
+    STAGE5.append(dict(
+        name=_n, dirs=["usr/src/libplot/" + _d], cflags="-O",
+        product=_n + ".a", install="usr/lib/" + _n + ".a",
+        note="libplot/%s/makefile: cp %s/* . ; cc -cO *.c ; ar rc %s.a *.o"
+             % (_d.split("/")[0], _d.split("/")[1], _n)))
+
+
+# ================================================================ stage 6
+# The commands.
+#
+# 113 directories with a makefile, 7 without, 164 loose .c, 2 loose .y and 6
+# .sh -- and the makefiles are not a family.  awk's opens by saying it is
+# wrong; sed links with `cc -o sed -n *.o`; troff builds two programs from
+# overlapping object sets under different CFLAGS.  Six of the 113 state an
+# object macro, one link line and nothing exotic.  So this stage is a LIST,
+# built up in dependency order, not a loop over a directory.
+#
+# It starts with the commands the later stages need, because those are the
+# ones whose absence blocks something:
+#
+#	config		stage 7 cannot run without it, and it is the only
+#			tool in the build that needs BOTH yacc and lex
+#
+# ONE RULE APPLIES TO EVERY ENTRY HERE: never -l, always the path.  V8's ld
+# has no -L (see "Stage isolation" in docs/build-from-source.md), so -ll on
+# the link line searches /lib, /usr/lib and /usr/local/lib -- the RUNNING
+# system's libraries -- and finds the tape's libl.a in preference to the one
+# stage 5 just built.  It does that silently and the build succeeds.  `libs`
+# below names archives by path for exactly this reason.
+
+STAGE6 = [
+    dict(name="config", dir="usr/src/cmd/config",
+         objs={"y.tab.o": "y.tab.c", "lex.yy.o": "lex.yy.c",
+               "main.o": "main.c", "mkioconf.o": "mkioconf.c",
+               "mkmakefile.o": "mkmakefile.c", "mkubglue.o": "mkubglue.c",
+               "mkheaders.o": "mkheaders.c", "mkconf.o": "mkconf.c"},
+         # -d because mkconf.c and the grammar share y.tab.h.  The tape's
+         # makefile says `yacc -d config.y` and nothing else generates it.
+         gen={"y.tab.c": ("yacc -d", "config.y", None),
+              "lex.yy.c": ("lex", "config.l", None)},
+         # -d writes y.tab.h beside y.tab.c, and SIX of config's eight sources
+         # include it -- including config.l, so even the lex output needs it.
+         # It exists only in the object directory, so nothing can find it by
+         # scanning the share.
+         sidegen={"y.tab.h": "y.tab.c"},
+         objdeps=["y.tab.h"],
+         libs=["usr/lib/libl.a"],
+         # DESTDIR, not TOOLDIR: stage 6's commands ARE the system being
+         # assembled, where stage 1's tools were only the machinery that
+         # built it.
+         dest="DESTDIR",
+         product="config", install="etc/config",
+         note="cmd/config/makefile: OBJS (8), LDFLAGS=-ll, installs to "
+              "$(DESTDIR)/etc -- we name libl.a by path instead of -ll"),
+]
+
+# ---------------------------------------------------------------- notes on
+# what is NOT here yet, so the gap is on the record rather than implied:
+#
+#   the other 112 makefile directories
+#   the 164 loose .c in usr/src/cmd, which have no makefile of any kind and
+#     whose install directory has to come from the golden image rather than
+#     from the source -- /bin vs /usr/bin is not a detail (/usr is a separate
+#     filesystem, so /bin has to be self-sufficient for a single-user boot)
+#   the 2 loose .y (bc.y, egrep.y) and 6 .sh
+#   the 7 directories with no makefile: Admin ccom cref inet lfactor pcc1 upas
+#     -- ccom and pcc1 are compilers we already build from elsewhere
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true",
@@ -658,33 +1080,46 @@ def main():
 
     os.makedirs(GEN, exist_ok=True)
     stale = []
-    for c in STAGE1:
-        text = emit(c)
-        path = os.path.join(GEN, c["name"] + ".mk")
+
+    def put(name, text):
+        """Write gen/<name>, or record it as stale under --check.
+
+        Every generated file goes through here.  It used to be four copies of
+        the same read-compare-write, which is how stage5.order would have
+        ended up being the one nobody remembered to check.
+        """
+        path = os.path.join(GEN, name)
         old = open(path).read() if os.path.exists(path) else None
         if args.check:
             if old != text:
-                stale.append(c["name"])
+                stale.append(name)
         elif old != text:
             open(path, "w").write(text)
 
-    text = emit_libc()
-    path = os.path.join(GEN, "libc.mk")
-    old = open(path).read() if os.path.exists(path) else None
-    if args.check:
-        if old != text:
-            stale.append("libc")
-    elif old != text:
-        open(path, "w").write(text)
+    def order(name, entries):
+        put(name, "".join("%s\t%s\t%s\n" % e for e in entries))
 
-    # the stage-1 order, as a file the driver reads rather than a second copy
-    order = os.path.join(GEN, "stage1.order")
-    text = "".join("%s\t%s\t%s\n" % (c["name"], c["dir"], c["install"]) for c in STAGE1)
-    if args.check:
-        if not os.path.exists(order) or open(order).read() != text:
-            stale.append("stage1.order")
-    else:
-        open(order, "w").write(text)
+    for c in STAGE1:
+        put(c["name"] + ".mk", emit(c))
+    put("libc.mk", emit_libc())
+    order("stage1.order", [(c["name"], c["dir"], c["install"]) for c in STAGE1])
+
+    # stage 4 -- one makefile, no order file: there is only one thing to do
+    hdrtext, nhdr = emit_headers()
+    put("headers.mk", hdrtext)
+
+    # stage 5 -- the libraries
+    for l in STAGE5:
+        put(l["name"] + ".mk", emit_lib(l))
+    order("stage5.order", [(l["name"], l["dirs"][0], l["install"]) for l in STAGE5])
+
+    # stage 6 -- the commands, same emitter as stage 1: they are the same
+    # shape (objects, one product, one install path) and the only reason
+    # stage 1 is separate is that it has to be built before there is anything
+    # to build it with.
+    for c in STAGE6:
+        put(c["name"] + ".mk", emit(c))
+    order("stage6.order", [(c["name"], c["dir"], c["install"]) for c in STAGE6])
 
     if args.check:
         if stale:
@@ -692,7 +1127,8 @@ def main():
             return 1
         print("makefiles are up to date with the source tree")
         return 0
-    print("generated %d component makefiles in %s" % (len(STAGE1), rel(GEN, os.getcwd())))
+    print("generated %d toolchain + libc + %d headers + %d libraries + %d commands in %s"
+          % (len(STAGE1), nhdr, len(STAGE5), len(STAGE6), rel(GEN, os.getcwd())))
     return 0
 
 

@@ -279,9 +279,33 @@ the safety rules are in [build-from-source.md](build-from-source.md).
       *(2026-08-10; `tools/drive-stage1.sh`, `work/myv8/c2-stage1.log`)*
 - [x] **S4** Stage 2 (libc) then stage 3 (the toolchain again, against it) —
       `same=14 differ=0`, so the system reproduces itself *(2026-08-10)*
-- [ ] **S5** `cc -B` extended to `as`, `ld`, `crt0.o`, and `yaccpar` behind an
-      `#ifndef` — the hermeticity gaps
-- [ ] **S6** Stages 4–7: headers, libraries, then everything
+- [x] **S5** `cc -B` extended to `as`, `ld`, `crt0.o` **and `libc.a`** — the
+      hermeticity gaps *(2026-08-10)*. `-t02palc` seals everything `cc`
+      executes; `-t c` also stops it appending `-lc`, which mattered most
+      because V8's `ld` has no `-L` and would have resolved the C library out
+      of the running system silently. `yaccpar` moved to a **runtime**
+      `$YACCPAR` rather than an `#ifndef`, so stage 1's yacc and stage 3's
+      stay byte-identical. Verified with the full seal in place:
+      `same=14 differ=0`, and `cmp-sealed-vs-oldcc=0` — our `as` and `ld`
+      reproduce the tape's output too. Two bugs fell out: libc was being
+      compiled by the *tape's* `cc` (the script conflated "which compiler"
+      with "which directory"), and the fixpoint test needed the classic
+      stage3-vs-stage3b fallback, now in `v8/mk/fixpoint.sh`
+- [ ] **S6** Stages 4–7: headers, libraries, then everything. Four separate
+      pieces, in a forced order, each blocked on the one before:
+  - [ ] **4** headers — 224 files into `DESTDIR/usr/include`; nothing after
+        this compiles against the running system's
+  - [ ] **5** libraries — 18 archives (curses, termcap, F77, I77, mp, l, jobs,
+        cbt, dbm, dk, g, and the seven plot libraries); libc is stage 2
+  - [ ] **6** commands — starts with `config`(8), which stage 7 cannot run
+        without and which is the only tool in the build needing *both* yacc
+        and lex. The other 112 makefile directories, 164 loose `.c`, 2 loose
+        `.y` and 6 `.sh` follow; the loose files have no makefile of any kind,
+        so their install directory has to come from the golden image
+  - [ ] **7** the kernel — `usr/sys/ipnx/conf`, which is `alice`'s VAX-11/780
+        plus the Internet pseudo-devices `research` had. The only stage that
+        copies source, because `config` resolves its inputs as `"../conf/"`
+        by string concatenation
 - [ ] **S7** Stage 8: a disk built from source, and a boot from it
 - [ ] **S8** Stage 9: the new system rebuilds itself under `chroot` — the point
       at which `v8/` is demonstrably complete
