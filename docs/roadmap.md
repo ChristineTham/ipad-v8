@@ -1,11 +1,13 @@
 # Roadmap
 
-*Two tracks sharing one spike. Track A ships a real product on proven ground; Track B is the
-research moonshot that lands into the same app shell. Update checkboxes and the status line
-as work completes.*
+*Tracks A and B share one spike: Track A ships a real product on proven ground; Track B is the
+research moonshot that lands into the same app shell. C and D are later and declared here so
+the README's scope has somewhere to point. Update checkboxes and the status line as work
+completes.*
 
-**Current phase: A3 — complete (2026-08-09) bar the human submission steps; Track B is
-next.** A0 proved the machinery on the desktop ([spike-a0-results.md](spike-a0-results.md));
+**Current phase: Track A complete through A4 (2026-08-10) bar the human submission steps;
+Track B under way — B0 and B0.5's N0–N3 are done, so V8 has an Internet connection.** A0
+proved the machinery on the desktop ([spike-a0-results.md](spike-a0-results.md));
 A1 shipped the text-mode app (open-simh as a library, V8 to `login:` in ~25–30 s,
 save/restore instant-on — [a1-notes.md](a1-notes.md)); A2 shipped the Blit experience
 (dmd_core on iOS, Metal phosphor screen, touch-as-mouse — `mux` and `jim` run end-to-end
@@ -186,6 +188,34 @@ new; stages 2 and 3 wait on N3-into-the-image and N4–N7 respectively.
 
 ### Merge
 - [ ] "Edition 10" machine in the app (embed the winning SIMH simulator if not `vax780`)
+
+## Track C — ipnx-ports *(declared 2026-08-10; nothing built)*
+
+A ports tree in this repository, in the spirit of FreeBSD's: one recipe per package —
+upstream distfile, patch series, build and install rules — for bringing contemporary
+software back to a 1985 machine. The patch series **is** the artifact; the target has
+K&R C with no prototypes, 14-byte filenames, no shared libraries and no POSIX, so a
+port is an act of translation and has to be readable as one.
+
+- [ ] **P0** Decide the shape: `ports/<category>/<name>/{Makefile,distinfo,patches/}`,
+      what fetches (host side) and what builds (guest side), and how a port crosses
+      the ingest path — courier disk today, netfs after N5–N7
+- [ ] **P1** First port end to end, chosen for smallness rather than usefulness, to
+      shake out the machinery
+- [ ] **P2** A handful that make V8 pleasant to live in rather than merely to boot
+- [ ] **P3** Reproducibility: a port builds the same way on a fresh golden image
+
+## Track D — ipnx-v11 *(speculative; behind V10, deliberately)*
+
+The Eleventh Edition that never existed: Plan 9 and Inferno components backported into
+a Research Unix that already invented several of their preconditions (`/proc`, streams,
+the file system switch, netfs). Inspiration is Plan 9 from User Space, run backwards.
+Nothing is committed and nothing should start before B4.
+
+- [ ] **D0** Survey what is actually portable — start from V10's own `sam`, then 9P/Styx
+      against netfs, then `rc`
+- [ ] **D1** Licensing pass: Plan 9 (MIT since 2021, via the Plan 9 Foundation) and
+      Inferno terms against the 2017 covenant — a v11 image mixes estates
 
 ## Post-1.0 (unscheduled)
 
