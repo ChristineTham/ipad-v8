@@ -57,7 +57,13 @@ set SEQ 0
 proc sh {cmd {t 0}} {
     global SEQ
     incr SEQ
-    sendline "M=+ok$SEQ; $cmd; echo \$M+"
+    # Three lines, not one.  Appending "; echo $M+" to the command breaks any
+    # command ending in "&" -- `cmd & ; echo` is a syntax error, so backgrounding
+    # ipconfig silently took the network down with it.  Separate lines let the
+    # shell treat each as its own command; the tty buffers them in order.
+    sendline "M=+ok$SEQ"
+    sendline "$cmd"
+    sendline "echo \$M+"
     must "+ok$SEQ+" $t
 }
 proc bootsh {cmd {t 0}} { must "# " $t; sendline $cmd }
@@ -68,11 +74,13 @@ proc simh {cmd {t 0}} { must "sim>" $t; sendline $cmd }
 proc catfile {src dst} {
     global SEQ
     incr SEQ
-    sendline "M=+ok$SEQ; cat > $dst; echo \$M+"
+    sendline "M=+ok$SEQ"
+    sendline "cat > $dst"
     set f [open $src r]
     while {[gets $f line] >= 0} { sendline $line }
     close $f
     send "\x04"
+    sendline "echo \$M+"
     must "+ok$SEQ+" 300
 }
 
