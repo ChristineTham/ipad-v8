@@ -1003,9 +1003,18 @@ def emit_lib(l):
     # and the symptom was a rule that never fired rather than an error.
     cflags = l.get("cflags", "-O") + "".join(
         " -I$(SRC)/" + i for i in l.get("incs", []))
+    # An assembled library has no objects.  Emitting an OBJS list and a
+    # per-object rule for one anyway produced a makefile that described work
+    # it never does -- dbxxx.o had a rule, nothing depended on it, and `clean`
+    # removed a file that never existed.  Harmless, and exactly the kind of
+    # thing that later gets read as intent.
+    if l.get("assemble"):
+        objmap = {}
+
     out = [LIB_PREAMBLE % dict(name=l["name"], note=l.get("note", "-"),
                                cflags=cflags)]
-    out.append("OBJS = " + " \\\n\t".join(sorted(objmap)) + "\n")
+    if objmap:
+        out.append("OBJS = " + " \\\n\t".join(sorted(objmap)) + "\n")
     out.append("\nall: %s\n" % l["product"])
 
     if l.get("assemble"):
@@ -1040,7 +1049,8 @@ def emit_lib(l):
         out.append("\t-rm -f $(DESTDIR)/%s\n" % extra)
         out.append("\tln $(DESTDIR)/%s $(DESTDIR)/%s\n" % (l["install"], extra))
 
-    out.append("\nclean:\n\t-rm -f $(OBJS) %s\n" % l["product"])
+    out.append("\nclean:\n\t-rm -f %s%s\n"
+               % ("$(OBJS) " if objmap else "", l["product"]))
     return "".join(out)
 
 
