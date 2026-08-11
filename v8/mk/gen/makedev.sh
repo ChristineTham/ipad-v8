@@ -1239,4 +1239,10 @@ chmod 0640 $DEV/rp1h
 $MKNOD $DEV/rrp1h c 4 15
 chmod 0640 $DEV/rrp1h
 
-echo MAKEDEV-done 414 nodes 3 directories
+# --- Interlan NI1010, char major 44 (usr/sys/dev/conf.c). See emit_makedev.
+$MKNOD $DEV/il0 c 44 0
+chmod 0666 $DEV/il0
+$MKNOD $DEV/il1 c 44 1
+chmod 0666 $DEV/il1
+
+echo MAKEDEV-done 416 nodes 3 directories

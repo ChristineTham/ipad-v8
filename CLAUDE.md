@@ -139,6 +139,40 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   **ipnx** ("iPad is not Unix"; the name itself carries no mark). Binding rules:
   [docs/licensing.md](docs/licensing.md).
 
+## The one rule that outranks everything else
+
+**NEVER LEAVE A MACHINE INCONSISTENT. A machine that was not cleanly halted has
+a corrupted disk — assume it, do not hope otherwise.**
+
+The only correct way to stop a running guest is a clean halt:
+
+```
+cd /; sync; sync        # userland flush
+/etc/halt               # RB_HALT: boot() calls update(), waits for the I/O,
+                        # then spins at IPL 31 -- SIMH reports "Infinite loop"
+```
+
+Wait for that marker, *then* `quit`. Never `pkill` a `vax780`, never kill the
+app, never quit an emulator with the guest still running, and never delete a
+`state.sav` while keeping the disk it belongs to (snapshot and disk are
+consistent only as a **pair** — keep both or discard both).
+
+**`fsck` is not a recovery tool.** It restores metadata *consistency* so the
+filesystem will mount; it does not restore *data*. Blocks that were in core and
+never written are gone, and several of its repairs destroy data by design —
+truncating a file to a provable length, clearing an unreconcilable inode,
+dumping a directory into `lost+found` under numeric names. A clean `fsck` pass
+is not evidence that anything survived. Real data loss from unhalted Research
+Unix machines is well attested; treat every uncleanly-stopped disk as damaged
+until a **hash against a known-good artefact** says otherwise. That is proof;
+"it booted fine" is not.
+
+If a disk must be recovered, **copy the damaged image first**. `fsck` gets one
+attempt at the original and its repairs cannot be undone.
+
+This is why `image/ipnx-v8-rp07.img.xz` is in git: it turns "is this disk
+intact?" into a three-second `shasum` instead of a judgement call.
+
 ## Gotchas (each cost the community real debugging time)
 
 - Naming trap: in Research tapes, `jerq/` = DMD 5620 (WE32100); `blit/` = original 68000
@@ -482,10 +516,39 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   `/usr`; `work/fix-lostfound.exp` reapplies it if the image is ever rebuilt.
   A run that *is* hard-killed still needs `tools/fsck-repair.exp`: the autoboot
   `fsck -p` can't answer its own questions, so it aborts to single-user and the machine
-  never reaches `login:`. `/etc/reboot -n` does **not** work there (*"Reboot request
-  failed, PC: 80004183"* — the VAX780 reboot goes through a console-subsystem request
-  the simulator doesn't implement); drop to `sim>` with ^E and quit, which also avoids
-  syncing the stale in-core root superblock back over `fsck`'s repair.
+  never reaches `login:`. **In that one case** drop to `sim>` with ^E and quit, which
+  avoids syncing the stale in-core root superblock back over `fsck`'s repair.
+- **`/etc/halt` is the clean shutdown, and it works.** This file used to say the
+  opposite, on the strength of one test with `/etc/reboot **-n**` — and `-n` is
+  `RB_NOSYNC`, the single flag that skips the part you wanted. `boot()`
+  (`usr/sys/sys/machdep.c:477`) does `update()`, prints `syncing disks... `, sleeps
+  five `lbolt` ticks for the I/O to drain, prints `done`, and only *then* looks at
+  `RB_HALT`: set, it prints `halting (in tight loop)` and spins at IPL 31; clear, it
+  falls through to the console-subsystem reboot request the simulator does not
+  implement, which is where *"Reboot request failed"* comes from. So the failure is
+  the **reboot** branch and the sync has already happened either way — but
+  `/etc/halt` (RB_HALT, `usr/src/cmd/halt.c`) is the one to use, because it stops
+  deterministically and SIMH reports the spin as `Infinite loop`, an
+  output-anchored marker. The proven sequence is `tools/boot-newdisk.exp`'s, and it
+  passes on every run:
+
+	sh "cd /; sync; sync"     ;# flush from userland first
+	sendline "/etc/halt"      ;# boot() syncs again, then spins
+	must "Infinite loop"      ;# SIMH sees the tight loop at IPL 31
+	simh "quit"               ;# disk is clean; no snapshot needed
+
+  **Suspending is not halting, and the app is right to do both differently.**
+  `Machine.background()` sends ^E then `save state.sav`: it snapshots a *running*
+  machine, and disk+snapshot are consistent only as a **pair**. That is the
+  correct behaviour for **quit** and for iOS backgrounding — it is what buys
+  instant-on, and the pair is safe as long as both are kept. Do not "fix" quit
+  to halt instead. **Halting is user-initiated**: a menu action, or Reset.
+  The failure mode to avoid is breaking the pair — deleting the snapshot and
+  keeping the disk leaves neither state, and the disk has unflushed buffers.
+  Two traps if you ever do wire a halt to a control: `/etc/halt` has to be typed
+  at a shell, and the **console is read-only behind a lock with no shell on it**
+  — the root login is `tty01`. Sending it to the console types into nothing,
+  times out, and leaves the machine stopped with neither a snapshot nor a halt.
 - **`hp` is block major 0 and char major 4** — `bdevsw` and `cdevsw` are unrelated
   tables and the indices don't match (`sys/dev/conf.c`). Block major 2 is `up`, a
   Unibus disk our machines don't have, so `mknod /dev/rp1g b 2 14` builds a node into

@@ -47,4 +47,45 @@ date >> /usr/adm/lastboot
 # /usr/net/share.go; /usr/net/setup.go	# mount remote file systems and announce us
 # /usr/net/face.go	# face server
 /etc/procmount
+
+# --- the network (ipnx) ----------------------------------------------
+#
+# The kernel carries the Interlan NI1010 driver (`device il0' in
+# usr/sys/ipnx/conf) and the app attaches a SLiRP-NAT card to it, so this
+# machine is on the Internet from boot rather than after an experiment.
+#
+# ipconfig and tcpconfig are PROCESSES, not settings: they die with the
+# machine and have to run on every boot.  And tcpconfig is not optional
+# housekeeping -- without it pushing the TCP line discipline onto /dev/ip6,
+# open("/dev/tcpNN") succeeds, the tcpuser write succeeds, and the connect
+# then blocks FOREVER with no diagnostic, because there is nothing
+# underneath the device.
+#
+# V8's inet is CLASSFUL.  The interface's network is 10.0.0.0, not SLiRP's
+# 10.0.2.0; that one number cost the N track a debugging session.  The
+# guest is 10.0.2.15 and reaches the host at 10.0.2.2, which SLiRP rewrites
+# to the host's loopback -- so nothing needs forwarding and the same setup
+# works inside the iOS sandbox.
+#
+# Guarded on the device node so a kernel or a machine without the card
+# boots exactly as before instead of hanging on a missing interface.
+if test -c /dev/il0
+then
+	if test ! -s /usr/inet/lib/hosts
+	then
+		echo '10.0.2.15	ipnx-v8 v8' > /usr/inet/lib/hosts
+		echo '10.0.2.2	gateway' >> /usr/inet/lib/hosts
+	fi
+	if test ! -s /usr/inet/lib/networks
+	then
+		echo '10.0.0.0	slirp-net' > /usr/inet/lib/networks
+	fi
+	/usr/inet/etc/ipconfig /dev/il0 ipnx-v8 slirp-net /dev/il1 &
+	sleep 3
+	/usr/inet/etc/tcpconfig /dev/ip6 &
+	sleep 3
+	/usr/inet/etc/route add '*' gateway
+	echo 'network: il0 10.0.2.15, gateway 10.0.2.2'
+fi
+
 exit 0

@@ -35,7 +35,6 @@ rp07rest     no binary of that name on the image
 tcat         no binary of that name on the image
 tpr          no binary of that name on the image
 trim         no binary of that name on the image
-uname        no binary of that name on the image
 und          no binary of that name on the image
 unexpand     no binary of that name on the image
 units        also in /usr/lib -- installed only to /usr/bin

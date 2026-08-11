@@ -261,9 +261,18 @@ device and one edition.)*
 
 ## Building and running
 
-Two emulator cores are built as xcframeworks first, then the app. The disk image is **not**
-in git — it is produced by the [A0 workbench](docs/spike-a0.md) and must exist at
-`work/myv8/rp06v8.golden` before the app build embeds it.
+Two emulator cores are built as xcframeworks first, then the app. The disk the app embeds
+is **built from this repository's own V8 source** and committed in compressed form, so a
+fresh clone needs no external media and no workbench:
+
+```bash
+python3 tools/image-pack.py unpack     # image/ipnx-v8-rp07.img.xz -> work/myv8/rp07new
+```
+
+That is the app build's only media prerequisite. To rebuild the disk from source rather
+than unpack it — and for what proves it complete — see
+[docs/golden-disk.md](docs/golden-disk.md); the original desktop spike is described in
+[docs/spike-a0.md](docs/spike-a0.md).
 
 ```bash
 libsimh/build-xcframework.sh

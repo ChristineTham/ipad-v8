@@ -120,6 +120,20 @@ final class Machine: ObservableObject {
     private var pendingDiskURL: URL { supportDir.appendingPathComponent("v8.disk.pending") }
     private var resetMarkerURL: URL { supportDir.appendingPathComponent("reset.pending") }
 
+    /// Records that this installation's account has been created, so first
+    /// boot happens exactly once. Beside v8.disk deliberately: `Reset disk`
+    /// removes the disk and this together, and a disk imported from elsewhere
+    /// arrives without it and is provisioned for whoever imported it.
+    var provisionedURL: URL { supportDir.appendingPathComponent("provisioned") }
+
+    var isProvisioned: Bool {
+        FileManager.default.fileExists(atPath: provisionedURL.path)
+    }
+
+    func markProvisioned(_ user: String) {
+        try? user.write(to: provisionedURL, atomically: true, encoding: .utf8)
+    }
+
     // MARK: - Config templates
     //
     // `Speed=*32` on the DZ attach is the fix for the download being slow.
@@ -158,12 +172,40 @@ final class Machine: ObservableObject {
     set tto 7b
     set dz lines=8
     \(dzAttachments)
-    set rp0 rp06
+    set rp0 rp07
     at rp0 v8.disk
     set tu0 te16
+    \(ilAttachment)
     load -o bootV8 0
     run 2
     """ }
+
+    /// The Interlan NI1010, on SLiRP's user-mode NAT.
+    ///
+    /// The kernel has carried this driver since the N track (`device il0` in
+    /// usr/sys/ipnx/conf, and `ilrint` is in the shipped /unix), but for a
+    /// while the app attached no card at all — so autoconfig found nothing,
+    /// no `il0` line appeared, and a machine whose kernel could do TCP/IP
+    /// looked exactly like one that could not.
+    ///
+    /// `nat:` rather than a real interface is what makes this legal in the
+    /// sandbox: SLiRP is a user-mode stack, so there is no BPF, no raw
+    /// socket and no entitlement involved, and the guest's 10.0.2.2 is
+    /// rewritten to the host's own loopback (`tcp_fconnect`, "It's an
+    /// alias") — which is also why the netfs share needs no port forwarding
+    /// on either platform.
+    /// Enabling the device is configuration and must precede `restore`, the
+    /// same as `set dz lines=8`: it changes the device table the snapshot's
+    /// registers are restored into.
+    private var ilEnable: String { "set il enable" }
+
+    /// The host-side connection, which must follow `restore` for the same
+    /// reason the DZ attachments do — a snapshot cannot carry a live host
+    /// socket, only the ATTACH string, so the attach has to land on
+    /// registers that have already been restored.
+    private var ilAttach: String { "attach il nat:" }
+
+    private var ilAttachment: String { ilEnable + "\n" + ilAttach }
 
     // Restore-path subtleties, all desktop/simulator-bisected:
     // - **`restore -D`, and attach everything ourselves.** This is the big
@@ -207,12 +249,14 @@ final class Machine: ObservableObject {
     set remote telnet=127.0.0.1:\(controlPort)
     set remote timeout=600
     set dz lines=8
-    set rp0 rp06
+    set rp0 rp07
     at rp0 v8.disk
+    \(ilEnable)
     restore -D -Q state.sav
     set cpu idle=4.1BSD
     set console telnet=127.0.0.1:\(consolePort)
     \(dzAttachments)
+    \(ilAttach)
     cont
     """ }
 
@@ -296,7 +340,7 @@ final class Machine: ObservableObject {
         try fm.createDirectory(at: supportDir, withIntermediateDirectories: true)
         var dir = supportDir
         var noBackup = URLResourceValues()
-        noBackup.isExcludedFromBackup = true          // 174 MB of rebuildable state
+        noBackup.isExcludedFromBackup = true          // 516 MB of rebuildable state
         try? dir.setResourceValues(noBackup)
 
         let disk = workingDiskURL
@@ -307,10 +351,18 @@ final class Machine: ObservableObject {
         if fm.fileExists(atPath: resetMarkerURL.path) {
             try? fm.removeItem(at: disk)
             try? fm.removeItem(at: resetMarkerURL)
+            // The account lives on the disk, so it goes when the disk does.
+            // Leaving the marker would give the replacement image no account
+            // and no way to notice it needed one.
+            try? fm.removeItem(at: provisionedURL)
         }
         if fm.fileExists(atPath: pendingDiskURL.path) {
             try? fm.removeItem(at: disk)
             try? fm.moveItem(at: pendingDiskURL, to: disk)
+            // Same reasoning as the reset above: an imported disk is somebody
+            // else's machine and carries their /etc/passwd, so this
+            // installation has to be provisioned into it afresh.
+            try? fm.removeItem(at: provisionedURL)
         }
         if !fm.fileExists(atPath: disk.path) {
             guard let bundled = Bundle.main.url(forResource: "v8", withExtension: "disk") else {

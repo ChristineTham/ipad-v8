@@ -9,7 +9,7 @@
 # files, and the one time they shared a file with the directory
 # list, stage 8 mkdir'd all of them. See emit_destfiles().
 #
-#	installed paths: 458
+#	installed paths: 460
 #
 bin/adb
 bin/ar
@@ -58,6 +58,7 @@ bin/tar
 bin/test
 bin/time
 bin/tp
+bin/uname
 bin/vmstat
 bin/who
 bin/write
@@ -154,6 +155,7 @@ usr/bin/hang
 usr/bin/hoc
 usr/bin/id
 usr/bin/idiff
+usr/bin/ipnxfetch
 usr/bin/join
 usr/bin/last
 usr/bin/lex

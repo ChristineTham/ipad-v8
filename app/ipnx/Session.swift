@@ -284,6 +284,46 @@ final class Session: ObservableObject, Identifiable {
         autoLoginDone = true
         note("logging \(line.device) in as root")
         link.send(Array("root\r".utf8))
+        await provisionIfNeeded(link)
+    }
+
+    /// First boot only: create the account that belongs to whoever is running
+    /// this copy. Runs here because this is the one place in the app that has
+    /// a *root shell* — the console is read-only behind a lock and has no
+    /// shell on it at all, which is worth stating because sending these to
+    /// the console instead types them into nothing and silently does nothing.
+    ///
+    /// Everything is proven by an output-anchored marker rather than by a
+    /// prompt: V8's tty echoes typed characters as they arrive and they
+    /// interleave *into* whatever is printing, so a `#` prompt matcher
+    /// matches the echo of the command being sent. The marker is spelled
+    /// through a shell variable so the echo carries `PROV$OK` and only the
+    /// result carries `PROV-ok`.
+    private func provisionIfNeeded(_ link: ConsoleLink) async {
+        guard !machine.isProvisioned else { return }
+        let user = Provisioner.v8Name(from: Provisioner.hostUserName)
+        let gecos = Provisioner.hostFullName
+
+        guard await link.waitFor("#", timeout: 20) else {
+            note("no root shell — account not created; will retry next boot")
+            return
+        }
+        // The marker variable itself, before anything that uses it.
+        link.send(Array("OK=-ok\r".utf8))
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        for cmd in Provisioner.commands(user: user, gecos: gecos) {
+            link.send(Array("\(cmd)\r".utf8))
+            try? await Task.sleep(nanoseconds: 700_000_000)
+        }
+        link.send(Array("echo PROV$OK\r".utf8))
+        if await link.waitFor("PROV-ok", timeout: 15) {
+            machine.markProvisioned(user)
+            note("account `\(user)' created, home /usr/\(user)")
+        } else {
+            // Deliberately NOT marked: a half-made account should be retried,
+            // and every command above is guarded so a second run is safe.
+            note("account creation unconfirmed — will retry next boot")
+        }
     }
 
     // MARK: Bytes

@@ -1,12 +1,17 @@
-Welcome to Eighth Edition Unix.   You may be sure that it
-is suitably protected by ironclad licences, contractual agreements,
-living wills, and trade secret laws of every sort.  A trolley car is
-certain to grow in your stomach if you violate the conditions
-under which you got this tape.  Consult your lawyer in case of any doubt.
-If doubt persists, consult our lawyers.
+Welcome to Eighth Edition Unix.
 
-Please commit this message to memory.  If this is a hardcopy terminal,
-tear off the paper and affix it to your machine.  Otherwise
-take a photo of your screen.  Then delete /etc/motd.
+Research Unix Edition 8 is Copyright (C) 1985 AT&T Bell Laboratories.
+Portions are derived from 4.1BSD, Copyright (C) 1980, 1981 The Regents
+of the University of California.
+
+In March 2017 Alcatel-Lucent, now part of Nokia, stated that it will not
+assert its copyright rights with respect to any non-commercial copying,
+distribution, performance, display or creation of derivative works of
+Research Unix Editions 8, 9 and 10.  That statement is a covenant not to
+assert rather than a licence, and it grants no rights for commercial
+purposes.  This machine is preserved and run on those terms.
+
+UNIX is a registered trademark of The Open Group.
+Sources: The Unix Heritage Society, www.tuhs.org
 
 Thank you for choosing Eighth Edition Unix.  Have a nice day.

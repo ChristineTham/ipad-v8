@@ -28,6 +28,31 @@ import SwiftUI
 @MainActor
 final class FileShare: ObservableObject {
 
+    /// Which mount this share feeds. Two of them exist because
+    /// docs/machine-config.md asks for two, and they are genuinely different
+    /// things: `/n/macos` is a folder the user picks, and `/n/home` is meant
+    /// to be their own home directory. Keeping them separate servers on
+    /// separate ports means the guest can have one without the other, and a
+    /// failure to grant access to one does not take the other down.
+    ///
+    /// Neither is the V8 account's home directory — see Provisioner for why
+    /// pointing a 1985 home at a macOS one does not survive contact.
+    enum Role: String {
+        case macos, home
+
+        /// Fixed rather than rotated per launch, because /etc/rc names them.
+        /// tmxr's TIME_WAIT problem does not apply: these are our own
+        /// listeners with SO_REUSEADDR set.
+        var port: UInt16 { self == .macos ? 9200 : 9201 }
+        /// Where the guest mounts it, and the unique-id nmount(8) wants.
+        var mountPoint: String { "/n/" + rawValue }
+        var mountID: Int { self == .macos ? 64 : 65 }
+        /// Separate defaults namespaces so the two never share a bookmark.
+        var keyPrefix: String { self == .macos ? "share" : "homeshare" }
+    }
+
+    let role: Role
+
     /// The folder being exported, or nil if none has been chosen.
     @Published private(set) var folder: URL?
     /// Whether the server is listening.
@@ -40,32 +65,33 @@ final class FileShare: ObservableObject {
     /// surprising.
     @Published var allowWrites: Bool {
         didSet {
-            store.set(allowWrites, forKey: Key.writes)
+            store.set(allowWrites, forKey: keys.writes)
             if running { restart() }
         }
     }
 
-    /// Fixed rather than rotated per launch, because the mount command the
-    /// user types in the guest names it. tmxr's TIME_WAIT problem does not
-    /// apply: this is our own listener with SO_REUSEADDR set.
-    let port: UInt16 = 9200
+    var port: UInt16 { role.port }
 
     private var server: NetFSServer?
     private let store: UserDefaults
 
-    private enum Key {
-        static let bookmark = "share.bookmark"
-        static let writes = "share.allowWrites"
-        static let enabled = "share.enabled"
+    private struct Keys {
+        let prefix: String
+        var bookmark: String { prefix + ".bookmark" }
+        var writes: String { prefix + ".allowWrites" }
+        var enabled: String { prefix + ".enabled" }
     }
+    private let keys: Keys
 
-    init(store: UserDefaults = .standard) {
+    init(role: Role = .macos, store: UserDefaults = .standard) {
+        self.role = role
+        self.keys = Keys(prefix: role.keyPrefix)
         self.store = store
-        allowWrites = store.bool(forKey: Key.writes)          // absent == false
-        if let data = store.data(forKey: Key.bookmark) {
+        allowWrites = store.bool(forKey: keys.writes)          // absent == false
+        if let data = store.data(forKey: keys.bookmark) {
             folder = Self.resolve(bookmark: data, store: store)
         }
-        if store.bool(forKey: Key.enabled), folder != nil { start() }
+        if store.bool(forKey: keys.enabled), folder != nil { start() }
     }
 
     // MARK: - The folder
@@ -85,7 +111,7 @@ final class FileShare: ObservableObject {
             let data = try url.bookmarkData(includingResourceValuesForKeys: nil,
                                             relativeTo: nil)
             #endif
-            store.set(data, forKey: Key.bookmark)
+            store.set(data, forKey: keys.bookmark)
             folder = Self.resolve(bookmark: data, store: store) ?? url
             lastError = nil
             if running { restart() } else { start() }
@@ -96,8 +122,8 @@ final class FileShare: ObservableObject {
 
     func forget() {
         stop()
-        store.removeObject(forKey: Key.bookmark)
-        store.set(false, forKey: Key.enabled)
+        store.removeObject(forKey: keys.bookmark)
+        store.set(false, forKey: keys.enabled)
         folder?.stopAccessingSecurityScopedResource()
         folder = nil
     }
@@ -138,7 +164,7 @@ final class FileShare: ObservableObject {
         server = s
         running = true
         lastError = nil
-        store.set(true, forKey: Key.enabled)
+        store.set(true, forKey: keys.enabled)
         // serveForever() blocks on accept(), so it gets a thread of its own.
         // One connection is one mount and the protocol is strictly serialised,
         // so there is no concurrency here worth a queue.
@@ -152,7 +178,7 @@ final class FileShare: ObservableObject {
         server?.stop()
         server = nil
         running = false
-        store.set(false, forKey: Key.enabled)
+        store.set(false, forKey: keys.enabled)
     }
 
     private func restart() { stop(); start() }
@@ -160,5 +186,15 @@ final class FileShare: ObservableObject {
     /// What to type in the guest, shown in Settings so it can be copied rather
     /// than remembered. The unique id is netfs's mount identity; 64 is the
     /// bottom of the range netfs(8) documents.
-    var mountCommand: String { "nmount 10.0.2.2 \(port) 64 /n/macos" }
+    /// What to type in the guest to mount this share by hand. /etc/rc does it
+    /// at boot, so this is for when someone has unmounted it or wants a
+    /// second look — and it has to follow the role, or the Home section would
+    /// tell you to mount it over /n/macos.
+    ///
+    /// 10.0.2.2 is the host: SLiRP rewrites every address inside its virtual
+    /// network to the host's loopback, so this works unchanged in the iOS
+    /// sandbox with nothing forwarded.
+    var mountCommand: String {
+        "/etc/nmount 10.0.2.2 \(port) \(role.mountID) \(role.mountPoint)"
+    }
 }

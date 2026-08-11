@@ -11,10 +11,12 @@ struct SettingsView: View {
     @ObservedObject var machine: Machine
     @ObservedObject var terminal: Terminal5620
     @ObservedObject var share: FileShare
+    @ObservedObject var homeShare: FileShare
 
     @State private var showLicences = false
     @State private var importError: String?
     @State private var pickingFolder = false
+    @State private var pickingHomeFolder = false
 
     var body: some View {
         Form {
@@ -25,6 +27,7 @@ struct SettingsView: View {
             sessionSection
             diskSection
             shareSection
+            homeShareSection
             aboutSection
         }
         .formStyle(.grouped)
@@ -219,11 +222,31 @@ struct SettingsView: View {
 
     // MARK: Shared folder
 
-    /// N7. The server is real and running; what is not yet in place is a guest
-    /// that can dial it, so this section says so rather than presenting a
-    /// feature that silently does nothing.
+    /// Two shares, two sections, one body — `/n/macos` is any folder the user
+    /// picks and `/n/home` is meant to be their own, and on macOS each needs
+    /// its own security-scoped grant, so neither can stand in for the other.
+    ///
+    /// The guest mounts both from /etc/rc now, so this no longer has to warn
+    /// that the disk cannot reach them: the shipped kernel carries the NI1010
+    /// driver and the app attaches the card.
     private var shareSection: some View {
-        Section("Shared folder") {
+        shareSection(share, title: "Shared folder",
+                     blurb: "Serves the folder to the emulated VAX over its own network, "
+                          + "using the file system Research Unix has had built into its "
+                          + "kernel since 1985. The guest mounts it at /n/macos at boot.")
+    }
+
+    private var homeShareSection: some View {
+        shareSection(homeShare, title: "Home folder",
+                     blurb: "A second share, mounted at /n/home. Deliberately NOT the V8 "
+                          + "account's home directory: 14-byte filenames, case sensitivity "
+                          + "and login's chdir all make that a trap — see Provisioner.")
+    }
+
+    @ViewBuilder
+    private func shareSection(_ share: FileShare, title: String,
+                              blurb: String) -> some View {
+        Section(title) {
             if let folder = share.folder {
                 LabeledContent("Folder") {
                     Text(folder.lastPathComponent).font(.caption)
@@ -241,22 +264,25 @@ struct SettingsView: View {
                 Button(share.running ? "Stop sharing" : "Start sharing") {
                     share.running ? share.stop() : share.start()
                 }
-                Button("Choose a different folder…") { pickingFolder = true }
+                Button("Choose a different folder…") { pickingBinding(for: share).wrappedValue = true }
                 Button("Stop sharing this folder", role: .destructive) { share.forget() }
             } else {
-                Button("Choose a folder to share…") { pickingFolder = true }
+                Button("Choose a folder to share…") { pickingBinding(for: share).wrappedValue = true }
             }
 
             if let err = share.lastError {
                 Text(err).font(.caption).foregroundStyle(.red)
             }
-            Text("Serves the folder to the emulated VAX over its own network, using the file system Research Unix has had built into its kernel since 1985. Needs a disk image with networking configured, which the bundled one does not yet have.")
-                .font(.caption).foregroundStyle(.secondary)
+            Text(blurb).font(.caption).foregroundStyle(.secondary)
         }
-        .fileImporter(isPresented: $pickingFolder,
+        .fileImporter(isPresented: pickingBinding(for: share),
                       allowedContentTypes: [.folder]) { result in
             if case .success(let url) = result { share.adopt(url) }
         }
+    }
+
+    private func pickingBinding(for s: FileShare) -> Binding<Bool> {
+        s.role == .macos ? $pickingFolder : $pickingHomeFolder
     }
 
     // MARK: About

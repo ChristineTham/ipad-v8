@@ -56,8 +56,14 @@ python3 "$ROOT/v8/mk/mkdep.py" --check || {
     echo "s48: regenerate first"; exit 1; }
 # Same rule for the carry list: it decides what stage 8 lifts off the TUHS
 # image, so a stale one silently ships the wrong disk.
-python3 "$ROOT/tools/mkcarry.py" --check || {
-    echo "s48: run tools/mkcarry.py"; exit 1; }
+# --image is passed rather than left to default, because the default is
+# rp07new and rp07new is also the TARGET of an rp07 build: the first thing
+# stage 8 does is mkfs it. Leaving them coupled by a default meant the
+# precondition checked the file the run was about to destroy, and a rebuild
+# that recreated the target from /dev/zero -- which is required whenever the
+# output is going to be committed -- failed here before the VAX ever started.
+python3 "$ROOT/tools/mkcarry.py" --check --image "$WORK/$REF" || {
+    echo "s48: run tools/mkcarry.py --image $WORK/$REF"; exit 1; }
 
 # The disk stage 8 builds.  1008000 sectors is hp7_sizes' partition c, the
 # whole RP07 -- see v8/mk/builddisk.sh for why the sizes come from the driver.

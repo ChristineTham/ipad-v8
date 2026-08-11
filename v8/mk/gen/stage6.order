@@ -10,6 +10,8 @@ mkfs	usr/src/cmd	etc/mkfs
 update	usr/src/cmd	etc/update
 nmount	usr/src/cmd	etc/nmount
 chroot	usr/src/cmd	etc/chroot
+uname	usr/src/cmd	bin/uname
+ipnxfetch	usr/src/cmd	usr/bin/ipnxfetch
 expr	usr/src/cmd/expr	usr/bin/expr
 hoc	usr/src/cmd/hoc	usr/bin/hoc
 eqn	usr/src/cmd/eqn	usr/bin/eqn

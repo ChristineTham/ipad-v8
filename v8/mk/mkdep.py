@@ -1091,6 +1091,27 @@ mkdir $DEV 2>/dev/null
                 out.append("chmod %s $DEV/%s\n" % (mode, node))
                 ndev += 1
 
+    # --- the NI1010, which proto-dev also does not have.
+    #
+    # proto-dev is the `research' 11/750's /dev and that machine had no
+    # Interlan; ours does, because the kernel we build declares
+    # `device il0 at uba? csr 0164040' (usr/sys/ipnx/conf) and we model the
+    # card for SIMH (libsimh/patches/pdp11_il.c). Without these nodes the
+    # driver is compiled in, autoconfig finds the card, and there is still
+    # no way for userland to configure it -- ipconfig(8) opens /dev/il0.
+    #
+    # Major 44 is read off cdevsw, not remembered: usr/sys/dev/conf.c has
+    # `/*il*/ ... /*44*/'. Two units because ipconfig takes a second device
+    # as its ARP/announce channel (`ipconfig /dev/il0 v8 slirp-net /dev/il1').
+    # Mode 666: the inet daemons do not run as root.
+    out.append("""
+# --- Interlan NI1010, char major 44 (usr/sys/dev/conf.c). See emit_makedev.
+""")
+    for unit in (0, 1):
+        out.append("$MKNOD $DEV/il%d c 44 %d\n" % (unit, unit))
+        out.append("chmod 0666 $DEV/il%d\n" % unit)
+        ndev += 1
+
     out.append("\necho MAKEDEV-done %d nodes %d directories\n" % (ndev, ndir))
     return "".join(out), ndev, ndir
 
@@ -1595,6 +1616,35 @@ STAGE6 = [
     dict(name="chroot", dir="usr/src/cmd", objs=["chroot.c"], dest="DESTDIR",
          product="chroot", install="etc/chroot",
          note="ipnx: V8 has chroot(2) and ships no chroot(1); stage 9 needs one"),
+
+    # Ours too, and it has to be declared here for the same reason chroot and
+    # nmount do: where.txt is harvested from the SHIPPED IMAGE, so it can only
+    # ever describe commands that already exist on the tape's disk. Anything
+    # we write is invisible to it by construction, and a command nobody
+    # declares is a command nobody builds -- which is exactly what happened:
+    # uname.c sat in the tree, correct and complete, through every full build,
+    # and no disk ever carried it.
+    #
+    # V8 has no uname(1) and no uname(2). The machine's name is /etc/whoami
+    # and nothing else; everything above the node name comes from <ipnx.h>,
+    # generated from v8/RELEASE, so a binary reports the system it was built
+    # as part of rather than trusting a file that may disagree with it.
+    # /bin rather than /usr/bin: it answers "what am I" and must work with
+    # /usr unmounted, which is precisely when you need to ask.
+    dict(name="uname", dir="usr/src/cmd", objs=["uname.c"], dest="DESTDIR",
+         product="uname", install="bin/uname",
+         note="ipnx: Research Unix has no uname(1); reports from <ipnx.h>"),
+
+    # The fetch-style banner. neofetch and fastfetch cannot run here -- one is
+    # bash, the other modern C reading sysctl and /sys -- so this reports the
+    # same fields from the sources V8 does have, and omits the ones it cannot
+    # answer honestly rather than printing N/A. Uptime and memory come out of
+    # the running kernel through /dev/kmemr (_bootime and _physmem are both in
+    # /unix's symbol table), which is why it links like fstat(1) does.
+    # /usr/bin: unlike uname it has no business running with /usr unmounted.
+    dict(name="ipnxfetch", dir="usr/src/cmd", objs=["ipnxfetch.c"],
+         dest="DESTDIR", product="ipnxfetch", install="usr/bin/ipnxfetch",
+         note="ipnx: neofetch/fastfetch equivalent, read from the kernel"),
 
     # ------------------------------------------------ the yacc/lex commands
     #

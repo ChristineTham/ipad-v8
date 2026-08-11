@@ -33,7 +33,14 @@ struct IpnxApp: App {
     @StateObject private var store: SessionStore
     /// N7. Built at launch so a share the user already chose is serving before
     /// the guest is in a position to mount it.
-    @StateObject private var share = FileShare()
+    ///
+    /// Two of them, because B0.6 asks for two mounts and they are different
+    /// things: `/n/macos` is any folder the user picks, `/n/home` is meant to
+    /// be their own. Separate servers on separate ports, so one can be absent
+    /// without disturbing the other — which matters on macOS, where each
+    /// needs its own security-scoped grant.
+    @StateObject private var share = FileShare(role: .macos)
+    @StateObject private var homeShare = FileShare(role: .home)
 
     #if os(macOS)
     @NSApplicationDelegateAdaptor(MacAppDelegate.self) private var appDelegate
@@ -72,7 +79,7 @@ struct IpnxApp: App {
         // Qualified: our own preferences type is also called Settings, and the
         // scene builder would otherwise resolve to its initialiser.
         SwiftUI.Settings {
-            SettingsView(settings: settings, machine: machine, terminal: dmd, share: share)
+            SettingsView(settings: settings, machine: machine, terminal: dmd, share: share, homeShare: homeShare)
                 .frame(width: 520, height: 640)
         }
         #else
@@ -88,11 +95,11 @@ struct IpnxApp: App {
     private func window(_ shape: TerminalShape) -> some View {
         #if os(macOS)
         SessionWindow(shape: shape, store: store, machine: machine,
-                      settings: settings, dmd: dmd, share: share, capture: capture)
+                      settings: settings, dmd: dmd, share: share, homeShare: homeShare, capture: capture)
             .onAppear { launch(shape) }
         #else
         SessionWindow(shape: shape, store: store, machine: machine,
-                      settings: settings, dmd: dmd, share: share)
+                      settings: settings, dmd: dmd, share: share, homeShare: homeShare)
             .onAppear { launch(shape) }
             .onChange(of: scenePhase) { _, newPhase in
                 switch newPhase {

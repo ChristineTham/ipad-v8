@@ -14,6 +14,7 @@ struct SessionWindow: View {
     @ObservedObject var settings: Settings
     @ObservedObject var dmd: Terminal5620
     @ObservedObject var share: FileShare
+    @ObservedObject var homeShare: FileShare
     #if os(macOS)
     @ObservedObject var capture: PointerCapture
     #endif
