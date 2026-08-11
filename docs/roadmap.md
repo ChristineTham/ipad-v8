@@ -300,7 +300,29 @@ the safety rules are in [build-from-source.md](build-from-source.md).
         stage 2 *(2026-08-11)*. `curses-ok` proves it together with stage 4:
         a program compiled against our headers, linked against our
         `libcurses` and `libtermcap`, and run
-  - [~] **6** commands — **173 of ~277** *(2026-08-11)*: 12 hand-written
+  - [~] **6** commands — **193 built, and the target is not what it looked
+        like** *(2026-08-11)*. The shipped image carries **381 commands**;
+        we install **205** of them. But of the 176 we do not, **147 have no
+        source anywhere in the tape** — including **all 34 games**, whose
+        binaries ship in `/usr/games` with nothing behind them. So the
+        buildable universe is **234**, and 205 of 234 is **88%**, with
+        `/bin` — the partition that has to be self-sufficient when `/usr` is
+        unmounted — at **50 of 57**.
+
+        The 29 that remain are listed individually in
+        `gen/stage6-skipped.txt`. The largest group needs `xstr`: `csh` and
+        `ex` both pipe every object through it to share string literals, and
+        `strings.o`, which both links, is *produced* by that pass rather than
+        compiled. `awk` needs a `maketab` built and run mid-build to generate
+        `proctab.c`. Four link archives built inside their own component
+        (`map`, `plot`, `view2d`, `asd`), five include headers the tape never
+        shipped, and two — `cfront` and `compat` — the 1985 compiler rejects
+        outright.
+
+        Detail below, and the original count of "~277" is superseded: it
+        counted source directories, not commands the image actually has.
+
+        Composition: 31 hand-written
         (`config`(8), `sh`, the boot path, `nmount`) plus **121 derived** from
         the tree and `v8/mk/where.txt`, plus **the whole toolchain installed
         into `DESTDIR`** — a system with no compiler cannot rebuild itself,
