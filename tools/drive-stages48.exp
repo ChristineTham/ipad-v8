@@ -100,6 +100,11 @@ simh "at rp1 rp06build"
 # second configuration; builddisk.sh refuses to touch drive 0 regardless.
 simh "set rp2 rp07"
 simh "at rp2 rp07new"
+# rp3: the golden image, read-only, as the source for the 175 commands whose
+# sources the tape never shipped. A COPY of it, because a build should not be
+# able to damage the thing it is copying from.
+simh "set rp3 rp06"
+simh "at rp3 -r rp06v8.golden"
 simh "set il enable"
 simh "attach il nat:"
 simh "load -o bootV8 0"
@@ -180,7 +185,14 @@ if {$from <= 5} { sh "sh /n/src/mk/buildlibs.sh /n/src /b /b/root /b/tools3 2>&1
 # is 132 now, and each is a compile and a link inside the emulator.
 if {$from <= 6} { sh "sh /n/src/mk/buildcmds.sh /n/src /b /b/root /b/tools3 2>&1" 10800 }
 if {$from <= 7} { sh "sh /n/src/mk/buildkernel.sh /n/src /b /b/root ipnx /b/tools3 2>&1" 7200 }
-if {$from <= 8} { sh "sh /n/src/mk/builddisk.sh /n/src /b/root 2 rp07 /mnt 2>&1" 3600 }
+if {$from <= 8} { # The golden image mounted read-only at /gold, BEFORE builddisk runs: it
+# reads gen/provenance.txt and lifts every `copy' row out of it.
+sh "mkdir /gold" 60
+sh "rm -f /dev/rp3a /dev/rp3g; /etc/mknod /dev/rp3a b 0 24; /etc/mknod /dev/rp3g b 0 30" 60
+sh "/etc/mount -r /dev/rp3a /gold" 120
+sh "mkdir /gold/usr 2>/dev/null; /etc/mount -r /dev/rp3g /gold/usr" 120
+sh "ls /gold/bin | wc -l" 60
+sh "sh /n/src/mk/builddisk.sh /n/src /b/root 2 rp07 /mnt /gold 2>&1" 3600 }
 
 # ---------------------------------------------------------------- stage 9
 # A SECOND mount of the same share, inside DESTDIR. chroot has no path to

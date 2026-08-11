@@ -47,6 +47,10 @@ DEST=${2-/b/root}
 UNIT=${3-2}
 TYPE=${4-rp07}
 MNT=${5-/mnt}
+# Where the golden image is mounted, read-only, so the commands the tape
+# never shipped sources for can be copied. Optional: without it the disk
+# still boots, it just has only what we build.
+GOLD=${6-/gold}
 
 case $TYPE in
 rp06)	ROOTSEC=15884; USRPART=g; USRPARTNO=6; USRSEC=291280 ;;
@@ -153,6 +157,43 @@ do
 		echo "  $d: `ls $MNT/$d | wc -l` files"
 	fi
 done
+
+echo ""
+echo "=== stage 8: what the tape did not ship ==="
+# 175 of the image's 381 commands are COPIED rather than built, and that is a
+# property of the tape rather than of this build: Bell Labs shipped binaries
+# whose sources are not on it -- all 34 games among them. gen/provenance.txt
+# is generated beside the makefiles and says which is which, so the two
+# cannot drift.
+#
+# $GOLD is the golden image's root, mounted read-only by the caller. Without
+# it the disk still boots -- everything in the `build' column is already
+# there -- so this is a warning and not a failure.
+if test -d $GOLD/bin
+then
+	# One `cp' per file, so a failure names the file. sed pulls "dir/name"
+	# out of the copy rows; V8 has no `cut -f' worth relying on and awk is
+	# a bigger dependency than this needs.
+	n=0; miss=0
+	for f in `sed -n 's|^\([^	]*\)	/\([^	]*\)	copy	.*|\2/\1|p' $SRC/mk/gen/provenance.txt`
+	do
+		if test -f $GOLD/$f
+		then
+			d=`dirname $MNT/$f`
+			test -d $d || mkdir $d 2>/dev/null
+			if cp $GOLD/$f $MNT/$f
+			then n=`expr $n + 1`
+			else echo "  cannot copy $f"; miss=`expr $miss + 1`
+			fi
+		else
+			miss=`expr $miss + 1`
+		fi
+	done
+	echo "  copied $n from the golden image, $miss not found"
+else
+	echo "  no golden image at $GOLD -- the disk will have only what we build"
+	echo "  (mount rp3's root there to fill in the 175 copy entries)"
+fi
 
 echo ""
 echo "=== stage 8: /dev ==="
