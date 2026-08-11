@@ -108,7 +108,9 @@ send_user "\n=== stages 4 to 8 ===\n"
 sh "date"
 sh "sh /n/src/mk/buildhdrs.sh /n/src /b/root 2>&1" 1800
 sh "sh /n/src/mk/buildlibs.sh /n/src /b /b/root /b/tools3 2>&1" 7200
-sh "sh /n/src/mk/buildcmds.sh /n/src /b /b/root /b/tools3 2>&1" 5400
+# 3 hours, not the 90 minutes this had when stage 6 was eleven commands: it
+# is 132 now, and each is a compile and a link inside the emulator.
+sh "sh /n/src/mk/buildcmds.sh /n/src /b /b/root /b/tools3 2>&1" 10800
 sh "sh /n/src/mk/buildkernel.sh /n/src /b /b/root ipnx /b/tools3 2>&1" 7200
 sh "sh /n/src/mk/builddisk.sh /n/src /b/root 2 rp07 /mnt 2>&1" 3600
 sh "date"

@@ -2,7 +2,7 @@
 #
 # Ask the golden image where every command lives.
 #
-#	expect tools/harvest-paths.exp [port]
+#	expect tools/harvest-paths.exp
 #
 # Stage 6 has to install 277 commands and the source does not say where any of
 # them go.  113 directories have a makefile, and two thirds of those install
@@ -51,17 +51,30 @@ proc sh {cmd {t 0}} {
 }
 proc simh {cmd {t 0}} { must "sim>" $t; sendline $cmd }
 
-set port [lindex $argv 0]
-if {$port == ""} { set port 9400 }
-
+# The boot block is copied from the drivers that have actually run, not
+# composed afresh, and two of its lines are load-bearing in ways that are
+# invisible until they bite:
+#
+#   set noasynch  the desktop work/opensimh/BIN/vax780 IS built with async
+#                 I/O (the in-app libsimh is not), and without this V8
+#                 corrupts RP06 transfers -- presenting as a hardware fault,
+#                 `hp06: hard error er1=5<RMR,ILF>', not a config error.
+#                 Light I/O hides it, which is exactly how a read-only walk
+#                 like this one would get away with omitting it and teach the
+#                 next script the wrong lesson.
+#   set tto 7b    V8's getty sends the FIRST `login:' with mark parity, so
+#                 the console bytes are `\354ogin:' and a matcher waiting for
+#                 the literal string waits forever.  Every driver in tools/
+#                 that expects `login:' sets this first; this one did not.
+#
+# No DZ: this logs in on the console, so a mux line with nothing dialling it
+# is dead configuration and one more port to collide on.
 spawn vax780
-simh "set cpu 4M" 60
+simh "set noasynch"
+simh "set cpu idle=4.1BSD"
+simh "set tto 7b"
 simh "set rp0 rp06"
 simh "at rp0 harvest.disk"
-simh "set dz lines=8"
-simh "set dz 8b"
-simh "att dz -m Line=0,127.0.0.1:$port"
-simh "set cpu idle=4.1BSD"
 simh "load -o bootV8 0"
 simh "run 2"
 

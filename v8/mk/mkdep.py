@@ -305,8 +305,39 @@ TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
 """
 
 
+def emit_shell(c):
+    """A command that is a shell script: install is the whole build.
+
+    Four of them (bundle, cflow, false, where). They still get a makefile
+    rather than a line in the driver, because stage 9 has to be able to
+    rebuild the system the same way stage 6 built it, and "the same way"
+    means the same rules. A script whose install lives in a driver instead
+    would be the one thing chroot could not reproduce.
+
+    The copy is deliberate rather than installing straight off the share: the
+    product has to exist in the object directory for `make' to have anything
+    to compare mtimes against, exactly like a binary.
+    """
+    srcdir = "$(SRC)/" + c["dir"]
+    src = "%s/%s" % (srcdir, c["script"])
+    dest = "$(%s)" % c.get("dest", "DESTDIR")
+    out = [PREAMBLE % dict(name=c["name"], cflags="", incs="")]
+    # `all' first, like every other generated makefile: the driver runs
+    # `make -f x.mk' with no goal, so the first target is the default one.
+    out.append("\nall: %s\n" % c["product"])
+    out.append("\n%s: %s\n\tcp %s %s\n\tchmod +x %s\n"
+               % (c["product"], src, src, c["product"], c["product"]))
+    out.append("\ninstall: %s\n" % c["product"])
+    out.append("\t-mkdir %s/%s\n" % (dest, os.path.dirname(c["install"])))
+    out.append("\tcp %s %s/%s\n" % (c["product"], dest, c["install"]))
+    out.append("\nclean:\n\t-rm -f %s\n" % c["product"])
+    return "".join(out)
+
+
 def emit(c):
     d = os.path.join(V8, c["dir"])
+    if c.get("script"):
+        return emit_shell(c)
     incs = c.get("incs", ["."])
     incdirs = [os.path.normpath(os.path.join(d, i)) for i in incs]
     incdirs.append(os.path.join(V8, "usr/include"))
@@ -1362,17 +1393,157 @@ STAGE6 = [
               "which stage 5 now builds from cmd/inet/libin"),
 ]
 
+# ------------------------------------------------- the rest of usr/src/cmd
+#
+# Everything above is hand-written because something about it is NOT the
+# common case: config needs yacc, lex and a header that exists only in the
+# object directory; sh compiles one object to assembly and edits it; and the
+# boot path had to be right before stage 8 could exist at all.
+#
+# The common case is one source file, one binary, one directory to put it in,
+# and 173 of those sit LOOSE in usr/src/cmd with no makefile of any kind.
+# Those are derived below rather than typed. Not to save typing: 130 hand-
+# copied near-identical dicts invite exactly one kind of bug -- a duplicated
+# line not fully edited -- and they would bury the single fact that actually
+# varies between them, which is where the binary goes.
+#
+# And that fact is not in the source at all. /usr is a separate filesystem, so
+# /bin has to be self-sufficient for a single-user boot, and nothing in a
+# loose .c says which of /bin and /usr/bin it belongs to. where.txt answers it
+# by MEASUREMENT -- tools/harvest-paths.sh walks the shipped image -- which is
+# also why a name the image does not have is skipped rather than guessed: the
+# 37 of those are drivers for hardware we do not emulate (rp07dump, bad144,
+# hp), terminal support for terminals we do not have (2621, 300, 4014, 450),
+# and a handful the image simply never installed.
+
+
+def load_where():
+    """name -> [directories it was found in] on the shipped image.
+
+    Written by tools/harvest-paths.sh. Absent is not an error: the file is a
+    measurement of a machine, so a checkout that has never booted one still
+    generates -- it just generates the hand-written entries only, and says so.
+    """
+    path = os.path.join(HERE, "where.txt")
+    if not os.path.exists(path):
+        return {}
+    w = {}
+    for line in open(path):
+        if line.startswith("#") or not line.strip():
+            continue
+        name, d = line.rstrip("\n").split("\t")
+        w.setdefault(name, []).append(d)
+    return w
+
+
+WHERE = load_where()
+
+# Which directory wins when a name was found in more than one. Root first,
+# because the question this whole file exists to answer is what a system needs
+# in order to repair itself with /usr unmounted.
+DIRPREF = ["/bin", "/etc", "/lib", "/usr/bin", "/usr/games", "/usr/lib"]
+
+# Headers that mean "this needs a library the derivation does not know about".
+# The scan found exactly two hits across all 165 loose sources -- fstat.c
+# (math.h, and not on the image anyway) and nmount.c (ours, hand-written
+# above) -- so every derived command below links against libc alone. That is
+# a fact about this tree, not an assumption, and this table is what keeps it
+# true if the tree changes.
+NEEDSLIB = {
+    "curses.h": "libcurses.a + libtermlib.a",
+    "math.h": "libm.a",
+    "dbm.h": "libdbm.a",
+    "sys/inet/in.h": "libin.a",
+}
+
+
+def derive_loose():
+    """Entries for every loose file in usr/src/cmd the image says is a command.
+
+    Returns (entries, skipped) where skipped is a list of (name, reason) --
+    kept and written out, because a build that silently covers less than it
+    appears to is worse than one that covers less and says so.
+    """
+    d = os.path.join(V8, "usr/src/cmd")
+    # STAGE1 as well as STAGE6, and this is not a tidiness point. Six of the
+    # toolchain's sources are loose .c in usr/src/cmd -- ld.c ar.c ranlib.c
+    # nm.c size.c cc.c -- so the first version of this derived them a second
+    # time and, because every generated file is named <component>.mk,
+    # OVERWROTE stage 1's. The build would still have run: they are
+    # single-file programs and the derived rule compiles them correctly.
+    # What it drops is the part that is not in the source -- ld and as install
+    # to bin/ AND lib/, which is the whole of what `cc -B$(TOOLDIR)/lib/'
+    # resolves against, so stage 3 would have silently gone back to linking
+    # with the running system's loader. Caught by --check on the second run,
+    # which is the only reason it is a comment and not a week.
+    hand = {c["name"] for c in STAGE6} | {c["name"] for c in STAGE1}
+    entries, skipped = [], []
+
+    for f in sorted(os.listdir(d)):
+        stem, dot, ext = f.rpartition(".")
+        if not dot or ext not in ("c", "y", "sh") or not stem:
+            continue
+        if os.path.isdir(os.path.join(d, f)):
+            continue
+        if stem in hand:
+            continue                    # hand-written above; that one wins
+        dirs = WHERE.get(stem)
+        if not dirs:
+            skipped.append((stem, "no binary of that name on the image"))
+            continue
+
+        # A source that reaches for a library we cannot name is skipped
+        # rather than emitted with a link line that would fail late.
+        body = open(os.path.join(d, f), "rb").read()
+        need = [lib for h, lib in sorted(NEEDSLIB.items())
+                if re.search(rb'#\s*include\s*[<"]%s[">]'
+                             % re.escape(h.encode()), body)]
+        if need:
+            skipped.append((stem, "needs " + ", ".join(need)))
+            continue
+
+        best = sorted(dirs, key=lambda x: (DIRPREF.index(x)
+                                           if x in DIRPREF else 99))[0]
+        if len(dirs) > 1:
+            # Two names in the whole tree, and neither is a plain second copy
+            # of a binary: /usr/lib/units is the units TABLE, and procmount is
+            # in both /etc and /usr/bin. Install to the preferred one and say
+            # so, rather than `also'-ing a data file out of existence.
+            skipped.append((stem, "also in %s -- installed only to %s"
+                            % (", ".join(x for x in dirs if x != best), best)))
+        install = best.lstrip("/") + "/" + stem
+
+        if ext == "sh":
+            entries.append(dict(name=stem, dir="usr/src/cmd", script=f,
+                                dest="DESTDIR", product=stem, install=install,
+                                note="loose %s; /%s measured on the image" % (f, install)))
+        elif ext == "y":
+            entries.append(dict(name=stem, dir="usr/src/cmd",
+                                objs={"y.tab.o": "y.tab.c"},
+                                gen={"y.tab.c": ("yacc", f, None)},
+                                dest="DESTDIR", product=stem, install=install,
+                                note="loose %s; /%s measured on the image" % (f, install)))
+        else:
+            entries.append(dict(name=stem, dir="usr/src/cmd", objs=[f],
+                                dest="DESTDIR", product=stem, install=install,
+                                note="loose %s; /%s measured on the image" % (f, install)))
+    return entries, skipped
+
+
+DERIVED, SKIPPED = derive_loose()
+STAGE6 = STAGE6 + DERIVED
+
 # ---------------------------------------------------------------- notes on
 # what is NOT here yet, so the gap is on the record rather than implied:
 #
-#   the other 112 makefile directories
-#   the 164 loose .c in usr/src/cmd, which have no makefile of any kind and
-#     whose install directory has to come from the golden image rather than
-#     from the source -- /bin vs /usr/bin is not a detail (/usr is a separate
-#     filesystem, so /bin has to be self-sufficient for a single-user boot)
-#   the 2 loose .y (bc.y, egrep.y) and 6 .sh
+#   the 113 makefile directories, minus the four already done (config, login,
+#     sh and -- via stage 1 -- the toolchain's own). Each has to be read once,
+#     because they are not a family: awk's makefile says outright that it is
+#     wrong, sed links with `cc -o sed -n *.o', and troff builds two programs
+#     out of overlapping object sets.
 #   the 7 directories with no makefile: Admin ccom cref inet lfactor pcc1 upas
 #     -- ccom and pcc1 are compilers we already build from elsewhere
+#   whatever gen/stage6-skipped.txt lists after the last run
 
 
 def main():
@@ -1384,13 +1555,26 @@ def main():
     os.makedirs(GEN, exist_ok=True)
     stale = []
 
+    written = set()
+
     def put(name, text):
         """Write gen/<name>, or record it as stale under --check.
 
         Every generated file goes through here.  It used to be four copies of
         the same read-compare-write, which is how stage5.order would have
         ended up being the one nobody remembered to check.
+
+        The duplicate check is here because generated names are derived from
+        component names, and two components CAN collide: six of stage 1's
+        tools are also loose sources in usr/src/cmd, so stage 6's derivation
+        wrote ld.mk over stage 1's. Nothing failed -- the second file was a
+        valid makefile for the same program -- which is exactly why this is
+        an assertion and not a warning.
         """
+        if name in written:
+            raise SystemExit("mkdep: two components both generate %s -- one "
+                             "would silently overwrite the other" % name)
+        written.add(name)
         path = os.path.join(GEN, name)
         old = open(path).read() if os.path.exists(path) else None
         if args.check:
@@ -1429,6 +1613,15 @@ def main():
         put(c["name"] + ".mk", emit(c))
     order("stage6.order", [(c["name"], c["dir"], c["install"]) for c in STAGE6])
 
+    # What the derivation deliberately did NOT cover, and why. Generated
+    # rather than commented, so it cannot drift from the code that produced
+    # it -- and so `stage 6 built 145 commands' is never mistaken for `stage 6
+    # built the tree'. Not read by anything; read by people.
+    put("stage6-skipped.txt",
+        "# Loose files in usr/src/cmd that derive_loose() did not emit.\n"
+        "# Regenerated by v8/mk/mkdep.py; see load_where() for the oracle.\n#\n"
+        + "".join("%-12s %s\n" % s for s in SKIPPED))
+
     if args.check:
         if stale:
             print("stale, re-run v8/mk/mkdep.py: " + " ".join(stale))
@@ -1439,6 +1632,12 @@ def main():
           " + %d device nodes in %s"
           % (len(STAGE1), nhdr, len(STAGE5), len(STAGE6), ndev,
              rel(GEN, os.getcwd())))
+    print("  commands: %d hand-written, %d derived from the tree + where.txt,"
+          " %d skipped (gen/stage6-skipped.txt)"
+          % (len(STAGE6) - len(DERIVED), len(DERIVED), len(SKIPPED)))
+    if not WHERE:
+        print("  NO v8/mk/where.txt -- run tools/harvest-paths.sh; without it"
+              " stage 6 is the hand-written entries only")
     return 0
 
 

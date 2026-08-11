@@ -1,7 +1,7 @@
 #!/bin/bash
 # Ask the golden image where every command lives, and write v8/mk/where.txt.
 #
-#	tools/harvest-paths.sh [seconds] [port]
+#	tools/harvest-paths.sh [seconds]
 #
 # See tools/harvest-paths.exp for why the machine is the authority and the
 # source tree is not.  Runs on a COPY of the golden image and nothing inside
@@ -11,7 +11,6 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$ROOT/work/myv8"
 LIMIT=${1:-900}
-PORT=${2:-9400}
 LOG="$WORK/harvest-paths.log"
 OUT="$ROOT/v8/mk/where.txt"
 
@@ -39,7 +38,7 @@ echo "== copying rp06v8.golden -> harvest.disk =="
 rm -f harvest.disk && cp rp06v8.golden harvest.disk
 
 : > "$LOG"
-expect "$ROOT/tools/harvest-paths.exp" "$PORT" &
+expect "$ROOT/tools/harvest-paths.exp" &
 EXP_PID=$!
 for ((i = 0; i < LIMIT; i++)); do
     kill -0 "$EXP_PID" 2>/dev/null || break
