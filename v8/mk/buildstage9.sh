@@ -96,19 +96,36 @@ rc=$?
 
 echo ""
 echo "=== stage 9: what came out ==="
-ls -l $DEST/build9/tools9/bin 2>&1 | head -20
+# No `head': it is one of the loose commands the image never installed, so it
+# is not in DESTDIR either, and piping into it only prints "head: not found".
+ls -l $DEST/build9/tools9/bin $DEST/build9/tools9/usr/bin 2>&1
 
+# bin AND usr/bin. stage1.order puts yacc, make, cc, as, ld, ar, nm, size and
+# strip in bin, and lex and ranlib in usr/bin -- so a check that looks only in
+# bin reports two tools missing that were built correctly. Second time the
+# same assumption cost a run; the order file is the authority.
 n=0
-for t in yacc make lex cc ar ranlib nm size strip
+for t in yacc make cc ar nm size strip
 do
 	if test -f $DEST/build9/tools9/bin/$t
 	then n=`expr $n + 1`
-	else echo "  missing $t"
+	else echo "  missing bin/$t"
+	fi
+done
+for t in lex ranlib
+do
+	if test -f $DEST/build9/tools9/usr/bin/$t
+	then n=`expr $n + 1`
+	else echo "  missing usr/bin/$t"
 	fi
 done
 echo "stage 9 rebuilt $n of 9 checked tools"
 
+# STAGE9-CHROOT, not STAGE9: build1.sh prints "STAGE<suffix> OK" for its own
+# stage, and this stage's suffix IS 9, so both messages landed in the same log
+# and the scorer matched the wrong one -- reporting success from the inner
+# build a line before this script reported failure.
 if test $rc = 0 -a $n = 9
-then echo "STAGE9 OK"
-else echo "STAGE9 INCOMPLETE"; exit 1
+then echo "STAGE9-CHROOT OK"
+else echo "STAGE9-CHROOT INCOMPLETE"; exit 1
 fi

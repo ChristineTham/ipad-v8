@@ -121,7 +121,7 @@ ckstage 5 "5: libraries"          'STAGE5 OK'
 ckstage 6 "6: commands"           'STAGE6 OK'
 ckstage 7 "7: the kernel"         'STAGE7 OK'
 ckstage 8 "8: a disk"             'STAGE8 OK'
-ck        "9: rebuilds itself"    'STAGE9 OK'
+ck        "9: rebuilds itself"    'STAGE9-CHROOT OK'
 grep -E '  BUILD FAILED |  INSTALL FAILED |Don.t know how to make' <<< "$LOGC" \
     | sed 's/^/  /' | head -20
 sed -n '/=== stage 7: what got built ===/,$p' <<< "$LOGC" \
