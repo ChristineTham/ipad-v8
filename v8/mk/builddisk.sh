@@ -143,9 +143,15 @@ echo "=== stage 8: the tree ==="
 # which is ENOENT for the MOUNT POINT, not for anything in the kernel.
 # etc/skel holds the .profile a new account starts from; usr/jerq must
 # exist before cpio -p is pointed at it as a destination directory.
-for d in bin etc etc/skel lib tmp tmp/dump dev proc usr/bin usr/lib \
-	 usr/include usr/include/sys usr/include/sys/inet usr/adm \
-	 usr/spool usr/tmp usr/jerq usr/games
+for d in bin etc etc/skel lib tmp tmp/dump dev proc usr/adm \
+	 usr/spool usr/tmp usr/jerq
+do
+	mkdir $MNT/$d 2>/dev/null
+done
+# ...and every directory the build installs into, which is generated rather
+# than listed here because the list was wrong -- see gen/destdirs.txt.  It is
+# sorted parents first, which is load-bearing: V8 has no mkdir -p.
+for d in `grep -v '^#' $SRC/mk/gen/destdirs.txt`
 do
 	mkdir $MNT/$d 2>/dev/null
 done
@@ -225,14 +231,20 @@ date
 # ours last makes that belt-and-braces: whatever order the passes above
 # leave behind, the binary that ends up on the disk is the one this build
 # produced.
-# usr/games belongs in this list and was missing from it: bcd is the one
-# game with source on the tape, stage 6 builds it into DESTDIR/usr/games,
-# and nothing copied it out -- so a command we build was absent from the
-# disk while every report said it had been built. Found by retire-check.py,
-# which asks a question a boot test cannot: is anything on the reference
-# image not on ours?
-for d in bin etc lib usr/bin usr/lib usr/games usr/include usr/include/sys \
-	 usr/include/sys/inet
+#
+# THE DIRECTORY LIST IS GENERATED, and that is the whole point of it.  It
+# used to be written here by hand, and it was wrong twice over: usr/games
+# was missing, so `bcd' -- the one game with source on the tape -- was built,
+# reported built, and absent from the disk; and so were usr/include/CC and
+# its two subdirectories, usr/include/chaos, usr/include/local and
+# usr/lib/lex, another 34 files.  mkdep.py now scrapes the destinations out
+# of the cp rules of the makefiles it generates, so a component that starts
+# installing somewhere new appears here without anyone noticing it had to.
+#
+# Worth knowing that retire-check.py cannot catch this class: headers are
+# `source' rows in MANIFEST, so it counts them as safe in git and never asks
+# whether they are on the disk.
+for d in `grep -v '^#' $SRC/mk/gen/destdirs.txt`
 do
 	if test -d $DEST/$d
 	then
