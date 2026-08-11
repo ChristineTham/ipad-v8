@@ -1659,10 +1659,18 @@ def derive_dirs(taken):
         # makefile never says `lex', so the makefile test passed, the link
         # went ahead without a scanner, and ld reported the symptom rather
         # than the cause: `Undefined: _yylex, _yyinput'.
-        grammars = [f for f in os.listdir(p) if f.endswith((".y", ".l"))]
-        if grammars or re.search(r'\byacc\b|\blex\b|y\.tab|lex\.yy', mk):
+        # `.g' as well as `.y' and `.l': ratfor's grammar is r.g, and its
+        # makefile says `yacc -d r.g'. The tape does not insist on suffixes.
+        grammars = [f for f in os.listdir(p) if f.endswith((".y", ".l", ".g"))]
+        # A RECIPE that runs yacc or lex, not the word anywhere in the file.
+        # csh's makefile contains "lex" only inside sh.lex.o, an object name in
+        # a macro continuation, and the loose test skipped the C shell over it.
+        # Same shape as the -l84 hits: matching a word is not matching a use.
+        invokes = re.search(r'^\t.*[; \t(]?\b(yacc|lex)\b\s', mk, re.M)
+        if grammars or invokes:
             skipped.append((name + "/", "yacc/lex (%s) -- needs gen rules, like config"
-                            % (" ".join(sorted(grammars)) or "per its makefile")))
+                            % (" ".join(sorted(grammars))
+                               or "invoked by its makefile")))
             continue
         # An archive built inside the component, which stage 5 knows nothing
         # about. map/ links libmap.a out of map/libmap, and without it ld

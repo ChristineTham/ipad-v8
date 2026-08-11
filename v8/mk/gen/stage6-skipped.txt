@@ -57,7 +57,6 @@ compact/     directory name is not a binary on the image
 compat/      System V compatibility traps; unixtraps.c:328: `non-constant case expression'
 config/      a loose file or a hand-written entry already provides this command
 cpp/         a loose file or a hand-written entry already provides this command
-csh/         yacc/lex (per its makefile) -- needs gen rules, like config
 cyntax/      no .c files
 daemon/      directory name is not a binary on the image
 des/         directory name is not a binary on the image
@@ -72,7 +71,7 @@ eqn/         yacc/lex (eqn.y) -- needs gen rules, like config
 ether/       directory name is not a binary on the image
 ex/          3 programs in one directory (ex expreserve exrecover) -- needs the makefile's own object split
 expr/        yacc/lex (expr.y) -- needs gen rules, like config
-f77/         yacc/lex (per its makefile) -- needs gen rules, like config
+f77/         includes a header the tape does not ship: tokdefs (from lex.c)
 grap/        yacc/lex (grap.y grapl.l) -- needs gen rules, like config
 hist/        directory name is not a binary on the image
 hoc/         yacc/lex (hoc.y) -- needs gen rules, like config
@@ -81,7 +80,7 @@ kasb/        directory name is not a binary on the image
 lcomp/       2 programs in one directory (bb lprint) -- needs the makefile's own object split
 learn/       directory name is not a binary on the image
 lex/         a loose file or a hand-written entry already provides this command
-lint/        yacc/lex (per its makefile) -- needs gen rules, like config
+lint/        yacc/lex (invoked by its makefile) -- needs gen rules, like config
 login/       a loose file or a hand-written entry already provides this command
 m4/          yacc/lex (m4y.y) -- needs gen rules, like config
 make/        a loose file or a hand-written entry already provides this command
@@ -99,7 +98,7 @@ prof         also in /usr/lib -- installed only to /usr/bin
 ps/          3 programs in one directory (getfs getuname ps) -- needs the makefile's own object split
 punct/       directory name is not a binary on the image
 rarepl/      2 programs in one directory (rarct rarepl) -- needs the makefile's own object split
-ratfor/      yacc/lex (per its makefile) -- needs gen rules, like config
+ratfor/      yacc/lex (r.g) -- needs gen rules, like config
 refer/       7 programs in one directory (deliv1 hunt1 inv1 mkey1 refer1 what1 what4) -- needs the makefile's own object split
 sdb/         includes a header the tape does not ship: bio.h (from old.c)
 server/      directory name is not a binary on the image
