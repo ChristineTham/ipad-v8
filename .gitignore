@@ -23,6 +23,8 @@ tools/vendor/
 tools/dmdbridge/.cargo/
 
 # Big historical artifacts — never commit; rebuild locally per docs/spike-a0.md
+# The one exception is image/ipnx-v8-rp07.img.xz, un-ignored below: it is the
+# disk WE build, and the next build reads it (docs/golden-disk.md).
 *.disk
 *.dsk
 *.tap
@@ -32,6 +34,8 @@ tools/dmdbridge/.cargo/
 *.tgz
 *.cpio
 *.iso
+*.img
+!image/ipnx-v8-rp07.img.xz
 app/*.log
 libdmd/build-*.log
 libdmd/*.pgm

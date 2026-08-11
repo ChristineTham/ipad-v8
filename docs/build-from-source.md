@@ -521,8 +521,14 @@ them from `DESTDIR`, writes 414 device nodes and installs the kernel;
 `tools/boot-newdisk.sh` then boots the image **alone** — nothing else attached, so no
 missing file can be satisfied from another drive — and gets the boot block finding
 `hp(0,0)unix`, the autoconfig, `login:`, a root shell, and a C program compiled *and run*
-by the compiler stage 6 installed. What it does **not** yet have is most of `/usr`: only
-132 of ~277 commands are built, so `/bin` holds 36 files and `/usr/bin` 73.
+by the compiler stage 6 installed.
+
+It is now a **complete** system rather than a partial one: 206 commands built, 1406
+carried off the reference image because the tape shipped them without source, and the
+runtime trees (the manual, nroff's macros, the games' data, the 5620's fonts) installed
+alongside. `/bin` holds all 57 files the reference image has. What that took, and the
+containment argument that lets the TUHS image be retired, is
+[docs/golden-disk.md](golden-disk.md).
 
 Three faults on the way, and all three are the same fault: **a command's directory is not
 guessable, and the failure that follows a wrong guess is not a missing-command error.**

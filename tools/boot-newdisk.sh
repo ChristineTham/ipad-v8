@@ -56,6 +56,12 @@ ck "init, /etc/rc and getty"       'login:'
 ck "a root shell"                  'BN-SHELL-ok'
 ck "cc is installed"               'BN-HAVE-CC-ok'
 ck "and it compiles and runs"      'BN-COMPILED-ok'
+ck "mux and muxterm are there"     'BN-MUX-ok'
+ck "and the widened pair (A4)"     'BN-WMUX-ok'
+ck "games: fortune and bcd"        'BN-GAMES-ok'
+ck "the manual and tmac"           'BN-MAN-ok'
+ck "yacc and strip in /usr/bin"    'BN-YACC-ok'
+ck "login read /.profile"          'term=vt100'
 ck "clean halt"                    'BN-DONE-ok'
 
 echo

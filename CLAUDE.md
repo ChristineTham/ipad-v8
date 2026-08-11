@@ -496,11 +496,47 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   `/usr/bin/{yacc,lex,ranlib}`, `/usr/lib/yaccpar` — there is no `/bin/strip`.
   `cc -B` is a bare `strspl`, so the prefix must name the passes' actual directory
   (`-B$(TOOLDIR)/lib/`), and `as`/`ld`/`crt0.o` have no `-B` equivalent at all.
+- **Read a V8 disk from the host — don't boot one to look.** `tools/v8fs.py` walks a
+  SIMH RP06/RP07 image directly (`ls`/`cat`/`stat`/`diff`, `IMAGE:PART`); every
+  constant is quoted from the tree (`param.h`, `ino.h`, `dir.h`, `subr.c`'s `bmap`,
+  `hp.c`'s tables in *sectors* with *cylinder* offsets). The one trap is
+  `usr/src/libc/gen/l3tol.c`: on the **vax** a 3-byte disk address is little-endian
+  with a zero high byte, and the **pdp11 arm of the same file** packs the identical
+  bytes in a different order — pick wrong and the inode addresses look almost
+  plausible. This turned "what is actually on that disk?" from a five-minute boot
+  into a one-second question, which is what made the retirement audit possible at all.
+- **netfs costs a round trip per file, not per byte** — measured at ~30 files/minute
+  through the emulated VAX + Interlan + SLiRP. So it is excellent for a build reading
+  sources on demand and hopeless for bulk installs: 2264 runtime files over the wire
+  is ninety minutes, and the same set via `cpio` off a mounted disk is four seconds.
+  Diagnose by counting *files*, never bytes.
+- **`cp` per file is what makes stage 8 slow, not I/O.** 400 copies took longer than
+  the `mkfs` of a 475 MB filesystem. `cpio -p` reads its path list from stdin, which
+  is exactly the shape of a generated manifest — one process for the whole set.
+- **A command can be built and still not be on the disk.** Stage 8's copy loop has its
+  own directory list, unrelated to `provenance.txt`, and `usr/games` was missing from
+  it — so `bcd` was built, reported built, and absent. Symmetrically, `TOOLDIR` serves
+  *two* roles (the staging toolchain, and the system being built, since stage 6 aims
+  it at `DESTDIR`), so an install path in `stage1.order` is a **system-layout**
+  decision: `yacc` and `strip` installed to `bin/` reached the toolchain and never
+  `/usr/bin`, where `where.txt`, the reference image and `provenance.txt` all say they
+  live — and where `mkdep.py`'s own generated makefiles default `YACCPATH` to look.
+  Neither is visible from a boot test; both were found by `tools/retire-check.py`.
+- **`mkfs` does not clear data blocks.** A second stage 8 over the same image file
+  leaves the previous run's contents in what the new filesystem calls free space:
+  invisible to the guest, very visible to a compressor. Recreate the file from
+  `/dev/zero` before the run that produces a committed artefact.
 
 ## Conventions
 
 - Big binaries (disk images, tapes, tarballs) never enter git — rebuild locally per the
-  runbook (gitignored: `*.disk`, `*.tap`, `work/`).
+  runbook (gitignored: `*.disk`, `*.tap`, `*.img`, `work/`). **Exactly one exception**,
+  named in `.gitignore` and in `tools/hook-block-binaries.sh` rather than left to a gap
+  in a pattern list: `image/ipnx-v8-rp07.img.xz`, the disk *we* build, because it is the
+  **input to the next build** — stage 8 lifts `v8/mk/gen/carry.txt` off it. With it
+  committed the build's only external input is the tapes, which `v8/MANIFEST` already
+  accounts for. Written only by `tools/image-pack.py`
+  ([docs/golden-disk.md](docs/golden-disk.md)).
 - **VERIFY** marks a documented step assembled from research but not yet executed here.
   Resolving one means executing it and correcting the doc, *or* recording that the step was
   superseded — never silently deleting the marker. None remain open

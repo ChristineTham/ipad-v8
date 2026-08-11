@@ -90,6 +90,28 @@ shmust "if test -x /bin/cc; then echo BN-HAVE-CC\$OK; fi" "BN-HAVE-CC-ok" 60
 sh "echo 'main(){printf(\"BN-COMPILED\");}' > /tmp/t.c"
 shmust "cd /tmp; if cc -o t t.c; then ./t; echo \$OK; fi" "BN-COMPILED-ok" 300
 
+# The content the build CARRIES rather than makes, checked on the disk that
+# will replace the one it was carried from. Each is a different origin:
+# mux and muxterm are jerq binaries with no source on the tape; fortune is a
+# game, also sourceless; the manual and nroff's macros are `source' rows that
+# came off the reference image only because they were proven byte-identical
+# to ours; wmux and /.profile are ours and are named individually in
+# builddisk.sh, which is exactly the kind of thing that silently does not
+# ship. A disk missing all of these still boots to login: perfectly.
+shmust "if test -x /usr/jerq/bin/mux -a -x /usr/jerq/lib/muxterm; then echo BN-MUX\$OK; fi" \
+       "BN-MUX-ok" 60
+shmust "if test -x /usr/jerq/bin/wmux -a -f /usr/jerq/lib/muxterm.w; then echo BN-WMUX\$OK; fi" \
+       "BN-WMUX-ok" 60
+shmust "if test -x /usr/games/fortune -a -x /usr/games/bcd; then echo BN-GAMES\$OK; fi" \
+       "BN-GAMES-ok" 60
+shmust "if test -f /usr/man/man1/ls.1 -a -f /usr/lib/tmac/tmac.an; then echo BN-MAN\$OK; fi" \
+       "BN-MAN-ok" 60
+shmust "if test -x /usr/bin/yacc -a -x /usr/bin/strip; then echo BN-YACC\$OK; fi" \
+       "BN-YACC-ok" 60
+# TERM comes from /.profile, which V8 itself ships none of -- so this is
+# both "the file is there" and "login actually read it".
+sh "echo term=\$TERM"
+
 sh "echo BN-DONE\$OK"
 sh "cd /; sync; sync" 60
 sendline "/etc/halt"
