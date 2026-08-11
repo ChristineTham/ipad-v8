@@ -189,8 +189,11 @@ if {$from <= 8} { # The golden image mounted read-only at /gold, BEFORE builddis
 # reads gen/provenance.txt and lifts every `copy' row out of it.
 sh "mkdir /gold" 60
 sh "rm -f /dev/rp3a /dev/rp3g; /etc/mknod /dev/rp3a b 0 24; /etc/mknod /dev/rp3g b 0 30" 60
-sh "/etc/mount -r /dev/rp3a /gold" 120
-sh "mkdir /gold/usr 2>/dev/null; /etc/mount -r /dev/rp3g /gold/usr" 120
+# `-r' goes LAST. mount.c's usage says so -- "mount [-a] [special dir [-r]]"
+# -- and putting it first makes -r the special file, so the diagnostic is
+# "mount: No such file or directory" about a flag.
+sh "/etc/mount /dev/rp3a /gold -r" 120
+sh "mkdir /gold/usr 2>/dev/null; /etc/mount /dev/rp3g /gold/usr -r" 120
 sh "ls /gold/bin | wc -l" 60
 sh "sh /n/src/mk/builddisk.sh /n/src /b/root 2 rp07 /mnt /gold 2>&1" 3600 }
 
