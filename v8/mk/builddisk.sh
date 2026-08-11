@@ -16,10 +16,26 @@
 # so /usr is partition g on an RP06 and partition f on an RP07, and d, e, f, h
 # on an RP06 are ZERO LENGTH -- they are not small, they do not exist.  Root is
 # 15884 sectors on both, which is what swapalice.c means by
-# `rootdev = makedev(0, 0)'.  mkfs takes 512-byte blocks and a sector is 512
-# bytes, so the sector counts are the block counts; asking for more lays the
-# free list down past the end of the partition and fails on the FIRST write
-# rather than partway through.
+# `rootdev = makedev(0, 0)'.
+#
+# THOSE NUMBERS ARE SECTORS AND mkfs WANTS BLOCKS, AND A BLOCK IS NOT A SECTOR.
+# This file previously said, as a statement of fact, "mkfs takes 512-byte
+# blocks and a sector is 512 bytes, so the sector counts are the block counts".
+# usr/include/sys/param.h:
+#
+#	#define BSIZE(dev)      (BITFS(dev)? 4096: 1024)
+#
+# So a filesystem of 15884 blocks wants 31768 sectors out of a partition that
+# has 15884, and mkfs walks off the end. Hence the divide by 2 below.
+#
+# The failure is worth knowing because it does not look like an overrun.  mkfs
+# builds the free list DOWNWARD from the last block but only writes when its
+# in-core list of 150 fills, so the first write lands 149 blocks below the top:
+#
+#	write error: 15734          (= 15883 - 149)
+#
+# which reads like a bad block 150 short of the end rather than a filesystem
+# twice the size of its partition.
 #
 # The nodes for the target drive have to exist on the RUNNING system before
 # any of this: minor is drive<<3 | partition, `hp' is block major 0 and char
@@ -33,10 +49,18 @@ TYPE=${4-rp07}
 MNT=${5-/mnt}
 
 case $TYPE in
-rp06)	ROOTSZ=15884; USRPART=g; USRPARTNO=6; USRSZ=291280 ;;
-rp07)	ROOTSZ=15884; USRPART=f; USRPARTNO=5; USRSZ=928000 ;;
+rp06)	ROOTSEC=15884; USRPART=g; USRPARTNO=6; USRSEC=291280 ;;
+rp07)	ROOTSEC=15884; USRPART=f; USRPARTNO=5; USRSEC=928000 ;;
 *)	echo "builddisk: unknown drive type $TYPE (rp06 or rp07)" 1>&2; exit 1 ;;
 esac
+
+# sectors -> filesystem blocks.  BSIZE(dev) is 1024 and a sector is 512, so
+# every partition holds half as many blocks as it does sectors.  Kept as an
+# explicit divide with the two names spelled differently (SEC vs SZ) rather
+# than pre-divided constants, because the numbers above are quoted from
+# usr/sys/dev/hp.c and should stay quotable.
+ROOTSZ=`expr $ROOTSEC / 2`
+USRSZ=`expr $USRSEC / 2`
 
 test -f $DEST/unix || { echo "builddisk: no $DEST/unix -- stage 7 first" 1>&2; exit 1; }
 test -d $DEST/bin  || { echo "builddisk: no $DEST/bin -- stage 6 first" 1>&2; exit 1; }
@@ -51,7 +75,7 @@ USRB=/dev/rp$UNIT$USRPART; USRR=/dev/rrp$UNIT$USRPART
 AMIN=`expr $UNIT \* 8`
 UMIN=`expr $UNIT \* 8 + $USRPARTNO`
 
-echo "=== stage 8: $TYPE on drive $UNIT, root $ROOTSZ, /usr $USRSZ ==="
+echo "=== stage 8: $TYPE on drive $UNIT, root $ROOTSZ blocks ($ROOTSEC sectors), /usr $USRSZ blocks ($USRSEC sectors) ==="
 
 # /etc/mknod, not mknod. There is no mknod on root's PATH -- where.txt says
 # /etc -- and the first run of this script said so four times, in the middle
