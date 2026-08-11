@@ -68,14 +68,14 @@ diff3        also in /usr/lib -- installed only to /usr/bin
 dired        also in /usr/lib -- installed only to /usr/bin
 dump/        directory name is not a binary on the image
 efl/         yacc/lex (lex.l) -- needs gen rules, like config
-eqn/         yacc/lex (eqn.y) -- needs gen rules, like config
+eqn/         a loose file or a hand-written entry already provides this command
 ether/       directory name is not a binary on the image
 ex/          3 programs in one directory (ex expreserve exrecover) -- needs the makefile's own object split
-expr/        yacc/lex (expr.y) -- needs gen rules, like config
+expr/        a loose file or a hand-written entry already provides this command
 f77/         includes a header the tape does not ship: tokdefs (from lex.c)
-grap/        yacc/lex (grap.y grapl.l) -- needs gen rules, like config
+grap/        a loose file or a hand-written entry already provides this command
 hist/        directory name is not a binary on the image
-hoc/         yacc/lex (hoc.y) -- needs gen rules, like config
+hoc/         a loose file or a hand-written entry already provides this command
 ideal/       yacc/lex (idlex.l idyac.y) -- needs gen rules, like config
 kasb/        directory name is not a binary on the image
 lcomp/       2 programs in one directory (bb lprint) -- needs the makefile's own object split
@@ -83,7 +83,7 @@ learn/       directory name is not a binary on the image
 lex/         a loose file or a hand-written entry already provides this command
 lint/        yacc/lex (invoked by its makefile) -- needs gen rules, like config
 login/       a loose file or a hand-written entry already provides this command
-m4/          yacc/lex (m4y.y) -- needs gen rules, like config
+m4/          a loose file or a hand-written entry already provides this command
 make/        a loose file or a hand-written entry already provides this command
 map/         links libmap.a, built inside the component
 monk/        no .c files
@@ -92,14 +92,14 @@ numdate/     directory name is not a binary on the image
 p/           includes a header the tape does not ship: /usr/jerq/include/jioctl.h (from p.c)
 pack/        2 programs in one directory (pack unpack) -- needs the makefile's own object split
 passwd       also in /etc -- installed only to /bin
-pic/         yacc/lex (picl.l picy.y) -- needs gen rules, like config
+pic/         a loose file or a hand-written entry already provides this command
 plot/        links l2621.a, built inside the component
-pp/          yacc/lex (scan.l) -- needs gen rules, like config
+pp/          a loose file or a hand-written entry already provides this command
 prof         also in /usr/lib -- installed only to /usr/bin
 ps/          3 programs in one directory (getfs getuname ps) -- needs the makefile's own object split
 punct/       directory name is not a binary on the image
 rarepl/      2 programs in one directory (rarct rarepl) -- needs the makefile's own object split
-ratfor/      yacc/lex (r.g) -- needs gen rules, like config
+ratfor/      a loose file or a hand-written entry already provides this command
 refer/       7 programs in one directory (deliv1 hunt1 inv1 mkey1 refer1 what1 what4) -- needs the makefile's own object split
 sdb/         includes a header the tape does not ship: bio.h (from old.c)
 server/      directory name is not a binary on the image

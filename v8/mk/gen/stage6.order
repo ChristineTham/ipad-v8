@@ -10,6 +10,14 @@ mkfs	usr/src/cmd	etc/mkfs
 update	usr/src/cmd	etc/update
 nmount	usr/src/cmd	etc/nmount
 chroot	usr/src/cmd	etc/chroot
+expr	usr/src/cmd/expr	usr/bin/expr
+hoc	usr/src/cmd/hoc	usr/bin/hoc
+eqn	usr/src/cmd/eqn	usr/bin/eqn
+m4	usr/src/cmd/m4	usr/bin/m4
+pp	usr/src/cmd/pp	usr/bin/pp
+pic	usr/src/cmd/pic	usr/bin/pic
+grap	usr/src/cmd/grap	usr/bin/grap
+ratfor	usr/src/cmd/ratfor	usr/bin/ratfor
 ac	usr/src/cmd	etc/ac
 accton	usr/src/cmd	etc/accton
 apply	usr/src/cmd	usr/bin/apply

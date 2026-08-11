@@ -1420,6 +1420,117 @@ STAGE6 = [
     dict(name="chroot", dir="usr/src/cmd", objs=["chroot.c"], dest="DESTDIR",
          product="chroot", install="etc/chroot",
          note="ipnx: V8 has chroot(2) and ships no chroot(1); stage 9 needs one"),
+
+    # ------------------------------------------------ the yacc/lex commands
+    #
+    # Hand-written because they are not a family and cannot be derived. Every
+    # one runs yacc or lex differently: expr compiles y.tab.c straight to a
+    # binary, m4 renames it, eqn/pic/grap/hoc each COPY y.tab.h to a private
+    # name their sources include, ratfor's grammar is called r.g. The pattern
+    # config(8) established -- gen for the generated source, sidegen for the
+    # header that exists only in the object directory, objdeps so every object
+    # waits for it, and -I. because cpp searches the source's directory and
+    # never the current one -- is what they all share, and nothing else is.
+    #
+    # The `extra' third element of a gen entry is the tape's own header copy.
+    # Those makefiles all spell it `-cmp -s y.tab.h X || cp y.tab.h X', which
+    # exists to avoid touching X when the grammar changes but its tokens do
+    # not. Out of tree the object directory is fresh every run, so there is
+    # nothing to preserve and the plain cp is the same thing without the
+    # dependency on cmp.
+
+    dict(name="expr", dir="usr/src/cmd/expr",
+         objs={"y.tab.o": "y.tab.c"},
+         gen={"y.tab.c": ("yacc", "expr.y", None)},
+         # The tape says `cc -I/usr/src/cmd/bs' -- an absolute path into a
+         # live machine. ../bs is the same directory reached hermetically.
+         incs=[".", "../bs"],
+         dest="DESTDIR", product="expr", install="usr/bin/expr",
+         note="cmd/expr/makefile: yacc expr.y, then cc y.tab.c -o expr"),
+
+    dict(name="hoc", dir="usr/src/cmd/hoc",
+         objs={"hoc.o": "y.tab.c", "code.o": "code.c", "init.o": "init.c",
+               "math.o": "math.c", "symbol.o": "symbol.c"},
+         gen={"y.tab.c": ("yacc -d", "hoc.y", None)},
+         sidegen={"y.tab.h": "y.tab.c"}, objdeps=["y.tab.h"],
+         dest="DESTDIR", product="hoc", install="usr/bin/hoc",
+         note="cmd/hoc/makefile: OBJS(5), YFLAGS=-d, -lm (which is libc here). "
+              "code.c includes y.tab.h directly, so no header copy is needed -- "
+              "the makefile's x.tab.h is dependency bookkeeping, not a source"),
+
+    dict(name="eqn", dir="usr/src/cmd/eqn",
+         objs={"eqn.o": "y.tab.c", "main.o": "main.c", "diacrit.o": "diacrit.c",
+               "eqnbox.o": "eqnbox.c", "font.o": "font.c", "fromto.o": "fromto.c",
+               "funny.o": "funny.c", "glob.o": "glob.c", "integral.o": "integral.c",
+               "input.o": "input.c", "lex.o": "lex.c", "lookup.o": "lookup.c",
+               "mark.o": "mark.c", "matrix.o": "matrix.c", "move.o": "move.c",
+               "over.o": "over.c", "paren.o": "paren.c", "pile.o": "pile.c",
+               "shift.o": "shift.c", "size.o": "size.c", "sqrt.o": "sqrt.c",
+               "text.o": "text.c"},
+         gen={"y.tab.c": ("yacc -d", "eqn.y", "cp y.tab.h e.def")},
+         sidegen={"y.tab.h": "y.tab.c", "e.def": "y.tab.c"},
+         objdeps=["e.def"],
+         dest="DESTDIR", product="eqn", install="usr/bin/eqn",
+         note="cmd/eqn/makefile: FILES(22), YFLAGS=-d, e.def is a copy of "
+              "y.tab.h and twenty of the sources include it by that name"),
+
+    dict(name="m4", dir="usr/src/cmd/m4",
+         objs={"m4y.o": "y.tab.c", "m4.o": "m4.c", "m4ext.o": "m4ext.c",
+               "m4macs.o": "m4macs.c"},
+         gen={"y.tab.c": ("yacc", "m4y.y", None)},
+         dest="DESTDIR", product="m4", install="usr/bin/m4",
+         note="cmd/m4/makefile: a.out from four objects, installed as "
+              "/usr/bin/m4 -- the product name is in the install rule, not "
+              "in the link"),
+
+    dict(name="pp", dir="usr/src/cmd/pp",
+         objs={"pp.o": "pp.c", "scan.o": "lex.yy.c"},
+         gen={"lex.yy.c": ("lex", "scan.l", None)},
+         libs=["usr/lib/libl.a"],
+         dest="DESTDIR", product="pp", install="usr/bin/pp",
+         note="cmd/pp/makefile: pp.o scan.o -ll; scan.o is the lex output and "
+              "its makefile never says `lex', which is why the derivation "
+              "linked it without a scanner"),
+
+    dict(name="pic", dir="usr/src/cmd/pic",
+         objs={"picy.o": "y.tab.c", "picl.o": "lex.yy.c", "main.o": "main.c",
+               "print.o": "print.c", "misc.o": "misc.c", "symtab.o": "symtab.c",
+               "blockgen.o": "blockgen.c", "boxgen.o": "boxgen.c",
+               "circgen.o": "circgen.c", "arcgen.o": "arcgen.c",
+               "linegen.o": "linegen.c", "movegen.o": "movegen.c",
+               "textgen.o": "textgen.c", "input.o": "input.c", "for.o": "for.c",
+               "pltroff.o": "pltroff.c"},
+         gen={"y.tab.c": ("yacc -d", "picy.y", "cp y.tab.h pic.ydef"),
+              "lex.yy.c": ("lex", "picl.l", None)},
+         sidegen={"y.tab.h": "y.tab.c", "pic.ydef": "y.tab.c"},
+         objdeps=["pic.ydef"],
+         dest="DESTDIR", product="pic", install="usr/bin/pic",
+         note="cmd/pic/makefile: OFILES(16), YFLAGS=-d, pic.ydef is its copy "
+              "of y.tab.h"),
+
+    dict(name="grap", dir="usr/src/cmd/grap",
+         objs={"grap.o": "y.tab.c", "grapl.o": "lex.yy.c", "main.o": "main.c",
+               "input.o": "input.c", "print.o": "print.c", "frame.o": "frame.c",
+               "for.o": "for.c", "coord.o": "coord.c", "ticks.o": "ticks.c",
+               "plot.o": "plot.c", "label.o": "label.c", "misc.o": "misc.c"},
+         gen={"y.tab.c": ("yacc -d", "grap.y", "cp y.tab.h prevy.tab.h"),
+              "lex.yy.c": ("lex", "grapl.l", None)},
+         sidegen={"y.tab.h": "y.tab.c", "prevy.tab.h": "y.tab.c"},
+         objdeps=["prevy.tab.h"],
+         dest="DESTDIR", product="grap", install="usr/bin/grap",
+         note="cmd/grap/makefile: grap.o grapl.o + OFILES(10), prevy.tab.h is "
+              "its copy of y.tab.h"),
+
+    dict(name="ratfor", dir="usr/src/cmd/ratfor",
+         objs={"y.tab.o": "y.tab.c", "r0.o": "r0.c", "r1.o": "r1.c",
+               "r2.o": "r2.c", "rio.o": "rio.c", "rlook.o": "rlook.c",
+               "rlex.o": "rlex.c"},
+         # r.g, not r.y. The tape does not insist on suffixes and the
+         # derivation's grammar test had to learn that from this directory.
+         gen={"y.tab.c": ("yacc -d", "r.g", None)},
+         sidegen={"y.tab.h": "y.tab.c"}, objdeps=["y.tab.h"],
+         dest="DESTDIR", product="ratfor", install="usr/bin/ratfor",
+         note="cmd/ratfor/makefile: a.out from seven objects; grammar is r.g"),
 ]
 
 # ------------------------------------------------- the rest of usr/src/cmd
