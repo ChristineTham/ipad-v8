@@ -151,6 +151,16 @@ done
 # ...and every directory the build installs into, which is generated rather
 # than listed here because the list was wrong -- see gen/destdirs.txt.  It is
 # sorted parents first, which is load-bearing: V8 has no mkdir -p.
+#
+# destdirs.txt MUST CONTAIN DIRECTORIES AND NOTHING ELSE, because this loop
+# mkdirs every line of it.  It briefly also carried the 458 exact installed
+# PATHS, tab-indented to tell them apart -- and `for d in `grep ...`` splits
+# on IFS, which contains tab, so the marker was gone before the shell saw a
+# word.  Stage 8 made /bin/sh, /bin/cc and /etc/init into empty directories,
+# the copy pass below skipped each of them (it is guarded by `test -d
+# $DEST/$d', false for a file), and the disk mounted, fscked and walked
+# clean while being unbootable -- no /etc/init to exec.  The paths now live
+# in gen/destfiles.txt, which nothing here reads.  Do not merge them again.
 for d in `grep -v '^#' $SRC/mk/gen/destdirs.txt`
 do
 	mkdir $MNT/$d 2>/dev/null

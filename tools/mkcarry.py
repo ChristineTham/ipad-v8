@@ -119,8 +119,8 @@ def load_manifest():
     return disp
 
 
-def load_destdirs():
-    """The exact paths this build installs (mkdep.py's gen/destdirs.txt).
+def load_destfiles():
+    """The exact paths this build installs (mkdep.py's gen/destfiles.txt).
 
     A file that this build installs AND that is not on the tape at all was
     put there by us, so carrying it off a reference image is wrong twice over:
@@ -138,14 +138,16 @@ def load_destdirs():
     ours" is the same trap as the hand-listed copy directories: it is
     correct on the day it is written.
     """
-    p = os.path.join(REPO, "v8", "mk", "gen", "destdirs.txt")
+    # These used to live in destdirs.txt, tab-indented, alongside the
+    # directories builddisk.sh copies. They do not any more: builddisk.sh
+    # word-splits that file into `mkdir', tab and all, so every path in it
+    # became an empty directory and the disk would not boot. Separate files
+    # now -- see mkdep.py's emit_destfiles().
+    p = os.path.join(REPO, "v8", "mk", "gen", "destfiles.txt")
     if not os.path.exists(p):
         return set()
-    # The tab-indented rows are exact installed PATHS; the unindented ones
-    # are the directories builddisk.sh copies. Only the paths answer "is
-    # this file ours" -- see the /bin/bls note in mkdep.py's emit_destdirs.
     return {"/" + l.strip() for l in open(p)
-            if l.startswith("\t") and l.strip()}
+            if l.strip() and not l.startswith("#")}
 
 
 def load_built():
@@ -328,7 +330,7 @@ def main():
 
     disp = load_manifest()
     built = load_built()
-    destdirs = load_destdirs()
+    destdirs = load_destfiles()
 
     gold = {}
     for part, pfx in v8fs.wholesystem(args.image):
@@ -405,7 +407,7 @@ def main():
 
     # Every directory a file copy will create by itself: the parents of
     # everything in the three lists, plus everything the build installs into
-    # (gen/destdirs.txt, which mkdep.py scrapes out of the makefiles).
+    # (gen/destdirs.txt and gen/destfiles.txt, scraped out of the makefiles).
     covered = set()
     for line in carry:
         p2 = line.lstrip("/")
@@ -420,11 +422,12 @@ def main():
             while "/" in p2:
                 p2 = p2.rsplit("/", 1)[0]
                 covered.add(p2)
-    dd = os.path.join(REPO, "v8", "mk", "gen", "destdirs.txt")
-    if os.path.exists(dd):
-        for line in open(dd):
-            if not line.startswith("#") and line.strip():
-                covered.add(line.strip())
+    for g in ("destdirs.txt", "destfiles.txt"):
+        dd = os.path.join(REPO, "v8", "mk", "gen", g)
+        if os.path.exists(dd):
+            for line in open(dd):
+                if not line.startswith("#") and line.strip():
+                    covered.add(line.strip())
     dtext = emit_dirs(gold, covered)
     ndirs = sum(1 for l in dtext.splitlines() if not l.startswith("#"))
 

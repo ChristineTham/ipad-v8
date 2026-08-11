@@ -415,6 +415,24 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   because the new script wanted a file that run's stage 1 had not been told to install.
   During a run, `docs/`, `CLAUDE.md` and brand-new files are safe; `v8/**` and the
   `tools/*.sh|*.exp` that bash is still reading are not.
+- **A generated list read by 1985 shell must hold exactly one kind of thing.**
+  `v8/mk/gen/destdirs.txt` briefly held both the directories stage 8 copies and
+  the 458 exact installed paths `mkcarry.py` needs, told apart by a leading tab
+  — and `builddisk.sh` reads it as `` for d in `grep -v '^#' destdirs.txt` ``,
+  which splits on `IFS`. Tab is in `IFS`, so the marker was gone before the
+  shell saw a word and `mkdir` got all 458: `/bin/sh`, `/bin/cc`, `/etc/init`
+  and 96 more became empty **directories**, and the copy pass skipped each
+  (it is guarded by `test -d $DEST/$d`, false for a file). Carried files were
+  untouched, so `/bin` came out with its Bell Labs binaries intact and
+  everything we build missing. The disk mounted, `fsck`'d clean, walked
+  4,507 files — and stopped dead after autoconfig with the CPU idle, because
+  there was no `/etc/init` to exec. Exact paths now live in
+  `gen/destfiles.txt`; never merge them back.
+  **And the check that should have caught it compared paths, not types**: a
+  directory named `/bin/sh` satisfied a search for the file `/bin/sh`, so
+  `retire-check.py` said UNIQUE 0 about an unbootable disk. It now compares
+  the inode type — same image, 424 failures. *A containment check that ignores
+  inode type is not a containment check.*
 - **V8's `ld` is single-pass only without a valid `__.SYMDEF`** — archive member order
   is *not* unconditionally correctness. `getfile()` returns 1 (no table of contents),
   2 (current) or 3 (stale, because the archive's mtime is newer). Case 2 runs

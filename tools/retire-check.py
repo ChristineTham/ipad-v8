@@ -103,7 +103,14 @@ def main():
     args = ap.parse_args()
 
     tuhs = walk(args.tuhs, v8fs.wholesystem(args.tuhs))
-    ipnx = set(walk(args.ipnx, v8fs.wholesystem(args.ipnx)))
+    # The whole inode, not just the path. This used to be a set() of paths,
+    # and a set of paths cannot tell a file from a directory that happens to
+    # have the same name -- which is not a hypothetical. A stage-8 bug
+    # created /bin/adb, /etc/init and 96 more as empty DIRECTORIES, and this
+    # check passed the resulting disk with UNIQUE 0 because every path it
+    # looked for was present. The disk could not boot: there was no
+    # /etc/init to exec. See mkdep.py's emit_destfiles() for the cause.
+    ipnx = walk(args.ipnx, v8fs.wholesystem(args.ipnx))
     man = load_manifest()
 
     tally = collections.Counter()
@@ -112,8 +119,16 @@ def main():
         ip = tuhs[path]
         if ip.isdir:
             continue
-        if path in ipnx:
-            tally["on ours"] += 1
+        # Every path that gets here is a FILE on the tape (dirs skipped
+        # above), so ours has to be a file too. A directory of the same name
+        # is not the file: it is the shape a failed install leaves behind.
+        ours = ipnx.get(path)
+        if ours is not None:
+            if ours.isdir:
+                orphan.append((path, "ours has this as a DIRECTORY, not a file"
+                                     " -- a failed install, not a copy"))
+            else:
+                tally["on ours"] += 1
             continue
         d, stored = man.get(path, (None, None))
         if d in ("source", "unpacked"):

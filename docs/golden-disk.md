@@ -214,8 +214,43 @@ tools/boot-newdisk.sh           # behaviour: boots alone, and has mux, games, ma
 
 `verify-golden.sh` answers "is the right thing on it" in a second;
 `boot-newdisk.sh` costs a VAX boot and answers "does it run". Neither replaces
-the other — the four files the containment check found were all on a disk that
-booted perfectly.
+the other, and it took both directions to prove it: the four files the
+containment check found were all on a disk that booted perfectly, and later a
+disk that passed containment with **UNIQUE 0** could not reach `login:` at all.
+
+### The disk that walked clean and would not boot
+
+The RP06 variant mounted, `fsck`'d clean, listed 4,507 files and passed
+`retire-check.py`. It stopped dead after autoconfig with the CPU idle at 1.7%
+— the kernel loaded, the machine came up, and there was no `/etc/init` to
+exec, because `/etc/init` was an empty **directory**. So were `/bin/sh`,
+`/bin/cc` and 96 others: 424 files in all.
+
+Two independent faults had to line up, and each is worth keeping.
+
+**The cause.** `gen/destdirs.txt` briefly carried two kinds of line — the
+directories stage 8 copies, and the 458 exact installed paths `mkcarry.py`
+uses to answer "is this file ours" — told apart by a leading tab. But
+`builddisk.sh` reads it as `` for d in `grep -v '^#' destdirs.txt` ``, and the
+shell splits on `IFS`, which contains tab. The marker was gone before the
+shell saw a word, so `mkdir` got all 458. The copy pass then skipped every one
+of them, because it is guarded by `test -d $DEST/$d` and that is false for a
+file. Carried files were unaffected, which is why `/bin` came out with its
+Bell Labs binaries (`csh`, `bls`, `[`) intact and everything we build missing.
+*A distinction encoded in leading whitespace cannot survive a consumer that
+word-splits, and in 1985 shell every consumer word-splits.* The paths now live
+in `gen/destfiles.txt` and nothing in `builddisk.sh` reads it.
+
+**Why nothing caught it.** `retire-check.py` compared *paths*. A directory
+named `/bin/sh` satisfies a search for a file named `/bin/sh`, so the gate that
+exists to decide whether the TUHS image can be deleted approved a disk that
+could not boot. It now compares the inode type, and the difference is not
+subtle — the same broken image reports 424 failures where it used to report
+none.
+
+The committed RP07 predates the bug and is unaffected: its `/bin` has zero
+directories, and its 15-directory `destdirs.txt` is byte-identical to the one
+HEAD generates today, so the image in git is what this tree builds.
 
 ## Four ways a file goes missing, and what catches each
 
@@ -228,6 +263,7 @@ have a check that would find them again:
 | built into `DESTDIR`, but stage 8 doesn't copy that directory | `gen/destdirs.txt`, scraped from the makefiles' own `cp` rules |
 | ours, on the tape nowhere, so no manifest describes it | named in `builddisk.sh` — `wmux`, `profile.root`, `profile.skel` |
 | an **empty** directory | `gen/dirs.txt` |
+| installed as a **directory** where a file belongs | `retire-check.py`, since it compares inode types |
 
 The last one is the one to remember. Every copy pass creates the directories it
 puts files in, so a directory with contents appears by itself and one without
