@@ -58,17 +58,36 @@ The **Phase A0 desktop spike** commands are in [docs/spike-a0.md](docs/spike-a0.
 (build SIMH `vax780`, produce `v8.disk` via timnewsham/myv8, connect a 5620/Blit terminal
 emulator, run `mux`), all inside the gitignored `work/` directory.
 
-Proven workbench commands (from the A0 spike; run from repo root):
+The A0 workbench ran on a local **SIMH 3.12** build at `work/simh312/`, which was
+deleted in the 2026-08-12 cleanup. `work/boot-hold.exp` and `work/dztalk.py` survive
+but **must not simply be repointed at `work/opensimh/BIN/vax780`**: that build has
+async I/O compiled in and `boot-hold.exp` predates the rule, so it opens without
+`set noasynch` and walks into the corruption trap documented below
+(`hp06: hard error er1=5<RMR,ILF>` and silent file loss). The current equivalents,
+which do set it, are:
 
 ```bash
-# Boot V8 to multiuser and hold (console stays on this terminal)
-cd work/myv8 && PATH="$PWD/../simh312/sim/BIN:$PATH" expect ../boot-hold.exp
+# Boot an image alone and check it end to end (13 assertions, then a clean halt)
+IMG=rp07new tools/boot-newdisk.sh
 ```
 
 ```bash
-# Prove a DZ login + exercise the system (separate shell, after boot)
-python3 work/dztalk.py
+# Content-only verification of the built disk, no VAX required (about a second)
+tools/verify-golden.sh
 ```
+
+**What in `work/` is load-bearing**, since the rest is scratch and was cleaned out:
+`rp07new` and `rp06new` (the built goldens), `rp06build` (stages 1–3 —
+`drive-stages48.sh` refuses to start without it and rebuilding costs ~50 min),
+`rp07v8.net` (the build machine itself, plus `.net.bak`, its only rollback),
+`rp06v8.golden` (the TUHS reference — still the default `--tuhs` for
+`retire-check.py`, `compare-built.py` and `verify-golden.sh`), the `*.tap.gz`
+archives and `work/v8.tar`/`v8jerq.tar` (what `v8-import.py --verify` reads).
+Tools for finished phases still name images that are gone — `drive-widemux.sh`
+wants `rp06v8.wide`, `rp07mig.sh` wants `rp06v8.mig`, `n3-ilkernel.sh` wants
+`rp07v8.golden`, `idle-probe.py` wants `idle-probe.disk`. Each fails with a plain
+"no such file"; their outputs are all committed, so recreate the image only if you
+genuinely need to re-run that experiment.
 
 Toolchains:
 - App shell (real since A1): Swift/SwiftUI, `app/ipnx.xcodeproj` — hand-authored,
