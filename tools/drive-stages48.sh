@@ -31,7 +31,7 @@ FROM="${3:-4}"
 TO="${4:-9}"
 # The reference image stage 8 lifts carry.txt off. Must match the --image
 # tools/mkcarry.py generated the lists from; see docs/golden-disk.md.
-REF="${5:-rp06v8.golden}"
+REF="${5:-rp07new}"
 # rp07 (the build and Track B disk) or rp06 (what the app can ship).
 TARGET="${6:-rp07}"
 LOG="$WORK/stages48.log"

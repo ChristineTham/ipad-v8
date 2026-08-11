@@ -129,7 +129,10 @@ simh "at rp2 $targetimg"
 # tools/mkcarry.py --image must name the same file, or the list and the disk
 # it is read from disagree -- which is the one failure this pair can have.
 set refimg [lindex $argv 3]
-if {$refimg == ""} { set refimg "rp06v8.golden" }
+# Ours. carry.txt derived from this image and from the TUHS one give the
+# same 1405 paths, which is what "the build no longer needs that disk"
+# means in practice. tools/image-pack.py unpack recreates it from git.
+if {$refimg == ""} { set refimg "rp07new" }
 if {[string match "*rp07*" $refimg] || [string match "*ipnx*" $refimg]} {
     set reftype rp07; set refusr f; set refusrminor 29
 } else {

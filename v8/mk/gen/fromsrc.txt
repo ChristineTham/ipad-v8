@@ -8,7 +8,11 @@
 # the mount point. They differ because the tape says jerq/ and the
 # image says /usr/jerq.
 #
-#	1 files
+#	5 files
 #
 #src	dst
-jerq/src/jplot/Makefile	usr/jerq/src/jplot/Makefile
+usr/bin/cflow	usr/bin/cflow
+usr/bin/diff3	usr/bin/diff3
+usr/bin/man	usr/bin/man
+usr/bin/readslow	usr/bin/readslow
+usr/bin/where	usr/bin/where

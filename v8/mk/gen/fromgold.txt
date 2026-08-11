@@ -9,7 +9,7 @@
 # Anything that stops being identical moves to fromsrc.txt by
 # itself. Same cpio(1) pass as carry.txt.
 #
-#	2263 files
+#	2259 files
 #
 usr/bin/2
 usr/bin/3
@@ -52,21 +52,17 @@ usr/bin/WWB/wwbmail
 usr/bin/WWB/wwbstand
 usr/bin/bundle
 usr/bin/calendar
-usr/bin/cflow
-usr/bin/diff3
 usr/bin/dirname
 usr/bin/doctype
 usr/bin/ideal
 usr/bin/lcomp
 usr/bin/lint
 usr/bin/lorder
-usr/bin/man
 usr/bin/map
 usr/bin/monk
 usr/bin/monksample
 usr/bin/pick
 usr/bin/plot
-usr/bin/readslow
 usr/bin/ship
 usr/bin/spell
 usr/bin/struct
@@ -74,7 +70,6 @@ usr/bin/tel
 usr/bin/uulog
 usr/bin/uupick
 usr/bin/uuto
-usr/bin/where
 usr/bin/whois
 usr/bin/wwb
 usr/dict/words
@@ -994,6 +989,7 @@ usr/jerq/src/jim/term/msgs.c
 usr/jerq/src/jim/term/msgs.h
 usr/jerq/src/jim/term/string.c
 usr/jerq/src/jim/unix.c
+usr/jerq/src/jplot/Makefile
 usr/jerq/src/jplot/driver.c
 usr/jerq/src/jplot/nmytest
 usr/jerq/src/jps.c

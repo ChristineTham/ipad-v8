@@ -77,8 +77,8 @@ def main():
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
 
-    tuhs = load(args.tuhs, (("a", ""), ("g", "/usr")))
-    ours = load(args.ipnx, (("a", ""), ("f", "/usr")))
+    tuhs = load(args.tuhs, v8fs.wholesystem(args.tuhs))
+    ours = load(args.ipnx, v8fs.wholesystem(args.ipnx))
 
     want = []
     for line in open(os.path.join(REPO, "v8/mk/gen/provenance.txt")):

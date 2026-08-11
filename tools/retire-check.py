@@ -102,8 +102,8 @@ def main():
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
 
-    tuhs = walk(args.tuhs, (("a", ""), ("g", "/usr")))
-    ipnx = set(walk(args.ipnx, (("a", ""), ("f", "/usr"))))
+    tuhs = walk(args.tuhs, v8fs.wholesystem(args.tuhs))
+    ipnx = set(walk(args.ipnx, v8fs.wholesystem(args.ipnx)))
     man = load_manifest()
 
     tally = collections.Counter()

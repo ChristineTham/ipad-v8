@@ -114,6 +114,32 @@ def load_manifest():
     return disp
 
 
+def load_destdirs():
+    """Directories this build installs into (mkdep.py's gen/destdirs.txt).
+
+    A file that is in one of these AND is not on the tape at all was put
+    there by us, so carrying it off a reference image is wrong twice over:
+    the next build regenerates it anyway, and carrying it would freeze
+    whatever the last build happened to produce.
+
+    This is the closure condition. Without it, regenerating carry.txt from
+    OUR disk instead of the TUHS one adds eight entries -- etc/chroot,
+    etc/nmount, the two profiles, the cc -B pass copies lib/as and lib/ld,
+    usr/include/ipnx.h and usr/lib/libpen.a -- and the two lists stop
+    agreeing, which is exactly the property that says the build no longer
+    needs the TUHS disk.
+
+    Derived rather than listed, because a hand-list of "things that are
+    ours" is the same trap as the hand-listed copy directories: it is
+    correct on the day it is written.
+    """
+    p = os.path.join(REPO, "v8", "mk", "gen", "destdirs.txt")
+    if not os.path.exists(p):
+        return set()
+    return {"/" + l.strip() for l in open(p)
+            if not l.startswith("#") and l.strip()}
+
+
 def load_built():
     """The (dir, name) pairs stage 6 installs, so we never carry over one.
 
@@ -177,7 +203,8 @@ def split_runtime(image, gold):
             keep.append((img, f[4], f[5]))
 
     # One open of the image, two partitions, read on demand.
-    readers = {"": v8fs.V8FS(image, "a"), "/usr": v8fs.V8FS(image, "g")}
+    readers = {"": v8fs.V8FS(image, "a"),
+               "/usr": v8fs.V8FS(image, v8fs.usrpart(image))}
     ingold, insrc = [], []
     for img, tape, stored in sorted(keep):
         rp = os.path.join(REPO, "v8", stored)
@@ -282,22 +309,27 @@ def emit_dirs(gold, covered):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--image", default=os.path.join(REPO, "work", "myv8", "rp06v8.golden"))
+    # OUR disk, not the TUHS one. Both give the same 1405 paths -- that
+    # equality is the whole point of the exercise -- so the default is now
+    # the image this build produces and the TUHS one is no longer needed.
+    # tools/image-pack.py unpack puts it here.
+    ap.add_argument("--image", default=os.path.join(REPO, "work", "myv8", "rp07new"))
     ap.add_argument("--check", action="store_true",
                     help="regenerate and diff against the committed file")
     args = ap.parse_args()
 
     disp = load_manifest()
     built = load_built()
+    destdirs = load_destdirs()
 
     gold = {}
-    for part, pfx in (("a", ""), ("g", "/usr")):
+    for part, pfx in v8fs.wholesystem(args.image):
         fs = v8fs.V8FS(args.image, part)
         for p, ip in fs.walk("/"):
             gold[pfx + p] = ip
 
     carry, reason = [], {}
-    nskip = ncollide = 0
+    nskip = ncollide = nours = 0
     for path in sorted(gold):
         ip = gold[path]
         if ip.isdir or ip.isdev:
@@ -312,6 +344,9 @@ def main():
         if d == "excluded":
             reason[path] = "no source on the tape"
         elif d is None:
+            if os.path.dirname(path) in destdirs:
+                nours += 1          # ours, and this build makes it again
+                continue
             reason[path] = "not on the tape at all"
         elif d == "unpacked":
             # An ar(1) archive used as a source container.  Its MEMBERS are
@@ -348,6 +383,7 @@ def main():
     out.append("#\t%d files\t%d bytes" % (len(carry), total))
     out.append("#\t%d skipped (regenerated here, or one machine's state)" % nskip)
     out.append("#\t%d not carried because we build our own" % ncollide)
+    out.append("#\t%d not carried because they are ours and not on the tape" % nours)
     out.append("#")
     out.append("# by tree:")
     for k, v in sorted(tree.items(), key=lambda kv: -size[kv[0]]):
@@ -401,8 +437,8 @@ def main():
     open(GOLDOUT, "w").write(gtext)
     open(SRCOUT, "w").write(stext)
     open(DIROUT, "w").write(dtext)
-    print("wrote %s: %d files, %d bytes, %d skipped, %d ours"
-          % (os.path.relpath(OUT, REPO), len(carry), total, nskip, ncollide))
+    print("wrote %s: %d files, %d bytes, %d skipped, %d built, %d ours"
+          % (os.path.relpath(OUT, REPO), len(carry), total, nskip, ncollide, nours))
     for k, v in sorted(tree.items(), key=lambda kv: -size[kv[0]])[:12]:
         print("   %-28s %5d files %10d" % (k, v, size[k]))
     print("wrote fromgold.txt: %d files identical to ours" % ngold)

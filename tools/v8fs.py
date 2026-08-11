@@ -257,6 +257,24 @@ class V8FS(object):
         return ip
 
 
+def usrpart(path):
+    """Which partition holds /usr on this image: `g' on an RP06, `f' on an
+    RP07.
+
+    Both drives put root on `a', so only /usr needs asking, and the answer
+    is a property of the DRIVE rather than of the filesystem -- hp6_sizes
+    gives partition g from cylinder 118 and hp7_sizes gives f from cylinder
+    50 (usr/sys/dev/hp.c).  Every tool that walks a whole system needs this,
+    and hardcoding `g' is exactly what broke when the reference image became
+    our own RP07."""
+    return "f" if V8FS(path, "a").dtype == "rp07" else "g"
+
+
+def wholesystem(path):
+    """The (partition, prefix) pairs that make up one system's namespace."""
+    return (("a", ""), (usrpart(path), "/usr"))
+
+
 def openspec(spec, default="a"):
     """IMAGE or IMAGE:PART."""
     if ":" in spec:

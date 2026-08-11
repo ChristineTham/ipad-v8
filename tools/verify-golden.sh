@@ -56,7 +56,10 @@ hdr "2. containment: nothing exists only on the TUHS image"
 run python3 "$ROOT/tools/retire-check.py" --tuhs "$TUHS" --ipnx "$IPNX" || fail=1
 
 hdr "3. the generated lists are current"
-run python3 "$ROOT/tools/mkcarry.py" --image "$TUHS" --check ||
+# Against the IPNX image, because that is the reference the build reads
+# now. Both images give the same 1405 carry paths -- that equality is what
+# retiring the TUHS disk means -- but only ours is guaranteed to be there.
+run python3 "$ROOT/tools/mkcarry.py" --image "$IPNX" --check ||
     { echo "  FAIL  run tools/mkcarry.py"; fail=1; }
 
 hdr "4. C4: what our build reproduces of the 1985 binaries"
