@@ -133,7 +133,11 @@ echo "=== stage 8: the tree ==="
 # tmp/dump is not decoration: /etc/rc line 31 is `/etc/savecore /tmp/dump',
 # savecore's argument is the DIRECTORY it saves a crash dump into, and without
 # it every single boot opens with "/tmp/dump: No such file or directory".
-for d in bin etc lib tmp tmp/dump dev usr/bin usr/lib usr/include \
+# proc, because /etc/rc mounts it and V8's /proc is a real filesystem type --
+# without the directory every boot prints
+#	gmount(2, "/proc", 0) returned -1, errno = 2
+# which is ENOENT for the MOUNT POINT, not for anything in the kernel.
+for d in bin etc lib tmp tmp/dump dev proc usr/bin usr/lib usr/include \
 	 usr/include/sys usr/include/sys/inet usr/adm usr/spool usr/tmp
 do
 	mkdir $MNT/$d 2>/dev/null

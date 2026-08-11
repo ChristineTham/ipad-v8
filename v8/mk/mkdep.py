@@ -1407,6 +1407,19 @@ STAGE6 = [
          product="nmount", install="etc/nmount",
          note="ipnx, phase N6: needs in_address() and tcp_sock() from libin, "
               "which stage 5 now builds from cmd/inet/libin"),
+
+    # Also ours. V8 has chroot(2) -- syscall 61 -- and no chroot(1): no such
+    # command on the golden image, no source in usr/src, no manual page. The
+    # system call has never had a command in front of it.
+    #
+    # Stage 9 is what wants it, and cc(1) is why it has to be a real chroot
+    # rather than a -B: `-B' is a RUNTIME option, so the cc installed into
+    # DESTDIR still carries /lib/ccom as its compiled-in pass directory. Run
+    # from outside, that quietly means the BUILDING system's passes; run under
+    # chroot, DESTDIR/lib/ccom is /lib/ccom and the same binary cannot cheat.
+    dict(name="chroot", dir="usr/src/cmd", objs=["chroot.c"], dest="DESTDIR",
+         product="chroot", install="etc/chroot",
+         note="ipnx: V8 has chroot(2) and ships no chroot(1); stage 9 needs one"),
 ]
 
 # ------------------------------------------------- the rest of usr/src/cmd

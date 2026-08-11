@@ -180,7 +180,23 @@ if {$from <= 5} { sh "sh /n/src/mk/buildlibs.sh /n/src /b /b/root /b/tools3 2>&1
 # is 132 now, and each is a compile and a link inside the emulator.
 if {$from <= 6} { sh "sh /n/src/mk/buildcmds.sh /n/src /b /b/root /b/tools3 2>&1" 10800 }
 if {$from <= 7} { sh "sh /n/src/mk/buildkernel.sh /n/src /b /b/root ipnx /b/tools3 2>&1" 7200 }
-sh "sh /n/src/mk/builddisk.sh /n/src /b/root 2 rp07 /mnt 2>&1" 3600
+if {$from <= 8} { sh "sh /n/src/mk/builddisk.sh /n/src /b/root 2 rp07 /mnt 2>&1" 3600 }
+
+# ---------------------------------------------------------------- stage 9
+# A SECOND mount of the same share, inside DESTDIR. chroot has no path to
+# anywhere outside the new root, so /n/src must already be reachable as
+# /b/root/n/src before we enter -- the mount cannot be done from within.
+#
+# Unique id 66 and tcp minor 67: both differ from the first mount's (65).
+# The id is the mount's identity to the kernel and the minor is the device,
+# and reusing either would be asking for the connection already in use.
+send_user "\n=== stage 9: the share, again, inside DESTDIR ===\n"
+sh "mkdir /b/root/n" 60
+sh "mkdir /b/root/n/src" 60
+sh "/tmp/nmount 10.0.2.2 $port 67 /b/root/n/src" 120
+shmust "if test -f /b/root/n/src/mk/build1.sh; then echo S48-INNER-MOUNT\$OK; fi" \
+       "S48-INNER-MOUNT-ok" 120
+sh "sh /n/src/mk/buildstage9.sh /n/src /b /b/root 2>&1" 10800
 sh "date"
 
 sh "echo S48-DONE\$OK"

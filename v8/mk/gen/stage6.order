@@ -9,6 +9,7 @@ umount	usr/src/cmd	etc/umount
 mkfs	usr/src/cmd	etc/mkfs
 update	usr/src/cmd	etc/update
 nmount	usr/src/cmd	etc/nmount
+chroot	usr/src/cmd	etc/chroot
 ac	usr/src/cmd	etc/ac
 accton	usr/src/cmd	etc/accton
 apply	usr/src/cmd	usr/bin/apply
