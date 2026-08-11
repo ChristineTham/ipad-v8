@@ -155,3 +155,59 @@ fresh i-list and free list but does not clear data blocks, so a second stage
 filesystem calls free space. Invisible to the guest; extremely visible to the
 compressor. `image-pack.py pack` reports the nonzero fraction for exactly
 this reason.
+
+## Building it
+
+Two runs, because moving a tool between `bin` and `usr/bin` invalidates the
+staged toolchain and there is no shortcut around that.
+
+```bash
+tools/drive-stage1.sh 25200 9370
+```
+
+Stages 1–7: the bootstrap toolchain, libc, the toolchain again against it, the
+fixpoint comparison, then headers, libraries, commands and the kernel. Hours,
+not minutes — and **not because the VAX is slow**. It sits at 6–8% CPU
+throughout, waiting on netfs, which costs a round trip per file (task #70).
+
+```bash
+rm -f work/myv8/rp07new
+tools/drive-stages48.sh 5400 9370 8 9
+```
+
+Stages 8 and 9. The `rm` matters: `drive-stages48.sh` only creates the image if
+it is absent, and `mkfs` does not clear data blocks, so reusing the file leaves
+the previous run's contents in what the new filesystem calls free space.
+
+```bash
+tools/verify-golden.sh          # content: containment, lists current, C4
+tools/boot-newdisk.sh           # behaviour: boots alone, and has mux, games, man
+```
+
+`verify-golden.sh` answers "is the right thing on it" in a second;
+`boot-newdisk.sh` costs a VAX boot and answers "does it run". Neither replaces
+the other — the four files the containment check found were all on a disk that
+booted perfectly.
+
+## Four ways a file goes missing, and what catches each
+
+Worth stating together, because each was found separately and only the last two
+have a check that would find them again:
+
+| how it goes missing | caught by |
+| --- | --- |
+| unique to the reference image, never carried | `retire-check.py` |
+| built into `DESTDIR`, but stage 8 doesn't copy that directory | `gen/destdirs.txt`, scraped from the makefiles' own `cp` rules |
+| ours, on the tape nowhere, so no manifest describes it | named in `builddisk.sh` — `wmux`, `profile.root`, `profile.skel` |
+| an **empty** directory | `gen/dirs.txt` |
+
+The last one is the one to remember. Every copy pass creates the directories it
+puts files in, so a directory with contents appears by itself and one without
+never does — and `retire-check.py` skips directories on the reasoning that a
+directory has no content to lose. True of the bytes, false of the system:
+`uucp` will not run without its spool tree, `at(1)` fails on a missing `past/`,
+and `/dev/pt` is where the `sp` pseudo-device puts its stream pipes.
+
+The third row is the uncomfortable one, because it has no generated check at
+all — only a name in a script. Anything of ours that belongs on the disk has to
+be added there deliberately, and nothing will notice if it is not.
