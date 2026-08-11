@@ -822,7 +822,16 @@ def emit_makedev():
 # Owners are not reproduced: the listing carries the 1127 staff's personal
 # ownership of their own terminals, and those accounts do not exist here.
 # Groups are, because bin/man/other/sys are real.
+#
+# /etc/mknod, spelled out 414 times, because there is NO mknod on root's PATH
+# -- it lives in /etc, and where.txt says so.  builddisk.sh made the same
+# assumption four times and the result was not a clean failure: mkfs given a
+# name that is not a special file creates a REGULAR FILE and writes the
+# filesystem into it, so four `mknod: not found' messages became `/: file
+# system full' about an unrelated filesystem.  Here it would have been 414 of
+# them, on the LAST step of stage 8, after the disk was otherwise built.
 
+MKNOD=/etc/mknod
 DEV=${1-/dev}
 mkdir $DEV 2>/dev/null
 """]
@@ -864,7 +873,7 @@ mkdir $DEV 2>/dev/null
             major, minor = [int(x) for x in blob.replace(",", " ").split()[:2]]
         except ValueError:
             continue
-        out.append("mknod $DEV/%s%s %s %d %d\n"
+        out.append("$MKNOD $DEV/%s%s %s %d %d\n"
                    % (cur, name, f[0][0], major, minor))
         out.append("chmod %s $DEV/%s%s\n" % (mode, cur, name))
         if group != "0":
@@ -895,7 +904,7 @@ mkdir $DEV 2>/dev/null
             minor = (drive << 3) | part
             for pfx, kind, mode in (("rp", "b", "0640"), ("rrp", "c", "0640")):
                 node = "%s%d%s" % (pfx, drive, letter)
-                out.append("mknod $DEV/%s %s %d %d\n"
+                out.append("$MKNOD $DEV/%s %s %d %d\n"
                            % (node, kind, 0 if kind == "b" else 4, minor))
                 out.append("chmod %s $DEV/%s\n" % (mode, node))
                 ndev += 1

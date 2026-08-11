@@ -10,1217 +10,1226 @@
 # Owners are not reproduced: the listing carries the 1127 staff's personal
 # ownership of their own terminals, and those accounts do not exist here.
 # Groups are, because bin/man/other/sys are real.
+#
+# /etc/mknod, spelled out 414 times, because there is NO mknod on root's PATH
+# -- it lives in /etc, and where.txt says so.  builddisk.sh made the same
+# assumption four times and the result was not a clean failure: mkfs given a
+# name that is not a special file creates a REGULAR FILE and writes the
+# filesystem into it, so four `mknod: not found' messages became `/: file
+# system full' about an unrelated filesystem.  Here it would have been 414 of
+# them, on the LAST step of stage 8, after the disk was otherwise built.
 
+MKNOD=/etc/mknod
 DEV=${1-/dev}
 mkdir $DEV 2>/dev/null
-mknod $DEV/console c 0 0
+$MKNOD $DEV/console c 0 0
 chmod 0622 $DEV/console
 mkdir $DEV/dk
 chmod 0775 $DEV/dk
-mknod $DEV/dn0 c 19 128
+$MKNOD $DEV/dn0 c 19 128
 chmod 0666 $DEV/dn0
 chgrp bin $DEV/dn0
-mknod $DEV/drum c 7 0
+$MKNOD $DEV/drum c 7 0
 chmod 0644 $DEV/drum
 chgrp man $DEV/drum
 mkdir $DEV/fd
 chmod 0755 $DEV/fd
-mknod $DEV/ip0 c 42 0
+$MKNOD $DEV/ip0 c 42 0
 chmod 0666 $DEV/ip0
 chgrp bin $DEV/ip0
-mknod $DEV/ip16 c 42 16
+$MKNOD $DEV/ip16 c 42 16
 chmod 0666 $DEV/ip16
 chgrp bin $DEV/ip16
-mknod $DEV/ip17 c 42 17
+$MKNOD $DEV/ip17 c 42 17
 chmod 0666 $DEV/ip17
 chgrp bin $DEV/ip17
-mknod $DEV/ip6 c 42 6
+$MKNOD $DEV/ip6 c 42 6
 chmod 0666 $DEV/ip6
 chgrp bin $DEV/ip6
-mknod $DEV/kUmem c 3 3
+$MKNOD $DEV/kUmem c 3 3
 chmod 0600 $DEV/kUmem
 chgrp sys $DEV/kUmem
-mknod $DEV/kmc0 c 26 0
+$MKNOD $DEV/kmc0 c 26 0
 chmod 0666 $DEV/kmc0
 chgrp sys $DEV/kmc0
-mknod $DEV/kmem c 3 1
+$MKNOD $DEV/kmem c 3 1
 chmod 0644 $DEV/kmem
 chgrp sys $DEV/kmem
-mknod $DEV/kmemr c 3 4
+$MKNOD $DEV/kmemr c 3 4
 chmod 0444 $DEV/kmemr
 chgrp bin $DEV/kmemr
-mknod $DEV/mem c 3 0
+$MKNOD $DEV/mem c 3 0
 chmod 0644 $DEV/mem
 chgrp sys $DEV/mem
-mknod $DEV/mt1 b 8 0
+$MKNOD $DEV/mt1 b 8 0
 chmod 0666 $DEV/mt1
 chgrp sys $DEV/mt1
-mknod $DEV/mt2 b 8 8
+$MKNOD $DEV/mt2 b 8 8
 chmod 0666 $DEV/mt2
 chgrp sys $DEV/mt2
-mknod $DEV/mt5 b 8 4
+$MKNOD $DEV/mt5 b 8 4
 chmod 0666 $DEV/mt5
 chgrp sys $DEV/mt5
-mknod $DEV/mt6 b 8 12
+$MKNOD $DEV/mt6 b 8 12
 chmod 0666 $DEV/mt6
 chgrp sys $DEV/mt6
-mknod $DEV/mtpr c 3 5
+$MKNOD $DEV/mtpr c 3 5
 chmod 0600 $DEV/mtpr
-mknod $DEV/nmt1 b 8 4
+$MKNOD $DEV/nmt1 b 8 4
 chmod 0666 $DEV/nmt1
 chgrp sys $DEV/nmt1
-mknod $DEV/nmt2 b 8 12
+$MKNOD $DEV/nmt2 b 8 12
 chmod 0666 $DEV/nmt2
 chgrp sys $DEV/nmt2
-mknod $DEV/nrmt1 c 22 4
+$MKNOD $DEV/nrmt1 c 22 4
 chmod 0666 $DEV/nrmt1
 chgrp sys $DEV/nrmt1
-mknod $DEV/nrmt2 c 22 12
+$MKNOD $DEV/nrmt2 c 22 12
 chmod 0666 $DEV/nrmt2
 chgrp sys $DEV/nrmt2
-mknod $DEV/null c 3 2
+$MKNOD $DEV/null c 3 2
 chmod 0666 $DEV/null
 chgrp man $DEV/null
 mkdir $DEV/pt
 chmod 0755 $DEV/pt
-mknod $DEV/ra00 b 7 64
+$MKNOD $DEV/ra00 b 7 64
 chmod 0640 $DEV/ra00
 chgrp sys $DEV/ra00
-mknod $DEV/ra01 b 7 1
+$MKNOD $DEV/ra01 b 7 1
 chmod 0640 $DEV/ra01
 chgrp sys $DEV/ra01
-mknod $DEV/ra02 b 7 66
+$MKNOD $DEV/ra02 b 7 66
 chmod 0640 $DEV/ra02
 chgrp sys $DEV/ra02
-mknod $DEV/ra03 b 7 67
+$MKNOD $DEV/ra03 b 7 67
 chmod 0640 $DEV/ra03
 chgrp sys $DEV/ra03
-mknod $DEV/ra04 b 7 68
+$MKNOD $DEV/ra04 b 7 68
 chmod 0640 $DEV/ra04
 chgrp sys $DEV/ra04
-mknod $DEV/ra05 b 7 69
+$MKNOD $DEV/ra05 b 7 69
 chmod 0640 $DEV/ra05
 chgrp sys $DEV/ra05
-mknod $DEV/ra06 b 7 70
+$MKNOD $DEV/ra06 b 7 70
 chmod 0640 $DEV/ra06
 chgrp sys $DEV/ra06
-mknod $DEV/ra10 b 7 72
+$MKNOD $DEV/ra10 b 7 72
 chmod 0640 $DEV/ra10
 chgrp sys $DEV/ra10
-mknod $DEV/ra11 b 7 9
+$MKNOD $DEV/ra11 b 7 9
 chmod 0640 $DEV/ra11
 chgrp sys $DEV/ra11
-mknod $DEV/ra12 b 7 74
+$MKNOD $DEV/ra12 b 7 74
 chmod 0640 $DEV/ra12
 chgrp sys $DEV/ra12
-mknod $DEV/ra13 b 7 75
+$MKNOD $DEV/ra13 b 7 75
 chmod 0640 $DEV/ra13
 chgrp sys $DEV/ra13
-mknod $DEV/ra14 b 7 76
+$MKNOD $DEV/ra14 b 7 76
 chmod 0640 $DEV/ra14
 chgrp sys $DEV/ra14
-mknod $DEV/ra15 b 7 77
+$MKNOD $DEV/ra15 b 7 77
 chmod 0640 $DEV/ra15
 chgrp sys $DEV/ra15
-mknod $DEV/ra16 b 7 78
+$MKNOD $DEV/ra16 b 7 78
 chmod 0640 $DEV/ra16
 chgrp sys $DEV/ra16
-mknod $DEV/ra20a b 7 80
+$MKNOD $DEV/ra20a b 7 80
 chmod 0664 $DEV/ra20a
 chgrp bin $DEV/ra20a
-mknod $DEV/ra21 b 7 17
+$MKNOD $DEV/ra21 b 7 17
 chmod 0640 $DEV/ra21
 chgrp sys $DEV/ra21
-mknod $DEV/ra22 b 7 18
+$MKNOD $DEV/ra22 b 7 18
 chmod 0664 $DEV/ra22
 chgrp bin $DEV/ra22
-mknod $DEV/ra23 b 7 83
+$MKNOD $DEV/ra23 b 7 83
 chmod 0640 $DEV/ra23
 chgrp sys $DEV/ra23
-mknod $DEV/ra24 b 7 84
+$MKNOD $DEV/ra24 b 7 84
 chmod 0640 $DEV/ra24
 chgrp sys $DEV/ra24
-mknod $DEV/ra25 b 7 85
+$MKNOD $DEV/ra25 b 7 85
 chmod 0640 $DEV/ra25
 chgrp sys $DEV/ra25
-mknod $DEV/ra26 b 7 22
+$MKNOD $DEV/ra26 b 7 22
 chmod 0640 $DEV/ra26
 chgrp sys $DEV/ra26
-mknod $DEV/rmt1 c 22 0
+$MKNOD $DEV/rmt1 c 22 0
 chmod 0666 $DEV/rmt1
 chgrp sys $DEV/rmt1
-mknod $DEV/rmt2 c 22 8
+$MKNOD $DEV/rmt2 c 22 8
 chmod 0666 $DEV/rmt2
 chgrp sys $DEV/rmt2
-mknod $DEV/rmt5 c 22 4
+$MKNOD $DEV/rmt5 c 22 4
 chmod 0666 $DEV/rmt5
 chgrp sys $DEV/rmt5
-mknod $DEV/rmt6 c 22 12
+$MKNOD $DEV/rmt6 c 22 12
 chmod 0666 $DEV/rmt6
 chgrp sys $DEV/rmt6
-mknod $DEV/rra00 c 28 0
+$MKNOD $DEV/rra00 c 28 0
 chmod 0640 $DEV/rra00
 chgrp sys $DEV/rra00
-mknod $DEV/rra01 c 28 1
+$MKNOD $DEV/rra01 c 28 1
 chmod 0640 $DEV/rra01
 chgrp sys $DEV/rra01
-mknod $DEV/rra02 c 28 2
+$MKNOD $DEV/rra02 c 28 2
 chmod 0640 $DEV/rra02
 chgrp sys $DEV/rra02
-mknod $DEV/rra03 c 28 3
+$MKNOD $DEV/rra03 c 28 3
 chmod 0640 $DEV/rra03
 chgrp sys $DEV/rra03
-mknod $DEV/rra04 c 28 4
+$MKNOD $DEV/rra04 c 28 4
 chmod 0640 $DEV/rra04
 chgrp sys $DEV/rra04
-mknod $DEV/rra05 c 28 5
+$MKNOD $DEV/rra05 c 28 5
 chmod 0640 $DEV/rra05
 chgrp sys $DEV/rra05
-mknod $DEV/rra06 c 28 6
+$MKNOD $DEV/rra06 c 28 6
 chmod 0640 $DEV/rra06
 chgrp sys $DEV/rra06
-mknod $DEV/rra07 c 28 7
+$MKNOD $DEV/rra07 c 28 7
 chmod 0640 $DEV/rra07
 chgrp sys $DEV/rra07
-mknod $DEV/rra10 c 28 8
+$MKNOD $DEV/rra10 c 28 8
 chmod 0660 $DEV/rra10
 chgrp sys $DEV/rra10
-mknod $DEV/rra11 c 28 9
+$MKNOD $DEV/rra11 c 28 9
 chmod 0640 $DEV/rra11
 chgrp sys $DEV/rra11
-mknod $DEV/rra12 c 28 10
+$MKNOD $DEV/rra12 c 28 10
 chmod 0640 $DEV/rra12
 chgrp sys $DEV/rra12
-mknod $DEV/rra13 c 28 11
+$MKNOD $DEV/rra13 c 28 11
 chmod 0640 $DEV/rra13
 chgrp sys $DEV/rra13
-mknod $DEV/rra14 c 28 12
+$MKNOD $DEV/rra14 c 28 12
 chmod 0640 $DEV/rra14
 chgrp sys $DEV/rra14
-mknod $DEV/rra15 c 28 13
+$MKNOD $DEV/rra15 c 28 13
 chmod 0640 $DEV/rra15
 chgrp sys $DEV/rra15
-mknod $DEV/rra16 c 28 14
+$MKNOD $DEV/rra16 c 28 14
 chmod 0660 $DEV/rra16
 chgrp sys $DEV/rra16
-mknod $DEV/rra17 c 28 15
+$MKNOD $DEV/rra17 c 28 15
 chmod 0640 $DEV/rra17
 chgrp sys $DEV/rra17
-mknod $DEV/rra20 c 28 16
+$MKNOD $DEV/rra20 c 28 16
 chmod 0640 $DEV/rra20
 chgrp sys $DEV/rra20
-mknod $DEV/rra21 c 28 17
+$MKNOD $DEV/rra21 c 28 17
 chmod 0640 $DEV/rra21
 chgrp sys $DEV/rra21
-mknod $DEV/rra22 c 28 18
+$MKNOD $DEV/rra22 c 28 18
 chmod 0640 $DEV/rra22
 chgrp sys $DEV/rra22
-mknod $DEV/rra23 c 28 19
+$MKNOD $DEV/rra23 c 28 19
 chmod 0640 $DEV/rra23
 chgrp sys $DEV/rra23
-mknod $DEV/rra24 c 28 20
+$MKNOD $DEV/rra24 c 28 20
 chmod 0640 $DEV/rra24
 chgrp sys $DEV/rra24
-mknod $DEV/rra25 c 28 21
+$MKNOD $DEV/rra25 c 28 21
 chmod 0640 $DEV/rra25
 chgrp sys $DEV/rra25
-mknod $DEV/rra26 c 28 22
+$MKNOD $DEV/rra26 c 28 22
 chmod 0640 $DEV/rra26
 chgrp sys $DEV/rra26
-mknod $DEV/rra27 c 28 23
+$MKNOD $DEV/rra27 c 28 23
 chmod 0640 $DEV/rra27
 chgrp sys $DEV/rra27
-mknod $DEV/stderr c 40 2
+$MKNOD $DEV/stderr c 40 2
 chmod 0666 $DEV/stderr
 chgrp other $DEV/stderr
-mknod $DEV/stdin c 40 0
+$MKNOD $DEV/stdin c 40 0
 chmod 0666 $DEV/stdin
 chgrp other $DEV/stdin
-mknod $DEV/stdout c 40 1
+$MKNOD $DEV/stdout c 40 1
 chmod 0666 $DEV/stdout
 chgrp other $DEV/stdout
-mknod $DEV/tcp00 c 43 0
+$MKNOD $DEV/tcp00 c 43 0
 chmod 0600 $DEV/tcp00
 chgrp other $DEV/tcp00
-mknod $DEV/tcp01 c 43 1
+$MKNOD $DEV/tcp01 c 43 1
 chmod 0666 $DEV/tcp01
 chgrp bin $DEV/tcp01
-mknod $DEV/tcp02 c 43 2
+$MKNOD $DEV/tcp02 c 43 2
 chmod 0600 $DEV/tcp02
 chgrp other $DEV/tcp02
-mknod $DEV/tcp03 c 43 3
+$MKNOD $DEV/tcp03 c 43 3
 chmod 0666 $DEV/tcp03
 chgrp bin $DEV/tcp03
-mknod $DEV/tcp04 c 43 4
+$MKNOD $DEV/tcp04 c 43 4
 chmod 0600 $DEV/tcp04
 chgrp other $DEV/tcp04
-mknod $DEV/tcp05 c 43 5
+$MKNOD $DEV/tcp05 c 43 5
 chmod 0666 $DEV/tcp05
 chgrp bin $DEV/tcp05
-mknod $DEV/tcp06 c 43 6
+$MKNOD $DEV/tcp06 c 43 6
 chmod 0600 $DEV/tcp06
 chgrp bin $DEV/tcp06
-mknod $DEV/tcp07 c 43 7
+$MKNOD $DEV/tcp07 c 43 7
 chmod 0666 $DEV/tcp07
 chgrp bin $DEV/tcp07
-mknod $DEV/tcp08 c 43 8
+$MKNOD $DEV/tcp08 c 43 8
 chmod 0600 $DEV/tcp08
 chgrp bin $DEV/tcp08
-mknod $DEV/tcp09 c 43 9
+$MKNOD $DEV/tcp09 c 43 9
 chmod 0666 $DEV/tcp09
 chgrp bin $DEV/tcp09
-mknod $DEV/tcp10 c 43 10
+$MKNOD $DEV/tcp10 c 43 10
 chmod 0600 $DEV/tcp10
 chgrp bin $DEV/tcp10
-mknod $DEV/tcp11 c 43 11
+$MKNOD $DEV/tcp11 c 43 11
 chmod 0666 $DEV/tcp11
 chgrp bin $DEV/tcp11
-mknod $DEV/tty c 40 3
+$MKNOD $DEV/tty c 40 3
 chmod 0666 $DEV/tty
 chgrp other $DEV/tty
-mknod $DEV/tty00 c 1 0
+$MKNOD $DEV/tty00 c 1 0
 chmod 0622 $DEV/tty00
-mknod $DEV/tty01 c 1 1
+$MKNOD $DEV/tty01 c 1 1
 chmod 0622 $DEV/tty01
-mknod $DEV/tty02 c 1 2
+$MKNOD $DEV/tty02 c 1 2
 chmod 0622 $DEV/tty02
-mknod $DEV/tty03 c 1 3
+$MKNOD $DEV/tty03 c 1 3
 chmod 0622 $DEV/tty03
-mknod $DEV/tty04 c 1 4
+$MKNOD $DEV/tty04 c 1 4
 chmod 0622 $DEV/tty04
-mknod $DEV/tty05 c 1 5
+$MKNOD $DEV/tty05 c 1 5
 chmod 0622 $DEV/tty05
-mknod $DEV/tty06 c 1 6
+$MKNOD $DEV/tty06 c 1 6
 chmod 0622 $DEV/tty06
-mknod $DEV/tty07 c 1 7
+$MKNOD $DEV/tty07 c 1 7
 chmod 0622 $DEV/tty07
-mknod $DEV/dk/dk01 c 31 1
+$MKNOD $DEV/dk/dk01 c 31 1
 chmod 0600 $DEV/dk/dk01
 chgrp sys $DEV/dk/dk01
-mknod $DEV/dk/dk02 c 31 2
+$MKNOD $DEV/dk/dk02 c 31 2
 chmod 0622 $DEV/dk/dk02
 chgrp bin $DEV/dk/dk02
-mknod $DEV/dk/dk03 c 31 3
+$MKNOD $DEV/dk/dk03 c 31 3
 chmod 0666 $DEV/dk/dk03
 chgrp sys $DEV/dk/dk03
-mknod $DEV/dk/dk04 c 31 4
+$MKNOD $DEV/dk/dk04 c 31 4
 chmod 0622 $DEV/dk/dk04
 chgrp other $DEV/dk/dk04
-mknod $DEV/dk/dk05 c 31 5
+$MKNOD $DEV/dk/dk05 c 31 5
 chmod 0666 $DEV/dk/dk05
 chgrp sys $DEV/dk/dk05
-mknod $DEV/dk/dk06 c 31 6
+$MKNOD $DEV/dk/dk06 c 31 6
 chmod 0644 $DEV/dk/dk06
 chgrp other $DEV/dk/dk06
-mknod $DEV/dk/dk07 c 31 7
+$MKNOD $DEV/dk/dk07 c 31 7
 chmod 0666 $DEV/dk/dk07
 chgrp sys $DEV/dk/dk07
-mknod $DEV/dk/dk08 c 31 8
+$MKNOD $DEV/dk/dk08 c 31 8
 chmod 0622 $DEV/dk/dk08
 chgrp other $DEV/dk/dk08
-mknod $DEV/dk/dk09 c 31 9
+$MKNOD $DEV/dk/dk09 c 31 9
 chmod 0666 $DEV/dk/dk09
 chgrp sys $DEV/dk/dk09
-mknod $DEV/dk/dk10 c 31 10
+$MKNOD $DEV/dk/dk10 c 31 10
 chmod 0644 $DEV/dk/dk10
 chgrp other $DEV/dk/dk10
-mknod $DEV/dk/dk11 c 31 11
+$MKNOD $DEV/dk/dk11 c 31 11
 chmod 0666 $DEV/dk/dk11
 chgrp sys $DEV/dk/dk11
-mknod $DEV/dk/dk12 c 31 12
+$MKNOD $DEV/dk/dk12 c 31 12
 chmod 0622 $DEV/dk/dk12
 chgrp other $DEV/dk/dk12
-mknod $DEV/dk/dk13 c 31 13
+$MKNOD $DEV/dk/dk13 c 31 13
 chmod 0666 $DEV/dk/dk13
 chgrp sys $DEV/dk/dk13
-mknod $DEV/dk/dk14 c 31 14
+$MKNOD $DEV/dk/dk14 c 31 14
 chmod 0622 $DEV/dk/dk14
 chgrp other $DEV/dk/dk14
-mknod $DEV/dk/dk15 c 31 15
+$MKNOD $DEV/dk/dk15 c 31 15
 chmod 0666 $DEV/dk/dk15
 chgrp sys $DEV/dk/dk15
-mknod $DEV/dk/dk16 c 31 16
+$MKNOD $DEV/dk/dk16 c 31 16
 chmod 0622 $DEV/dk/dk16
 chgrp bin $DEV/dk/dk16
-mknod $DEV/dk/dk17 c 31 17
+$MKNOD $DEV/dk/dk17 c 31 17
 chmod 0666 $DEV/dk/dk17
 chgrp sys $DEV/dk/dk17
-mknod $DEV/dk/dk18 c 31 18
+$MKNOD $DEV/dk/dk18 c 31 18
 chmod 0622 $DEV/dk/dk18
 chgrp other $DEV/dk/dk18
-mknod $DEV/dk/dk19 c 31 19
+$MKNOD $DEV/dk/dk19 c 31 19
 chmod 0666 $DEV/dk/dk19
 chgrp other $DEV/dk/dk19
-mknod $DEV/dk/dk20 c 31 20
+$MKNOD $DEV/dk/dk20 c 31 20
 chmod 0622 $DEV/dk/dk20
 chgrp bin $DEV/dk/dk20
-mknod $DEV/dk/dk21 c 31 21
+$MKNOD $DEV/dk/dk21 c 31 21
 chmod 0666 $DEV/dk/dk21
 chgrp sys $DEV/dk/dk21
-mknod $DEV/dk/dk22 c 31 22
+$MKNOD $DEV/dk/dk22 c 31 22
 chmod 0722 $DEV/dk/dk22
 chgrp other $DEV/dk/dk22
-mknod $DEV/dk/dk23 c 31 23
+$MKNOD $DEV/dk/dk23 c 31 23
 chmod 0666 $DEV/dk/dk23
 chgrp sys $DEV/dk/dk23
-mknod $DEV/dk/dk24 c 31 24
+$MKNOD $DEV/dk/dk24 c 31 24
 chmod 0622 $DEV/dk/dk24
 chgrp other $DEV/dk/dk24
-mknod $DEV/dk/dk25 c 31 25
+$MKNOD $DEV/dk/dk25 c 31 25
 chmod 0666 $DEV/dk/dk25
 chgrp sys $DEV/dk/dk25
-mknod $DEV/dk/dk26 c 31 26
+$MKNOD $DEV/dk/dk26 c 31 26
 chmod 0622 $DEV/dk/dk26
 chgrp other $DEV/dk/dk26
-mknod $DEV/dk/dk27 c 31 27
+$MKNOD $DEV/dk/dk27 c 31 27
 chmod 0666 $DEV/dk/dk27
 chgrp sys $DEV/dk/dk27
-mknod $DEV/dk/dk28 c 31 28
+$MKNOD $DEV/dk/dk28 c 31 28
 chmod 0622 $DEV/dk/dk28
 chgrp other $DEV/dk/dk28
-mknod $DEV/dk/dk29 c 31 29
+$MKNOD $DEV/dk/dk29 c 31 29
 chmod 0666 $DEV/dk/dk29
 chgrp sys $DEV/dk/dk29
-mknod $DEV/dk/dk30 c 31 30
+$MKNOD $DEV/dk/dk30 c 31 30
 chmod 0622 $DEV/dk/dk30
 chgrp other $DEV/dk/dk30
-mknod $DEV/dk/dk31 c 31 31
+$MKNOD $DEV/dk/dk31 c 31 31
 chmod 0666 $DEV/dk/dk31
 chgrp sys $DEV/dk/dk31
-mknod $DEV/dk/dk32 c 31 32
+$MKNOD $DEV/dk/dk32 c 31 32
 chmod 0722 $DEV/dk/dk32
 chgrp other $DEV/dk/dk32
-mknod $DEV/dk/dk33 c 31 33
+$MKNOD $DEV/dk/dk33 c 31 33
 chmod 0666 $DEV/dk/dk33
 chgrp sys $DEV/dk/dk33
-mknod $DEV/dk/dk34 c 31 34
+$MKNOD $DEV/dk/dk34 c 31 34
 chmod 0622 $DEV/dk/dk34
 chgrp other $DEV/dk/dk34
-mknod $DEV/dk/dk35 c 31 35
+$MKNOD $DEV/dk/dk35 c 31 35
 chmod 0666 $DEV/dk/dk35
 chgrp sys $DEV/dk/dk35
-mknod $DEV/dk/dk36 c 31 36
+$MKNOD $DEV/dk/dk36 c 31 36
 chmod 0622 $DEV/dk/dk36
 chgrp other $DEV/dk/dk36
-mknod $DEV/dk/dk37 c 31 37
+$MKNOD $DEV/dk/dk37 c 31 37
 chmod 0666 $DEV/dk/dk37
 chgrp other $DEV/dk/dk37
-mknod $DEV/dk/dk38 c 31 38
+$MKNOD $DEV/dk/dk38 c 31 38
 chmod 0622 $DEV/dk/dk38
 chgrp other $DEV/dk/dk38
-mknod $DEV/dk/dk39 c 31 39
+$MKNOD $DEV/dk/dk39 c 31 39
 chmod 0666 $DEV/dk/dk39
 chgrp sys $DEV/dk/dk39
-mknod $DEV/dk/dk40 c 31 40
+$MKNOD $DEV/dk/dk40 c 31 40
 chmod 0622 $DEV/dk/dk40
 chgrp other $DEV/dk/dk40
-mknod $DEV/dk/dk41 c 31 41
+$MKNOD $DEV/dk/dk41 c 31 41
 chmod 0666 $DEV/dk/dk41
 chgrp sys $DEV/dk/dk41
-mknod $DEV/dk/dk42 c 31 42
+$MKNOD $DEV/dk/dk42 c 31 42
 chmod 0622 $DEV/dk/dk42
 chgrp other $DEV/dk/dk42
-mknod $DEV/dk/dk43 c 31 43
+$MKNOD $DEV/dk/dk43 c 31 43
 chmod 0666 $DEV/dk/dk43
 chgrp sys $DEV/dk/dk43
-mknod $DEV/dk/dk44 c 31 44
+$MKNOD $DEV/dk/dk44 c 31 44
 chmod 0622 $DEV/dk/dk44
 chgrp other $DEV/dk/dk44
-mknod $DEV/dk/dk45 c 31 45
+$MKNOD $DEV/dk/dk45 c 31 45
 chmod 0666 $DEV/dk/dk45
 chgrp other $DEV/dk/dk45
-mknod $DEV/dk/dk46 c 31 46
+$MKNOD $DEV/dk/dk46 c 31 46
 chmod 0622 $DEV/dk/dk46
 chgrp bin $DEV/dk/dk46
-mknod $DEV/dk/dk47 c 31 47
+$MKNOD $DEV/dk/dk47 c 31 47
 chmod 0666 $DEV/dk/dk47
 chgrp other $DEV/dk/dk47
-mknod $DEV/dk/dk48 c 31 48
+$MKNOD $DEV/dk/dk48 c 31 48
 chmod 0622 $DEV/dk/dk48
 chgrp bin $DEV/dk/dk48
-mknod $DEV/dk/dk49 c 31 49
+$MKNOD $DEV/dk/dk49 c 31 49
 chmod 0666 $DEV/dk/dk49
 chgrp sys $DEV/dk/dk49
-mknod $DEV/dk/dk50 c 31 50
+$MKNOD $DEV/dk/dk50 c 31 50
 chmod 0622 $DEV/dk/dk50
 chgrp bin $DEV/dk/dk50
-mknod $DEV/dk/dk51 c 31 51
+$MKNOD $DEV/dk/dk51 c 31 51
 chmod 0664 $DEV/dk/dk51
 chgrp sys $DEV/dk/dk51
-mknod $DEV/dk/dk52 c 31 52
+$MKNOD $DEV/dk/dk52 c 31 52
 chmod 0622 $DEV/dk/dk52
 chgrp bin $DEV/dk/dk52
-mknod $DEV/dk/dk53 c 31 53
+$MKNOD $DEV/dk/dk53 c 31 53
 chmod 0664 $DEV/dk/dk53
 chgrp sys $DEV/dk/dk53
-mknod $DEV/dk/dk54 c 31 54
+$MKNOD $DEV/dk/dk54 c 31 54
 chmod 0622 $DEV/dk/dk54
 chgrp other $DEV/dk/dk54
-mknod $DEV/dk/dk55 c 31 55
+$MKNOD $DEV/dk/dk55 c 31 55
 chmod 0664 $DEV/dk/dk55
 chgrp sys $DEV/dk/dk55
-mknod $DEV/dk/dk56 c 31 56
+$MKNOD $DEV/dk/dk56 c 31 56
 chmod 0622 $DEV/dk/dk56
 chgrp other $DEV/dk/dk56
-mknod $DEV/dk/dk57 c 31 57
+$MKNOD $DEV/dk/dk57 c 31 57
 chmod 0664 $DEV/dk/dk57
 chgrp sys $DEV/dk/dk57
-mknod $DEV/dk/dk58 c 31 58
+$MKNOD $DEV/dk/dk58 c 31 58
 chmod 0644 $DEV/dk/dk58
 chgrp other $DEV/dk/dk58
-mknod $DEV/dk/dk59 c 31 59
+$MKNOD $DEV/dk/dk59 c 31 59
 chmod 0664 $DEV/dk/dk59
 chgrp sys $DEV/dk/dk59
-mknod $DEV/dk/dk60 c 31 60
+$MKNOD $DEV/dk/dk60 c 31 60
 chmod 0622 $DEV/dk/dk60
 chgrp bin $DEV/dk/dk60
-mknod $DEV/dk/dk61 c 31 61
+$MKNOD $DEV/dk/dk61 c 31 61
 chmod 0664 $DEV/dk/dk61
 chgrp sys $DEV/dk/dk61
-mknod $DEV/dk/dk62 c 31 62
+$MKNOD $DEV/dk/dk62 c 31 62
 chmod 0622 $DEV/dk/dk62
 chgrp bin $DEV/dk/dk62
-mknod $DEV/dk/dk63 c 31 63
+$MKNOD $DEV/dk/dk63 c 31 63
 chmod 0664 $DEV/dk/dk63
 chgrp sys $DEV/dk/dk63
-mknod $DEV/dk/dk64 c 31 64
+$MKNOD $DEV/dk/dk64 c 31 64
 chmod 0622 $DEV/dk/dk64
 chgrp bin $DEV/dk/dk64
-mknod $DEV/dk/dk65 c 31 65
+$MKNOD $DEV/dk/dk65 c 31 65
 chmod 0664 $DEV/dk/dk65
 chgrp bin $DEV/dk/dk65
-mknod $DEV/dk/dk66 c 31 66
+$MKNOD $DEV/dk/dk66 c 31 66
 chmod 0722 $DEV/dk/dk66
 chgrp other $DEV/dk/dk66
-mknod $DEV/dk/dk67 c 31 67
+$MKNOD $DEV/dk/dk67 c 31 67
 chmod 0664 $DEV/dk/dk67
 chgrp bin $DEV/dk/dk67
-mknod $DEV/dk/dk68 c 31 68
+$MKNOD $DEV/dk/dk68 c 31 68
 chmod 0622 $DEV/dk/dk68
 chgrp other $DEV/dk/dk68
-mknod $DEV/dk/dk69 c 31 69
+$MKNOD $DEV/dk/dk69 c 31 69
 chmod 0664 $DEV/dk/dk69
 chgrp bin $DEV/dk/dk69
-mknod $DEV/dk/dk70 c 31 70
+$MKNOD $DEV/dk/dk70 c 31 70
 chmod 0622 $DEV/dk/dk70
 chgrp other $DEV/dk/dk70
-mknod $DEV/dk/dk71 c 31 71
+$MKNOD $DEV/dk/dk71 c 31 71
 chmod 0664 $DEV/dk/dk71
 chgrp bin $DEV/dk/dk71
-mknod $DEV/dk/dk72 c 31 72
+$MKNOD $DEV/dk/dk72 c 31 72
 chmod 0622 $DEV/dk/dk72
 chgrp bin $DEV/dk/dk72
-mknod $DEV/dk/dk73 c 31 73
+$MKNOD $DEV/dk/dk73 c 31 73
 chmod 0664 $DEV/dk/dk73
 chgrp bin $DEV/dk/dk73
-mknod $DEV/dk/dk74 c 31 74
+$MKNOD $DEV/dk/dk74 c 31 74
 chmod 0622 $DEV/dk/dk74
 chgrp bin $DEV/dk/dk74
-mknod $DEV/dk/dk75 c 31 75
+$MKNOD $DEV/dk/dk75 c 31 75
 chmod 0664 $DEV/dk/dk75
 chgrp bin $DEV/dk/dk75
-mknod $DEV/dk/dk76 c 31 76
+$MKNOD $DEV/dk/dk76 c 31 76
 chmod 0622 $DEV/dk/dk76
 chgrp bin $DEV/dk/dk76
-mknod $DEV/dk/dk77 c 31 77
+$MKNOD $DEV/dk/dk77 c 31 77
 chmod 0664 $DEV/dk/dk77
 chgrp bin $DEV/dk/dk77
-mknod $DEV/dk/dk78 c 31 78
+$MKNOD $DEV/dk/dk78 c 31 78
 chmod 0622 $DEV/dk/dk78
 chgrp bin $DEV/dk/dk78
-mknod $DEV/dk/dk79 c 31 79
+$MKNOD $DEV/dk/dk79 c 31 79
 chmod 0664 $DEV/dk/dk79
 chgrp bin $DEV/dk/dk79
-mknod $DEV/dk/dk80 c 31 80
+$MKNOD $DEV/dk/dk80 c 31 80
 chmod 0622 $DEV/dk/dk80
 chgrp other $DEV/dk/dk80
-mknod $DEV/dk/dk81 c 31 81
+$MKNOD $DEV/dk/dk81 c 31 81
 chmod 0664 $DEV/dk/dk81
 chgrp bin $DEV/dk/dk81
-mknod $DEV/dk/dk82 c 31 82
+$MKNOD $DEV/dk/dk82 c 31 82
 chmod 0622 $DEV/dk/dk82
 chgrp other $DEV/dk/dk82
-mknod $DEV/dk/dk83 c 31 83
+$MKNOD $DEV/dk/dk83 c 31 83
 chmod 0664 $DEV/dk/dk83
 chgrp bin $DEV/dk/dk83
-mknod $DEV/dk/dk84 c 31 84
+$MKNOD $DEV/dk/dk84 c 31 84
 chmod 0622 $DEV/dk/dk84
 chgrp other $DEV/dk/dk84
-mknod $DEV/dk/dk85 c 31 85
+$MKNOD $DEV/dk/dk85 c 31 85
 chmod 0664 $DEV/dk/dk85
 chgrp bin $DEV/dk/dk85
-mknod $DEV/dk/dk86 c 31 86
+$MKNOD $DEV/dk/dk86 c 31 86
 chmod 0622 $DEV/dk/dk86
 chgrp other $DEV/dk/dk86
-mknod $DEV/dk/dk87 c 31 87
+$MKNOD $DEV/dk/dk87 c 31 87
 chmod 0664 $DEV/dk/dk87
 chgrp bin $DEV/dk/dk87
-mknod $DEV/dk/dk88 c 31 88
+$MKNOD $DEV/dk/dk88 c 31 88
 chmod 0622 $DEV/dk/dk88
 chgrp other $DEV/dk/dk88
-mknod $DEV/dk/dk89 c 31 89
+$MKNOD $DEV/dk/dk89 c 31 89
 chmod 0664 $DEV/dk/dk89
 chgrp bin $DEV/dk/dk89
-mknod $DEV/dk/dk90 c 31 90
+$MKNOD $DEV/dk/dk90 c 31 90
 chmod 0622 $DEV/dk/dk90
 chgrp other $DEV/dk/dk90
-mknod $DEV/dk/dk91 c 31 91
+$MKNOD $DEV/dk/dk91 c 31 91
 chmod 0664 $DEV/dk/dk91
 chgrp bin $DEV/dk/dk91
-mknod $DEV/dk/dk92 c 31 92
+$MKNOD $DEV/dk/dk92 c 31 92
 chmod 0644 $DEV/dk/dk92
 chgrp other $DEV/dk/dk92
-mknod $DEV/dk/dk93 c 31 93
+$MKNOD $DEV/dk/dk93 c 31 93
 chmod 0664 $DEV/dk/dk93
 chgrp bin $DEV/dk/dk93
-mknod $DEV/dk/dk94 c 31 94
+$MKNOD $DEV/dk/dk94 c 31 94
 chmod 0622 $DEV/dk/dk94
 chgrp other $DEV/dk/dk94
-mknod $DEV/dk/dk95 c 31 95
+$MKNOD $DEV/dk/dk95 c 31 95
 chmod 0664 $DEV/dk/dk95
 chgrp bin $DEV/dk/dk95
-mknod $DEV/fd/0 c 40 0
+$MKNOD $DEV/fd/0 c 40 0
 chmod 0666 $DEV/fd/0
 chgrp other $DEV/fd/0
-mknod $DEV/fd/1 c 40 1
+$MKNOD $DEV/fd/1 c 40 1
 chmod 0666 $DEV/fd/1
 chgrp other $DEV/fd/1
-mknod $DEV/fd/10 c 40 10
+$MKNOD $DEV/fd/10 c 40 10
 chmod 0666 $DEV/fd/10
 chgrp other $DEV/fd/10
-mknod $DEV/fd/100 c 40 100
+$MKNOD $DEV/fd/100 c 40 100
 chmod 0666 $DEV/fd/100
 chgrp other $DEV/fd/100
-mknod $DEV/fd/101 c 40 101
+$MKNOD $DEV/fd/101 c 40 101
 chmod 0666 $DEV/fd/101
 chgrp other $DEV/fd/101
-mknod $DEV/fd/102 c 40 102
+$MKNOD $DEV/fd/102 c 40 102
 chmod 0666 $DEV/fd/102
 chgrp other $DEV/fd/102
-mknod $DEV/fd/103 c 40 103
+$MKNOD $DEV/fd/103 c 40 103
 chmod 0666 $DEV/fd/103
 chgrp other $DEV/fd/103
-mknod $DEV/fd/104 c 40 104
+$MKNOD $DEV/fd/104 c 40 104
 chmod 0666 $DEV/fd/104
 chgrp other $DEV/fd/104
-mknod $DEV/fd/105 c 40 105
+$MKNOD $DEV/fd/105 c 40 105
 chmod 0666 $DEV/fd/105
 chgrp other $DEV/fd/105
-mknod $DEV/fd/106 c 40 106
+$MKNOD $DEV/fd/106 c 40 106
 chmod 0666 $DEV/fd/106
 chgrp other $DEV/fd/106
-mknod $DEV/fd/107 c 40 107
+$MKNOD $DEV/fd/107 c 40 107
 chmod 0666 $DEV/fd/107
 chgrp other $DEV/fd/107
-mknod $DEV/fd/108 c 40 108
+$MKNOD $DEV/fd/108 c 40 108
 chmod 0666 $DEV/fd/108
 chgrp other $DEV/fd/108
-mknod $DEV/fd/109 c 40 109
+$MKNOD $DEV/fd/109 c 40 109
 chmod 0666 $DEV/fd/109
 chgrp other $DEV/fd/109
-mknod $DEV/fd/11 c 40 11
+$MKNOD $DEV/fd/11 c 40 11
 chmod 0666 $DEV/fd/11
 chgrp other $DEV/fd/11
-mknod $DEV/fd/110 c 40 110
+$MKNOD $DEV/fd/110 c 40 110
 chmod 0666 $DEV/fd/110
 chgrp other $DEV/fd/110
-mknod $DEV/fd/111 c 40 111
+$MKNOD $DEV/fd/111 c 40 111
 chmod 0666 $DEV/fd/111
 chgrp other $DEV/fd/111
-mknod $DEV/fd/112 c 40 112
+$MKNOD $DEV/fd/112 c 40 112
 chmod 0666 $DEV/fd/112
 chgrp other $DEV/fd/112
-mknod $DEV/fd/113 c 40 113
+$MKNOD $DEV/fd/113 c 40 113
 chmod 0666 $DEV/fd/113
 chgrp other $DEV/fd/113
-mknod $DEV/fd/114 c 40 114
+$MKNOD $DEV/fd/114 c 40 114
 chmod 0666 $DEV/fd/114
 chgrp other $DEV/fd/114
-mknod $DEV/fd/115 c 40 115
+$MKNOD $DEV/fd/115 c 40 115
 chmod 0666 $DEV/fd/115
 chgrp other $DEV/fd/115
-mknod $DEV/fd/116 c 40 116
+$MKNOD $DEV/fd/116 c 40 116
 chmod 0666 $DEV/fd/116
 chgrp other $DEV/fd/116
-mknod $DEV/fd/117 c 40 117
+$MKNOD $DEV/fd/117 c 40 117
 chmod 0666 $DEV/fd/117
 chgrp other $DEV/fd/117
-mknod $DEV/fd/118 c 40 118
+$MKNOD $DEV/fd/118 c 40 118
 chmod 0666 $DEV/fd/118
 chgrp other $DEV/fd/118
-mknod $DEV/fd/119 c 40 119
+$MKNOD $DEV/fd/119 c 40 119
 chmod 0666 $DEV/fd/119
 chgrp other $DEV/fd/119
-mknod $DEV/fd/12 c 40 12
+$MKNOD $DEV/fd/12 c 40 12
 chmod 0666 $DEV/fd/12
 chgrp other $DEV/fd/12
-mknod $DEV/fd/120 c 40 120
+$MKNOD $DEV/fd/120 c 40 120
 chmod 0666 $DEV/fd/120
 chgrp other $DEV/fd/120
-mknod $DEV/fd/121 c 40 121
+$MKNOD $DEV/fd/121 c 40 121
 chmod 0666 $DEV/fd/121
 chgrp other $DEV/fd/121
-mknod $DEV/fd/122 c 40 122
+$MKNOD $DEV/fd/122 c 40 122
 chmod 0666 $DEV/fd/122
 chgrp other $DEV/fd/122
-mknod $DEV/fd/123 c 40 123
+$MKNOD $DEV/fd/123 c 40 123
 chmod 0666 $DEV/fd/123
 chgrp other $DEV/fd/123
-mknod $DEV/fd/124 c 40 124
+$MKNOD $DEV/fd/124 c 40 124
 chmod 0666 $DEV/fd/124
 chgrp other $DEV/fd/124
-mknod $DEV/fd/125 c 40 125
+$MKNOD $DEV/fd/125 c 40 125
 chmod 0666 $DEV/fd/125
 chgrp other $DEV/fd/125
-mknod $DEV/fd/126 c 40 126
+$MKNOD $DEV/fd/126 c 40 126
 chmod 0666 $DEV/fd/126
 chgrp other $DEV/fd/126
-mknod $DEV/fd/127 c 40 127
+$MKNOD $DEV/fd/127 c 40 127
 chmod 0666 $DEV/fd/127
 chgrp other $DEV/fd/127
-mknod $DEV/fd/13 c 40 13
+$MKNOD $DEV/fd/13 c 40 13
 chmod 0666 $DEV/fd/13
 chgrp other $DEV/fd/13
-mknod $DEV/fd/14 c 40 14
+$MKNOD $DEV/fd/14 c 40 14
 chmod 0666 $DEV/fd/14
 chgrp other $DEV/fd/14
-mknod $DEV/fd/15 c 40 15
+$MKNOD $DEV/fd/15 c 40 15
 chmod 0666 $DEV/fd/15
 chgrp other $DEV/fd/15
-mknod $DEV/fd/16 c 40 16
+$MKNOD $DEV/fd/16 c 40 16
 chmod 0666 $DEV/fd/16
 chgrp other $DEV/fd/16
-mknod $DEV/fd/17 c 40 17
+$MKNOD $DEV/fd/17 c 40 17
 chmod 0666 $DEV/fd/17
 chgrp other $DEV/fd/17
-mknod $DEV/fd/18 c 40 18
+$MKNOD $DEV/fd/18 c 40 18
 chmod 0666 $DEV/fd/18
 chgrp other $DEV/fd/18
-mknod $DEV/fd/19 c 40 19
+$MKNOD $DEV/fd/19 c 40 19
 chmod 0666 $DEV/fd/19
 chgrp other $DEV/fd/19
-mknod $DEV/fd/2 c 40 2
+$MKNOD $DEV/fd/2 c 40 2
 chmod 0666 $DEV/fd/2
 chgrp other $DEV/fd/2
-mknod $DEV/fd/20 c 40 20
+$MKNOD $DEV/fd/20 c 40 20
 chmod 0666 $DEV/fd/20
 chgrp other $DEV/fd/20
-mknod $DEV/fd/21 c 40 21
+$MKNOD $DEV/fd/21 c 40 21
 chmod 0666 $DEV/fd/21
 chgrp other $DEV/fd/21
-mknod $DEV/fd/22 c 40 22
+$MKNOD $DEV/fd/22 c 40 22
 chmod 0666 $DEV/fd/22
 chgrp other $DEV/fd/22
-mknod $DEV/fd/23 c 40 23
+$MKNOD $DEV/fd/23 c 40 23
 chmod 0666 $DEV/fd/23
 chgrp other $DEV/fd/23
-mknod $DEV/fd/24 c 40 24
+$MKNOD $DEV/fd/24 c 40 24
 chmod 0666 $DEV/fd/24
 chgrp other $DEV/fd/24
-mknod $DEV/fd/25 c 40 25
+$MKNOD $DEV/fd/25 c 40 25
 chmod 0666 $DEV/fd/25
 chgrp other $DEV/fd/25
-mknod $DEV/fd/26 c 40 26
+$MKNOD $DEV/fd/26 c 40 26
 chmod 0666 $DEV/fd/26
 chgrp other $DEV/fd/26
-mknod $DEV/fd/27 c 40 27
+$MKNOD $DEV/fd/27 c 40 27
 chmod 0666 $DEV/fd/27
 chgrp other $DEV/fd/27
-mknod $DEV/fd/28 c 40 28
+$MKNOD $DEV/fd/28 c 40 28
 chmod 0666 $DEV/fd/28
 chgrp other $DEV/fd/28
-mknod $DEV/fd/29 c 40 29
+$MKNOD $DEV/fd/29 c 40 29
 chmod 0666 $DEV/fd/29
 chgrp other $DEV/fd/29
-mknod $DEV/fd/3 c 40 3
+$MKNOD $DEV/fd/3 c 40 3
 chmod 0666 $DEV/fd/3
 chgrp other $DEV/fd/3
-mknod $DEV/fd/30 c 40 30
+$MKNOD $DEV/fd/30 c 40 30
 chmod 0666 $DEV/fd/30
 chgrp other $DEV/fd/30
-mknod $DEV/fd/31 c 40 31
+$MKNOD $DEV/fd/31 c 40 31
 chmod 0666 $DEV/fd/31
 chgrp other $DEV/fd/31
-mknod $DEV/fd/32 c 40 32
+$MKNOD $DEV/fd/32 c 40 32
 chmod 0666 $DEV/fd/32
 chgrp other $DEV/fd/32
-mknod $DEV/fd/33 c 40 33
+$MKNOD $DEV/fd/33 c 40 33
 chmod 0666 $DEV/fd/33
 chgrp other $DEV/fd/33
-mknod $DEV/fd/34 c 40 34
+$MKNOD $DEV/fd/34 c 40 34
 chmod 0666 $DEV/fd/34
 chgrp other $DEV/fd/34
-mknod $DEV/fd/35 c 40 35
+$MKNOD $DEV/fd/35 c 40 35
 chmod 0666 $DEV/fd/35
 chgrp other $DEV/fd/35
-mknod $DEV/fd/36 c 40 36
+$MKNOD $DEV/fd/36 c 40 36
 chmod 0666 $DEV/fd/36
 chgrp other $DEV/fd/36
-mknod $DEV/fd/37 c 40 37
+$MKNOD $DEV/fd/37 c 40 37
 chmod 0666 $DEV/fd/37
 chgrp other $DEV/fd/37
-mknod $DEV/fd/38 c 40 38
+$MKNOD $DEV/fd/38 c 40 38
 chmod 0666 $DEV/fd/38
 chgrp other $DEV/fd/38
-mknod $DEV/fd/39 c 40 39
+$MKNOD $DEV/fd/39 c 40 39
 chmod 0666 $DEV/fd/39
 chgrp other $DEV/fd/39
-mknod $DEV/fd/4 c 40 4
+$MKNOD $DEV/fd/4 c 40 4
 chmod 0666 $DEV/fd/4
 chgrp other $DEV/fd/4
-mknod $DEV/fd/40 c 40 40
+$MKNOD $DEV/fd/40 c 40 40
 chmod 0666 $DEV/fd/40
 chgrp other $DEV/fd/40
-mknod $DEV/fd/41 c 40 41
+$MKNOD $DEV/fd/41 c 40 41
 chmod 0666 $DEV/fd/41
 chgrp other $DEV/fd/41
-mknod $DEV/fd/42 c 40 42
+$MKNOD $DEV/fd/42 c 40 42
 chmod 0666 $DEV/fd/42
 chgrp other $DEV/fd/42
-mknod $DEV/fd/43 c 40 43
+$MKNOD $DEV/fd/43 c 40 43
 chmod 0666 $DEV/fd/43
 chgrp other $DEV/fd/43
-mknod $DEV/fd/44 c 40 44
+$MKNOD $DEV/fd/44 c 40 44
 chmod 0666 $DEV/fd/44
 chgrp other $DEV/fd/44
-mknod $DEV/fd/45 c 40 45
+$MKNOD $DEV/fd/45 c 40 45
 chmod 0666 $DEV/fd/45
 chgrp other $DEV/fd/45
-mknod $DEV/fd/46 c 40 46
+$MKNOD $DEV/fd/46 c 40 46
 chmod 0666 $DEV/fd/46
 chgrp other $DEV/fd/46
-mknod $DEV/fd/47 c 40 47
+$MKNOD $DEV/fd/47 c 40 47
 chmod 0666 $DEV/fd/47
 chgrp other $DEV/fd/47
-mknod $DEV/fd/48 c 40 48
+$MKNOD $DEV/fd/48 c 40 48
 chmod 0666 $DEV/fd/48
 chgrp other $DEV/fd/48
-mknod $DEV/fd/49 c 40 49
+$MKNOD $DEV/fd/49 c 40 49
 chmod 0666 $DEV/fd/49
 chgrp other $DEV/fd/49
-mknod $DEV/fd/5 c 40 5
+$MKNOD $DEV/fd/5 c 40 5
 chmod 0666 $DEV/fd/5
 chgrp other $DEV/fd/5
-mknod $DEV/fd/50 c 40 50
+$MKNOD $DEV/fd/50 c 40 50
 chmod 0666 $DEV/fd/50
 chgrp other $DEV/fd/50
-mknod $DEV/fd/51 c 40 51
+$MKNOD $DEV/fd/51 c 40 51
 chmod 0666 $DEV/fd/51
 chgrp other $DEV/fd/51
-mknod $DEV/fd/52 c 40 52
+$MKNOD $DEV/fd/52 c 40 52
 chmod 0666 $DEV/fd/52
 chgrp other $DEV/fd/52
-mknod $DEV/fd/53 c 40 53
+$MKNOD $DEV/fd/53 c 40 53
 chmod 0666 $DEV/fd/53
 chgrp other $DEV/fd/53
-mknod $DEV/fd/54 c 40 54
+$MKNOD $DEV/fd/54 c 40 54
 chmod 0666 $DEV/fd/54
 chgrp other $DEV/fd/54
-mknod $DEV/fd/55 c 40 55
+$MKNOD $DEV/fd/55 c 40 55
 chmod 0666 $DEV/fd/55
 chgrp other $DEV/fd/55
-mknod $DEV/fd/56 c 40 56
+$MKNOD $DEV/fd/56 c 40 56
 chmod 0666 $DEV/fd/56
 chgrp other $DEV/fd/56
-mknod $DEV/fd/57 c 40 57
+$MKNOD $DEV/fd/57 c 40 57
 chmod 0666 $DEV/fd/57
 chgrp other $DEV/fd/57
-mknod $DEV/fd/58 c 40 58
+$MKNOD $DEV/fd/58 c 40 58
 chmod 0666 $DEV/fd/58
 chgrp other $DEV/fd/58
-mknod $DEV/fd/59 c 40 59
+$MKNOD $DEV/fd/59 c 40 59
 chmod 0666 $DEV/fd/59
 chgrp other $DEV/fd/59
-mknod $DEV/fd/6 c 40 6
+$MKNOD $DEV/fd/6 c 40 6
 chmod 0666 $DEV/fd/6
 chgrp other $DEV/fd/6
-mknod $DEV/fd/60 c 40 60
+$MKNOD $DEV/fd/60 c 40 60
 chmod 0666 $DEV/fd/60
 chgrp other $DEV/fd/60
-mknod $DEV/fd/61 c 40 61
+$MKNOD $DEV/fd/61 c 40 61
 chmod 0666 $DEV/fd/61
 chgrp other $DEV/fd/61
-mknod $DEV/fd/62 c 40 62
+$MKNOD $DEV/fd/62 c 40 62
 chmod 0666 $DEV/fd/62
 chgrp other $DEV/fd/62
-mknod $DEV/fd/63 c 40 63
+$MKNOD $DEV/fd/63 c 40 63
 chmod 0666 $DEV/fd/63
 chgrp other $DEV/fd/63
-mknod $DEV/fd/64 c 40 64
+$MKNOD $DEV/fd/64 c 40 64
 chmod 0666 $DEV/fd/64
 chgrp other $DEV/fd/64
-mknod $DEV/fd/65 c 40 65
+$MKNOD $DEV/fd/65 c 40 65
 chmod 0666 $DEV/fd/65
 chgrp other $DEV/fd/65
-mknod $DEV/fd/66 c 40 66
+$MKNOD $DEV/fd/66 c 40 66
 chmod 0666 $DEV/fd/66
 chgrp other $DEV/fd/66
-mknod $DEV/fd/67 c 40 67
+$MKNOD $DEV/fd/67 c 40 67
 chmod 0666 $DEV/fd/67
 chgrp other $DEV/fd/67
-mknod $DEV/fd/68 c 40 68
+$MKNOD $DEV/fd/68 c 40 68
 chmod 0666 $DEV/fd/68
 chgrp other $DEV/fd/68
-mknod $DEV/fd/69 c 40 69
+$MKNOD $DEV/fd/69 c 40 69
 chmod 0666 $DEV/fd/69
 chgrp other $DEV/fd/69
-mknod $DEV/fd/7 c 40 7
+$MKNOD $DEV/fd/7 c 40 7
 chmod 0666 $DEV/fd/7
 chgrp other $DEV/fd/7
-mknod $DEV/fd/70 c 40 70
+$MKNOD $DEV/fd/70 c 40 70
 chmod 0666 $DEV/fd/70
 chgrp other $DEV/fd/70
-mknod $DEV/fd/71 c 40 71
+$MKNOD $DEV/fd/71 c 40 71
 chmod 0666 $DEV/fd/71
 chgrp other $DEV/fd/71
-mknod $DEV/fd/72 c 40 72
+$MKNOD $DEV/fd/72 c 40 72
 chmod 0666 $DEV/fd/72
 chgrp other $DEV/fd/72
-mknod $DEV/fd/73 c 40 73
+$MKNOD $DEV/fd/73 c 40 73
 chmod 0666 $DEV/fd/73
 chgrp other $DEV/fd/73
-mknod $DEV/fd/74 c 40 74
+$MKNOD $DEV/fd/74 c 40 74
 chmod 0666 $DEV/fd/74
 chgrp other $DEV/fd/74
-mknod $DEV/fd/75 c 40 75
+$MKNOD $DEV/fd/75 c 40 75
 chmod 0666 $DEV/fd/75
 chgrp other $DEV/fd/75
-mknod $DEV/fd/76 c 40 76
+$MKNOD $DEV/fd/76 c 40 76
 chmod 0666 $DEV/fd/76
 chgrp other $DEV/fd/76
-mknod $DEV/fd/77 c 40 77
+$MKNOD $DEV/fd/77 c 40 77
 chmod 0666 $DEV/fd/77
 chgrp other $DEV/fd/77
-mknod $DEV/fd/78 c 40 78
+$MKNOD $DEV/fd/78 c 40 78
 chmod 0666 $DEV/fd/78
 chgrp other $DEV/fd/78
-mknod $DEV/fd/79 c 40 79
+$MKNOD $DEV/fd/79 c 40 79
 chmod 0666 $DEV/fd/79
 chgrp other $DEV/fd/79
-mknod $DEV/fd/8 c 40 8
+$MKNOD $DEV/fd/8 c 40 8
 chmod 0666 $DEV/fd/8
 chgrp other $DEV/fd/8
-mknod $DEV/fd/80 c 40 80
+$MKNOD $DEV/fd/80 c 40 80
 chmod 0666 $DEV/fd/80
 chgrp other $DEV/fd/80
-mknod $DEV/fd/81 c 40 81
+$MKNOD $DEV/fd/81 c 40 81
 chmod 0666 $DEV/fd/81
 chgrp other $DEV/fd/81
-mknod $DEV/fd/82 c 40 82
+$MKNOD $DEV/fd/82 c 40 82
 chmod 0666 $DEV/fd/82
 chgrp other $DEV/fd/82
-mknod $DEV/fd/83 c 40 83
+$MKNOD $DEV/fd/83 c 40 83
 chmod 0666 $DEV/fd/83
 chgrp other $DEV/fd/83
-mknod $DEV/fd/84 c 40 84
+$MKNOD $DEV/fd/84 c 40 84
 chmod 0666 $DEV/fd/84
 chgrp other $DEV/fd/84
-mknod $DEV/fd/85 c 40 85
+$MKNOD $DEV/fd/85 c 40 85
 chmod 0666 $DEV/fd/85
 chgrp other $DEV/fd/85
-mknod $DEV/fd/86 c 40 86
+$MKNOD $DEV/fd/86 c 40 86
 chmod 0666 $DEV/fd/86
 chgrp other $DEV/fd/86
-mknod $DEV/fd/87 c 40 87
+$MKNOD $DEV/fd/87 c 40 87
 chmod 0666 $DEV/fd/87
 chgrp other $DEV/fd/87
-mknod $DEV/fd/88 c 40 88
+$MKNOD $DEV/fd/88 c 40 88
 chmod 0666 $DEV/fd/88
 chgrp other $DEV/fd/88
-mknod $DEV/fd/89 c 40 89
+$MKNOD $DEV/fd/89 c 40 89
 chmod 0666 $DEV/fd/89
 chgrp other $DEV/fd/89
-mknod $DEV/fd/9 c 40 9
+$MKNOD $DEV/fd/9 c 40 9
 chmod 0666 $DEV/fd/9
 chgrp other $DEV/fd/9
-mknod $DEV/fd/90 c 40 90
+$MKNOD $DEV/fd/90 c 40 90
 chmod 0666 $DEV/fd/90
 chgrp other $DEV/fd/90
-mknod $DEV/fd/91 c 40 91
+$MKNOD $DEV/fd/91 c 40 91
 chmod 0666 $DEV/fd/91
 chgrp other $DEV/fd/91
-mknod $DEV/fd/92 c 40 92
+$MKNOD $DEV/fd/92 c 40 92
 chmod 0666 $DEV/fd/92
 chgrp other $DEV/fd/92
-mknod $DEV/fd/93 c 40 93
+$MKNOD $DEV/fd/93 c 40 93
 chmod 0666 $DEV/fd/93
 chgrp other $DEV/fd/93
-mknod $DEV/fd/94 c 40 94
+$MKNOD $DEV/fd/94 c 40 94
 chmod 0666 $DEV/fd/94
 chgrp other $DEV/fd/94
-mknod $DEV/fd/95 c 40 95
+$MKNOD $DEV/fd/95 c 40 95
 chmod 0666 $DEV/fd/95
 chgrp other $DEV/fd/95
-mknod $DEV/fd/96 c 40 96
+$MKNOD $DEV/fd/96 c 40 96
 chmod 0666 $DEV/fd/96
 chgrp other $DEV/fd/96
-mknod $DEV/fd/97 c 40 97
+$MKNOD $DEV/fd/97 c 40 97
 chmod 0666 $DEV/fd/97
 chgrp other $DEV/fd/97
-mknod $DEV/fd/98 c 40 98
+$MKNOD $DEV/fd/98 c 40 98
 chmod 0666 $DEV/fd/98
 chgrp other $DEV/fd/98
-mknod $DEV/fd/99 c 40 99
+$MKNOD $DEV/fd/99 c 40 99
 chmod 0666 $DEV/fd/99
 chgrp other $DEV/fd/99
-mknod $DEV/pt/pt00 c 18 0
+$MKNOD $DEV/pt/pt00 c 18 0
 chmod 0666 $DEV/pt/pt00
 chgrp sys $DEV/pt/pt00
-mknod $DEV/pt/pt01 c 18 1
+$MKNOD $DEV/pt/pt01 c 18 1
 chmod 0666 $DEV/pt/pt01
 chgrp sys $DEV/pt/pt01
-mknod $DEV/pt/pt02 c 18 2
+$MKNOD $DEV/pt/pt02 c 18 2
 chmod 0666 $DEV/pt/pt02
 chgrp other $DEV/pt/pt02
-mknod $DEV/pt/pt03 c 18 3
+$MKNOD $DEV/pt/pt03 c 18 3
 chmod 0666 $DEV/pt/pt03
 chgrp other $DEV/pt/pt03
-mknod $DEV/pt/pt04 c 18 4
+$MKNOD $DEV/pt/pt04 c 18 4
 chmod 0666 $DEV/pt/pt04
 chgrp bin $DEV/pt/pt04
-mknod $DEV/pt/pt05 c 18 5
+$MKNOD $DEV/pt/pt05 c 18 5
 chmod 0666 $DEV/pt/pt05
 chgrp other $DEV/pt/pt05
-mknod $DEV/pt/pt06 c 18 6
+$MKNOD $DEV/pt/pt06 c 18 6
 chmod 0666 $DEV/pt/pt06
 chgrp other $DEV/pt/pt06
-mknod $DEV/pt/pt07 c 18 7
+$MKNOD $DEV/pt/pt07 c 18 7
 chmod 0666 $DEV/pt/pt07
 chgrp other $DEV/pt/pt07
-mknod $DEV/pt/pt08 c 18 8
+$MKNOD $DEV/pt/pt08 c 18 8
 chmod 0666 $DEV/pt/pt08
 chgrp other $DEV/pt/pt08
-mknod $DEV/pt/pt09 c 18 9
+$MKNOD $DEV/pt/pt09 c 18 9
 chmod 0666 $DEV/pt/pt09
 chgrp other $DEV/pt/pt09
-mknod $DEV/pt/pt10 c 18 10
+$MKNOD $DEV/pt/pt10 c 18 10
 chmod 0666 $DEV/pt/pt10
 chgrp other $DEV/pt/pt10
-mknod $DEV/pt/pt11 c 18 11
+$MKNOD $DEV/pt/pt11 c 18 11
 chmod 0666 $DEV/pt/pt11
 chgrp other $DEV/pt/pt11
-mknod $DEV/pt/pt12 c 18 12
+$MKNOD $DEV/pt/pt12 c 18 12
 chmod 0666 $DEV/pt/pt12
 chgrp other $DEV/pt/pt12
-mknod $DEV/pt/pt13 c 18 13
+$MKNOD $DEV/pt/pt13 c 18 13
 chmod 0666 $DEV/pt/pt13
 chgrp other $DEV/pt/pt13
-mknod $DEV/pt/pt14 c 18 14
+$MKNOD $DEV/pt/pt14 c 18 14
 chmod 0666 $DEV/pt/pt14
 chgrp other $DEV/pt/pt14
-mknod $DEV/pt/pt15 c 18 15
+$MKNOD $DEV/pt/pt15 c 18 15
 chmod 0666 $DEV/pt/pt15
 chgrp other $DEV/pt/pt15
-mknod $DEV/pt/pt16 c 18 16
+$MKNOD $DEV/pt/pt16 c 18 16
 chmod 0666 $DEV/pt/pt16
 chgrp bin $DEV/pt/pt16
-mknod $DEV/pt/pt17 c 18 17
+$MKNOD $DEV/pt/pt17 c 18 17
 chmod 0666 $DEV/pt/pt17
 chgrp other $DEV/pt/pt17
-mknod $DEV/pt/pt18 c 18 18
+$MKNOD $DEV/pt/pt18 c 18 18
 chmod 0666 $DEV/pt/pt18
 chgrp other $DEV/pt/pt18
-mknod $DEV/pt/pt19 c 18 19
+$MKNOD $DEV/pt/pt19 c 18 19
 chmod 0666 $DEV/pt/pt19
 chgrp other $DEV/pt/pt19
-mknod $DEV/pt/pt20 c 18 20
+$MKNOD $DEV/pt/pt20 c 18 20
 chmod 0666 $DEV/pt/pt20
 chgrp sys $DEV/pt/pt20
-mknod $DEV/pt/pt21 c 18 21
+$MKNOD $DEV/pt/pt21 c 18 21
 chmod 0666 $DEV/pt/pt21
 chgrp sys $DEV/pt/pt21
-mknod $DEV/pt/pt22 c 18 22
+$MKNOD $DEV/pt/pt22 c 18 22
 chmod 0666 $DEV/pt/pt22
 chgrp sys $DEV/pt/pt22
-mknod $DEV/pt/pt23 c 18 23
+$MKNOD $DEV/pt/pt23 c 18 23
 chmod 0666 $DEV/pt/pt23
 chgrp sys $DEV/pt/pt23
-mknod $DEV/pt/pt24 c 18 24
+$MKNOD $DEV/pt/pt24 c 18 24
 chmod 0666 $DEV/pt/pt24
 chgrp sys $DEV/pt/pt24
-mknod $DEV/pt/pt25 c 18 25
+$MKNOD $DEV/pt/pt25 c 18 25
 chmod 0666 $DEV/pt/pt25
 chgrp sys $DEV/pt/pt25
-mknod $DEV/pt/pt26 c 18 26
+$MKNOD $DEV/pt/pt26 c 18 26
 chmod 0666 $DEV/pt/pt26
 chgrp sys $DEV/pt/pt26
-mknod $DEV/pt/pt27 c 18 27
+$MKNOD $DEV/pt/pt27 c 18 27
 chmod 0666 $DEV/pt/pt27
 chgrp sys $DEV/pt/pt27
-mknod $DEV/pt/pt28 c 18 28
+$MKNOD $DEV/pt/pt28 c 18 28
 chmod 0666 $DEV/pt/pt28
 chgrp sys $DEV/pt/pt28
-mknod $DEV/pt/pt29 c 18 29
+$MKNOD $DEV/pt/pt29 c 18 29
 chmod 0666 $DEV/pt/pt29
 chgrp sys $DEV/pt/pt29
-mknod $DEV/pt/pt30 c 18 30
+$MKNOD $DEV/pt/pt30 c 18 30
 chmod 0666 $DEV/pt/pt30
 chgrp sys $DEV/pt/pt30
-mknod $DEV/pt/pt31 c 18 31
+$MKNOD $DEV/pt/pt31 c 18 31
 chmod 0666 $DEV/pt/pt31
 chgrp sys $DEV/pt/pt31
-mknod $DEV/pt/pt32 c 18 32
+$MKNOD $DEV/pt/pt32 c 18 32
 chmod 0666 $DEV/pt/pt32
 chgrp sys $DEV/pt/pt32
-mknod $DEV/pt/pt33 c 18 33
+$MKNOD $DEV/pt/pt33 c 18 33
 chmod 0666 $DEV/pt/pt33
 chgrp sys $DEV/pt/pt33
-mknod $DEV/pt/pt34 c 18 34
+$MKNOD $DEV/pt/pt34 c 18 34
 chmod 0666 $DEV/pt/pt34
 chgrp sys $DEV/pt/pt34
-mknod $DEV/pt/pt35 c 18 35
+$MKNOD $DEV/pt/pt35 c 18 35
 chmod 0666 $DEV/pt/pt35
 chgrp sys $DEV/pt/pt35
-mknod $DEV/pt/pt36 c 18 36
+$MKNOD $DEV/pt/pt36 c 18 36
 chmod 0666 $DEV/pt/pt36
 chgrp sys $DEV/pt/pt36
-mknod $DEV/pt/pt37 c 18 37
+$MKNOD $DEV/pt/pt37 c 18 37
 chmod 0666 $DEV/pt/pt37
 chgrp sys $DEV/pt/pt37
-mknod $DEV/pt/pt38 c 18 38
+$MKNOD $DEV/pt/pt38 c 18 38
 chmod 0666 $DEV/pt/pt38
 chgrp sys $DEV/pt/pt38
-mknod $DEV/pt/pt39 c 18 39
+$MKNOD $DEV/pt/pt39 c 18 39
 chmod 0666 $DEV/pt/pt39
 chgrp sys $DEV/pt/pt39
-mknod $DEV/pt/pt40 c 18 40
+$MKNOD $DEV/pt/pt40 c 18 40
 chmod 0666 $DEV/pt/pt40
 chgrp sys $DEV/pt/pt40
-mknod $DEV/pt/pt41 c 18 41
+$MKNOD $DEV/pt/pt41 c 18 41
 chmod 0666 $DEV/pt/pt41
 chgrp sys $DEV/pt/pt41
-mknod $DEV/pt/pt42 c 18 42
+$MKNOD $DEV/pt/pt42 c 18 42
 chmod 0666 $DEV/pt/pt42
 chgrp sys $DEV/pt/pt42
-mknod $DEV/pt/pt43 c 18 43
+$MKNOD $DEV/pt/pt43 c 18 43
 chmod 0666 $DEV/pt/pt43
 chgrp sys $DEV/pt/pt43
-mknod $DEV/pt/pt44 c 18 44
+$MKNOD $DEV/pt/pt44 c 18 44
 chmod 0666 $DEV/pt/pt44
 chgrp sys $DEV/pt/pt44
-mknod $DEV/pt/pt45 c 18 45
+$MKNOD $DEV/pt/pt45 c 18 45
 chmod 0666 $DEV/pt/pt45
 chgrp sys $DEV/pt/pt45
-mknod $DEV/pt/pt46 c 18 46
+$MKNOD $DEV/pt/pt46 c 18 46
 chmod 0666 $DEV/pt/pt46
 chgrp sys $DEV/pt/pt46
-mknod $DEV/pt/pt47 c 18 47
+$MKNOD $DEV/pt/pt47 c 18 47
 chmod 0666 $DEV/pt/pt47
 chgrp sys $DEV/pt/pt47
-mknod $DEV/pt/pt48 c 18 48
+$MKNOD $DEV/pt/pt48 c 18 48
 chmod 0666 $DEV/pt/pt48
 chgrp sys $DEV/pt/pt48
-mknod $DEV/pt/pt49 c 18 49
+$MKNOD $DEV/pt/pt49 c 18 49
 chmod 0666 $DEV/pt/pt49
 chgrp sys $DEV/pt/pt49
-mknod $DEV/pt/pt50 c 18 50
+$MKNOD $DEV/pt/pt50 c 18 50
 chmod 0666 $DEV/pt/pt50
 chgrp sys $DEV/pt/pt50
-mknod $DEV/pt/pt51 c 18 51
+$MKNOD $DEV/pt/pt51 c 18 51
 chmod 0666 $DEV/pt/pt51
 chgrp sys $DEV/pt/pt51
-mknod $DEV/pt/pt52 c 18 52
+$MKNOD $DEV/pt/pt52 c 18 52
 chmod 0666 $DEV/pt/pt52
 chgrp sys $DEV/pt/pt52
-mknod $DEV/pt/pt53 c 18 53
+$MKNOD $DEV/pt/pt53 c 18 53
 chmod 0666 $DEV/pt/pt53
 chgrp sys $DEV/pt/pt53
-mknod $DEV/pt/pt54 c 18 54
+$MKNOD $DEV/pt/pt54 c 18 54
 chmod 0666 $DEV/pt/pt54
 chgrp sys $DEV/pt/pt54
-mknod $DEV/pt/pt55 c 18 55
+$MKNOD $DEV/pt/pt55 c 18 55
 chmod 0666 $DEV/pt/pt55
 chgrp sys $DEV/pt/pt55
-mknod $DEV/pt/pt56 c 18 56
+$MKNOD $DEV/pt/pt56 c 18 56
 chmod 0666 $DEV/pt/pt56
 chgrp sys $DEV/pt/pt56
-mknod $DEV/pt/pt57 c 18 57
+$MKNOD $DEV/pt/pt57 c 18 57
 chmod 0666 $DEV/pt/pt57
 chgrp sys $DEV/pt/pt57
-mknod $DEV/pt/pt58 c 18 58
+$MKNOD $DEV/pt/pt58 c 18 58
 chmod 0666 $DEV/pt/pt58
 chgrp sys $DEV/pt/pt58
-mknod $DEV/pt/pt59 c 18 59
+$MKNOD $DEV/pt/pt59 c 18 59
 chmod 0666 $DEV/pt/pt59
 chgrp sys $DEV/pt/pt59
-mknod $DEV/pt/pt60 c 18 60
+$MKNOD $DEV/pt/pt60 c 18 60
 chmod 0666 $DEV/pt/pt60
 chgrp sys $DEV/pt/pt60
-mknod $DEV/pt/pt61 c 18 61
+$MKNOD $DEV/pt/pt61 c 18 61
 chmod 0666 $DEV/pt/pt61
 chgrp sys $DEV/pt/pt61
-mknod $DEV/pt/pt62 c 18 62
+$MKNOD $DEV/pt/pt62 c 18 62
 chmod 0666 $DEV/pt/pt62
 chgrp sys $DEV/pt/pt62
-mknod $DEV/pt/pt63 c 18 63
+$MKNOD $DEV/pt/pt63 c 18 63
 chmod 0666 $DEV/pt/pt63
 chgrp sys $DEV/pt/pt63
 
 # --- RP06/RP07, which proto-dev does not have: see mkdep.py's emit_makedev.
 # block major 0, char major 4, minor = drive<<3 | partition.
-mknod $DEV/rp0a b 0 0
+$MKNOD $DEV/rp0a b 0 0
 chmod 0640 $DEV/rp0a
-mknod $DEV/rrp0a c 4 0
+$MKNOD $DEV/rrp0a c 4 0
 chmod 0640 $DEV/rrp0a
-mknod $DEV/rp0b b 0 1
+$MKNOD $DEV/rp0b b 0 1
 chmod 0640 $DEV/rp0b
-mknod $DEV/rrp0b c 4 1
+$MKNOD $DEV/rrp0b c 4 1
 chmod 0640 $DEV/rrp0b
-mknod $DEV/rp0c b 0 2
+$MKNOD $DEV/rp0c b 0 2
 chmod 0640 $DEV/rp0c
-mknod $DEV/rrp0c c 4 2
+$MKNOD $DEV/rrp0c c 4 2
 chmod 0640 $DEV/rrp0c
-mknod $DEV/rp0d b 0 3
+$MKNOD $DEV/rp0d b 0 3
 chmod 0640 $DEV/rp0d
-mknod $DEV/rrp0d c 4 3
+$MKNOD $DEV/rrp0d c 4 3
 chmod 0640 $DEV/rrp0d
-mknod $DEV/rp0e b 0 4
+$MKNOD $DEV/rp0e b 0 4
 chmod 0640 $DEV/rp0e
-mknod $DEV/rrp0e c 4 4
+$MKNOD $DEV/rrp0e c 4 4
 chmod 0640 $DEV/rrp0e
-mknod $DEV/rp0f b 0 5
+$MKNOD $DEV/rp0f b 0 5
 chmod 0640 $DEV/rp0f
-mknod $DEV/rrp0f c 4 5
+$MKNOD $DEV/rrp0f c 4 5
 chmod 0640 $DEV/rrp0f
-mknod $DEV/rp0g b 0 6
+$MKNOD $DEV/rp0g b 0 6
 chmod 0640 $DEV/rp0g
-mknod $DEV/rrp0g c 4 6
+$MKNOD $DEV/rrp0g c 4 6
 chmod 0640 $DEV/rrp0g
-mknod $DEV/rp0h b 0 7
+$MKNOD $DEV/rp0h b 0 7
 chmod 0640 $DEV/rp0h
-mknod $DEV/rrp0h c 4 7
+$MKNOD $DEV/rrp0h c 4 7
 chmod 0640 $DEV/rrp0h
-mknod $DEV/rp1a b 0 8
+$MKNOD $DEV/rp1a b 0 8
 chmod 0640 $DEV/rp1a
-mknod $DEV/rrp1a c 4 8
+$MKNOD $DEV/rrp1a c 4 8
 chmod 0640 $DEV/rrp1a
-mknod $DEV/rp1b b 0 9
+$MKNOD $DEV/rp1b b 0 9
 chmod 0640 $DEV/rp1b
-mknod $DEV/rrp1b c 4 9
+$MKNOD $DEV/rrp1b c 4 9
 chmod 0640 $DEV/rrp1b
-mknod $DEV/rp1c b 0 10
+$MKNOD $DEV/rp1c b 0 10
 chmod 0640 $DEV/rp1c
-mknod $DEV/rrp1c c 4 10
+$MKNOD $DEV/rrp1c c 4 10
 chmod 0640 $DEV/rrp1c
-mknod $DEV/rp1d b 0 11
+$MKNOD $DEV/rp1d b 0 11
 chmod 0640 $DEV/rp1d
-mknod $DEV/rrp1d c 4 11
+$MKNOD $DEV/rrp1d c 4 11
 chmod 0640 $DEV/rrp1d
-mknod $DEV/rp1e b 0 12
+$MKNOD $DEV/rp1e b 0 12
 chmod 0640 $DEV/rp1e
-mknod $DEV/rrp1e c 4 12
+$MKNOD $DEV/rrp1e c 4 12
 chmod 0640 $DEV/rrp1e
-mknod $DEV/rp1f b 0 13
+$MKNOD $DEV/rp1f b 0 13
 chmod 0640 $DEV/rp1f
-mknod $DEV/rrp1f c 4 13
+$MKNOD $DEV/rrp1f c 4 13
 chmod 0640 $DEV/rrp1f
-mknod $DEV/rp1g b 0 14
+$MKNOD $DEV/rp1g b 0 14
 chmod 0640 $DEV/rp1g
-mknod $DEV/rrp1g c 4 14
+$MKNOD $DEV/rrp1g c 4 14
 chmod 0640 $DEV/rrp1g
-mknod $DEV/rp1h b 0 15
+$MKNOD $DEV/rp1h b 0 15
 chmod 0640 $DEV/rp1h
-mknod $DEV/rrp1h c 4 15
+$MKNOD $DEV/rrp1h c 4 15
 chmod 0640 $DEV/rrp1h
 
 echo MAKEDEV-done 414 nodes 3 directories

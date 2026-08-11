@@ -369,14 +369,17 @@ that happens to end in `.a`, which `ld` loads as a plain file. And `libtermlib` 
 `termcap.a`, installs it as `libtermcap.a`, and hard-links `libtermlib.a` to it, so
 `-ltermlib` and `-ltermcap` are one file.
 
-**Stage 6 — commands.** A *list*, not a loop. The tape's 113 makefiles are not a family:
-`awk`'s opens by saying it is wrong, `sed` links with `cc -o sed -n *.o`, `troff` builds
-two programs from overlapping object sets under different `CFLAGS`. Only six state an
-object macro, one link line and nothing exotic. The list starts with what later stages
-need and grows. **One rule applies to every entry: never `-l`, always the path** — for
-the `ld`-has-no-`-L` reason above, `-ll` would resolve out of the running system's
-`/usr/lib` in preference to the `libl.a` stage 5 just built, silently, and the build
-would succeed.
+**Stage 6 — commands.** A *list*, not a loop, for the 113 makefile directories: they are
+not a family — `awk`'s opens by saying it is wrong, `sed` links with `cc -o sed -n *.o`,
+`troff` builds two programs from overlapping object sets under different `CFLAGS`. Only
+six state an object macro, one link line and nothing exotic. **One rule applies to every
+entry: never `-l`, always the path** — for the `ld`-has-no-`-L` reason above, `-ll` would
+resolve out of the running system's `/usr/lib` in preference to the `libl.a` stage 5 just
+built, silently, and the build would succeed.
+
+The other 173 commands are *loose files* in `usr/src/cmd` with no makefile of any kind,
+and those are derived rather than listed — see below, because what makes them derivable
+is not in the source tree.
 
 **Stage 7 — the kernel.** The only stage that copies source, and not by choice:
 `config` resolves its global inputs by literal string concatenation —
@@ -397,6 +400,53 @@ Two things about `config` that are not what they appear:
   `${LD}` and `${CC}`, with defaults added to `conf/makefile` — V8's make has no built-in
   `LD` (`dfltmacro[]` defines `CC`, `AS`, `AR`, `YACC`, `LEX` and stops), so without one
   the link line would begin with a space and fail at the last command.
+
+### Where each command goes is measured, not guessed
+
+165 of the loose files are `.c`, two are `.y`, six are `.sh`, and every one of them is
+one source, one binary. The only thing that varies is the install directory — and the
+source does not contain it. There is no makefile to read, and the manual pages do not
+settle it either, since `man1` covers both `/bin` and `/usr/bin`.
+
+It is not a cosmetic difference. **`/usr` is a separate filesystem**, so everything
+needed to `fsck` and mount it has to be on the root, and a command placed in the wrong
+one produces a system that works perfectly until the day it has to repair itself.
+
+So the authority is a machine that boots. `tools/harvest-paths.sh` runs a copy of the
+golden image, walks `/bin`, `/usr/bin`, `/etc`, `/usr/lib`, `/usr/games` and `/lib`, and
+writes `v8/mk/where.txt` — 434 entries. Every one of the seven names the generator had
+refused to guess (`date`, `rm`, `cat`, `ls`, `echo`, `chmod`, `sync`, all called by bare
+name from `/etc/rc`) is `/bin`, and all seven install paths already inferred for the boot
+path were right.
+
+With the oracle in place `mkdep.py`'s `derive_loose()` emits the entry, and a name the
+image does not have is **skipped rather than guessed** — 40 of them, listed with reasons
+in `gen/stage6-skipped.txt`. They are drivers for hardware we do not emulate (`rp07dump`,
+`bad144`, `hp`), support for terminals we do not have (`2621`, `300`, `4014`, `450`), and
+a handful the image simply never installed (`head`, `yes`, `uname`).
+
+Two traps, both found rather than anticipated:
+
+- **Six of stage 1's tools are also loose sources in `usr/src/cmd`** — `ld.c`, `ar.c`,
+  `ranlib.c`, `nm.c`, `size.c`, `cc.c` — and every generated file is named
+  `<component>.mk`, so the derivation quietly overwrote stage 1's. Nothing would have
+  failed: they are single-file programs and the derived rule compiles them correctly.
+  What it drops is the part that is *not* in the source — `ld` and `as` install to
+  `lib/` as well as `bin/`, and `lib/` is what `cc -B$(TOOLDIR)/lib/` resolves against —
+  so stage 3 would have gone back to linking with the running system's loader, silently.
+  `mkdep.py --check` caught it on the second run; `put()` now refuses to write a name
+  twice.
+- **`-lm` needs nothing.** 19 of the makefile directories link it, which looked like a
+  prerequisite library stage 5 was missing. There is no `libm` source anywhere in the
+  tree: `usr/src/libc/Makefile` does `cc -c -O math/*.c` straight into `libc.a`, and our
+  `libc.mk` compiles the same 17 files. `/usr/lib/libm.a` exists on the shipped image but
+  is not built from this tree.
+
+Of every `-l` in the 113 makefiles, only four name something the tree cannot supply —
+`ether`, `chaos`, `y` and `ln` — blocking exactly three directories (`ether/`, which is
+an older Ethernet stack than the `cmd/inet` one the N track used; `neqn/`; `struct/`).
+The rest of the apparent hits were regex noise: `-l84`, `-l90` and `-l57` are `pr(1)`
+page lengths, `-lS` is a `lint` flag, and `-lunet`/`-lbtl` are commented out.
 
 ## Stage 9 needs a compiler inside `DESTDIR`, and that costs nothing
 

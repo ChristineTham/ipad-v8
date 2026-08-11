@@ -1,7 +1,12 @@
 #!/bin/bash
 # Stages 4 to 8 against a build filesystem that already has stages 1 to 3.
 #
-#	tools/drive-stages48.sh [limit-seconds] [port]
+#	tools/drive-stages48.sh [limit-seconds] [port] [first-stage]
+#
+# first-stage defaults to 4.  Stages 4 to 7 leave their products on the build
+# filesystem, so when only stage 8 has changed, `tools/drive-stages48.sh "" ""
+# 8' reaches it in a couple of minutes instead of fifty.  Nothing is skipped
+# silently: the summary below reports the skipped stages as such.
 #
 # tools/drive-stage1.sh spends about fifty minutes rebuilding the toolchain
 # before it reaches anything you are iterating on.  rp06build is a FILE and it
@@ -18,6 +23,7 @@ ROOT="$(cd "$ROOT" && pwd)"
 WORK="$ROOT/work/myv8"
 LIMIT="${1:-14400}"
 PORT="${2:-9370}"
+FROM="${3:-4}"
 LOG="$WORK/stages48.log"
 NETFSD="$ROOT/netfs/.build/release/netfsd"
 
@@ -60,16 +66,37 @@ NETFSD_PID=$!
 sleep 1
 
 : > "$LOG"
-expect "$ROOT/tools/drive-stages48.exp" "$PORT" &
+expect "$ROOT/tools/drive-stages48.exp" "$PORT" "$FROM" &
 EXP_PID=$!
+# The size cap is not tidiness. A SLiRP attach that cannot bind prints
+# "Sockets: bind error 13 - Permission denied" and RETRIES, with no backoff
+# and no give-up, so a run that failed on its very first command sat there
+# writing the same line until it had produced 3.3 million of them and a 152 MB
+# log. Nothing in the timeout logic notices, because the run is not hung --
+# it is extremely busy.
+MAXLOG=$((64 * 1024 * 1024))
 for ((i = 0; i < LIMIT; i++)); do
     kill -0 "$EXP_PID" 2>/dev/null || break
+    if (( i % 10 == 0 )) && [[ $(stat -f %z "$LOG" 2>/dev/null || echo 0) -gt $MAXLOG ]]; then
+        echo "s48: log passed 64 MB -- something is looping, stopping"
+        tail -3 "$LOG"
+        kill -9 "$EXP_PID" 2>/dev/null
+        break
+    fi
     sleep 1
 done
 wait "$EXP_PID" 2>/dev/null
 rc=$?
 
-LOGC=$(tr -d '\r' < "$LOG")
+# Drop expect's own timeout diagnostic before scoring. `must' prints the
+# pattern it gave up on -- "never saw 'S48-MOUNTED-ok'" -- so the message
+# announcing that a marker NEVER APPEARED contains that marker, and a plain
+# grep then scores the stage as ok. It reported "share mounted at /n/src: ok"
+# on a run that died because the share was not mounted.
+#
+# Same shape as the tty-echo trap the markers are spelled through a shell
+# variable to avoid: the thing that talks about the marker is not the marker.
+LOGC=$(tr -d '\r' < "$LOG" | grep -v 'FAILED: never saw')
 fail=0
 ck() {
     if grep -qE "$2" <<< "$LOGC"; then printf '  ok    %s\n' "$1"
@@ -82,12 +109,18 @@ ck "share mounted at /n/src"      'S48-MOUNTED-ok'
 ck "stage 3 present in /b"        'S48-STAGE3-present-ok'
 
 echo
-echo "== stages 4 to 8 =="
-ck "4: headers"                   'STAGE4 OK'
-ck "5: libraries"                 'STAGE5 OK'
-ck "6: commands"                  'STAGE6 OK'
-ck "7: the kernel"                'STAGE7 OK'
-ck "8: a disk"                    'STAGE8 OK'
+echo "== stages $FROM to 8 =="
+# A stage below FROM was not run, and says so: reporting it as ok would be a
+# lie about this run, and omitting it would make a partial run look complete.
+ckstage() {                             # ckstage <n> <label> <pattern>
+    if [[ $1 -lt $FROM ]]; then printf '  --    %s (not run)\n' "$2"
+    else ck "$2" "$3"; fi
+}
+ckstage 4 "4: headers"            'STAGE4 OK'
+ckstage 5 "5: libraries"          'STAGE5 OK'
+ckstage 6 "6: commands"           'STAGE6 OK'
+ckstage 7 "7: the kernel"         'STAGE7 OK'
+ck        "8: a disk"             'STAGE8 OK'
 grep -E '  BUILD FAILED |  INSTALL FAILED |Don.t know how to make' <<< "$LOGC" \
     | sed 's/^/  /' | head -20
 sed -n '/=== stage 7: what got built ===/,$p' <<< "$LOGC" \

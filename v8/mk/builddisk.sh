@@ -53,13 +53,36 @@ UMIN=`expr $UNIT \* 8 + $USRPARTNO`
 
 echo "=== stage 8: $TYPE on drive $UNIT, root $ROOTSZ, /usr $USRSZ ==="
 
+# /etc/mknod, not mknod. There is no mknod on root's PATH -- where.txt says
+# /etc -- and the first run of this script said so four times, in the middle
+# of its own output, as `builddisk.sh: mknod: not found'.
+#
 # rm first: mknod does not replace, it complains and leaves what was there.
 rm -f $ROOTB $ROOTR $USRB $USRR
-mknod $ROOTB b 0 $AMIN
-mknod $ROOTR c 4 $AMIN
-mknod $USRB  b 0 $UMIN
-mknod $USRR  c 4 $UMIN
+/etc/mknod $ROOTB b 0 $AMIN
+/etc/mknod $ROOTR c 4 $AMIN
+/etc/mknod $USRB  b 0 $UMIN
+/etc/mknod $USRR  c 4 $UMIN
 ls -l $ROOTB $ROOTR $USRB $USRR
+
+# AND THEN CHECK, because the failure that follows a missing node is not a
+# failure. mkfs(8) does not require a special file: given a name that is not
+# one it CREATES A REGULAR FILE and writes the filesystem into it. So four
+# `mknod: not found' messages turned `mkfs /dev/rrp2f 928000' into a request
+# to write 475 MB into a file on the RUNNING system's root -- which is 8 MB --
+# and the diagnostic was `/: file system full', about the wrong filesystem
+# entirely, three lines after a message nobody reads twice.
+#
+# This is the only guard that matters in this script: everything after it
+# either works on a real device or refuses to start.
+for n in $ROOTB $USRB
+do
+	test -b $n || { echo "builddisk: $n is not a block device -- refusing"; exit 1; }
+done
+for n in $ROOTR $USRR
+do
+	test -c $n || { echo "builddisk: $n is not a character device -- refusing"; exit 1; }
+done
 
 echo ""
 echo "=== stage 8: mkfs ==="

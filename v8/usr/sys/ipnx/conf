@@ -54,8 +54,21 @@ controller	mba1	at nexus ?
 controller	mba2	at nexus ?
 controller	uba0	at nexus ?
 controller	uba1	at nexus ?
+# FOUR drives, where alice had two.  A build machine needs three at once --
+# the system it runs on, the filesystem it builds into, and the disk it is
+# writing -- and stage 8 found this the hard way: with only hp0 and hp1
+# declared, /etc/mknod happily makes /dev/rp2a (mknod does not check that the
+# device exists) and mkfs then fails on its first data block with
+#
+#	write error: 2
+#
+# which names a block number, not a device, and looks nothing like "there is
+# no such disk".  SIMH's RP is 8 units on Massbus adapter 0, so the hardware
+# was there all along; only the kernel's table was short.
 disk		hp0	at mba0 drive 0
 disk		hp1	at mba0 drive 1
+disk		hp2	at mba0 drive 2
+disk		hp3	at mba0 drive 3
 master		mt0	at mba? drive ?
 tape		mu0	at mt0 slave 0
 master		ht0	at mba? drive ?

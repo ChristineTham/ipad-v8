@@ -47,6 +47,22 @@ proc sh {cmd {t 0}} {
 proc bootsh {cmd {t 0}} { must "# " $t; sendline $cmd }
 proc simh {cmd {t 0}} { must "sim>" $t; sendline $cmd }
 
+# A precondition, not a step: run the command and REQUIRE its marker before
+# the completion marker.  `sh' only waits for +okN+, which a command prints
+# whether it worked or not -- so the first run of this driver mounted nothing
+# and then ran all five stages against a share that was not there, reporting
+# five failures for one cause.  A precondition that is merely checked at the
+# end is a precondition in name only.
+proc shmust {cmd pat {t 0}} {
+    global SEQ
+    incr SEQ
+    sendline "M=+ok$SEQ"
+    sendline "$cmd"
+    sendline "echo \$M+"
+    must "$pat" $t
+    must "+ok$SEQ+" $t
+}
+
 # cat waits for input, so this cannot use sh -- the marker would never arrive
 # until after the data has been fed and the ^D delivered.
 proc catfile {src dst} {
@@ -64,6 +80,13 @@ proc catfile {src dst} {
 
 set port [lindex $argv 0]
 if {$port == ""} { set port 9370 }
+
+# Which stage to start at. Stages 4 to 7 leave their products on the build
+# filesystem, so re-running all of them to reach a failing stage 8 costs about
+# fifty minutes -- and stage 6 in particular cannot be short-cut by make,
+# because buildcmds.sh rm -rf's each object directory before it builds it.
+set from [lindex $argv 1]
+if {$from == ""} { set from 4 }
 
 spawn vax780
 simh "set noasynch"
@@ -87,31 +110,76 @@ bootsh "PS1='ipnx%%% '" 120
 sh "OK=-ok" 120
 sh "stty erase '^H'" 60
 
+# FIRST, before anything at all needs room on /. mkfs given a name that is not
+# a special file creates a REGULAR FILE and writes the filesystem into it, so
+# a run whose /etc/mknod failed left megabytes of would-be filesystem in /dev
+# on a root partition that is only 8 MB. Everything afterwards then fails for
+# the wrong reason: the first casualty is `cat > /tmp/nmount.c', which leaves
+# `/tmp/nmount: not found' and a mount that never happens.
+#
+# This was originally placed just before `mkdir /b' -- i.e. AFTER the nmount
+# compile it exists to protect. Cleanup that runs after the damage matters is
+# not cleanup.
+send_user "\n=== clear wreckage from a previous stage 8 ===\n"
+sh "rm -f /dev/rp2? /dev/rrp2?" 60
+sh "df /" 60
+
+# ------------------------------------------------------------- networking
+# Missing entirely from the first version of this driver, which is what its
+# first run found: nmount answered `short tcp reply (0)' and every stage then
+# reported no /n/src, so five stages failed on one unmounted share.
+#
+# The device nodes and /usr/inet/lib persist on rp07v8.net, so a machine that
+# has run the full driver before already has them -- but ipconfig and
+# tcpconfig are PROCESSES and die with the machine, so they have to run on
+# every boot. Without tcpconfig pushing the TCP discipline onto /dev/ip6
+# there is nothing underneath /dev/tcp01: the open succeeds, the write
+# succeeds, and the reply never comes.  Same sequence the N track settled on.
+send_user "\n=== network ===\n"
+sh "/etc/mknod /dev/il0 c 44 0"
+sh "/etc/mknod /dev/il1 c 44 1"
+sh "/etc/mknod /dev/ip0  c 42 0"
+sh "/etc/mknod /dev/ip6  c 42 6"
+sh "for i in 0 1 2 3 4 5 6 7; do /etc/mknod /dev/tcp0\$i c 43 \$i; done"
+sh "chmod 666 /dev/tcp0? /dev/ip0 /dev/ip6 /dev/il0 /dev/il1"
+sh "mkdir /usr/inet/lib"
+sh "echo '10.0.2.15\tv8' > /usr/inet/lib/hosts"
+sh "echo '10.0.2.2\tgateway' >> /usr/inet/lib/hosts"
+sh "echo '10.0.0.0\tslirp-net' > /usr/inet/lib/networks"
+sh "cd /usr/src/cmd/inet/etc; ./ipconfig /dev/il0 v8 slirp-net /dev/il1 &"
+sh "sleep 3"
+sh "cd /usr/src/cmd/inet/etc; ./tcpconfig /dev/ip6 &"
+sh "sleep 3"
+sh "cd /usr/src/cmd/inet/etc; ./route add '*' gateway; echo route-rc=$?"
+
 # The share, exactly as the full driver builds it: nmount is compiled in the
 # guest from the repo's copy rather than assumed to exist, and minor 65 is odd
 # because tcp_device.c refuses an even one whose socket is not already active.
 # (Stage 6 now builds nmount into DESTDIR, but DESTDIR is not the running
 # system -- this machine still has to make its own.)
+send_user "\n=== mount the repo tree at /n/src ===\n"
 sh "mkdir /n" 60
 sh "mkdir /n/src" 60
 catfile "../../tools/v8/nmount.c" "/tmp/nmount.c"
 sh "cd /tmp; cc -o nmount nmount.c -lin" 300
 sh "/tmp/nmount 10.0.2.2 $port 65 /n/src" 120
-sh "if test -f /n/src/mk/build1.sh; then echo S48-MOUNTED\$OK; fi"
+shmust "if test -f /n/src/mk/build1.sh; then echo S48-MOUNTED\$OK; fi" \
+       "S48-MOUNTED-ok" 120
 
 sh "mkdir /b" 60
 sh "if /etc/fsck -y /dev/rrp1g > /dev/null; then /etc/mount /dev/rp1g /b; fi" 900
 sh "df /b"
-sh "if test -f /b/tools3/bin/cc; then echo S48-STAGE3-present\$OK; fi"
+shmust "if test -f /b/tools3/bin/cc; then echo S48-STAGE3-present\$OK; fi" \
+       "S48-STAGE3-present-ok" 120
 
-send_user "\n=== stages 4 to 8 ===\n"
+send_user "\n=== stages $from to 8 ===\n"
 sh "date"
-sh "sh /n/src/mk/buildhdrs.sh /n/src /b/root 2>&1" 1800
-sh "sh /n/src/mk/buildlibs.sh /n/src /b /b/root /b/tools3 2>&1" 7200
+if {$from <= 4} { sh "sh /n/src/mk/buildhdrs.sh /n/src /b/root 2>&1" 1800 }
+if {$from <= 5} { sh "sh /n/src/mk/buildlibs.sh /n/src /b /b/root /b/tools3 2>&1" 7200 }
 # 3 hours, not the 90 minutes this had when stage 6 was eleven commands: it
 # is 132 now, and each is a compile and a link inside the emulator.
-sh "sh /n/src/mk/buildcmds.sh /n/src /b /b/root /b/tools3 2>&1" 10800
-sh "sh /n/src/mk/buildkernel.sh /n/src /b /b/root ipnx /b/tools3 2>&1" 7200
+if {$from <= 6} { sh "sh /n/src/mk/buildcmds.sh /n/src /b /b/root /b/tools3 2>&1" 10800 }
+if {$from <= 7} { sh "sh /n/src/mk/buildkernel.sh /n/src /b /b/root ipnx /b/tools3 2>&1" 7200 }
 sh "sh /n/src/mk/builddisk.sh /n/src /b/root 2 rp07 /mnt 2>&1" 3600
 sh "date"
 
