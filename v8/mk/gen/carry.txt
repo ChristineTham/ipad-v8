@@ -12,7 +12,7 @@
 # relative to its root -- so strip comments and pipe it in.
 #
 #	1406 files	23570698 bytes
-#	14 skipped (regenerated here, or one machine's state)
+#	11 skipped (regenerated here, or one machine's state)
 #	206 not carried because we build our own
 #	6 not carried because they are ours and not on the tape
 #
