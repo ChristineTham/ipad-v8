@@ -334,10 +334,35 @@ the safety rules are in [build-from-source.md](build-from-source.md).
       declares more than two. What it still lacks is most of `/usr`: 36 files
       in `/bin`, 73 in `/usr/bin`, and `/etc/rc` still reports `cron` and
       `rmdir` missing — all of it stage 6's remaining 145
-- [ ] **S8** Stage 9: the new system rebuilds itself under `chroot` — the point
-      at which `v8/` is demonstrably complete
-- [ ] **S9** Our guest-side patches move into the tree (the `streamio.c`
-      `istread` fix, `nmount.c`, the `il0` kernel config)
+- [x] **S8** Stage 9: the new system rebuilds itself under `chroot` — the point
+      at which `v8/` is demonstrably complete *(2026-08-11)*. **9 of 9 tools**,
+      rebuilt from source by the compiler stage 6 installed, inside
+      `DESTDIR`, with **no `-B` and no `TOOLDIR`**: `yacc make lex cpp ccom c2
+      as ld ar ranlib nm size strip cc` and then libc. `v8/mk/buildstage9.sh`.
+
+      V8 has `chroot(2)` — syscall 61 — and ships **no `chroot(1)`**: no
+      command on the image, no source in `usr/src`, no manual page. So
+      `v8/usr/src/cmd/chroot.c` is ours, and stage 6 installs it as
+      `/etc/chroot`. `cc(1)` is why it has to be a real chroot rather than a
+      `-B`: `-B` is a *runtime* option, so the `cc` in `DESTDIR` still carries
+      `/lib/ccom` as its compiled-in pass directory and, run from outside,
+      would silently use the **building** system's passes and report success
+      for a `DESTDIR` containing none of them. Under chroot
+      `DESTDIR/lib/ccom` *is* `/lib/ccom`, so a missing pass fails instead of
+      being borrowed — which is the whole experiment.
+
+      Three things a chroot needs that nothing lists: `/dev/null` (there is no
+      `/dev` in `DESTDIR` at all, so every `> /dev/null` reads as a
+      permissions problem), a build directory that is not `/` (`//obj9` is
+      rejected by V8's `mkdir` on all fourteen components), and the share
+      mounted **inside** the new root before entering it
+- [x] **S9** Our guest-side patches move into the tree *(2026-08-11)*: the
+      `streamio.c` `istread`/`istwrite` rewrite with `strdata` widened from
+      512/256 to **8192/4096**, `nmount.c`, and the `il0` kernel config —
+      `usr/sys/ipnx/conf` declares `il0 at uba? csr 0164040` plus the `inet`,
+      `uarp`, `tcp` and `udp` pseudo-devices. Every kernel stage 7 builds now
+      carries all of it by construction, rather than by a driver patching a
+      running machine. `chroot.c` (S8) and `date.c`'s 69/70 window joined them
 
 ## Track C — ipnx-ports *(declared 2026-08-10; nothing built)*
 
