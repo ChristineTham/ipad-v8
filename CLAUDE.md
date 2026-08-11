@@ -77,7 +77,9 @@ tools/verify-golden.sh
 ```
 
 **What in `work/` is load-bearing**, since the rest is scratch and was cleaned out:
-`rp07new` and `rp06new` (the built goldens), `rp06build` (stages 1–3 —
+`rp07new` (the built golden — the RP06 variant `rp06new` holds the *same system* in
+a different container and nothing consumes it, so it is not kept; one stage-8 run
+rebuilds it, `tools/drive-stages48.sh "" "" 8 8 rp07new rp06`), `rp06build` (stages 1–3 —
 `drive-stages48.sh` refuses to start without it and rebuilding costs ~50 min),
 `rp07v8.net` (the build machine itself, plus `.net.bak`, its only rollback),
 `rp06v8.golden` (the TUHS reference — still the default `--tuhs` for
