@@ -130,8 +130,11 @@ echo "=== stage 8: the tree ==="
 # V8 has no mkdir -p and no cp -r.  The directory list is explicit and the
 # copies are one `cp src/* dst' per directory, so a failure names a directory
 # rather than disappearing into a recursive walk.
-for d in bin etc lib tmp dev usr/bin usr/lib usr/include usr/include/sys \
-	 usr/include/sys/inet usr/adm usr/spool usr/tmp
+# tmp/dump is not decoration: /etc/rc line 31 is `/etc/savecore /tmp/dump',
+# savecore's argument is the DIRECTORY it saves a crash dump into, and without
+# it every single boot opens with "/tmp/dump: No such file or directory".
+for d in bin etc lib tmp tmp/dump dev usr/bin usr/lib usr/include \
+	 usr/include/sys usr/include/sys/inet usr/adm usr/spool usr/tmp
 do
 	mkdir $MNT/$d 2>/dev/null
 done

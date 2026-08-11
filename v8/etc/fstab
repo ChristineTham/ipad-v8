@@ -1,3 +1,2 @@
 /dev/rp0a:/:rw:1:1
-/dev/rp0b::sw::
 /dev/rp0f:/usr:rw:1:2
