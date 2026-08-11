@@ -223,6 +223,28 @@ done
 echo "  /usr/man: `ls $MNT/usr/man | wc -l` sections, /usr/lib: `ls $MNT/usr/lib | wc -l` entries"
 
 echo ""
+echo "=== stage 8: the directories no file copy would make ==="
+# An EMPTY directory is invisible to every check above.  cpio and cp create
+# the directories they put files in, so a directory with contents appears by
+# itself -- and one without never does.  retire-check.py does not catch it
+# either: it skips directories, on the reasoning that a directory has no
+# content to lose.  True of the bytes, false of the system.
+#
+# 35 of them, and they are not decoration: /usr/spool/uucp with its nine
+# dot-directories is uucp's working layout, /usr/spool/at/past is where at(1)
+# files a job it has run, /dev/pt is where the `sp' pseudo-device puts its
+# stream pipes, and /n, /n/home and /n/macos are our own mount points.
+#
+# AFTER the copy passes, because some of these hang off directories that only
+# exist once files have been put in them (usr/lib/ideal/idfilt).  Parents
+# first within the file, because V8 has no mkdir -p.
+for d in `grep -v '^#' $SRC/mk/gen/dirs.txt`
+do
+	mkdir $MNT/$d 2>/dev/null
+done
+echo "  `grep -cv '^#' $SRC/mk/gen/dirs.txt` directories"
+
+echo ""
 echo "=== stage 8: what we built, last so that ours wins ==="
 date
 # LAST ON PURPOSE.  A command can be `excluded' on the tape and `build' for
