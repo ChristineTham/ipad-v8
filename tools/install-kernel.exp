@@ -1,0 +1,141 @@
+#!/usr/bin/env expect
+#
+# Put the kernel stage 7 built onto the machine that built it, and boot it.
+#
+#	expect tools/install-kernel.exp
+#
+# WHY THIS EXISTS. Stage 8 has to write a disk that is neither the system it
+# is running on nor the filesystem it is building into, so the build machine
+# needs three drives at once. No machine description on the tape declares more
+# than two, so rp07v8.net boots a kernel with hp0 and hp1 and nothing else,
+# and stage 8 dies on its first data block. usr/sys/ipnx/conf now declares
+# hp0..hp3 -- but a conf only takes effect in a kernel that is running.
+#
+# So this swaps the build machine onto OUR kernel, which is also the first
+# time anything from stage 7 has been booted rather than merely linked. That
+# makes this a Track S milestone and a risk in the same step, and it is
+# handled the way 1985 handled it: the old kernel is kept as /ounix, and
+# work/myv8/rp07v8.net.bak is a whole-image backup taken before the first
+# attempt. Recovery from an unbootable kernel is a file copy.
+#
+# It boots TWICE on purpose. The first boot installs and halts; the second
+# proves the installed kernel comes up on its own, which is the only evidence
+# that matters. A script that installed and stopped would report success for a
+# kernel that never ran.
+
+set timeout 600
+log_file -a install-kernel.log
+proc sendline {x} { send "$x\r" }
+
+proc must {pat {t 0}} {
+    global timeout
+    set use [expr {$t > 0 ? $t : $timeout}]
+    expect -timeout $use "$pat" {
+    } timeout {
+        send_user "\n*** GAVE UP after ${use}s ***\n"; exit 3
+    } eof {
+        send_user "\n*** simulator exited ***\n"; exit 4
+    }
+}
+
+# Markers are spelled through a shell variable, never literally: the tty
+# echoes what we type into whatever is printing, so a literal marker can be
+# matched in the echo of the command that produces it.
+set SEQ 0
+proc sh {cmd {t 0}} {
+    global SEQ
+    incr SEQ
+    sendline "M=+ok$SEQ"
+    sendline "$cmd"
+    sendline "echo \$M+"
+    must "+ok$SEQ+" $t
+}
+proc shmust {cmd pat {t 0}} {
+    global SEQ
+    incr SEQ
+    sendline "M=+ok$SEQ"
+    sendline "$cmd"
+    sendline "echo \$M+"
+    must "$pat" $t
+    must "+ok$SEQ+" $t
+}
+proc simh {cmd {t 0}} { must "sim>" $t; sendline $cmd }
+
+proc bootmachine {} {
+    # `spawn' sets spawn_id in the CURRENT scope, so spawning inside a proc
+    # leaves it local: every other proc then falls back to the unset global
+    # one and gets an instant `spawn id exp0 not open' that expect reports as
+    # eof -- i.e. "the simulator exited" three lines after it started fine.
+    # The other drivers in tools/ spawn at top level and never meet this.
+    global spawn_id
+    spawn vax780
+    simh "set noasynch"
+    simh "set cpu idle=4.1BSD"
+    simh "set tto 7b"
+    simh "set rp0 rp07"
+    simh "at rp0 rp07v8.net"
+    simh "set rp1 rp06"
+    simh "at rp1 rp06build"
+    # rp2 attached on BOTH boots: on the second it is what we are proving the
+    # new kernel can see, and an unattached unit would fail for the wrong
+    # reason.
+    simh "set rp2 rp07"
+    simh "at rp2 rp07new"
+    simh "load -o bootV8 0"
+    simh "run 2"
+    must "login:" 300
+    sendline "root"
+    must "# " 120
+    sendline "PS1='ipnx%%% '"
+    sh "OK=-ok" 120
+    sh "stty erase '^H'" 60
+}
+
+# ---------------------------------------------------------- first boot
+send_user "\n=== boot 1: install ===\n"
+bootmachine
+sh "mkdir /b" 60
+sh "if /etc/fsck -y /dev/rrp1g > /dev/null; then /etc/mount /dev/rp1g /b; fi" 900
+shmust "if test -f /b/root/unix; then echo IK-HAVE-KERNEL\$OK; fi" "IK-HAVE-KERNEL-ok" 120
+sh "ls -l /b/root/unix /unix"
+
+# Copy first, rename second. A copy that fails half way through leaves a short
+# /nunix and an untouched /unix; a copy straight over /unix would leave the
+# machine with no kernel at all and no way to say so.
+sh "cp /b/root/unix /nunix" 300
+sh "ls -l /nunix"
+shmust "if cmp /b/root/unix /nunix; then echo IK-COPY\$OK; fi" "IK-COPY-ok" 300
+sh "rm -f /ounix" 60
+sh "mv /unix /ounix" 60
+sh "mv /nunix /unix" 60
+sh "ls -l /unix /ounix"
+sh "/etc/umount /dev/rp1g" 120
+sh "cd /; sync; sync" 60
+sendline "/etc/halt"
+must "Infinite loop" 120
+simh "quit" 60
+expect eof
+wait
+
+# ---------------------------------------------------------- second boot
+send_user "\n=== boot 2: does our kernel come up? ===\n"
+bootmachine
+sh "ls -l /unix /ounix"
+
+# The whole point: a third drive the old kernel did not have. mknod makes a
+# node whether or not the device exists, so the node proves nothing -- reading
+# a block off it does. dd is /bin/dd (where.txt).
+sh "rm -f /dev/rp2a /dev/rrp2a" 60
+sh "/etc/mknod /dev/rp2a b 0 16" 60
+sh "/etc/mknod /dev/rrp2a c 4 16" 60
+shmust "if dd if=/dev/rrp2a of=/dev/null bs=512 count=1 2>/dev/null; then echo IK-DRIVE2\$OK; fi" \
+       "IK-DRIVE2-ok" 120
+
+sh "echo IK-DONE\$OK"
+sh "cd /; sync; sync" 60
+sendline "/etc/halt"
+must "Infinite loop" 120
+simh "quit" 60
+expect eof
+wait
+send_user "\n=== INSTALL-KERNEL DONE ===\n"
