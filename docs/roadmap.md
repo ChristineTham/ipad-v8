@@ -300,7 +300,7 @@ the safety rules are in [build-from-source.md](build-from-source.md).
         stage 2 *(2026-08-11)*. `curses-ok` proves it together with stage 4:
         a program compiled against our headers, linked against our
         `libcurses` and `libtermcap`, and run
-  - [~] **6** commands — **132 of ~277** *(2026-08-11)*: 11 hand-written
+  - [~] **6** commands — **173 of ~277** *(2026-08-11)*: 12 hand-written
         (`config`(8), `sh`, the boot path, `nmount`) plus **121 derived** from
         the tree and `v8/mk/where.txt`, plus **the whole toolchain installed
         into `DESTDIR`** — a system with no compiler cannot rebuild itself,
@@ -309,12 +309,27 @@ the safety rules are in [build-from-source.md](build-from-source.md).
         entries, because the 165 loose `.c` have no makefile of any kind and
         `/bin` vs `/usr/bin` decides whether the system can repair itself with
         `/usr` unmounted. All seven names it had refused to guess (`date`
-        `rm` `cat` `ls` `echo` `chmod` `sync`) are `/bin`. 40 skipped with
-        reasons in `gen/stage6-skipped.txt`. **Remaining: the 113 makefile
-        directories** — no new library blocks them (`-lm` needs nothing; V8
-        compiles `math/*.c` into `libc.a`), only `ether` `chaos` `y` `ln`
-        have no source in the tree at all, and they block just three
-        directories
+        `rm` `cat` `ls` `echo` `chmod` `sync`) are `/bin`. The 113 makefile
+        directories are read for the two facts only they know — which objects
+        and which extra libraries — and 62 derive cleanly.
+
+        **118 are refused, each with a stated reason** in
+        `gen/stage6-skipped.txt`, and every rule was written by a build
+        failure rather than foreseen: one `main()` or it is not one program
+        (`asd` holds five, `refer` twelve, `view2d` thirteen); the directory
+        and not just the makefile (`pp` carries a `scan.l` its makefile never
+        names); an archive built inside the component (`map`'s `libmap.a`); a
+        header the tape does not ship (`sdb`'s `bio.h`, plus three components
+        including headers by **absolute path** into a live machine); a source
+        that is not C (`csh`'s `doprnt.c` is VAX assembly with cpp
+        directives); and a `.c.o` redefined as a multi-step recipe (`csh`'s
+        `xstr` string sharing). Two the 1985 compiler simply cannot build are
+        refused by name: `cfront` (C++) and `compat`.
+
+        No new library blocks the rest — `-lm` needs nothing at all, since V8
+        compiles `math/*.c` straight into `libc.a` — and of every `-l` in the
+        113 makefiles only `ether`, `chaos`, `y` and `ln` name something with
+        no source in the tree, blocking three directories
   - [x] **7** the kernel — **a 236,520-byte `unix`, built from our source
         with our toolchain** *(2026-08-11)*. `usr/sys/ipnx/conf` is `alice`'s
         VAX-11/780 plus the Internet pseudo-devices `research` had, and it is
