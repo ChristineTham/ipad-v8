@@ -507,6 +507,50 @@ Read-only is a genuine milestone: `NGET`, `NNAMI`, `NREAD`, `NSTAT`, `NPUT`
 and `NFREE` are enough to mount a host directory and read it. `NWRT`,
 `NTRUNC`, `NUPDAT` and the `NNAMI` side effects can come with N7.
 
+## What it costs: one round trip per path component
+
+Measured across stages 1–5 of the 2026-08-11 world build — 115,446 requests in
+about 31 minutes:
+
+| | | |
+|---|---:|---|
+| `NNAMI` | 34,795 | 30% |
+| `NGET` | 34,184 | 30% |
+| `NPUT` | 34,181 | 30% |
+| `NREAD` | 6,258 | 5% |
+| `NSTAT` | 5,933 | 5% |
+| `NUPDAT` | 101 | |
+
+**Only 5% of requests move data.** The rest is path resolution, and the reason
+is in the client rather than the wire format. `nanami()`
+(`v8/usr/sys/sys/neta.c`) copies characters into `u.u_dbuf` until `/` or NUL,
+capped at `DIRSIZ` = 14, sets `x.buf = u.u_dbuf`, and sends. One component,
+one exchange. So
+
+```
+/n/src/usr/src/cmd/ccom/vax/../common/reader.c
+```
+
+costs about ten `NNAMI` exchanges before a byte is read — and a compiler opens
+dozens of files per translation unit. `naget`/`naput` appearing in a 1:1 ratio
+says the same thing about attributes: no netfs inode survives between uses, so
+every access re-fetches it and releases it again.
+
+At ~16 ms a request the emulated VAX spends 92% of a build waiting, which is
+why `vax780` sits at 6–8% CPU while compiling. That 16 ms is itself the
+calibrated 10 ms clock tick plus overhead: `libsimh/patches/pdp11_il.c` polls
+the NI1010 receive path with `sim_clock_coschedule(uptr, tmxr_poll)`, so a
+reply that lands just after a poll waits most of a tick.
+
+Two consequences worth keeping separate. **Bulk copying over this share is
+hopeless** — about 30 files a minute regardless of file size, which is why
+stage 8 lifts 2264 runtime files off a mounted disk with `cpio` in four
+seconds instead. **Compiling over it is fine but slow**, and the fix is to cut
+the number of round trips rather than the time each takes. We own both ends —
+the client is `neta.c`, the server is `netfs/Sources/NetFS` — so resolving a
+whole path in one exchange is available, and it is worth roughly ten times
+more than tuning the poll interval.
+
 ## Sources
 
 All paths relative to the V8 tree (`work/v8src/`), from TUHS.
