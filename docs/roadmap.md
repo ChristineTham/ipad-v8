@@ -368,9 +368,11 @@ the safety rules are in [build-from-source.md](build-from-source.md).
       the compiler stage 6 installed. Its own prerequisite was booting the
       build machine on our stage-7 kernel (`tools/install-kernel.sh`), because
       stage 8 needs a third drive and no machine description on the tape
-      declares more than two. What it still lacks is most of `/usr`: 36 files
-      in `/bin`, 73 in `/usr/bin`, and `/etc/rc` still reports `cron` and
-      `rmdir` missing — all of it stage 6's remaining 145
+      declares more than two. What it still lacked at that point was most of
+      `/usr`: 36 files in `/bin`, 73 in `/usr/bin`, and `/etc/rc` reporting
+      `cron` and `rmdir` missing — closed by **S10**, which is where the
+      difference between "we built it" and "it is on the disk" turned out to
+      live
 - [x] **S8** Stage 9: the new system rebuilds itself under `chroot` — the point
       at which `v8/` is demonstrably complete *(2026-08-11)*. **9 of 9 tools**,
       rebuilt from source by the compiler stage 6 installed, inside
@@ -400,6 +402,40 @@ the safety rules are in [build-from-source.md](build-from-source.md).
       `uarp`, `tcp` and `udp` pseudo-devices. Every kernel stage 7 builds now
       carries all of it by construction, rather than by a driver patching a
       running machine. `chroot.c` (S8) and `date.c`'s 69/70 window joined them
+- [ ] **S10** **The golden disk is ours, and the TUHS image retires**
+      *(2026-08-11; [golden-disk.md](golden-disk.md))*. The disk stops being
+      "what we could build" and becomes a complete system: 206 built, **1406
+      carried** off the reference image because the tape shipped them without
+      source, and the runtime trees installed beside them.
+
+      The gate is not "does our disk equal theirs" — it does not, and should
+      not. It is **containment**: every file on the TUHS image is on ours, or
+      in git as a `MANIFEST` `source` row, or named individually as
+      deliberately regenerated. `tools/retire-check.py` decides it, and while
+      one file is left over it fails.
+
+      Two tools made this cheap enough to do at all. `tools/v8fs.py` reads a
+      V8 filesystem out of a SIMH image **from macOS**, so "what is actually
+      on that disk?" stopped meaning "boot a VAX and read `find` off a serial
+      line". And stage 8's `cp`-per-file loop became one `cpio -p` fed by a
+      generated manifest: 22 MB in six seconds, where 400 copies had been the
+      slowest thing in the stage.
+
+      `tools/mkcarry.py` generates the three lists and, for the 2264 runtime
+      files, **sha256-compares the image's copy against ours** — 2263 match,
+      so they come off the mounted disk instead of over netfs, which costs a
+      round trip per file and would have taken ninety minutes. The one that
+      differs comes from `/n/src`. It is a proof, not a shortcut, and it is
+      re-run every time the lists are regenerated.
+
+      Four files were found missing that no boot test could have caught, each
+      a different way for a build to lie about itself: `bcd` built into
+      `DESTDIR/usr/games` with `usr/games` absent from stage 8's copy list;
+      `yacc` and `strip` installed to `TOOLDIR/bin`, reaching the toolchain
+      and never `/usr/bin` — where `where.txt`, the image and our own
+      `provenance.txt` all say they belong, and where `mkdep.py`'s generated
+      makefiles default `YACCPATH` to look; and `wmux`, ours from A4, which no
+      `MANIFEST` row describes and no generated list picks up
 
 ## Track C — ipnx-ports *(declared 2026-08-10; nothing built)*
 
