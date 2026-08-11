@@ -164,8 +164,20 @@ ls -l $MNT/unix
 # fsck cannot reconnect an orphaned inode without one, and an autoboot fsck
 # that needs to aborts to a single-user shell -- "Automatic reboot failed...
 # help!" -- which is how a disk that looks finished turns out not to boot.
-/etc/mklost+found $MNT
-/etc/mklost+found $MNT/usr
+#
+# cd, because /etc/mklost+found TAKES NO ARGUMENT. It is a shell script whose
+# first line is `mkdir lost+found', in the current directory, and it ignores
+# anything you pass it -- silently, and then prints the full path of what it
+# made, which is the only reason this was caught:
+#
+#	drwxrwxr-x  2 root bin 4128 /tmp/lost+found
+#
+# after `/etc/mklost+found /mnt'.  The second call then said "mkdir: cannot
+# make directory lost+found" because the first had already made it in /tmp,
+# and stage 8 finished reporting success with neither filesystem having one.
+( cd $MNT     && /etc/mklost+found )
+( cd $MNT/usr && /etc/mklost+found )
+ls -ld $MNT/lost+found $MNT/usr/lost+found
 
 echo ""
 echo "=== stage 8: unmount and verify ==="
