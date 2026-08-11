@@ -448,6 +448,44 @@ an older Ethernet stack than the `cmd/inet` one the N track used; `neqn/`; `stru
 The rest of the apparent hits were regex noise: `-l84`, `-l90` and `-l57` are `pr(1)`
 page lengths, `-lS` is a `lint` flag, and `-lunet`/`-lbtl` are commented out.
 
+## Stage 9: done, and V8 had no `chroot`
+
+**9 of 9 tools, 2026-08-11.** `yacc make lex cpp ccom c2 as ld ar ranlib nm size
+strip cc`, and libc after them, compiled from source by the compiler stage 6
+installed, inside `DESTDIR`, with **no `-B` and no `TOOLDIR`**. `v8/mk/buildstage9.sh`.
+
+V8 has `chroot(2)` — syscall 61, `usr/sys/sys/sysent.c`, implemented in `sys4.c` —
+and ships **no `chroot(1)`**: no command on the golden image, no source anywhere in
+`usr/src`, no manual page in man1, man2 or man8. The system call never had a command in
+front of it. `v8/usr/src/cmd/chroot.c` is ours, about fifteen lines of K&R.
+
+`cc(1)` is why this has to be a real chroot rather than a `-B`, and it is the same fact
+that made S5 necessary in the first place: **`-B` is a runtime option.** The `cc` stage 6
+installs into `DESTDIR` still carries `/lib/ccom` as its compiled-in default pass
+directory. Invoked from outside with no `-B` it silently uses the *building* system's
+`ccom`, `cpp`, `c2`, `as` and `ld` — and would report success for a `DESTDIR` containing
+none of them. Under chroot, `DESTDIR/lib/ccom` **is** `/lib/ccom`, so a missing pass fails
+instead of being borrowed. That is why stage 9 passes no `-B` and no `TOOLDIR` where every
+other stage passes both: here the defaults are the experiment.
+
+Three things a chroot needs that nothing lists, each found by running it:
+
+- **`/dev/null`.** `DESTDIR` is assembled by `buildcmds.sh`, which makes `bin`, `etc`,
+  `usr`, `usr/bin` and `usr/lib` — and no `/dev` at all. Every `> /dev/null` inside became
+  `build1.sh: /dev/null: cannot create`, once per redirection, which reads as a
+  permissions problem in the build rather than a missing device.
+- **A build directory that is not `/`.** `build1.sh` composes `$BLD/obj9`, so `/` gives
+  `//obj9`, and V8's `mkdir` refuses it — on all fourteen components, as
+  `mkdir: cannot access //obj9/.`. The toolchain-to-build-*with* is passed as the **empty
+  string** for the same reason: it is only ever used as a prefix, so `''` composes
+  `/bin/cc` exactly while `/` composes `//bin/cc`.
+- **The share mounted *inside* the new root**, before entering — after `chroot` there is
+  no path to anywhere else, so the mount cannot be done from within.
+
+And `chroot(2)` moves the root but leaves the working directory outside it, so `chroot.c`
+does `chdir("/")`. Without that the process can walk back out with `..`, which is the
+classic way a chroot turns out not to be one.
+
 ## Stage 9 needs a compiler inside `DESTDIR`, and that costs nothing
 
 A system that cannot compile is not self-hosting, so stage 9 — rebuild the world from
