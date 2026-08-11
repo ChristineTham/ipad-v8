@@ -55,7 +55,7 @@ INCS   = -I$(SRC)/usr/src/cmd/trace -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) $(INCS) -c
 TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
 
-OBJS = cmalloc.o malloc_t.o trace1.o trace2.o trace3.o trace4.o trace5.o trace6.o trace7.o trace8.o trace9.o
+OBJS = cmalloc.o malloc_t.o trace.expr.o trace1.o trace2.o trace3.o trace4.o trace5.o trace6.o trace7.o trace8.o trace9.o
 
 all: trace
 
@@ -67,6 +67,9 @@ cmalloc.o: $(SRC)/usr/src/cmd/trace/cmalloc.c $(TOOLS)
 
 malloc_t.o: $(SRC)/usr/src/cmd/trace/malloc_t.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/trace/trace.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/trace/malloc_t.c
+
+trace.expr.o: $(SRC)/usr/src/cmd/trace/trace.expr.c $(INCDIR)/math.h $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/trace/trace.d $(SRC)/usr/src/cmd/trace/trace.h $(TOOLS)
+	$(COMPILE) $(SRC)/usr/src/cmd/trace/trace.expr.c
 
 trace1.o: $(SRC)/usr/src/cmd/trace/trace1.c $(INCDIR)/signal.h $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/trace/trace.d $(SRC)/usr/src/cmd/trace/trace.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/trace/trace1.c

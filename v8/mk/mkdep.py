@@ -1598,6 +1598,16 @@ LIBMAP = {
 # command in a rule, and -lunet/-lbtl are commented out in uucp/makefile.
 NOTALIB = re.compile(r'pr\s+-l|lprint|can\s+-f|lint|\bls\s+-l|^\s*#')
 
+# Two the 1985 compiler cannot build, quoted with its own words so nobody
+# re-derives them.  Neither is a defect in the derivation and neither is worth
+# patching around: they are facts about the tape.
+REFUSE = {
+    "cfront": "C++ translator; /bin/cc rejects it -- "
+              "munch.c:18: `saw NAME ... cannot recover from earlier errors'",
+    "compat": "System V compatibility traps; "
+              "unixtraps.c:328: `non-constant case expression'",
+}
+
 
 def derive_dirs(taken):
     """Entries for usr/src/cmd/<dir>/makefile that fit the common shape.
@@ -1629,8 +1639,28 @@ def derive_dirs(taken):
             continue
 
         mk = open(os.path.join(p, "makefile"), errors="replace").read()
-        if re.search(r'\byacc\b|\blex\b|y\.tab|lex\.yy', mk):
-            skipped.append((name, "runs yacc/lex -- needs gen rules, like config"))
+        if name in REFUSE:
+            skipped.append((name + "/", REFUSE[name]))
+            continue
+        # The DIRECTORY, not just the makefile. pp/ carries scan.l and its
+        # makefile never says `lex', so the makefile test passed, the link
+        # went ahead without a scanner, and ld reported the symptom rather
+        # than the cause: `Undefined: _yylex, _yyinput'.
+        grammars = [f for f in os.listdir(p) if f.endswith((".y", ".l"))]
+        if grammars or re.search(r'\byacc\b|\blex\b|y\.tab|lex\.yy', mk):
+            skipped.append((name + "/", "yacc/lex (%s) -- needs gen rules, like config"
+                            % (" ".join(sorted(grammars)) or "per its makefile")))
+            continue
+        # An archive built inside the component, which stage 5 knows nothing
+        # about. map/ links libmap.a out of map/libmap, and without it ld
+        # names the missing routines (_Xguyou, _Xtetra) rather than the
+        # missing library.
+        ours = set(LIBMAP.values())
+        local = [a for a in re.findall(r'(\b\w+\.a)\b', mk)
+                 if not any(o.endswith(a) for o in ours if o)]
+        if local:
+            skipped.append((name + "/", "links %s, built inside the component"
+                            % " ".join(sorted(set(local)))))
             continue
 
         # Extra libraries, in the order the makefile names them: without a
@@ -1654,13 +1684,59 @@ def derive_dirs(taken):
         # names none, the whole directory. Taking the makefile's list matters
         # -- several directories carry sources for a second program, or a
         # `lint' stub, that the product does not link.
+        # `[\w.]' and not `\w': trace/ has trace.expr.c, so the object is
+        # trace.expr.o, and a pattern that stops at the dot captured `expr',
+        # which is not a source here -- so the object was dropped, the link
+        # went ahead without it, and ld named the two routines it could not
+        # find (_evalcond, _evalexpr) rather than the file. Matching against
+        # the directory's actual sources is what makes the looser pattern
+        # safe.
         cs = {f[:-2] for f in os.listdir(p) if f.endswith(".c")}
-        objs = sorted(o for o in set(re.findall(r'([A-Za-z_][\w]*)\.o\b', mk))
+        objs = sorted(o for o in set(re.findall(r'([\w.]+)\.o\b', mk))
                       if o in cs)
         if not objs:
             objs = sorted(cs)
         if not objs:
-            skipped.append((name, "no .c files"))
+            skipped.append((name + "/", "no .c files"))
+            continue
+
+        # ONE main() OR IT IS NOT ONE PROGRAM. This is the check that catches
+        # what "the directory name is a binary" does not: asd/ holds mkpkg,
+        # seal and unseal; at/ holds at and atrun; calendar/ holds three. Each
+        # source is a whole program, and linking the set gives
+        #
+        #	_main: atrun.o: multiply defined
+        #
+        # which is ld naming the second definition rather than the mistake.
+        # Splitting them needs to know which objects belong to which product,
+        # and the makefile is the only thing that knows -- so refuse here and
+        # do those by hand.
+        # A header the tape references and does not ship. sdb/makefile lists
+        # old.o, old.c says #include "bio.h", and bio.h exists nowhere in the
+        # tree -- so sdb cannot be built from this source at all, and the
+        # build says so as `Can't find include file bio.h' two dozen objects
+        # in. Checking on the host costs nothing and names the file.
+        missing = []
+        inc = os.path.join(V8, "usr/include")
+        for o in objs:
+            body = open(os.path.join(p, o + ".c"), "rb").read()
+            for h in re.findall(rb'^\s*#\s*include\s*"([^"]+)"', body, re.M):
+                h = h.decode()
+                if not (os.path.exists(os.path.join(p, h))
+                        or os.path.exists(os.path.join(inc, h))):
+                    missing.append("%s (from %s.c)" % (h, o))
+        if missing:
+            skipped.append((name + "/", "includes a header the tape does not "
+                                        "ship: " + ", ".join(sorted(set(missing)))))
+            continue
+
+        mains = [o for o in objs
+                 if re.search(rb'^\s*(?:int\s+)?main\s*\(',
+                              open(os.path.join(p, o + ".c"), "rb").read(), re.M)]
+        if len(mains) > 1:
+            skipped.append((name + "/", "%d programs in one directory (%s) -- "
+                            "needs the makefile's own object split"
+                            % (len(mains), " ".join(sorted(mains)))))
             continue
 
         best = sorted(dirs, key=lambda x: (DIRPREF.index(x)
