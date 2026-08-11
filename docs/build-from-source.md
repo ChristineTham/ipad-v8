@@ -478,8 +478,50 @@ to be run from, and that is a reason for the chroot rather than an inconvenience
 
 ## Stage 8: a disk, and what the tree already has for it
 
-Not built yet. Written down now because the survey came out better than expected:
-**every ingredient is in `v8/`, including the boot program.**
+**Built and booted, 2026-08-11.** `v8/mk/builddisk.sh` makes both filesystems, populates
+them from `DESTDIR`, writes 414 device nodes and installs the kernel;
+`tools/boot-newdisk.sh` then boots the image **alone** — nothing else attached, so no
+missing file can be satisfied from another drive — and gets the boot block finding
+`hp(0,0)unix`, the autoconfig, `login:`, a root shell, and a C program compiled *and run*
+by the compiler stage 6 installed. What it does **not** yet have is most of `/usr`: only
+132 of ~277 commands are built, so `/bin` holds 36 files and `/usr/bin` 73.
+
+Three faults on the way, and all three are the same fault: **a command's directory is not
+guessable, and the failure that follows a wrong guess is not a missing-command error.**
+
+- `mknod` is `/etc/mknod`. Four "not found" messages meant no device nodes — and `mkfs`
+  given a name that is not a special file *creates a regular file* and writes the
+  filesystem into it, so the diagnostic was `/: file system full` about the running
+  machine's root, not about the target at all. `builddisk.sh` now checks with `test -b`
+  and `test -c` before it will run `mkfs`.
+- `chgrp` is `/etc/chgrp` while `chmod` is `/bin/chmod`. The generated `makedev.sh` said
+  `chgrp` 190 times, got "not found" every time, and produced a complete `/dev` in which
+  every node had the wrong group.
+- `/etc/mklost+found` takes **no argument** — it is a shell script whose first line is
+  `mkdir lost+found`, in the current directory. `/etc/mklost+found /mnt` made
+  `/tmp/lost+found`, and a filesystem with no `lost+found` is exactly the one whose
+  autoboot `fsck` aborts to single-user with *"Automatic reboot failed... help!"*.
+
+And one arithmetic error that hid behind a plausible symptom: **`hp7_sizes` is in sectors
+and `mkfs` wants blocks**, with `BSIZE(dev)` = 1024. Asking for 15884 blocks of a
+15884-*sector* partition is a filesystem twice the size of its home — but `mkfs` builds
+its free list downward from the top and only writes when its in-core list of 150 fills,
+so the first write lands 149 blocks below the end and reports `write error: 15734`, which
+reads like one bad block near the end of an otherwise healthy disk.
+
+### The tape's `/etc` is another machine's too
+
+`v8/proto-dev` being the research VAX-750's `/dev` was already known. `v8/etc/fstab` is
+the same problem and was not: every entry names `/dev/ra*`, MSCP RA81s on a machine that
+had them. `/etc/rc` runs `/etc/mount -a`, which reads that file, matches nothing our
+hardware has, and mounts nothing — so the first disk to boot came up with `/usr` absent
+and no error anywhere, because mounting zero filesystems successfully is not a failure.
+`v8/etc/fstab` is now ours: `rp0a` on `/`, `rp0f` on `/usr`, `rp0b` as swap. It carries no
+comment saying so because `getfsent()` has no comment syntax — it splits every line on
+colons and would parse one as a device.
+
+The rest of the survey, which came out better than expected: **every ingredient is in
+`v8/`, including the boot program.**
 
 | need | where it is |
 |---|---|
