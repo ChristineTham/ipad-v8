@@ -1,7 +1,7 @@
 #!/bin/bash
 # Stages 4 to 8 against a build filesystem that already has stages 1 to 3.
 #
-#	tools/drive-stages48.sh [limit-seconds] [port] [first-stage] [last-stage]
+#	tools/drive-stages48.sh [limit-seconds] [port] [first-stage] [last-stage] [ref-image]
 #
 # first-stage defaults to 4.  Stages 4 to 7 leave their products on the build
 # filesystem, so when only stage 8 has changed, `tools/drive-stages48.sh "" ""
@@ -29,6 +29,9 @@ LIMIT="${1:-14400}"
 PORT="${2:-9370}"
 FROM="${3:-4}"
 TO="${4:-9}"
+# The reference image stage 8 lifts carry.txt off. Must match the --image
+# tools/mkcarry.py generated the lists from; see docs/golden-disk.md.
+REF="${5:-rp06v8.golden}"
 LOG="$WORK/stages48.log"
 NETFSD="$ROOT/netfs/.build/release/netfsd"
 
@@ -75,7 +78,7 @@ NETFSD_PID=$!
 sleep 1
 
 : > "$LOG"
-expect "$ROOT/tools/drive-stages48.exp" "$PORT" "$FROM" "$TO" &
+expect "$ROOT/tools/drive-stages48.exp" "$PORT" "$FROM" "$TO" "$REF" &
 EXP_PID=$!
 # The size cap is not tidiness. A SLiRP attach that cannot bind prints
 # "Sockets: bind error 13 - Permission denied" and RETRIES, with no backoff

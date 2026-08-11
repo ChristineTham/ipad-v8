@@ -107,11 +107,26 @@ simh "at rp1 rp06build"
 # second configuration; builddisk.sh refuses to touch drive 0 regardless.
 simh "set rp2 rp07"
 simh "at rp2 rp07new"
-# rp3: the golden image, read-only, as the source for the 175 commands whose
-# sources the tape never shipped. A COPY of it, because a build should not be
-# able to damage the thing it is copying from.
-simh "set rp3 rp06"
-simh "at rp3 -r rp06v8.golden"
+# rp3: the REFERENCE image, read-only -- the source for the 1406 files in
+# gen/carry.txt, which the tape shipped as binaries with no source, plus the
+# 2263 in gen/fromgold.txt that mkcarry.py has proven byte-identical to ours.
+# Read-only because a build must not be able to damage what it copies from.
+#
+# Two settings, because retiring the TUHS image means making OUR disk the
+# reference and they are different drives. `a' is root on both; /usr is
+# partition g on an RP06 (block minor 3*8+6 = 30) and f on an RP07 (29).
+# tools/mkcarry.py --image must name the same file, or the list and the disk
+# it is read from disagree -- which is the one failure this pair can have.
+set refimg [lindex $argv 3]
+if {$refimg == ""} { set refimg "rp06v8.golden" }
+if {[string match "*rp07*" $refimg] || [string match "*ipnx*" $refimg]} {
+    set reftype rp07; set refusr f; set refusrminor 29
+} else {
+    set reftype rp06; set refusr g; set refusrminor 30
+}
+send_user "\n=== reference image: $refimg ($reftype, /usr on $refusr) ===\n"
+simh "set rp3 $reftype"
+simh "at rp3 -r $refimg"
 simh "set il enable"
 simh "attach il nat:"
 simh "load -o bootV8 0"
@@ -195,12 +210,12 @@ if {$from <= 7} { sh "sh /n/src/mk/buildkernel.sh /n/src /b /b/root ipnx /b/tool
 if {$from <= 8} { # The golden image mounted read-only at /gold, BEFORE builddisk runs: it
 # reads gen/provenance.txt and lifts every `copy' row out of it.
 sh "mkdir /gold" 60
-sh "rm -f /dev/rp3a /dev/rp3g; /etc/mknod /dev/rp3a b 0 24; /etc/mknod /dev/rp3g b 0 30" 60
+sh "rm -f /dev/rp3a /dev/rp3$refusr; /etc/mknod /dev/rp3a b 0 24; /etc/mknod /dev/rp3$refusr b 0 $refusrminor" 60
 # `-r' goes LAST. mount.c's usage says so -- "mount [-a] [special dir [-r]]"
 # -- and putting it first makes -r the special file, so the diagnostic is
 # "mount: No such file or directory" about a flag.
 sh "/etc/mount /dev/rp3a /gold -r" 120
-sh "mkdir /gold/usr 2>/dev/null; /etc/mount /dev/rp3g /gold/usr -r" 120
+sh "mkdir /gold/usr 2>/dev/null; /etc/mount /dev/rp3$refusr /gold/usr -r" 120
 sh "ls /gold/bin | wc -l" 60
 sh "sh /n/src/mk/builddisk.sh /n/src /b/root 2 rp07 /mnt /gold 2>&1" 3600 }
 
