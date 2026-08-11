@@ -55,7 +55,7 @@ INCS   = -I$(SRC)/usr/src/cmd/at -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) $(INCS) -c
 TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
 
-OBJS = at.o atrun.o
+OBJS = at.o
 
 all: at
 
@@ -64,9 +64,6 @@ at: $(OBJS) $(LD) $(LIBC)
 
 at.o: $(SRC)/usr/src/cmd/at/at.c $(INCDIR)/ctype.h $(INCDIR)/dir.h $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/stat.h $(INCDIR)/sys/types.h $(INCDIR)/time.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/at/at.c
-
-atrun.o: $(SRC)/usr/src/cmd/at/atrun.c $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/dir.h $(INCDIR)/sys/param.h $(INCDIR)/sys/stat.h $(INCDIR)/sys/types.h $(INCDIR)/time.h $(TOOLS)
-	$(COMPILE) $(SRC)/usr/src/cmd/at/atrun.c
 
 install: at
 	-mkdir $(DESTDIR)/usr/bin

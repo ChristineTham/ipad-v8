@@ -46,7 +46,7 @@ PDP11/       directory name is not a binary on the image
 adb          also in /usr/lib -- installed only to /bin
 as/          a loose file or a hand-written entry already provides this command
 asd/         links lib.a, built inside the component
-at/          2 programs in one directory (at atrun) -- needs the makefile's own object split
+at/          a loose file or a hand-written entry already provides this command
 awk/         yacc/lex (awk.g.y awk.lx.l) -- needs gen rules, like config
 c2/          a loose file or a hand-written entry already provides this command
 calendar/    3 programs in one directory (calendar1 calendar2 calendar4) -- needs the makefile's own object split
@@ -63,7 +63,7 @@ daemon/      directory name is not a binary on the image
 des/         directory name is not a binary on the image
 descrypt/    directory name is not a binary on the image
 diction/     directory name is not a binary on the image
-diff/        2 programs in one directory (diff diffh) -- needs the makefile's own object split
+diff/        a loose file or a hand-written entry already provides this command
 diff3        also in /usr/lib -- installed only to /usr/bin
 dired        also in /usr/lib -- installed only to /usr/bin
 dump/        directory name is not a binary on the image
@@ -90,15 +90,14 @@ monk/        no .c files
 neqn/        yacc/lex (e.y) -- needs gen rules, like config
 numdate/     directory name is not a binary on the image
 p/           includes a header the tape does not ship: /usr/jerq/include/jioctl.h (from p.c)
-pack/        2 programs in one directory (pack unpack) -- needs the makefile's own object split
+pack/        a loose file or a hand-written entry already provides this command
 passwd       also in /etc -- installed only to /bin
 pic/         a loose file or a hand-written entry already provides this command
 plot/        links l2621.a, built inside the component
 pp/          a loose file or a hand-written entry already provides this command
 prof         also in /usr/lib -- installed only to /usr/bin
-ps/          3 programs in one directory (getfs getuname ps) -- needs the makefile's own object split
 punct/       directory name is not a binary on the image
-rarepl/      2 programs in one directory (rarct rarepl) -- needs the makefile's own object split
+rarepl/      a loose file or a hand-written entry already provides this command
 ratfor/      a loose file or a hand-written entry already provides this command
 refer/       7 programs in one directory (deliv1 hunt1 inv1 mkey1 refer1 what1 what4) -- needs the makefile's own object split
 sdb/         includes a header the tape does not ship: bio.h (from old.c)

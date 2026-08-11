@@ -55,7 +55,7 @@ INCS   = -I$(SRC)/usr/src/cmd/pack -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) $(INCS) -c
 TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
 
-OBJS = pack.o unpack.o
+OBJS = pack.o
 
 all: pack
 
@@ -64,9 +64,6 @@ pack: $(OBJS) $(LD) $(LIBC)
 
 pack.o: $(SRC)/usr/src/cmd/pack/pack.c $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/stat.h $(INCDIR)/sys/types.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/pack/pack.c
-
-unpack.o: $(SRC)/usr/src/cmd/pack/unpack.c $(INCDIR)/setjmp.h $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/stat.h $(INCDIR)/sys/types.h $(TOOLS)
-	$(COMPILE) $(SRC)/usr/src/cmd/pack/unpack.c
 
 install: pack
 	-mkdir $(DESTDIR)/usr/bin

@@ -1531,6 +1531,70 @@ STAGE6 = [
          sidegen={"y.tab.h": "y.tab.c"}, objdeps=["y.tab.h"],
          dest="DESTDIR", product="ratfor", install="usr/bin/ratfor",
          note="cmd/ratfor/makefile: a.out from seven objects; grammar is r.g"),
+
+    # -------------------------------------- one directory, several programs
+    #
+    # The derivation refuses these because a directory with more than one
+    # main() is more than one program and it has no way to know which objects
+    # belong to which. The makefile does, so each product becomes its own
+    # component here -- same directory, different objects, different install
+    # path. Component names are the PRODUCTS, which is also why they do not
+    # collide: at and atrun are two entries, not one entry with two outputs.
+    #
+    # Install directories are measured, and two of them are not where anyone
+    # would put them: atrun is /usr/lib, not /etc beside cron, and diffh is
+    # /usr/lib, not /bin beside diff.
+
+    dict(name="at", dir="usr/src/cmd/at", objs=["at.c"], dest="DESTDIR",
+         product="at", install="usr/bin/at",
+         note="cmd/at/makefile: `all: at atrun', two independent programs"),
+    dict(name="atrun", dir="usr/src/cmd/at", objs=["atrun.c"], dest="DESTDIR",
+         product="atrun", install="usr/lib/atrun",
+         note="cmd/at/makefile: the other half of at; /usr/lib measured"),
+
+    dict(name="pack", dir="usr/src/cmd/pack", objs=["pack.c"], dest="DESTDIR",
+         product="pack", install="usr/bin/pack",
+         note="cmd/pack/makefile: `all: pack unpack'"),
+    dict(name="unpack", dir="usr/src/cmd/pack", objs=["unpack.c"],
+         dest="DESTDIR", product="unpack", install="usr/bin/unpack",
+         # The tape hard-links /usr/bin/pcat to unpack. A second cp is the
+         # same program under both names, which is what the link achieves and
+         # all that matters here -- V8's ln(1) would need the target to exist
+         # in DESTDIR first, and `also' already does copies.
+         also=["usr/bin/pcat"],
+         note="cmd/pack/makefile: unpack, plus pcat which the tape hard-links "
+              "to it"),
+
+    dict(name="diff", dir="usr/src/cmd/diff",
+         objs=["diff.c", "diffdir.c", "diffreg.c"],
+         # The tape bakes the paths of the programs diff execs into the
+         # binary with -D. They are the paths on the system it will RUN on,
+         # not on the one building it, so they stay absolute.
+         cflags="-DDIFF='\"/bin/diff\"' -DDIFFH='\"/usr/lib/diffh\"' "
+                "-DPR='\"/bin/pr\"' -d2",
+         dest="DESTDIR", product="diff", install="bin/diff",
+         note="cmd/diff/makefile: OBJS(3) and a second program diffh"),
+    dict(name="diffh", dir="usr/src/cmd/diff", objs=["diffh.c"],
+         dest="DESTDIR", product="diffh", install="usr/lib/diffh",
+         note="cmd/diff/makefile: diffh, and /usr/lib is measured -- not /bin "
+              "beside diff, which is where guessing would have put it"),
+
+    dict(name="rarct", dir="usr/src/cmd/rarepl", objs=["rarct.c"],
+         dest="DESTDIR", product="rarct", install="etc/rarct",
+         note="cmd/rarepl/makefile: `cp rarct rarepl /etc'"),
+    dict(name="rarepl", dir="usr/src/cmd/rarepl", objs=["rarepl.c"],
+         dest="DESTDIR", product="rarepl", install="etc/rarepl",
+         note="cmd/rarepl/makefile: the other half of rarct"),
+
+    dict(name="calendar1", dir="usr/src/cmd/calendar", objs=["calendar1.c"],
+         dest="DESTDIR", product="calendar1", install="usr/lib/calendar1",
+         note="cmd/calendar/makefile: three programs, all /usr/lib"),
+    dict(name="calendar2", dir="usr/src/cmd/calendar", objs=["calendar2.c"],
+         dest="DESTDIR", product="calendar2", install="usr/lib/calendar2",
+         note="cmd/calendar/makefile: three programs, all /usr/lib"),
+    dict(name="calendar4", dir="usr/src/cmd/calendar", objs=["calendar4.c"],
+         dest="DESTDIR", product="calendar4", install="usr/lib/calendar4",
+         note="cmd/calendar/makefile: three programs, all /usr/lib"),
 ]
 
 # ------------------------------------------------- the rest of usr/src/cmd
@@ -1733,6 +1797,36 @@ REFUSE = {
 }
 
 
+def has_main(path):
+    """Does this source define main() UNCONDITIONALLY?
+
+    The `#ifdef' part is the whole point. ps/getfs.c and ps/getuname.c both
+    open a main() inside `#ifdef TEST' -- a standalone test harness for a file
+    that is otherwise linked into ps -- and ps/makefile lists getfs.o and
+    getuname.o in OBJ alongside ps.o. A plain search for main() therefore
+    counts three programs in a directory that builds one, and refuses ps for
+    a conflict that cannot happen: TEST is never defined.
+
+    Counting only at conditional depth 0 is conservative in the safe
+    direction. A main() genuinely hidden behind an #ifdef the build does
+    define would be missed here and would fail at the link, where it is
+    obvious; the opposite mistake refuses a command that builds.
+    """
+    depth = 0
+    for line in open(path, "rb").read().splitlines():
+        s = line.lstrip()
+        if s.startswith(b"#"):
+            d = s[1:].lstrip()
+            if d.startswith((b"if", b"ifdef", b"ifndef")):
+                depth += 1
+            elif d.startswith(b"endif"):
+                depth = max(0, depth - 1)
+            continue
+        if depth == 0 and re.match(rb'\s*(?:int\s+)?main\s*\(', line):
+            return True
+    return False
+
+
 def derive_dirs(taken):
     """Entries for usr/src/cmd/<dir>/makefile that fit the common shape.
 
@@ -1910,9 +2004,7 @@ def derive_dirs(taken):
                                         "ship: " + ", ".join(sorted(set(missing)))))
             continue
 
-        mains = [o for o in objs
-                 if re.search(rb'^\s*(?:int\s+)?main\s*\(',
-                              open(os.path.join(p, o + ".c"), "rb").read(), re.M)]
+        mains = [o for o in objs if has_main(os.path.join(p, o + ".c"))]
         if len(mains) > 1:
             skipped.append((name + "/", "%d programs in one directory (%s) -- "
                             "needs the makefile's own object split"

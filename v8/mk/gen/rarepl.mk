@@ -55,15 +55,12 @@ INCS   = -I$(SRC)/usr/src/cmd/rarepl -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) $(INCS) -c
 TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
 
-OBJS = rarct.o rarepl.o
+OBJS = rarepl.o
 
 all: rarepl
 
 rarepl: $(OBJS) $(LD) $(LIBC)
 	$(CC) $(CFLAGS) -o rarepl $(OBJS) $(LIBC)
-
-rarct.o: $(SRC)/usr/src/cmd/rarepl/rarct.c $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h $(INCDIR)/sys/udaioc.h $(SRC)/usr/src/cmd/rarepl/rct.h $(TOOLS)
-	$(COMPILE) $(SRC)/usr/src/cmd/rarepl/rarct.c
 
 rarepl.o: $(SRC)/usr/src/cmd/rarepl/rarepl.c $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h $(INCDIR)/sys/udaioc.h $(SRC)/usr/src/cmd/rarepl/rct.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/rarepl/rarepl.c

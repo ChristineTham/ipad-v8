@@ -18,6 +18,17 @@ pp	usr/src/cmd/pp	usr/bin/pp
 pic	usr/src/cmd/pic	usr/bin/pic
 grap	usr/src/cmd/grap	usr/bin/grap
 ratfor	usr/src/cmd/ratfor	usr/bin/ratfor
+at	usr/src/cmd/at	usr/bin/at
+atrun	usr/src/cmd/at	usr/lib/atrun
+pack	usr/src/cmd/pack	usr/bin/pack
+unpack	usr/src/cmd/pack	usr/bin/unpack
+diff	usr/src/cmd/diff	bin/diff
+diffh	usr/src/cmd/diff	usr/lib/diffh
+rarct	usr/src/cmd/rarepl	etc/rarct
+rarepl	usr/src/cmd/rarepl	etc/rarepl
+calendar1	usr/src/cmd/calendar	usr/lib/calendar1
+calendar2	usr/src/cmd/calendar	usr/lib/calendar2
+calendar4	usr/src/cmd/calendar	usr/lib/calendar4
 ac	usr/src/cmd	etc/ac
 accton	usr/src/cmd	etc/accton
 apply	usr/src/cmd	usr/bin/apply
@@ -166,6 +177,7 @@ oops	usr/src/cmd/oops	bin/oops
 passwd	usr/src/cmd/passwd	bin/passwd
 primes	usr/src/cmd/primes	usr/bin/primes
 prof	usr/src/cmd/prof	usr/bin/prof
+ps	usr/src/cmd/ps	bin/ps
 pstat	usr/src/cmd/pstat	etc/pstat
 qed	usr/src/cmd/qed	usr/bin/qed
 quot	usr/src/cmd/quot	etc/quot
