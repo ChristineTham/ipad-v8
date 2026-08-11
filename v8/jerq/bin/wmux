@@ -1,0 +1,3 @@
+MUXTERM=/usr/jerq/lib/muxterm.w
+export MUXTERM
+exec /usr/jerq/bin/mux $*

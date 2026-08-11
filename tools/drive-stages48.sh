@@ -1,12 +1,16 @@
 #!/bin/bash
 # Stages 4 to 8 against a build filesystem that already has stages 1 to 3.
 #
-#	tools/drive-stages48.sh [limit-seconds] [port] [first-stage]
+#	tools/drive-stages48.sh [limit-seconds] [port] [first-stage] [last-stage]
 #
 # first-stage defaults to 4.  Stages 4 to 7 leave their products on the build
 # filesystem, so when only stage 8 has changed, `tools/drive-stages48.sh "" ""
-# 8' reaches it in a couple of minutes instead of fifty.  Nothing is skipped
+# 8 8' reaches it in a couple of minutes instead of fifty.  Nothing is skipped
 # silently: the summary below reports the skipped stages as such.
+#
+# last-stage defaults to 9.  Stage 9 is the chroot self-rebuild and costs the
+# better part of an hour; iterating on what stage 8 puts ON the disk does not
+# need the new system re-proved able to rebuild itself every time.
 #
 # tools/drive-stage1.sh spends about fifty minutes rebuilding the toolchain
 # before it reaches anything you are iterating on.  rp06build is a FILE and it
@@ -24,6 +28,7 @@ WORK="$ROOT/work/myv8"
 LIMIT="${1:-14400}"
 PORT="${2:-9370}"
 FROM="${3:-4}"
+TO="${4:-9}"
 LOG="$WORK/stages48.log"
 NETFSD="$ROOT/netfs/.build/release/netfsd"
 
@@ -44,6 +49,10 @@ fi
 # insists: a stale makefile is the one failure that looks like a source bug.
 python3 "$ROOT/v8/mk/mkdep.py" --check || {
     echo "s48: regenerate first"; exit 1; }
+# Same rule for the carry list: it decides what stage 8 lifts off the TUHS
+# image, so a stale one silently ships the wrong disk.
+python3 "$ROOT/tools/mkcarry.py" --check || {
+    echo "s48: run tools/mkcarry.py"; exit 1; }
 
 # The disk stage 8 builds.  1008000 sectors is hp7_sizes' partition c, the
 # whole RP07 -- see v8/mk/builddisk.sh for why the sizes come from the driver.
@@ -66,7 +75,7 @@ NETFSD_PID=$!
 sleep 1
 
 : > "$LOG"
-expect "$ROOT/tools/drive-stages48.exp" "$PORT" "$FROM" &
+expect "$ROOT/tools/drive-stages48.exp" "$PORT" "$FROM" "$TO" &
 EXP_PID=$!
 # The size cap is not tidiness. A SLiRP attach that cannot bind prints
 # "Sockets: bind error 13 - Permission denied" and RETRIES, with no backoff
@@ -109,11 +118,11 @@ ck "share mounted at /n/src"      'S48-MOUNTED-ok'
 ck "stage 3 present in /b"        'S48-STAGE3-present-ok'
 
 echo
-echo "== stages $FROM to 8 =="
+echo "== stages $FROM to $TO =="
 # A stage below FROM was not run, and says so: reporting it as ok would be a
 # lie about this run, and omitting it would make a partial run look complete.
 ckstage() {                             # ckstage <n> <label> <pattern>
-    if [[ $1 -lt $FROM ]]; then printf '  --    %s (not run)\n' "$2"
+    if [[ $1 -lt $FROM || $1 -gt $TO ]]; then printf '  --    %s (not run)\n' "$2"
     else ck "$2" "$3"; fi
 }
 ckstage 4 "4: headers"            'STAGE4 OK'
@@ -121,7 +130,7 @@ ckstage 5 "5: libraries"          'STAGE5 OK'
 ckstage 6 "6: commands"           'STAGE6 OK'
 ckstage 7 "7: the kernel"         'STAGE7 OK'
 ckstage 8 "8: a disk"             'STAGE8 OK'
-ck        "9: rebuilds itself"    'STAGE9-CHROOT OK'
+ckstage 9 "9: rebuilds itself"    'STAGE9-CHROOT OK'
 grep -E '  BUILD FAILED |  INSTALL FAILED |Don.t know how to make' <<< "$LOGC" \
     | sed 's/^/  /' | head -20
 sed -n '/=== stage 7: what got built ===/,$p' <<< "$LOGC" \

@@ -88,6 +88,13 @@ if {$port == ""} { set port 9370 }
 set from [lindex $argv 1]
 if {$from == ""} { set from 4 }
 
+# ...and which to stop after.  Stage 9 is the chroot self-rebuild and costs
+# the better part of an hour; iterating on stage 8's contents does not need
+# it re-proved every time.  `expect tools/drive-stages48.exp 9370 8 8' is
+# stage 8 alone.
+set to [lindex $argv 2]
+if {$to == ""} { set to 9 }
+
 spawn vax780
 simh "set noasynch"
 simh "set cpu idle=4.1BSD"
@@ -205,6 +212,7 @@ sh "sh /n/src/mk/builddisk.sh /n/src /b/root 2 rp07 /mnt /gold 2>&1" 3600 }
 # Unique id 66 and tcp minor 67: both differ from the first mount's (65).
 # The id is the mount's identity to the kernel and the minor is the device,
 # and reusing either would be asking for the connection already in use.
+if {$to >= 9} {
 send_user "\n=== stage 9: the share, again, inside DESTDIR ===\n"
 sh "mkdir /b/root/n" 60
 sh "mkdir /b/root/n/src" 60
@@ -213,6 +221,7 @@ shmust "if test -f /b/root/n/src/mk/build1.sh; then echo S48-INNER-MOUNT\$OK; fi
        "S48-INNER-MOUNT-ok" 120
 sh "sh /n/src/mk/buildstage9.sh /n/src /b /b/root 2>&1" 10800
 sh "date"
+}
 
 sh "echo S48-DONE\$OK"
 sh "cd /; sync; sync"

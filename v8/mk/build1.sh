@@ -99,7 +99,7 @@ fi
 # The macros that are one word each.  Unquoted below, so the shell splits them
 # into separate argv elements -- which is what make wants, and why none of
 # them may ever contain a space.
-STAGEMACS="YACC=$T1/bin/yacc YACCPATH=$T1/bin/yacc LEX=$T1/usr/bin/lex LEXPATH=$T1/usr/bin/lex CCPATH=$T1/bin/cc CCOM=$T1/lib/ccom CPP=$T1/lib/cpp C2=$T1/lib/c2 AS=$T1/lib/as LD=$T1/lib/ld LIBC=$NEWLIBC"
+STAGEMACS="YACC=$T1/usr/bin/yacc YACCPATH=$T1/usr/bin/yacc LEX=$T1/usr/bin/lex LEXPATH=$T1/usr/bin/lex CCPATH=$T1/bin/cc CCOM=$T1/lib/ccom CPP=$T1/lib/cpp C2=$T1/lib/c2 AS=$T1/lib/as LD=$T1/lib/ld LIBC=$NEWLIBC"
 
 if test ! -f $MK/stage1.order
 then

@@ -1,4 +1,4 @@
-yacc	usr/src/cmd/yacc	bin/yacc
+yacc	usr/src/cmd/yacc	usr/bin/yacc
 make	usr/src/cmd/make	bin/make
 lex	usr/src/cmd/lex	usr/bin/lex
 cpp	usr/src/cmd/cpp	lib/cpp
@@ -10,5 +10,5 @@ ar	usr/src/cmd	bin/ar
 ranlib	usr/src/cmd	usr/bin/ranlib
 nm	usr/src/cmd	bin/nm
 size	usr/src/cmd	bin/size
-strip	usr/src/cmd/strip	bin/strip
+strip	usr/src/cmd/strip	usr/bin/strip
 cc	usr/src/cmd	bin/cc

@@ -74,7 +74,7 @@ STAGE1 = [
     # compiling them, strip's directory also builds a second program, and cpp
     # links a generated rodata.c that does not exist until yacc has run.
     dict(name="yacc", dir="usr/src/cmd/yacc", objs="*.c", cflags="-DWORD32",
-         product="yacc", install="bin/yacc",
+         product="yacc", install="usr/bin/yacc",
          # /usr/lib, not /lib, because that is where the tape puts it and
          # yacc/files still compiles that path in as the DEFAULT.  It is no
          # longer the only answer: y1.c now reads $YACCPAR first (S5), so a
@@ -198,7 +198,7 @@ STAGE1 = [
     # not to strip, so *.c would link two programs' worth of objects.
     dict(name="strip", dir="usr/src/cmd/strip",
          objs=["strip.c", "rdout.c", "shrink.c", "symwrite.c", "hash.c", "fcopy.c"],
-         cflags="-d2", product="strip", install="bin/strip",
+         cflags="-d2", product="strip", install="usr/bin/strip",
          note="strip/Makefile: STRIP=, CFLAGS=-Od2"),
 
     dict(name="cc", dir="usr/src/cmd", objs=["cc.c"], product="cc", install="bin/cc"),

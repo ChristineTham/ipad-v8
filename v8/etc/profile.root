@@ -1,0 +1,10 @@
+PATH=:/bin:/usr/bin:/usr/games:/usr/jerq/bin
+export PATH
+case `tty` in
+/dev/tty00)	TERM=dmd ;;
+/dev/tty07)	TERM=vt100w ;;
+*)		TERM=vt100 ;;
+esac
+export TERM
+stty erase ^H kill ^U intr ^C
+/usr/games/fortune

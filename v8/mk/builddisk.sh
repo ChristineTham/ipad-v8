@@ -141,14 +141,97 @@ echo "=== stage 8: the tree ==="
 # without the directory every boot prints
 #	gmount(2, "/proc", 0) returned -1, errno = 2
 # which is ENOENT for the MOUNT POINT, not for anything in the kernel.
-for d in bin etc lib tmp tmp/dump dev proc usr/bin usr/lib usr/include \
-	 usr/include/sys usr/include/sys/inet usr/adm usr/spool usr/tmp
+# etc/skel holds the .profile a new account starts from; usr/jerq must
+# exist before cpio -p is pointed at it as a destination directory.
+for d in bin etc etc/skel lib tmp tmp/dump dev proc usr/bin usr/lib \
+	 usr/include usr/include/sys usr/include/sys/inet usr/adm \
+	 usr/spool usr/tmp usr/jerq usr/games
 do
 	mkdir $MNT/$d 2>/dev/null
 done
 chmod 777 $MNT/tmp $MNT/usr/tmp
 
-for d in bin etc lib usr/bin usr/lib usr/include usr/include/sys \
+echo ""
+echo "=== stage 8: carry what only the TUHS image has ==="
+date
+# THE ONE THING THAT MAKES RETIRING THAT IMAGE SAFE.  gen/carry.txt is the
+# set of files that exist ONLY there: machine code the tape shipped without
+# source, plus what the Labs (or we) put on it afterwards.  Everything else
+# is built by stages 4-7 or stored as text in v8/ and proven by MANIFEST, so
+# once these 1385 files are here the image holds nothing unique.
+# tools/mkcarry.py generates the list; it is not maintained by hand.
+#
+# cpio, not a `cp' loop.  The loop this replaces spawned one process per
+# file and stage 8 was dominated by fork/exec rather than by I/O -- 400
+# copies took longer than the mkfs of a 475 MB filesystem.  cpio -p is one
+# process for the whole set and reads its paths from stdin, which is exactly
+# the shape of a generated manifest.
+#
+# No -v.  It would name all 1385 files down a 9600-baud console.
+#
+# $GOLD is that image's root, mounted read-only by the caller.  Without it
+# the disk still boots -- everything we build is already here -- so a
+# missing $GOLD is a warning, not a failure.
+if test -d $GOLD/bin
+then
+	( cd $GOLD && grep -v '^#' $SRC/mk/gen/carry.txt | cpio -pdm $MNT )
+	echo "  carried: /usr/jerq `ls $MNT/usr/jerq/bin | wc -l` in bin, `ls $MNT/usr/jerq/mbin | wc -l` in mbin"
+else
+	echo "  no golden image at $GOLD -- the disk will have only what we build"
+	echo "  (mount rp3's root there, then this disk can replace it)"
+fi
+
+echo ""
+echo "=== stage 8: the runtime trees ==="
+date
+# Everything a working system needs that is NOT a command and NOT unique to
+# the reference image: nroff's macros, terminal tables, the manual, the
+# games' data files, the 5620's fonts and icons.
+#
+# These are `source' rows in MANIFEST -- text on the tape, so v8/ holds them
+# and v8/ is authoritative.  But 2263 of the 2264 are BYTE-IDENTICAL to the
+# copy already on the mounted image, and mkcarry.py proves that with sha256
+# every time it regenerates these lists.  So they come off the image, and
+# only the ones that actually differ come over the wire.
+#
+# This is not a shortcut, it is the difference between a usable build and an
+# abandoned one.  Pulling all 2264 over netfs costs a round trip per file
+# through an emulated VAX, an emulated Interlan and SLiRP: measured at about
+# 30 files a minute, so ninety minutes, of which eighty-nine deliver bytes
+# the machine already had mounted.  cpio does the same set in six seconds.
+if test -d $GOLD/bin
+then
+	( cd $GOLD && grep -v '^#' $SRC/mk/gen/fromgold.txt | cpio -pdm $MNT )
+fi
+
+# ...and the ones where we and the tape disagree, which is the whole reason
+# the split is computed rather than assumed.  Two columns, because the tape
+# says jerq/ where the image says /usr/jerq.
+grep -v '^#' $SRC/mk/gen/fromsrc.txt |
+while read s d
+do
+	dd=`dirname $MNT/$d`
+	test -d $dd || mkdir $dd 2>/dev/null
+	cp $SRC/$s $MNT/$d || echo "  cannot install $s"
+done
+echo "  /usr/man: `ls $MNT/usr/man | wc -l` sections, /usr/lib: `ls $MNT/usr/lib | wc -l` entries"
+
+echo ""
+echo "=== stage 8: what we built, last so that ours wins ==="
+date
+# LAST ON PURPOSE.  A command can be `excluded' on the tape and `build' for
+# us at the same time -- the tape shipped /bin/ls as a binary and ls.c as
+# source -- and mkcarry.py already drops those 206 from carry.txt.  Copying
+# ours last makes that belt-and-braces: whatever order the passes above
+# leave behind, the binary that ends up on the disk is the one this build
+# produced.
+# usr/games belongs in this list and was missing from it: bcd is the one
+# game with source on the tape, stage 6 builds it into DESTDIR/usr/games,
+# and nothing copied it out -- so a command we build was absent from the
+# disk while every report said it had been built. Found by retire-check.py,
+# which asks a question a boot test cannot: is anything on the reference
+# image not on ours?
+for d in bin etc lib usr/bin usr/lib usr/games usr/include usr/include/sys \
 	 usr/include/sys/inet
 do
 	if test -d $DEST/$d
@@ -157,43 +240,6 @@ do
 		echo "  $d: `ls $MNT/$d | wc -l` files"
 	fi
 done
-
-echo ""
-echo "=== stage 8: what the tape did not ship ==="
-# 175 of the image's 381 commands are COPIED rather than built, and that is a
-# property of the tape rather than of this build: Bell Labs shipped binaries
-# whose sources are not on it -- all 34 games among them. gen/provenance.txt
-# is generated beside the makefiles and says which is which, so the two
-# cannot drift.
-#
-# $GOLD is the golden image's root, mounted read-only by the caller. Without
-# it the disk still boots -- everything in the `build' column is already
-# there -- so this is a warning and not a failure.
-if test -d $GOLD/bin
-then
-	# One `cp' per file, so a failure names the file. sed pulls "dir/name"
-	# out of the copy rows; V8 has no `cut -f' worth relying on and awk is
-	# a bigger dependency than this needs.
-	n=0; miss=0
-	for f in `sed -n 's|^\([^	]*\)	/\([^	]*\)	copy	.*|\2/\1|p' $SRC/mk/gen/provenance.txt`
-	do
-		if test -f $GOLD/$f
-		then
-			d=`dirname $MNT/$f`
-			test -d $d || mkdir $d 2>/dev/null
-			if cp $GOLD/$f $MNT/$f
-			then n=`expr $n + 1`
-			else echo "  cannot copy $f"; miss=`expr $miss + 1`
-			fi
-		else
-			miss=`expr $miss + 1`
-		fi
-	done
-	echo "  copied $n from the golden image, $miss not found"
-else
-	echo "  no golden image at $GOLD -- the disk will have only what we build"
-	echo "  (mount rp3's root there to fill in the 175 copy entries)"
-fi
 
 echo ""
 echo "=== stage 8: /dev ==="
@@ -207,7 +253,27 @@ chmod 755 $MNT/unix
 # machine: rc, ttys, passwd, group, fstab, termcap and the rest.
 cp $SRC/etc/* $MNT/etc 2>/dev/null
 echo "  /etc: `ls $MNT/etc | wc -l` files"
-ls -l $MNT/unix
+
+# The login environment, which V8 ships NONE of -- no /.profile, no /.login,
+# no /etc/profile, which is why vi used to die with TERM unset.  Ours picks
+# TERM from `tty` so that tty00 is the 5620 and tty07 the wide vt100, which
+# is only correct because every DZ line has its own listen port (CLAUDE.md).
+#
+# Kept in v8/etc as ordinary files rather than written here by a here-
+# document: they are configuration, they belong under review, and a shell
+# script that echoes shell scripts gets the quoting wrong eventually.
+cp $SRC/etc/profile.root $MNT/.profile
+cp $SRC/etc/profile.skel $MNT/etc/skel/.profile
+chmod 644 $MNT/.profile $MNT/etc/skel/.profile
+
+# wmux is ours too (A4): three lines that point $MUXTERM at the widened
+# muxterm before exec'ing mux, because on a 1152-wide screen stock mux
+# downloads happily and then draws into the vacated 0x700000. It is not on
+# the tape, so no MANIFEST row describes it and neither generated list
+# picks it up -- it has to be named here or it silently does not ship.
+cp $SRC/jerq/bin/wmux $MNT/usr/jerq/bin/wmux
+chmod 755 $MNT/usr/jerq/bin/wmux
+ls -l $MNT/unix $MNT/.profile
 
 # fsck cannot reconnect an orphaned inode without one, and an autoboot fsck
 # that needs to aborts to a single-user shell -- "Automatic reboot failed...

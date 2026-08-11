@@ -412,9 +412,14 @@ sh "echo 'main(){initscr();endwin();printf(\"curses%s\\n\",\"-ok\");}' >> c.c"
 sh "/b/tools3/bin/cc -B/b/tools3/lib/ -t02palc -I/b/root/usr/include -o c c.c /b/root/usr/lib/libcurses.a /b/root/usr/lib/libtermcap.a" 600
 sh "TERM=dumb ./c"
 
-send_user "\n=== stage 6: config(8) ===\n"
+send_user "\n=== stage 6: the commands ===\n"
 sh "date"
-sh "sh /n/src/mk/buildcmds.sh /n/src /b /b/root /b/tools3 2>&1" 3600
+# 3 hours, matching drive-stages48.exp. This said 3600 from the days when
+# stage 6 built eleven components and was named "config(8)"; it builds 193
+# now, each a compile and a link inside the emulator, and a full run would
+# have died of a timeout three quarters of the way through with every
+# component up to that point built correctly.
+sh "sh /n/src/mk/buildcmds.sh /n/src /b /b/root /b/tools3 2>&1" 10800
 sh "ls -l /b/root/etc/config"
 
 send_user "\n=== stage 7: the kernel ===\n"

@@ -75,8 +75,8 @@ y4.o: $(SRC)/usr/src/cmd/yacc/y4.c $(INCDIR)/ctype.h $(INCDIR)/stdio.h $(SRC)/us
 	$(COMPILE) $(SRC)/usr/src/cmd/yacc/y4.c
 
 install: yacc
-	-mkdir $(TOOLDIR)/bin
-	cp yacc $(TOOLDIR)/bin/yacc
+	-mkdir $(TOOLDIR)/usr/bin
+	cp yacc $(TOOLDIR)/usr/bin/yacc
 	-mkdir $(TOOLDIR)/usr/lib
 	cp $(SRC)/usr/src/cmd/yacc/yaccpar $(TOOLDIR)/usr/lib/yaccpar
 

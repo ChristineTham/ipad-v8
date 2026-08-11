@@ -47,7 +47,7 @@ MACROS="CC=$T3/bin/cc -B$T3/lib/ -t02palc"
 # angle-bracket search from the share to the headers stage 4 installed.  The
 # generated rules already depend on $(INCDIR)/x.h, so this is also what makes
 # "touch a header, rebuild what includes it" true across stages.
-STAGEMACS="INCDIR=$DEST/usr/include YACC=$T3/bin/yacc YACCPATH=$T3/bin/yacc LEX=$T3/usr/bin/lex LEXPATH=$T3/usr/bin/lex CCPATH=$T3/bin/cc CCOM=$T3/lib/ccom CPP=$T3/lib/cpp C2=$T3/lib/c2 AS=$T3/lib/as LD=$T3/lib/ld AR=$T3/bin/ar RANLIB=$T3/usr/bin/ranlib LIBC=$T3/lib/libc.a"
+STAGEMACS="INCDIR=$DEST/usr/include YACC=$T3/usr/bin/yacc YACCPATH=$T3/usr/bin/yacc LEX=$T3/usr/bin/lex LEXPATH=$T3/usr/bin/lex CCPATH=$T3/bin/cc CCOM=$T3/lib/ccom CPP=$T3/lib/cpp C2=$T3/lib/c2 AS=$T3/lib/as LD=$T3/lib/ld AR=$T3/bin/ar RANLIB=$T3/usr/bin/ranlib LIBC=$T3/lib/libc.a"
 
 # Our yacc reads this ahead of the compiled-in /usr/lib/yaccpar, so the parser
 # text baked into every generated y.tab.c is the one in our tree.

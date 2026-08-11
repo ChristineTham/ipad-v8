@@ -81,8 +81,8 @@ symwrite.o: $(SRC)/usr/src/cmd/strip/symwrite.c $(INCDIR)/a.out.h $(INCDIR)/sign
 	$(COMPILE) $(SRC)/usr/src/cmd/strip/symwrite.c
 
 install: strip
-	-mkdir $(TOOLDIR)/bin
-	cp strip $(TOOLDIR)/bin/strip
+	-mkdir $(TOOLDIR)/usr/bin
+	cp strip $(TOOLDIR)/usr/bin/strip
 
 clean:
 	-rm -f $(OBJS) strip 

@@ -37,12 +37,15 @@ test -f $DEST/n/src/mk/build1.sh || {
 	echo "stage9: mounted inside it BEFORE we enter" 1>&2
 	exit 1; }
 
-# $DEST/bin/yacc, not $DEST/usr/bin/yacc: stage1.order installs yacc and make
-# into bin and only lex into usr/bin. Reading the order file beats remembering.
+# The paths come from stage1.order's install column, not from memory: make
+# and cc go in bin, yacc/lex/strip/ranlib in usr/bin. yacc used to be listed
+# here as $DEST/bin/yacc, which was true of the build and wrong about V8 --
+# where.txt and the reference image both put it in /usr/bin, and mkdep.py now
+# installs it there. Reading the order file beats remembering.
 echo "=== stage 9: what DESTDIR has to build with ==="
 ls -l $DEST/bin/cc $DEST/lib/ccom $DEST/lib/cpp $DEST/lib/c2 \
       $DEST/lib/as $DEST/lib/ld $DEST/lib/libc.a $DEST/lib/crt0.o \
-      $DEST/bin/make $DEST/bin/yacc $DEST/usr/bin/lex 2>&1
+      $DEST/bin/make $DEST/usr/bin/yacc $DEST/usr/bin/lex 2>&1
 
 # /tmp inside the new root: cc writes its temporaries there and names them
 # after its own pid, so a missing /tmp is a compiler that fails on every file
@@ -100,19 +103,19 @@ echo "=== stage 9: what came out ==="
 # is not in DESTDIR either, and piping into it only prints "head: not found".
 ls -l $DEST/build9/tools9/bin $DEST/build9/tools9/usr/bin 2>&1
 
-# bin AND usr/bin. stage1.order puts yacc, make, cc, as, ld, ar, nm, size and
-# strip in bin, and lex and ranlib in usr/bin -- so a check that looks only in
-# bin reports two tools missing that were built correctly. Second time the
-# same assumption cost a run; the order file is the authority.
+# bin AND usr/bin. stage1.order puts make, cc, as, ld, ar, nm and size in
+# bin, and yacc, strip, lex and ranlib in usr/bin -- so a check that looks
+# only in bin reports tools missing that were built correctly. Third time
+# some form of this assumption cost a run; the order file is the authority.
 n=0
-for t in yacc make cc ar nm size strip
+for t in make cc ar nm size
 do
 	if test -f $DEST/build9/tools9/bin/$t
 	then n=`expr $n + 1`
 	else echo "  missing bin/$t"
 	fi
 done
-for t in lex ranlib
+for t in yacc strip lex ranlib
 do
 	if test -f $DEST/build9/tools9/usr/bin/$t
 	then n=`expr $n + 1`
