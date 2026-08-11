@@ -714,6 +714,56 @@ runs, `$(CCPATH)` for the binary whose mtime means it changed.
 so the prefix must name the directory the passes are really in:
 `-B$(TOOLDIR)/lib/`, not `-B$(TOOLDIR)/`.
 
+## C4: what our build reproduces of the 1985 binaries
+
+Of the 206 commands `provenance.txt` says we build, comparing ours against the
+ones Bell Labs shipped — `tools/compare-built.py`, splitting at the `a.out`
+header so `ld`'s hash-ordered symbol table cannot mask the code:
+
+| | | |
+|---|---:|---|
+| identical, whole file | 3 | all three shell scripts |
+| identical `text`+`data` | 21 | |
+| **reproduced** | **24** | **11.7%** |
+| code differs | 172 | |
+| not an `a.out` | 7 | |
+
+11.7% looks like a bad result. It is one difference repeated, and the
+difference is not ours.
+
+At the same instruction in `/bin/cat`:
+
+```
+theirs   cf 8504          CF = word PC-relative displacement
+ours     ef 5b050000      EF = longword
+```
+
+Two bytes bigger per reference. That growth accumulates, so everything after it
+shifts — and blocks that happen to realign match **exactly**: `theirs[0x1030:]`
+equals `ours[0x1060:]` for 110 bytes, a pure `+0x30` shift.
+
+**Our assembler is not the cause, and `/lib/crt0.o` proves it.** The same source
+through both assemblers gives a byte-identical object: all 60 bytes of text, all
+4 of data, `trsize` 24 on both. Note that `crt0` itself uses `EF` for its
+externals — which is exactly the point. An assembler *must* emit a longword for a
+target it cannot resolve, and *may* use a word for one it can.
+
+So a `CF` where we emit an `EF` means that in the tape's `cat` the callee was
+resolvable **within the object**, and in ours it is external. That is a different
+object composition from a same-named source: the evidence points to the shipped
+**binaries** not having been built from the shipped **sources** in the same
+arrangement — a known hazard with Research tapes, and a preservation finding
+rather than a defect in this build.
+
+Two things that look like evidence and are not. `a_text` and `a_data` agreeing is
+meaningless, because `ld` page-rounds both for `ZMAGIC`; each binary's "identical
+tail" is pure zero padding. What *is* meaningful is `a_bss` — unrounded, and
+identical (12276, 7268, 7632), so the same objects with the same uninitialised
+data are being linked.
+
+None of this contradicts stage 2's byte-identical libc. That compared an archive
+of **objects**, and objects are precisely where the two agree.
+
 ## Sources
 
 - [FreeBSD `Makefile.inc1`](https://github.com/freebsd/freebsd-src/blob/main/Makefile.inc1) — stage comments and the lib-before-bin rationale
