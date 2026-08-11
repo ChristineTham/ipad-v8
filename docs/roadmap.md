@@ -402,7 +402,7 @@ the safety rules are in [build-from-source.md](build-from-source.md).
       `uarp`, `tcp` and `udp` pseudo-devices. Every kernel stage 7 builds now
       carries all of it by construction, rather than by a driver patching a
       running machine. `chroot.c` (S8) and `date.c`'s 69/70 window joined them
-- [ ] **S10** **The golden disk is ours, and the TUHS image retires**
+- [x] **S10** **The golden disk is ours, and the TUHS image retires**
       *(2026-08-11; [golden-disk.md](golden-disk.md))*. The disk stops being
       "what we could build" and becomes a complete system: 206 built, **1406
       carried** off the reference image because the tape shipped them without
@@ -435,7 +435,18 @@ the safety rules are in [build-from-source.md](build-from-source.md).
       and never `/usr/bin` — where `where.txt`, the image and our own
       `provenance.txt` all say they belong, and where `mkdep.py`'s generated
       makefiles default `YACCPATH` to look; and `wmux`, ours from A4, which no
-      `MANIFEST` row describes and no generated list picks up
+      `MANIFEST` row describes and no generated list picks up.
+
+      **Done.** The whole pipeline reran from bare source — `STAGE1` through
+      `STAGE9-CHROOT`, 193 commands with zero failures, a 236,672-byte kernel,
+      and the fixpoint holding at `same=14 differ=0` after the `yacc`/`strip`
+      move. `retire-check` reports **UNIQUE 0**; `boot-newdisk` boots the image
+      alone and passes all thirteen checks. `image/ipnx-v8-rp07.img.xz` is in
+      git at **7.6 MB**, 1.55% of raw.
+
+      And the loop is closed: `carry.txt` regenerated from **our** disk gives
+      the same 1405 paths as from the TUHS one, so the reference now defaults
+      to ours and the build's only external input is the tapes
 
 ## Track C — ipnx-ports *(declared 2026-08-10; nothing built)*
 

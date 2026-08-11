@@ -6,7 +6,33 @@ retired without losing anything.
 
 Built by [stage 8](build-from-source.md) — `v8/mk/builddisk.sh` — onto an
 RP07: root 7942 blocks (partition `a`), `/usr` 464,000 blocks (partition `f`).
-Committed to git as `image/ipnx-v8-rp07.img.xz`.
+Committed to git as `image/ipnx-v8-rp07.img.xz` — **7.6 MB, 1.55% of the raw
+492 MB.**
+
+**It is done.** The full pipeline ran from bare source and every stage passed:
+
+| stage | |
+| --- | --- |
+| 1 toolchain | `STAGE1 OK` — 14 tools |
+| 2 libc | built with our own compiler |
+| 3 + fixpoint | **`cmpstage: same=14 differ=0 missing=0`** |
+| 4 headers | `STAGE4 OK` — 224 |
+| 5 libraries | `STAGE5 OK` — 19 |
+| 6 commands | `STAGE6 OK` — **193, zero failures** |
+| 7 kernel | `STAGE7 OK` — a 236,672-byte `unix` |
+| 8 disk | `STAGE8 OK` |
+| 9 self-rebuild | `STAGE9-CHROOT OK` — **9 of 9 tools** |
+
+`tools/retire-check.py` reports **UNIQUE 0**, and `tools/boot-newdisk.sh` boots
+the image **alone** and passes all thirteen checks — including `mux` and
+`muxterm`, the widened A4 pair, `fortune` and `bcd`, the manual and `tmac`,
+`yacc` and `strip` in `/usr/bin`, and `$TERM` proving `login` read our
+`/.profile`.
+
+The fixpoint line is the load-bearing one. Moving `yacc` and `strip` out of
+`TOOLDIR/bin` was what let the built system run its own generated makefiles,
+and it invalidated the staged toolchain — so this run had to redo stages 1–3
+to find out whether self-hosting survived it. `same=14 differ=0` says it did.
 
 ## Where every file comes from
 
@@ -60,7 +86,9 @@ state. The question that gates retirement is containment —
 > every file on the TUHS image is either on ours, or in git, or deliberately
 > regenerated
 
-— and `tools/retire-check.py` decides it. Every file falls into one of:
+— and `tools/retire-check.py` decides it. **It now passes:** of 8,940 files,
+4,507 are on ours, 4,430 are in git as `MANIFEST` `source` rows, 3 are named
+below as deliberately regenerated, and **0 are left over**. Every file falls into one of:
 
 - **on ours** — built or carried.
 - **in git** — `MANIFEST` calls it `source`, and the stored file is present.
@@ -211,3 +239,29 @@ and `/dev/pt` is where the `sp` pseudo-device puts its stream pipes.
 The third row is the uncomfortable one, because it has no generated check at
 all — only a name in a script. Anything of ours that belongs on the disk has to
 be added there deliberately, and nothing will notice if it is not.
+
+## The loop is closed
+
+The last thing that made the TUHS image necessary was that stage 8 lifted
+`carry.txt` off it. So the test of whether it is still needed is simple:
+**regenerate the lists from the disk we built and see whether they agree.**
+
+They do — **1405 identical paths from either image**. The reference now
+defaults to `work/myv8/rp07new`, which `tools/image-pack.py unpack` recreates
+from git, and the build's only external input is the tapes, which
+`v8/MANIFEST` already accounts for.
+
+Getting the two to agree needed one rule that was missing. Eight files on our
+disk are ours and on the tape nowhere — `etc/chroot`, `etc/nmount`, the two
+profiles, the `cc -B` pass copies `lib/as` and `lib/ld`, `usr/include/ipnx.h`,
+`usr/lib/libpen.a` — and "not on the tape" alone was enough to make `mkcarry`
+want to carry them. Carrying a file this build produces is wrong twice over:
+the next build makes it again, and carrying it freezes whatever the last build
+happened to emit. The rule is derived rather than listed — a file in one of
+`gen/destdirs.txt`'s install directories that is not on the tape is ours.
+
+One geometry trap on the way, worth knowing because it will recur: four tools
+hardcoded partition `g` for `/usr`. `hp.c` puts `/usr` on **g at cylinder 118
+on an RP06** and on **f at cylinder 50 on an RP07**, so the moment the
+reference became our own RP07 they failed with *"rp07 has no partition g"*.
+`v8fs.usrpart()` derives it from the drive type the image size implies.
