@@ -93,6 +93,11 @@ SKIP_EXACT = {
     "/.profile": "ours -- v8/etc/profile.root",
     "/etc/skel/.profile": "ours -- v8/etc/profile.skel",
     "/usr/jerq/bin/wmux": "ours -- v8/jerq/bin/wmux",
+    # builddisk.sh does `cp $SRC/etc/* $MNT/etc', so these two land in /etc
+    # as well as at their real destinations. No makefile installs them, so
+    # the derived rule below cannot see them.
+    "/etc/profile.root": "ours -- v8/etc/profile.root",
+    "/etc/profile.skel": "ours -- v8/etc/profile.skel",
 }
 
 
@@ -115,10 +120,10 @@ def load_manifest():
 
 
 def load_destdirs():
-    """Directories this build installs into (mkdep.py's gen/destdirs.txt).
+    """The exact paths this build installs (mkdep.py's gen/destdirs.txt).
 
-    A file that is in one of these AND is not on the tape at all was put
-    there by us, so carrying it off a reference image is wrong twice over:
+    A file that this build installs AND that is not on the tape at all was
+    put there by us, so carrying it off a reference image is wrong twice over:
     the next build regenerates it anyway, and carrying it would freeze
     whatever the last build happened to produce.
 
@@ -136,8 +141,11 @@ def load_destdirs():
     p = os.path.join(REPO, "v8", "mk", "gen", "destdirs.txt")
     if not os.path.exists(p):
         return set()
+    # The tab-indented rows are exact installed PATHS; the unindented ones
+    # are the directories builddisk.sh copies. Only the paths answer "is
+    # this file ours" -- see the /bin/bls note in mkdep.py's emit_destdirs.
     return {"/" + l.strip() for l in open(p)
-            if not l.startswith("#") and l.strip()}
+            if l.startswith("\t") and l.strip()}
 
 
 def load_built():
@@ -344,7 +352,7 @@ def main():
         if d == "excluded":
             reason[path] = "no source on the tape"
         elif d is None:
-            if os.path.dirname(path) in destdirs:
+            if path in destdirs:
                 nours += 1          # ours, and this build makes it again
                 continue
             reason[path] = "not on the tape at all"

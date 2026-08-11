@@ -11,10 +11,10 @@
 # golden image mounted read-only. Bare paths, one per line,
 # relative to its root -- so strip comments and pipe it in.
 #
-#	1405 files	23560458 bytes
-#	12 skipped (regenerated here, or one machine's state)
+#	1406 files	23570698 bytes
+#	14 skipped (regenerated here, or one machine's state)
 #	206 not carried because we build our own
-#	9 not carried because they are ours and not on the tape
+#	6 not carried because they are ours and not on the tape
 #
 # by tree:
 #	/usr/jerq                      365 files    5629286 bytes
@@ -26,7 +26,7 @@
 #	/usr/src                        29 files     809711 bytes
 #	/usr/dict                        4 files     375766 bytes
 #	/usr/inet                       17 files     261120 bytes
-#	/bin                             4 files     152644 bytes
+#	/bin                             5 files     162884 bytes
 #	/lib                             4 files     150597 bytes
 #	/usr/man                         1 files      73728 bytes
 #	/usr/net                         4 files      73286 bytes
@@ -35,6 +35,7 @@
 #	/                                1 files       8904 bytes
 #
 bin/[
+bin/bls
 bin/csh
 bin/e
 bin/rmail

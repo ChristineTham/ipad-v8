@@ -813,12 +813,13 @@ def emit_destdirs(makefiles):
     system it builds contains a compiler (buildcmds.sh), which is why /bin
     and /lib appear at all.
     """
-    dirs = set()
+    dirs, files = set(), set()
     for text in makefiles:
         for line in text.splitlines():
             if not re.match(r"\t-?cp ", line):
                 continue
             for m in re.finditer(r"\$\((?:DESTDIR|TOOLDIR)\)/([A-Za-z0-9_./]+)", line):
+                files.add(m.group(1))
                 d = os.path.dirname(m.group(1))
                 if d:
                     dirs.add(d)
@@ -833,6 +834,18 @@ def emit_destdirs(makefiles):
     # Parents first, so `mkdir' can make them one level at a time -- V8 has
     # no mkdir -p, which is why the order in this file is load-bearing.
     out += sorted(dirs, key=lambda d: (d.count("/"), d))
+
+    # ...and the exact paths, which is a different question with a
+    # different consumer. mkcarry.py asks "did WE put this file here?" to
+    # decide whether carrying it off a reference image would be wrong, and
+    # the directory is not enough to answer that: /bin/bls is a Bell Labs
+    # binary with no tape entry that happens to live in a directory this
+    # build also installs into, and treating "in a destdir and not on the
+    # tape" as "ours" silently dropped it from the disk.
+    out.append("#")
+    out.append("#\tinstalled paths: %d" % len(files))
+    out.append("#")
+    out += ["\t" + f for f in sorted(files)]
     return "\n".join(out) + "\n"
 
 
