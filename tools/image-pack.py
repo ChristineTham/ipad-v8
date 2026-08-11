@@ -25,7 +25,8 @@ work/, rp06build, the .tap files -- stays out.
 WHY xz AND NOT gzip.  Measured on the dense 40 MB of a V8 image: gzip -9
 14.3%, bzip2 -9 11.5%, xz 8.8%.  On the whole 516 MB RP07 the difference
 is larger still, because most of the volume is free blocks and xz's longer
-window swallows runs of zeros almost entirely.  Python's lzma is the same
+window swallows them almost entirely: the built disk packs to 7.6 MB,
+1.55% of raw.  Python's lzma is the same
 compressor and is in the standard library, so this needs no xz(1) on the
 host -- macOS does not ship one.
 
@@ -33,9 +34,15 @@ ZERO THE FILE BEFORE THE BUILD THAT MAKES THE ARTEFACT.  mkfs writes a
 fresh i-list and free list but does NOT clear the data blocks, so a second
 stage 8 over the same file leaves the previous run's contents in what the
 new filesystem calls free space.  It is invisible to the guest and it is
-not invisible to the compressor.  `pack' reports the fraction of the image
-that is nonzero for exactly this reason: if it is far above what df says
-is used, the file was reused and should be recreated from /dev/zero.
+not invisible to the compressor.  `pack' warns when the PACKED SIZE is out
+of line -- a clean RP07 comes out at about 1.5% of raw, and stale data in
+free space is high-entropy and stops compressing.
+
+The nonzero figure it also prints is informational, not the test.  V8's
+mkfs builds its free list downward from the top of the partition writing a
+block every 150, so a brand-new empty filesystem has free-list blocks
+threaded through the whole volume: a 492 MB image with 5% of its bytes set
+is a normal, nearly-empty one.
 """
 
 import argparse
@@ -78,11 +85,20 @@ def cmd_pack(args):
             if not b:
                 break
             h.update(b)
-            # Cheap and good enough: a whole chunk of zeros is free space,
-            # anything else counts as used. Only used to warn about a
-            # reused file, never to decide anything.
+            # Count nonzero BYTES, not whole chunks.
+            #
+            # This counted a whole 8 MB chunk as used if one byte in it
+            # differed, and reported a freshly built image as 95% full when
+            # it is 5%. The reason is worth knowing: V8's mkfs builds its
+            # free list DOWNWARD from the top of the partition and writes a
+            # block every 150, so a brand-new empty filesystem threads
+            # free-list blocks through the entire volume. There is almost no
+            # 8 MB window anywhere on the disk that is all zeros.
+            #
+            # The `b != zeros' guard keeps the common all-zero chunk cheap;
+            # only chunks with something in them pay for the byte count.
             if b != zeros[:len(b)]:
-                nonzero += len(b)
+                nonzero += len(b) - b.count(0)
             z.write(b)
     digest = h.hexdigest()
     open(dst + ".sha256", "w").write("%s  %s\n" % (digest, os.path.basename(src)))
@@ -94,12 +110,18 @@ def cmd_pack(args):
     print("  nonzero   %s  (%.1f%% of the volume)" % (human(nonzero),
                                                       100.0 * nonzero / total))
     print("  sha256    %s" % digest)
-    if nonzero > total * 0.25:
+    # The real signal for a reused file is the COMPRESSION RATIO, not the
+    # nonzero count: stale data in free space is high-entropy and stops
+    # compressing, where a fresh image's free-list blocks are repetitive and
+    # nearly vanish. A clean RP07 packs to about 1.5%.
+    if packed > total * 0.05:
         print("")
-        print("  NOTE: a quarter of the volume is nonzero. A V8 image this")
-        print("  full is unlikely; more probably stage 8 reused the file and")
-        print("  the previous run's data is sitting in what is now free")
-        print("  space. rm the image and let the driver recreate it zeroed.")
+        print("  NOTE: this packed to %.1f%%, where a freshly built image"
+              % (100.0 * packed / total))
+        print("  packs to about 1.5%. Most likely stage 8 reused the file and")
+        print("  the previous run's data is sitting in what the new")
+        print("  filesystem calls free space. rm it and let the driver")
+        print("  recreate it from /dev/zero.")
     return 0
 
 
