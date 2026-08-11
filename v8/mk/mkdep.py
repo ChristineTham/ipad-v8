@@ -1546,7 +1546,143 @@ def derive_loose():
     return entries, skipped
 
 
+# --------------------------------------------- the makefile directories
+#
+# 113 of them, and the reason stage 6 is a list rather than a loop is that they
+# are not a family: awk's makefile opens by saying it is wrong, sed links with
+# `cc -o sed -n *.o', troff builds two programs out of overlapping object sets.
+# So this does NOT try to run them, or to translate them wholesale. It reads
+# each one for the two facts we cannot get anywhere else -- which objects, and
+# which extra libraries -- and takes everything else from the tree and from
+# where.txt, exactly as the loose files do.
+#
+# It is deliberately narrow, and refuses in four cases rather than guessing:
+#
+#   * the directory name is not a binary on the image (21 of them). The product
+#     is then something else -- learn/ links `a.out', dump/ is not installed at
+#     all -- and picking it out of `-o' arguments is guessing.
+#   * the makefile runs yacc or lex (21). Those need gen/sidegen rules and an
+#     -I., which config(8) already demonstrates; they are worth doing properly
+#     rather than pattern-matching.
+#   * it names a library with no source in this tree: ether, chaos, y, ln.
+#   * it wants more than one product.
+#
+# What is left is 67 directories that really are "these objects, one binary,
+# one place to put it", which is the same shape emit() already handles.
+
+# -l<name> -> the archive stage 5 installs, BY PATH. Never -l: V8's ld has no
+# -L, so -ll finds the running system's /usr/lib/libl.a in preference to ours,
+# silently.  An empty string means "already in libc, link nothing":
+#   m   -- V8 has no libm source at all. usr/src/libc/Makefile does
+#          `cc -c -O math/*.c' straight into libc.a and our libc.mk compiles
+#          the same 17 files, so -lm is a no-op here. /usr/lib/libm.a exists on
+#          the shipped image and is not built from this tree.
+#   c   -- emit() appends $(LIBC) to every link line already.
+LIBMAP = {
+    "m": "", "c": "",
+    "l": "usr/lib/libl.a",       "cbt": "usr/lib/libcbt.a",
+    "dk": "usr/lib/libdk.a",     "jobs": "usr/lib/libjobs.a",
+    "termcap": "usr/lib/libtermcap.a", "termlib": "usr/lib/libtermcap.a",
+    "curses": "usr/lib/libcurses.a",   "plot": "usr/lib/libplot.a",
+    "F77": "usr/lib/libF77.a",   "I77": "usr/lib/libI77.a",
+    "in": "usr/lib/libin.a",     "mp": "usr/lib/libmp.a",
+    "dbm": "usr/lib/libdbm.a",   "g": "usr/lib/libg.a",
+    "2621": "usr/lib/lib2621.a", "4014": "usr/lib/lib4014.a",
+    "5620": "usr/lib/lib5620.a", "blit": "usr/lib/libblit.a",
+    "tr": "usr/lib/libtr.a",     "pen": "usr/lib/libpen.a",
+}
+
+# A `-l' that is not a library at all. Every one of these was found by reading
+# the hit rather than trusting the regex: -l84/-l90/-l57 are pr(1) page lengths
+# in `print' targets, -lS is a lint flag, -ls is `ls -ls', -ln is the ln
+# command in a rule, and -lunet/-lbtl are commented out in uucp/makefile.
+NOTALIB = re.compile(r'pr\s+-l|lprint|can\s+-f|lint|\bls\s+-l|^\s*#')
+
+
+def derive_dirs(taken):
+    """Entries for usr/src/cmd/<dir>/makefile that fit the common shape.
+
+    `taken' is what derive_loose() already produced. A name can be both -- and
+    cflow is the case that proves the loose file should win: cmd/cflow.sh IS
+    the command, a shell script, while cmd/cflow/ builds the four helpers it
+    calls (dag, lpfx, nmf, flip) into /usr/lib. The directory is a
+    multi-product entry that happens to share the command's name, so deriving
+    it would install the wrong file as /usr/bin/cflow. Caught by put()'s
+    duplicate check rather than by foresight.
+    """
+    d0 = os.path.join(V8, "usr/src/cmd")
+    hand = ({c["name"] for c in STAGE6} | {c["name"] for c in STAGE1}
+            | set(taken))
+    entries, skipped = [], []
+
+    for name in sorted(os.listdir(d0)):
+        p = os.path.join(d0, name)
+        if not os.path.isdir(p) or not os.path.exists(os.path.join(p, "makefile")):
+            continue
+        if name in hand:
+            skipped.append((name + "/", "a loose file or a hand-written entry "
+                                        "already provides this command"))
+            continue
+        dirs = WHERE.get(name)
+        if not dirs:
+            skipped.append((name + "/", "directory name is not a binary on the image"))
+            continue
+
+        mk = open(os.path.join(p, "makefile"), errors="replace").read()
+        if re.search(r'\byacc\b|\blex\b|y\.tab|lex\.yy', mk):
+            skipped.append((name, "runs yacc/lex -- needs gen rules, like config"))
+            continue
+
+        # Extra libraries, in the order the makefile names them: without a
+        # valid __.SYMDEF, ld makes ONE sequential pass, and stage 5 does not
+        # ranlib into DESTDIR.
+        libs, unknown = [], []
+        for line in mk.splitlines():
+            if NOTALIB.search(line):
+                continue
+            for l in re.findall(r'-l([A-Za-z_][\w]*)', line):
+                if l not in LIBMAP:
+                    unknown.append(l)
+                elif LIBMAP[l] and LIBMAP[l] not in libs:
+                    libs.append(LIBMAP[l])
+        if unknown:
+            skipped.append((name, "needs -l%s, which has no source in this tree"
+                            % ", -l".join(sorted(set(unknown)))))
+            continue
+
+        # Objects: every .o the makefile names that has a .c beside it. If it
+        # names none, the whole directory. Taking the makefile's list matters
+        # -- several directories carry sources for a second program, or a
+        # `lint' stub, that the product does not link.
+        cs = {f[:-2] for f in os.listdir(p) if f.endswith(".c")}
+        objs = sorted(o for o in set(re.findall(r'([A-Za-z_][\w]*)\.o\b', mk))
+                      if o in cs)
+        if not objs:
+            objs = sorted(cs)
+        if not objs:
+            skipped.append((name, "no .c files"))
+            continue
+
+        best = sorted(dirs, key=lambda x: (DIRPREF.index(x)
+                                           if x in DIRPREF else 99))[0]
+        if len(dirs) > 1:
+            skipped.append((name, "also in %s -- installed only to %s"
+                            % (", ".join(x for x in dirs if x != best), best)))
+        entries.append(dict(name=name, dir="usr/src/cmd/" + name,
+                            objs=[o + ".c" for o in objs],
+                            libs=libs, dest="DESTDIR", product=name,
+                            install=best.lstrip("/") + "/" + name,
+                            note="cmd/%s/makefile: %d objects%s; /%s measured"
+                                 % (name, len(objs),
+                                    (", " + " ".join(libs)) if libs else "",
+                                    best.lstrip("/") + "/" + name)))
+    return entries, skipped
+
+
 DERIVED, SKIPPED = derive_loose()
+DIRENTRIES, DIRSKIPPED = derive_dirs({e["name"] for e in DERIVED})
+DERIVED = DERIVED + DIRENTRIES
+SKIPPED = SKIPPED + DIRSKIPPED
 STAGE6 = STAGE6 + DERIVED
 
 # ---------------------------------------------------------------- notes on
