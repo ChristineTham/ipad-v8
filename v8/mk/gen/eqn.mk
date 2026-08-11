@@ -55,7 +55,7 @@ INCS   = -I. -I$(SRC)/usr/src/cmd/eqn -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) $(INCS) -c
 TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
 
-OBJS = diacrit.o eqn.o eqnbox.o font.o fromto.o funny.o glob.o input.o integral.o lex.o lookup.o main.o mark.o matrix.o move.o over.o paren.o pile.o shift.o size.o sqrt.o text.o y.tab.o
+OBJS = diacrit.o eqnbox.o font.o fromto.o funny.o glob.o input.o integral.o lex.o lookup.o main.o mark.o matrix.o move.o over.o paren.o pile.o shift.o size.o sqrt.o text.o y.tab.o
 
 all: eqn
 
@@ -76,9 +76,6 @@ y.tab.h: y.tab.c
 
 diacrit.o: $(SRC)/usr/src/cmd/eqn/diacrit.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/eqn/e.h e.def $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/eqn/diacrit.c
-
-eqn.o: y.tab.c e.def $(TOOLS)
-	$(COMPILE) y.tab.c
 
 eqnbox.o: $(SRC)/usr/src/cmd/eqn/eqnbox.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/eqn/e.h e.def $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/eqn/eqnbox.c

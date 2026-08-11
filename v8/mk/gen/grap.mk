@@ -55,7 +55,7 @@ INCS   = -I. -I$(SRC)/usr/src/cmd/grap -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) $(INCS) -c
 TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
 
-OBJS = coord.o for.o frame.o grap.o grapl.o input.o label.o lex.yy.o main.o misc.o plot.o print.o ticks.o y.tab.o
+OBJS = coord.o for.o frame.o input.o label.o lex.yy.o main.o misc.o plot.o print.o ticks.o y.tab.o
 
 all: grap
 
@@ -85,12 +85,6 @@ for.o: $(SRC)/usr/src/cmd/grap/for.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/grap/g
 
 frame.o: $(SRC)/usr/src/cmd/grap/frame.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/grap/grap.h prevy.tab.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/grap/frame.c
-
-grap.o: y.tab.c prevy.tab.h $(TOOLS)
-	$(COMPILE) y.tab.c
-
-grapl.o: lex.yy.c prevy.tab.h $(TOOLS)
-	$(COMPILE) lex.yy.c
 
 input.o: $(SRC)/usr/src/cmd/grap/input.c $(INCDIR)/ctype.h $(INCDIR)/errno.h $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/grap/grap.h prevy.tab.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/grap/input.c

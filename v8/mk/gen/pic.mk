@@ -55,7 +55,7 @@ INCS   = -I. -I$(SRC)/usr/src/cmd/pic -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) $(INCS) -c
 TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
 
-OBJS = arcgen.o blockgen.o boxgen.o circgen.o for.o input.o lex.yy.o linegen.o main.o misc.o movegen.o picl.o picy.o pltroff.o print.o symtab.o textgen.o y.tab.o
+OBJS = arcgen.o blockgen.o boxgen.o circgen.o for.o input.o lex.yy.o linegen.o main.o misc.o movegen.o pltroff.o print.o symtab.o textgen.o y.tab.o
 
 all: pic
 
@@ -109,12 +109,6 @@ misc.o: $(SRC)/usr/src/cmd/pic/misc.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/pic/p
 
 movegen.o: $(SRC)/usr/src/cmd/pic/movegen.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/pic/pic.h pic.ydef $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/pic/movegen.c
-
-picl.o: lex.yy.c pic.ydef $(TOOLS)
-	$(COMPILE) lex.yy.c
-
-picy.o: y.tab.c pic.ydef $(TOOLS)
-	$(COMPILE) y.tab.c
 
 pltroff.o: $(SRC)/usr/src/cmd/pic/pltroff.c $(INCDIR)/math.h $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/pic/pic.h pic.ydef $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/pic/pltroff.c

@@ -1449,7 +1449,7 @@ STAGE6 = [
          note="cmd/expr/makefile: yacc expr.y, then cc y.tab.c -o expr"),
 
     dict(name="hoc", dir="usr/src/cmd/hoc",
-         objs={"hoc.o": "y.tab.c", "code.o": "code.c", "init.o": "init.c",
+         objs={"code.o": "code.c", "init.o": "init.c",
                "math.o": "math.c", "symbol.o": "symbol.c"},
          gen={"y.tab.c": ("yacc -d", "hoc.y", None)},
          sidegen={"y.tab.h": "y.tab.c"}, objdeps=["y.tab.h"],
@@ -1459,7 +1459,7 @@ STAGE6 = [
               "the makefile's x.tab.h is dependency bookkeeping, not a source"),
 
     dict(name="eqn", dir="usr/src/cmd/eqn",
-         objs={"eqn.o": "y.tab.c", "main.o": "main.c", "diacrit.o": "diacrit.c",
+         objs={"main.o": "main.c", "diacrit.o": "diacrit.c",
                "eqnbox.o": "eqnbox.c", "font.o": "font.c", "fromto.o": "fromto.c",
                "funny.o": "funny.c", "glob.o": "glob.c", "integral.o": "integral.c",
                "input.o": "input.c", "lex.o": "lex.c", "lookup.o": "lookup.c",
@@ -1475,7 +1475,7 @@ STAGE6 = [
               "y.tab.h and twenty of the sources include it by that name"),
 
     dict(name="m4", dir="usr/src/cmd/m4",
-         objs={"m4y.o": "y.tab.c", "m4.o": "m4.c", "m4ext.o": "m4ext.c",
+         objs={"m4.o": "m4.c", "m4ext.o": "m4ext.c",
                "m4macs.o": "m4macs.c"},
          gen={"y.tab.c": ("yacc", "m4y.y", None)},
          dest="DESTDIR", product="m4", install="usr/bin/m4",
@@ -1484,7 +1484,7 @@ STAGE6 = [
               "in the link"),
 
     dict(name="pp", dir="usr/src/cmd/pp",
-         objs={"pp.o": "pp.c", "scan.o": "lex.yy.c"},
+         objs={"pp.o": "pp.c"},
          gen={"lex.yy.c": ("lex", "scan.l", None)},
          libs=["usr/lib/libl.a"],
          dest="DESTDIR", product="pp", install="usr/bin/pp",
@@ -1493,7 +1493,7 @@ STAGE6 = [
               "linked it without a scanner"),
 
     dict(name="pic", dir="usr/src/cmd/pic",
-         objs={"picy.o": "y.tab.c", "picl.o": "lex.yy.c", "main.o": "main.c",
+         objs={"main.o": "main.c",
                "print.o": "print.c", "misc.o": "misc.c", "symtab.o": "symtab.c",
                "blockgen.o": "blockgen.c", "boxgen.o": "boxgen.c",
                "circgen.o": "circgen.c", "arcgen.o": "arcgen.c",
@@ -1509,7 +1509,7 @@ STAGE6 = [
               "of y.tab.h"),
 
     dict(name="grap", dir="usr/src/cmd/grap",
-         objs={"grap.o": "y.tab.c", "grapl.o": "lex.yy.c", "main.o": "main.c",
+         objs={"main.o": "main.c",
                "input.o": "input.c", "print.o": "print.c", "frame.o": "frame.c",
                "for.o": "for.c", "coord.o": "coord.c", "ticks.o": "ticks.c",
                "plot.o": "plot.c", "label.o": "label.c", "misc.o": "misc.c"},

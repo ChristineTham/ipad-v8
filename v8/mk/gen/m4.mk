@@ -55,7 +55,7 @@ INCS   = -I. -I$(SRC)/usr/src/cmd/m4 -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) $(INCS) -c
 TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
 
-OBJS = m4.o m4ext.o m4macs.o m4y.o y.tab.o
+OBJS = m4.o m4ext.o m4macs.o y.tab.o
 
 all: m4
 
@@ -73,9 +73,6 @@ m4ext.o: $(SRC)/usr/src/cmd/m4/m4ext.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/m4/m
 
 m4macs.o: $(SRC)/usr/src/cmd/m4/m4macs.c $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/stat.h $(INCDIR)/sys/types.h $(SRC)/usr/src/cmd/m4/m4.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/m4/m4macs.c
-
-m4y.o: y.tab.c $(TOOLS)
-	$(COMPILE) y.tab.c
 
 y.tab.o: y.tab.c $(TOOLS)
 	$(COMPILE) y.tab.c

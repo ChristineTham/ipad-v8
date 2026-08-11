@@ -55,7 +55,7 @@ INCS   = -I. -I$(SRC)/usr/src/cmd/hoc -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) $(INCS) -c
 TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
 
-OBJS = code.o hoc.o init.o math.o symbol.o y.tab.o
+OBJS = code.o init.o math.o symbol.o y.tab.o
 
 all: hoc
 
@@ -71,9 +71,6 @@ y.tab.h: y.tab.c
 
 code.o: $(SRC)/usr/src/cmd/hoc/code.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/hoc/hoc.h y.tab.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/hoc/code.c
-
-hoc.o: y.tab.c y.tab.h $(TOOLS)
-	$(COMPILE) y.tab.c
 
 init.o: $(SRC)/usr/src/cmd/hoc/init.c $(INCDIR)/math.h $(SRC)/usr/src/cmd/hoc/hoc.h y.tab.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/hoc/init.c

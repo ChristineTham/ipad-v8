@@ -55,7 +55,7 @@ INCS   = -I. -I$(SRC)/usr/src/cmd/pp -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) $(INCS) -c
 TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
 
-OBJS = lex.yy.o pp.o scan.o
+OBJS = lex.yy.o pp.o
 
 all: pp
 
@@ -70,9 +70,6 @@ lex.yy.o: lex.yy.c $(TOOLS)
 
 pp.o: $(SRC)/usr/src/cmd/pp/pp.c $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/stat.h $(INCDIR)/sys/types.h $(SRC)/usr/src/cmd/pp/dev.h $(SRC)/usr/src/cmd/pp/pp.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/pp/pp.c
-
-scan.o: lex.yy.c $(TOOLS)
-	$(COMPILE) lex.yy.c
 
 install: pp
 	-mkdir $(DESTDIR)/usr/bin
