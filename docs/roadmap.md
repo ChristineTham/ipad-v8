@@ -300,22 +300,40 @@ the safety rules are in [build-from-source.md](build-from-source.md).
         stage 2 *(2026-08-11)*. `curses-ok` proves it together with stage 4:
         a program compiled against our headers, linked against our
         `libcurses` and `libtermcap`, and run
-  - [~] **6** commands — 11 of ~277 *(2026-08-11)*: `config`(8), `sh`, and
-        the boot path (`init` `getty` `login` `fsck` `mount` `umount` `mkfs`
-        `update`), plus `nmount`, plus **the whole toolchain installed into
-        `DESTDIR`** — a system with no compiler cannot rebuild itself, which
-        is the whole of stage 9. Every install path measured, not inferred:
-        `login` goes to `/etc`, not `/bin`. The remaining ~266 need
-        `tools/harvest-paths.sh`, because the 164 loose `.c` have no makefile
-        of any kind and `/bin` vs `/usr/bin` decides whether the system can
-        repair itself with `/usr` unmounted
+  - [~] **6** commands — **132 of ~277** *(2026-08-11)*: 11 hand-written
+        (`config`(8), `sh`, the boot path, `nmount`) plus **121 derived** from
+        the tree and `v8/mk/where.txt`, plus **the whole toolchain installed
+        into `DESTDIR`** — a system with no compiler cannot rebuild itself,
+        which is the whole of stage 9. Every install path **measured**:
+        `tools/harvest-paths.sh` walks a booted golden image and writes 434
+        entries, because the 165 loose `.c` have no makefile of any kind and
+        `/bin` vs `/usr/bin` decides whether the system can repair itself with
+        `/usr` unmounted. All seven names it had refused to guess (`date`
+        `rm` `cat` `ls` `echo` `chmod` `sync`) are `/bin`. 40 skipped with
+        reasons in `gen/stage6-skipped.txt`. **Remaining: the 113 makefile
+        directories** — no new library blocks them (`-lm` needs nothing; V8
+        compiles `math/*.c` into `libc.a`), only `ether` `chaos` `y` `ln`
+        have no source in the tree at all, and they block just three
+        directories
   - [x] **7** the kernel — **a 236,520-byte `unix`, built from our source
         with our toolchain** *(2026-08-11)*. `usr/sys/ipnx/conf` is `alice`'s
         VAX-11/780 plus the Internet pseudo-devices `research` had, and it is
         the machine we actually emulate rather than either of the tape's. The
         only stage that copies source, because `config` resolves its inputs as
         `"../conf/"` by string concatenation
-- [ ] **S7** Stage 8: a disk built from source, and a boot from it
+- [x] **S7** Stage 8: a disk built from source, **and a boot from it**
+      *(2026-08-11)*. `v8/mk/builddisk.sh` makes both filesystems, fills them
+      from `DESTDIR`, writes 414 device nodes from `proto-dev` and installs
+      the kernel; `tools/boot-newdisk.sh` boots the image **alone** — nothing
+      else attached, so nothing missing can be satisfied from another drive —
+      and gets the boot block finding `hp(0,0)unix`, the autoconfig, `login:`,
+      a root shell, `/usr` mounted, and a C program **compiled and run** by
+      the compiler stage 6 installed. Its own prerequisite was booting the
+      build machine on our stage-7 kernel (`tools/install-kernel.sh`), because
+      stage 8 needs a third drive and no machine description on the tape
+      declares more than two. What it still lacks is most of `/usr`: 36 files
+      in `/bin`, 73 in `/usr/bin`, and `/etc/rc` still reports `cron` and
+      `rmdir` missing — all of it stage 6's remaining 145
 - [ ] **S8** Stage 9: the new system rebuilds itself under `chroot` — the point
       at which `v8/` is demonstrably complete
 - [ ] **S9** Our guest-side patches move into the tree (the `streamio.c`
