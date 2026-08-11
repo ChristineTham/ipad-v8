@@ -105,8 +105,19 @@ simh "set rp1 rp06"
 simh "at rp1 rp06build"
 # rp2 is the disk stage 8 builds.  Attached always, so a stage-8 run needs no
 # second configuration; builddisk.sh refuses to touch drive 0 regardless.
-simh "set rp2 rp07"
-simh "at rp2 rp07new"
+#
+# The TYPE is an argument because we want both. The RP07 is the build and
+# Track B disk -- 475 MB of /usr, room for the V10 cross-build. The RP06 is
+# the one the app can actually ship: app/ipnx/Machine.swift's boot.conf says
+# `set rp0 rp06', and an RP07 would be a config change plus three times the
+# bundle. Same DESTDIR, same carry set, one argument apart -- so "retire the
+# TUHS image" can mean the product too and not just the build.
+set target [lindex $argv 4]
+if {$target == ""} { set target rp07 }
+if {$target == "rp06"} { set targetimg rp06new } else { set targetimg rp07new }
+send_user "\n=== target: $targetimg ($target) ===\n"
+simh "set rp2 $target"
+simh "at rp2 $targetimg"
 # rp3: the REFERENCE image, read-only -- the source for the 1406 files in
 # gen/carry.txt, which the tape shipped as binaries with no source, plus the
 # 2263 in gen/fromgold.txt that mkcarry.py has proven byte-identical to ours.
@@ -217,7 +228,7 @@ sh "rm -f /dev/rp3a /dev/rp3$refusr; /etc/mknod /dev/rp3a b 0 24; /etc/mknod /de
 sh "/etc/mount /dev/rp3a /gold -r" 120
 sh "mkdir /gold/usr 2>/dev/null; /etc/mount /dev/rp3$refusr /gold/usr -r" 120
 sh "ls /gold/bin | wc -l" 60
-sh "sh /n/src/mk/builddisk.sh /n/src /b/root 2 rp07 /mnt /gold 2>&1" 3600 }
+sh "sh /n/src/mk/builddisk.sh /n/src /b/root 2 $target /mnt /gold 2>&1" 3600 }
 
 # ---------------------------------------------------------------- stage 9
 # A SECOND mount of the same share, inside DESTDIR. chroot has no path to

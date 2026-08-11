@@ -1,7 +1,7 @@
 #!/bin/bash
 # Stages 4 to 8 against a build filesystem that already has stages 1 to 3.
 #
-#	tools/drive-stages48.sh [limit-seconds] [port] [first-stage] [last-stage] [ref-image]
+#	tools/drive-stages48.sh [limit] [port] [first-stage] [last-stage] [ref-image] [rp06|rp07]
 #
 # first-stage defaults to 4.  Stages 4 to 7 leave their products on the build
 # filesystem, so when only stage 8 has changed, `tools/drive-stages48.sh "" ""
@@ -32,6 +32,8 @@ TO="${4:-9}"
 # The reference image stage 8 lifts carry.txt off. Must match the --image
 # tools/mkcarry.py generated the lists from; see docs/golden-disk.md.
 REF="${5:-rp06v8.golden}"
+# rp07 (the build and Track B disk) or rp06 (what the app can ship).
+TARGET="${6:-rp07}"
 LOG="$WORK/stages48.log"
 NETFSD="$ROOT/netfs/.build/release/netfsd"
 
@@ -59,9 +61,12 @@ python3 "$ROOT/tools/mkcarry.py" --check || {
 
 # The disk stage 8 builds.  1008000 sectors is hp7_sizes' partition c, the
 # whole RP07 -- see v8/mk/builddisk.sh for why the sizes come from the driver.
-[[ -e rp07new ]] || {
-    echo "== making rp07new (516 MB) =="
-    dd if=/dev/zero of=rp07new bs=512 count=1008000 2>/dev/null
+# Sizes are hp6_sizes/hp7_sizes partition c -- the whole volume. See
+# v8/mk/builddisk.sh for why they come from the driver and not from memory.
+if [[ "$TARGET" == rp06 ]]; then TIMG=rp06new; TSEC=340670; else TIMG=rp07new; TSEC=1008000; fi
+[[ -e $TIMG ]] || {
+    echo "== making $TIMG ($((TSEC / 2048)) MB) =="
+    dd if=/dev/zero of=$TIMG bs=512 count=$TSEC 2>/dev/null
 }
 
 cleanup() {
@@ -78,7 +83,7 @@ NETFSD_PID=$!
 sleep 1
 
 : > "$LOG"
-expect "$ROOT/tools/drive-stages48.exp" "$PORT" "$FROM" "$TO" "$REF" &
+expect "$ROOT/tools/drive-stages48.exp" "$PORT" "$FROM" "$TO" "$REF" "$TARGET" &
 EXP_PID=$!
 # The size cap is not tidiness. A SLiRP attach that cannot bind prints
 # "Sockets: bind error 13 - Permission denied" and RETRIES, with no backoff
