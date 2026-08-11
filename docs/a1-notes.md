@@ -122,6 +122,22 @@ The remote-console dialect in full, all desktop-verified:
     re-links the pointers, but zeroes the CSR the guest kernel configured
     — interrupt enable included — and V8 stops noticing console input
     entirely.
+
+    **Addendum, 2026-08-11 — the dropped connection is by design; only the
+    segfault was the bug.** Upstream's answer on #576 (markpizz): a device
+    is restorable only as far as its whole state lives in its `REG`s, and
+    TMXR's per-line connection state lives in the simulator's *host*
+    memory, which no `REG` describes — the most `restore` can do is replay
+    the ATTACH string. So the recipe below is not a workaround for a
+    defect, it is how the mechanism is meant to be used. The rule
+    generalises past this case: state held inside the **guest** survives a
+    snapshot, because it is only RAM; state held inside the **simulator**
+    does not. Upstream's escape hatch is therefore to reach the guest over
+    TCP and let its own stack own the session — which V8 could do, since
+    it ships `usr/src/cmd/inet/etc/telnetd.c` — and which is no use here,
+    because the far end of our DZ is a second emulated CPU in the same
+    process. We checkpoint both machines instead and keep the wire
+    stateless.
   - **Snapshot consumption**: `state.sav` is deleted the moment the
     machine runs again (foreground continue or restore success). A
     snapshot is only consistent with the disk while the machine stays

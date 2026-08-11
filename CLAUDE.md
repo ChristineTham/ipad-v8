@@ -251,6 +251,18 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   as [open-simh/simh#576](https://github.com/open-simh/simh/issues/576)). Don't "fix" the
   crash with `reset tti` — that zeroes the guest-configured CSR and V8 stops seeing
   console input.
+- **A mux connection dropped across save/restore is by design; only the segfault was
+  ever a bug.** Upstream's answer on #576 (markpizz, 2026-08-11): a device is restorable
+  only to the extent its whole state lives in its `REG`s, and TMXR's per-line connection
+  state lives in the simulator's *host* memory, which no `REG` describes — the most
+  `restore` can do is replay the ATTACH string. So `restore -D -Q` plus manual attach is
+  **the correct way to use the mechanism**, not a workaround. The general rule is worth
+  more than the case: state held inside the *guest* survives a snapshot (it is just RAM),
+  state held inside the *simulator* does not. Hence upstream's escape hatch — reach the
+  guest over TCP and let its own stack own the session, which V8 can do (it ships
+  `usr/src/cmd/inet/etc/telnetd.c`) — and hence why it is no use here: the far end of our
+  DZ is a second emulated CPU in the same process, so we checkpoint **both** machines and
+  keep the wire stateless.
 - A `state.sav` is only disk-consistent while the machine stays paused — the app deletes
   it the moment the machine runs again; unclean kills cold-boot and V8's autoboot fsck
   self-heals (with a telnet console V8 autoboots straight to `login:`, no single-user
@@ -262,7 +274,9 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   `SO_REUSEADDR`). The bind fails. That alone is survivable; scp.c's loop is not: it is
   gated on `r == SCPE_OK` and never resets `r`, so the **first** failure silently skips
   **every remaining attach** — and the DZ precedes RP0 in device order, so the machine
-  comes back **with no disk**. The console still answers (the kernel is in memory) and
+  comes back **with no disk**. Still true of open-simh at `scp.c:9065` (verified
+  2026-08-11); **fixed in `simh/simh`**, which attempts every attach and reports each
+  failure as it happens — the one concrete cherry-pick target from that codebase. The console still answers (the kernel is in memory) and
   the shell still echoes `# ` from memory, so it presents as a terminal that has gone
   quiet, which is nothing like the truth: `exec` SIGKILLs (`Killed`), `login` never
   reaches a shell, getty is stuck. Proof either way:
