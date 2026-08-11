@@ -831,7 +831,14 @@ def emit_makedev():
 # system full' about an unrelated filesystem.  Here it would have been 414 of
 # them, on the LAST step of stage 8, after the disk was otherwise built.
 
+# Both by absolute path, and they are NOT in the same place: where.txt says
+# /etc/mknod and /etc/chgrp, while chmod is /bin/chmod.  Guessing that the
+# three commands that set up a device node live together is exactly the kind
+# of reasonable assumption this file exists to avoid -- the first stage-8 run
+# to reach /dev printed "chgrp: not found" 190 times and produced a complete
+# /dev whose every node had the wrong group.
 MKNOD=/etc/mknod
+CHGRP=/etc/chgrp
 DEV=${1-/dev}
 mkdir $DEV 2>/dev/null
 """]
@@ -877,7 +884,7 @@ mkdir $DEV 2>/dev/null
                    % (cur, name, f[0][0], major, minor))
         out.append("chmod %s $DEV/%s%s\n" % (mode, cur, name))
         if group != "0":
-            out.append("chgrp %s $DEV/%s%s\n" % (group, cur, name))
+            out.append("$CHGRP %s $DEV/%s%s\n" % (group, cur, name))
         ndev += 1
 
     # ---------------------------------------------------------------------
