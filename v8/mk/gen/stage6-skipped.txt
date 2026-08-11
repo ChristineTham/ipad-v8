@@ -57,6 +57,7 @@ compact/     directory name is not a binary on the image
 compat/      System V compatibility traps; unixtraps.c:328: `non-constant case expression'
 config/      a loose file or a hand-written entry already provides this command
 cpp/         a loose file or a hand-written entry already provides this command
+csh/         redefines .c.o as a multi-step recipe (xstr string sharing) -- objects are not plain compilations
 cyntax/      no .c files
 daemon/      directory name is not a binary on the image
 des/         directory name is not a binary on the image
@@ -111,7 +112,7 @@ strip/       a loose file or a hand-written entry already provides this command
 struct/      yacc/lex (beauty.y lextab.l) -- needs gen rules, like config
 style/       yacc/lex (end.l nwords.l part.l) -- needs gen rules, like config
 track/       directory name is not a binary on the image
-troff/       5 programs in one directory (d202 hc n1 ta tc) -- needs the makefile's own object split
+troff/       d202.c hc.c ta.c tc.c is not C (assembly with cpp directives); needs cc -E piped to as
 uucp/        includes a header the tape does not ship: UNET/tcp.h (from callers.c), UNET/unetio.h (from callers.c)
 view2d/      links libview2d.a num.a, built inside the component
 wwb/         yacc/lex (gram.l org.l punct.l) -- needs gen rules, like config

@@ -1732,6 +1732,54 @@ def derive_dirs(taken):
         # Splitting them needs to know which objects belong to which product,
         # and the makefile is the only thing that knows -- so refuse here and
         # do those by hand.
+        # A makefile that redefines .c.o is not compiling normally, and the
+        # difference is not cosmetic. csh's rule pipes every source through
+        # xstr to share string literals --
+        #
+        #	.c.o:
+        #		${CC} -E ${CFLAGS} $*.c | ${XSTR} -c -
+        #		${CC} -c ${CFLAGS} x.c
+        #		mv x.o $*.o
+        #
+        # -- and strings.o, which the link needs, is PRODUCED by that process
+        # rather than compiled from a source. Deriving the objects gives a
+        # link that is missing a file no source in the directory could make.
+        # ...but only when the recipe is more than one command. tsort also
+        # redefines .c.o, and its whole recipe is `$C -c $G $*.c' -- a plain
+        # compilation with different flags, which is not a reason to refuse
+        # anything. Refusing it too dropped a command that had already been
+        # observed to build. One line is normal; three lines and a pipe is
+        # xstr.
+        m = re.search(r'^\.c\.o\s*:[^\n]*\n((?:\t[^\n]*\n)+)', mk, re.M)
+        if m and len([l for l in m.group(1).splitlines() if l.strip()]) > 1:
+            skipped.append((name + "/", "redefines .c.o as a multi-step recipe "
+                            "(xstr string sharing) -- objects are not plain "
+                            "compilations"))
+            continue
+
+        # A source that is not C. csh/doprnt.c is VAX ASSEMBLY carrying cpp
+        # directives, exactly like libc's errlst.o and sh's ctype.o, and the
+        # makefile assembles it with `cc -E doprnt.c > doprnt.s; as'. Compiled
+        # as C it dies on line 3 with
+        #
+        #	illegal character: 043 (octal)
+        #
+        # which is `#' -- an assembler comment that cpp passes straight
+        # through. A `#' line that is not a cpp directive is the signature.
+        CPPDIR = re.compile(rb'^\s*#\s*(include|define|undef|if|ifdef|ifndef'
+                            rb'|else|elif|endif|line|pragma|\d|$)')
+        notc = []
+        for o in objs:
+            for line in open(os.path.join(p, o + ".c"), "rb").read().splitlines():
+                if line.lstrip().startswith(b"#") and not CPPDIR.match(line):
+                    notc.append(o + ".c")
+                    break
+        if notc:
+            skipped.append((name + "/", "%s is not C (assembly with cpp "
+                            "directives); needs cc -E piped to as"
+                            % " ".join(sorted(set(notc)))))
+            continue
+
         # A header the tape references and does not ship. sdb/makefile lists
         # old.o, old.c says #include "bio.h", and bio.h exists nowhere in the
         # tree -- so sdb cannot be built from this source at all, and the

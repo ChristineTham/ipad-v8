@@ -136,7 +136,6 @@ cb	usr/src/cmd/cb	usr/bin/cb
 compress	usr/src/cmd/compress	usr/bin/compress
 cp	usr/src/cmd/cp	bin/cp
 cron	usr/src/cmd/cron	etc/cron
-csh	usr/src/cmd/csh	bin/csh
 ct	usr/src/cmd/ct	usr/bin/ct
 cu	usr/src/cmd/cu	usr/bin/cu
 dc	usr/src/cmd/dc	usr/bin/dc
