@@ -31,23 +31,28 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mkcarry
 import v8fs
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Reproduced by this build, or state that belongs to whoever ran the machine.
-# Same list as mkcarry.py's, and for the same reasons -- kept here as prose
-# because this file is the one that has to justify the omissions.
-POLICY = [
-    ("/dev/", "makedev.sh builds /dev from v8/proto-dev"),
-    ("/tmp/", "scratch"),
-    ("/usr/tmp/", "scratch"),
-    ("/usr/adm/", "the Labs' accounting and message log"),
-    ("/usr/spool/", "queue state"),
-    ("/usr/preserve/", "editor crash recovery"),
-    ("/lost+found/", "/etc/mklost+found makes it"),
-    ("/usr/lost+found/", "/etc/mklost+found makes it"),
-]
+#
+# IMPORTED, not restated. This list and mkcarry.py's have to agree exactly --
+# one decides what stage 8 puts on the disk and the other decides whether the
+# result is complete -- and two copies of a list that must agree is a bug
+# waiting for someone to edit one of them. mkcarry.py owns it.
+#
+# The distinction it draws is per-FILE. Directories under these prefixes are
+# a separate question with the opposite answer, and mkcarry.emit_dirs is
+# where that is handled: uucp's spool files are one machine's backlog, and
+# uucp's spool DIRECTORIES are how uucp is configured.
+POLICY = mkcarry.SKIP_PREFIX
+# Deliberately NOT importing mkcarry.SKIP_EXACT, which also lists /.profile,
+# /etc/skel/.profile and /usr/jerq/bin/wmux. Those are ours and mkcarry skips
+# CARRYING them because builddisk.sh installs them from v8/ instead -- so if
+# that install ever breaks, this check should say the file is missing rather
+# than excuse it. A shared list would have excused it.
 POLICY_EXACT = {
     "/unix": "stage 7 builds our own kernel",
     "/etc/utmp": "who was logged in, on their machine",
