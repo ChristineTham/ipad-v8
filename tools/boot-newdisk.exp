@@ -60,8 +60,15 @@ spawn vax780
 simh "set noasynch"
 simh "set cpu idle=4.1BSD"
 simh "set tto 7b"
-simh "set rp0 rp07"
-simh "at rp0 rp07new"
+# Which disk. Stage 8 builds both geometries from one DESTDIR -- the RP07
+# for the build and Track B, the RP06 as the drop-in for what the app
+# bundles -- and "it boots alone" has to be shown of each.
+set img [lindex $argv 0]
+if {$img == ""} { set img "rp07new" }
+if {[string match "*rp06*" $img]} { set dtype rp06 } else { set dtype rp07 }
+send_user "\n=== booting $img ($dtype) alone ===\n"
+simh "set rp0 $dtype"
+simh "at rp0 $img"
 simh "load -o bootV8 0"
 simh "run 2"
 

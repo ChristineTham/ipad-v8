@@ -30,7 +30,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 : > "$LOG"
-expect "$ROOT/tools/boot-newdisk.exp" &
+expect "$ROOT/tools/boot-newdisk.exp" "${IMG:-rp07new}" &
 EXP_PID=$!
 for ((i = 0; i < LIMIT; i++)); do
     kill -0 "$EXP_PID" 2>/dev/null || break

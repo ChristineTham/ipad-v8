@@ -296,6 +296,21 @@ echo "  /etc: `ls $MNT/etc | wc -l` files"
 # Kept in v8/etc as ordinary files rather than written here by a here-
 # document: they are configuration, they belong under review, and a shell
 # script that echoes shell scripts gets the quoting wrong eventually.
+# /etc/fstab NAMES A PARTITION, so it cannot be shipped as a constant.
+# v8/etc/fstab says /dev/rp0f, which is /usr on an RP07 -- and on an RP06
+# /usr is partition g (hp6_sizes vs hp7_sizes, usr/sys/dev/hp.c). A disk
+# built with the wrong one comes up with /usr not mounted and no error
+# anywhere, because `mount -a' matching nothing is not a failure: exactly
+# the way the tape's own fstab, which named the research VAX-750's
+# /dev/ra*, failed silently before it was replaced.
+#
+# Written here rather than kept in v8/etc because this is the only place
+# that knows which drive is being built. No comment line: getfsent() has
+# no comment syntax and splits every line on colons.
+echo "/dev/rp0a:/:rw:1:1" > $MNT/etc/fstab
+echo "/dev/rp0$USRPART:/usr:rw:1:2" >> $MNT/etc/fstab
+cat $MNT/etc/fstab
+
 cp $SRC/etc/profile.root $MNT/.profile
 cp $SRC/etc/profile.skel $MNT/etc/skel/.profile
 chmod 644 $MNT/.profile $MNT/etc/skel/.profile
