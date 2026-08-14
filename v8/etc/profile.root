@@ -1,7 +1,17 @@
 PATH=:/bin:/usr/bin:/usr/games:/usr/jerq/bin
 export PATH
 case `tty` in
-/dev/tty00)	TERM=dmd ;;
+/dev/tty00)	TERM=dmd
+		# The 5620's two screens need different muxterms, and the
+		# guest cannot measure the screen: there is no TIOCGWINSZ,
+		# and mux DOWNLOADS muxterm rather than asking it anything.
+		# So the app records the preset here. muxterm.w hardcodes
+		# base 0x800000 and stock muxterm 0x700000, and the wrong
+		# one does not fail -- it runs, draws into the vacated
+		# address, and looks like a hang.
+		if test -f /etc/dmdwide
+		then	MUXTERM=/usr/jerq/lib/muxterm.w; export MUXTERM
+		fi ;;
 /dev/tty07)	TERM=vt100w ;;
 *)		TERM=vt100 ;;
 esac

@@ -1,0 +1,80 @@
+#!/usr/bin/env expect
+# How large may a raw transfer to an hp disk actually be?
+#
+#	expect tools/rawsize-probe.exp
+#
+# B0 concluded "raw transfers must be 512 bytes: 4 KB+ writes fail with
+# er1=5<RMR,ILF> after one record". That conclusion is suspect and CLAUDE.md
+# says so: er1=5 turned out to be the signature of a MISSING `set noasynch',
+# and work/rawwrite.exp -- the script the rule came from -- never set it.
+# The desktop vax780 is built with SIM_ASYNCH_IO, so every hand-written
+# config that omits it walks into simh issue #425 and blames whatever it was
+# doing at the time.
+#
+# This sets it, and then simply tries: 512, 1024, 4096 and 10240 bytes a
+# record, writing and reading back so a silent short write cannot pass. A
+# scratch image is the target, never a golden one -- the point is to find the
+# limit by exceeding it.
+#
+# 1024 is already known to work: mkfs(8) writes BSIZE blocks through the raw
+# device and stage 8 succeeds. So the interesting range starts at 4096.
+
+set timeout 240
+log_user 1
+cd [file dirname [info script]]/../work/myv8
+
+set MARK "RS"
+spawn ../opensimh/BIN/vax780
+expect "sim>"
+
+foreach c {
+    "set noasynch"
+    "set cpu idle=4.1BSD"
+    "set tto 7b"
+    "set rp0 rp07"
+    "at rp0 rp07v8.net"
+    "set rp2 rp06"
+    "at rp2 rawprobe.disk"
+    "show asynch"
+} { send "$c\r"; expect "sim>" }
+
+send "load -o bootV8 0\r"; expect "sim>"
+send "run 2\r"
+expect { "Boot" {} timeout { puts "\nNO BOOT"; exit 2 } }
+send ": hp(0,0)unix\r"
+expect { "login:" {} timeout { puts "\nNO LOGIN"; exit 3 } }
+send "root\r"
+expect { "# " {} timeout { puts "\nNO SHELL"; exit 4 } }
+
+proc sh {cmd {t 240}} {
+    global timeout
+    set save $timeout; set timeout $t
+    send "$cmd\r"
+    expect { "# " {} timeout { puts "\nTIMEOUT: $cmd" } }
+    set timeout $save
+}
+
+puts "\n===== RAWSIZE ====="
+sh "PATH=/bin:/etc:/usr/bin; export PATH"
+sh "OK=-ok"
+sh "/etc/mknod /dev/rrp2a c 4 16"
+sh "chmod 666 /dev/rrp2a"
+
+# /unix is a convenient 200 KB+ of non-repeating bytes that certainly exists.
+foreach bs {512 1024 4096 10240} {
+    puts "\n--- $bs bytes a record ---"
+    sh "dd if=/unix of=/dev/rrp2a bs=$bs count=4 2>&1"
+    sh "dd if=/dev/rrp2a of=/tmp/rb.$bs bs=$bs count=4 2>&1"
+    sh "dd if=/unix of=/tmp/ref.$bs bs=$bs count=4 2>&1"
+    sh "if cmp /tmp/rb.$bs /tmp/ref.$bs; then echo RS-$bs\$OK; else echo RS-$bs-BAD; fi"
+    sh "rm -f /tmp/rb.$bs /tmp/ref.$bs"
+}
+puts "\n===== END RAWSIZE ====="
+
+sh "cd /; sync; sync"
+send "/etc/halt\r"
+expect { "Infinite loop" {} timeout { puts "\nHALT DID NOT CONFIRM" } }
+send "\005"
+expect "sim>"
+send "quit\r"
+expect eof

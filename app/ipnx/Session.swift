@@ -285,6 +285,29 @@ final class Session: ObservableObject, Identifiable {
         note("logging \(line.device) in as root")
         link.send(Array("root\r".utf8))
         await provisionIfNeeded(link)
+        await syncScreenMarker(link)
+    }
+
+    /// Tell the guest which 5620 screen it is talking to, so plain `mux`
+    /// works and nobody has to remember `wmux`.
+    ///
+    /// The guest cannot work this out for itself. There is no TIOCGWINSZ on
+    /// this kernel, and `mux` DOWNLOADS muxterm rather than asking it
+    /// anything — the choice has to be made before the terminal could
+    /// answer. And the wrong choice does not fail: muxterm.w hardcodes its
+    /// framebuffer at 0x800000 and the stock one at 0x700000, so on the wrong
+    /// screen it downloads, runs, draws into the address the resize vacated,
+    /// and presents as a hang with the ROM's text still showing.
+    ///
+    /// So the app writes the answer down and /.profile reads it. Every boot,
+    /// not just the first: the preset is a Setting, and it can change between
+    /// runs while the disk stays the same.
+    private func syncScreenMarker(_ link: ConsoleLink) async {
+        let wide = settings.activeScreen.romColumns > 88
+        link.send(Array((wide ? "> /etc/dmdwide\r" : "rm -f /etc/dmdwide\r").utf8))
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        note(wide ? "5620 is Wide — mux will use muxterm.w"
+                  : "5620 is Original — mux will use the stock muxterm")
     }
 
     /// First boot only: create the account that belongs to whoever is running
