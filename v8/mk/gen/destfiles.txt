@@ -248,7 +248,7 @@ usr/include/a.out.h
 usr/include/ar.h
 usr/include/assert.h
 usr/include/cbt.h
-usr/include/chaos/address
+usr/include/chaos/address-res.h
 usr/include/chaos/ch11.h
 usr/include/chaos/chaos.h
 usr/include/chaos/chil.h
@@ -376,7 +376,7 @@ usr/include/sys/neta.h
 usr/include/sys/nexus.h
 usr/include/sys/nioctl.h
 usr/include/sys/nttyld.h
-usr/include/sys/om
+usr/include/sys/om-consts.h
 usr/include/sys/order.h
 usr/include/sys/packet.h
 usr/include/sys/param.h

@@ -86,6 +86,17 @@ then
 	sleep 3
 	/usr/inet/etc/route add '*' gateway
 	echo 'network: il0 10.0.2.15, gateway 10.0.2.2'
+
+	# The host's folders, over netfs.  The app serves them in-process on
+	# fixed ports (FileShare.Role) and the guest reaches the host at
+	# 10.0.2.2, which SLiRP rewrites to the host's own loopback -- so
+	# nothing is forwarded and this works unchanged in the iOS sandbox.
+	#
+	# Backgrounded and silenced because a share the user has not chosen
+	# is simply not listening, and a boot must not wait on one.  The
+	# third argument is nmount's unique mount id, not a device minor.
+	/etc/nmount 10.0.2.2 9200 64 /n/macos >/dev/null 2>&1 &
+	/etc/nmount 10.0.2.2 9201 65 /n/home  >/dev/null 2>&1 &
 fi
 
 exit 0

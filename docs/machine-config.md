@@ -1,9 +1,24 @@
 # Configuring the machine: from a generic V8 image to a usable ipnx
 
-**Status: plan.** Stage 1 is partly built (`work/fix-identity.exp`,
-`work/fix-root-profile.exp`, `work/fix-lostfound.exp`); stages 2 and 3 depend on
-work that is not finished yet. Nothing here is claimed as done — see the
-checklist at the end and [roadmap.md](roadmap.md).
+**Status: built, 2026-08-12.** All three stages are in the tree; the checklist
+at the end records what is verified and what is not.
+
+**The design decision below changed in the doing, and for the better.** This
+document proposed `work/config.exp` — a build-time script run against the
+golden image on the workbench. That is not where it ended up. The build now
+generates the disk from source, so everything universal lives in `v8/etc/`
+and is *copied* by `builddisk.sh`: the identity, the motd, the profiles, the
+mount points. A script that mutates an image afterwards is strictly worse
+than a source file the build reads, because only one of them is reproducible.
+
+That change is also how this went wrong for a while, and the failure is worth
+recording. `config.exp` existed and had been run against the *old workbench*
+image, so the configured values were real — on that image. `v8/etc/whoami`
+still held the tape's `v8generic`, `v8/etc/motd` still held the 1985 joke, and
+`v8/etc/ttys` still described alice's 24 lines with six of ours disabled. The
+build faithfully copied all three. Nothing caught it: `retire-check.py`
+compares against the TUHS image and cannot see that something of *ours* is
+unset. `tools/config-audit.py` is the check that closes that gap.
 
 ## The goal
 
@@ -145,13 +160,38 @@ same feature rather than two.
 
 ## Checklist
 
-- [ ] Fold `fix-identity.exp`, `fix-root-profile.exp` and `fix-lostfound.exp`
-      into `work/config.exp`, idempotent and re-runnable
-- [ ] `/etc/skel/.profile` and the `/n`, `/n/macos`, `/n/home` mount points
-- [ ] First-boot provisioner in the app: create the account, verify from a
-      fresh login, record the marker
-- [ ] Name truncation rules, and showing the user what was chosen
-- [ ] Rebuild the golden image on the N3 kernel *(blocked on N3 → image)*
-- [ ] `att il0 nat:` in both configs; `/etc/rc` brings `il0` up; resolver
-- [ ] `/n/macos` and `/n/home` mounted at boot *(blocked on N5–N7)*
-- [ ] Settings: host folder picker, networking switch, optional password
+Superseded by the source tree rather than done as written:
+
+- [x] ~~Fold the three `fix-*.exp` into `work/config.exp`~~ — the values live
+      in `v8/etc/{whoami,motd,profile.root,profile.skel,ttys}` and the build
+      copies them. `config.exp` is retired; a script that patches an image
+      after the fact cannot be reproduced from the repo.
+
+Done and verified by `tools/config-audit.py` (0 config differences against the
+configured reference):
+
+- [x] `/etc/skel/.profile`, and the `/n`, `/n/macos`, `/n/home` mount points
+- [x] `/etc/whoami` = `ipnx-v8`; `/etc/motd` = the licensing position
+- [x] `/etc/ttys` enables `tty00`..`tty07` — all eight lines the app opens
+- [x] `lost+found` on `/` and `/usr`
+- [x] The golden image carries the N3 kernel: `ilrint` is in `/unix`, and the
+      config declares `il0` plus the `inet`/`tcp`/`udp` pseudo-devices. This
+      was the blocking item and it had already been cleared without the doc
+      noticing.
+- [x] `/dev/il0` and `/dev/il1`, char major 44 — the driver was compiled in
+      and there was no node for `ipconfig` to open
+- [x] `set il enable` / `attach il nat:` in both the app's configs
+- [x] `/etc/rc` brings `il0` up: `ipconfig`, `tcpconfig` onto `/dev/ip6`, and
+      the default route, all guarded on the device node existing
+- [x] First-boot provisioner: `Provisioner.swift` + `Session.provisionIfNeeded`
+- [x] Name truncation (8-char login, 14-byte filenames), deterministic, and
+      the chosen name is reported rather than silently applied
+- [x] Two shares — `/n/macos` and `/n/home` — each its own server and port,
+      with Settings sections for both
+
+Not done:
+
+- [ ] Verify the account end to end from a *fresh* login on a booted machine
+- [ ] Resolver configuration for `dnsq`, confirmed against the source
+- [ ] Settings: a switch to turn networking off, and an optional password
+- [ ] `/n/macos` and `/n/home` mounted from `/etc/rc` at boot

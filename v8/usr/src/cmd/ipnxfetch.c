@@ -43,13 +43,16 @@
 #define KERNEL	"/unix"
 #define KMEM	"/dev/kmemr"
 
-struct nlist nl[] = {
-	{ "_bootime" },
+/* Filled in at run time rather than with an initialiser.  struct nlist's
+   first member is a UNION (usr/include/a.out.h), and 1985 pcc answers a
+   braced initialiser for one with "operands of = have incompatible types"
+   followed by "initialization by non-constant".  fstat.c in the same tree
+   writes `{ "_proc" }' and is a `copy' row -- the tape shipped its binary,
+   so nothing ever compiled it with this compiler. */
 #define X_BOOTIME 0
-	{ "_physmem" },
 #define X_PHYSMEM 1
-	{ "" },
-};
+#define X_NSYM    3
+struct nlist nl[X_NSYM];
 
 char	*getenv();
 char	*ctime();
@@ -114,6 +117,9 @@ char **argv;
 
 	kfd = -1;
 	boot = phys = 0L;
+	nl[X_BOOTIME].n_un.n_name = "_bootime";
+	nl[X_PHYSMEM].n_un.n_name = "_physmem";
+	nl[2].n_un.n_name = "";
 	if (nlist(KERNEL, nl) >= 0)
 		kfd = open(KMEM, 0);
 	if (kfd >= 0) {

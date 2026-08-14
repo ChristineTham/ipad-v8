@@ -65,8 +65,11 @@ char **argv;
 	i = 0;
 	if (sysname) { printf("%s", "ipnx");            i++; }
 	if (node)    { printf(i++ ? " %s" : "%s", nodename()); }
-	if (release) { printf(i++ ? " %s" : "%s",
-			      IPNX_RELEASE "-" IPNX_BRANCH); }
+	/* Two arguments, not IPNX_RELEASE "-" IPNX_BRANCH: adjacent string
+	   literals are concatenated by ANSI C and by nothing older, and
+	   /bin/cc is 1985's -- it stops at `saw STRING'. */
+	if (release) { printf(i++ ? " %s-%s" : "%s-%s",
+			      IPNX_RELEASE, IPNX_BRANCH); }
 	if (version) { printf(i++ ? " %s" : "%s", IPNX_BANNER); }
 	if (machine) { printf(i++ ? " %s" : "%s", "vax"); }
 	printf("\n");
