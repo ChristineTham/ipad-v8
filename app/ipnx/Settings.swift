@@ -196,6 +196,31 @@ final class Settings: ObservableObject {
     /// user's own container with no network service listening. Revisit when
     /// there are real accounts.
     @Published var autoLoginRoot: Bool { didSet { store.set(autoLoginRoot, forKey: Key.autoLogin) } }
+
+    /// Whether the emulated VAX gets its Ethernet card at all.
+    ///
+    /// ON by default, and deliberately: a machine that cannot reach the host
+    /// cannot mount /n/macos, which is half of what makes this usable. The
+    /// switch exists because "no network" is a legitimate thing to want from
+    /// a 1985 machine -- and because SLiRP is a user-mode stack, turning it
+    /// off changes nothing about the host's own networking either way.
+    ///
+    /// Takes effect at the next cold boot: `attach il` happens in boot.conf,
+    /// and detaching a card from a running kernel that has autoconfigured it
+    /// is not something V8 has any way to be told about.
+    @Published var networkEnabled: Bool { didSet { store.set(networkEnabled, forKey: Key.network) } }
+
+    /// Set a password on the account the first-boot provisioner created.
+    ///
+    /// Empty means none, which is the default and is the honest choice for a
+    /// personal machine emulating a personal machine on a disk its owner
+    /// already holds: a prompt with no recovery path is a support burden with
+    /// no security value. Offered because some people want their machine to
+    /// feel like a machine.
+    ///
+    /// Stored here only long enough to be typed into passwd(1) on the guest;
+    /// V8 hashes it with its own crypt(3) and this is cleared afterwards.
+    @Published var accountPassword: String { didSet { store.set(accountPassword, forKey: Key.passwd) } }
     /// Font size in points, or nil for "fit the window". Stored as 0 for fit,
     /// which is also what an absent default reads as.
     @Published var glassFontSize: CGFloat? {
@@ -217,6 +242,8 @@ final class Settings: ObservableObject {
         static let glassTheme = "glass.theme"
         static let glassFont = "glass.fontSize"
         static let autoLogin = "session.autoLoginRoot"
+        static let network = "machine.networkEnabled"
+        static let passwd = "account.password"
     }
 
     init(store: UserDefaults = .standard) {
@@ -235,6 +262,8 @@ final class Settings: ObservableObject {
         let pts = store.double(forKey: Key.glassFont)
         glassFontSize = pts > 0 ? CGFloat(pts) : nil              // 0 / absent == fit
         autoLoginRoot = store.object(forKey: Key.autoLogin) as? Bool ?? true
+        networkEnabled = store.object(forKey: Key.network) as? Bool ?? true
+        accountPassword = store.string(forKey: Key.passwd) ?? ""
     }
 
     /// A second window to open at launch, from `defaults` rather than a click.

@@ -38,6 +38,12 @@ final class Machine: ObservableObject {
     /// Console bytes for the terminal view (wired up by the view layer).
     var onOutput: (([UInt8]) -> Void)?
 
+    /// Whether to give the emulated VAX its Ethernet card. Set from Settings
+    /// before start(); read when the configs are written, because `attach il`
+    /// is a boot-time decision -- V8 autoconfigures once and has no way to be
+    /// told a device appeared or vanished afterwards.
+    var networkEnabled = true
+
     private let console = ConsoleLink()
     private let control = ConsoleLink(replyToIAC: false)   // see ConsoleLink
 
@@ -197,13 +203,13 @@ final class Machine: ObservableObject {
     /// Enabling the device is configuration and must precede `restore`, the
     /// same as `set dz lines=8`: it changes the device table the snapshot's
     /// registers are restored into.
-    private var ilEnable: String { "set il enable" }
+    private var ilEnable: String { networkEnabled ? "set il enable" : "" }
 
     /// The host-side connection, which must follow `restore` for the same
     /// reason the DZ attachments do — a snapshot cannot carry a live host
     /// socket, only the ATTACH string, so the attach has to land on
     /// registers that have already been restored.
-    private var ilAttach: String { "attach il nat:" }
+    private var ilAttach: String { networkEnabled ? "attach il nat:" : "" }
 
     private var ilAttachment: String { ilEnable + "\n" + ilAttach }
 

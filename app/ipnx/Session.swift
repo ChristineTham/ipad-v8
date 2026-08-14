@@ -317,6 +317,7 @@ final class Session: ObservableObject, Identifiable {
         }
         link.send(Array("echo PROV$OK\r".utf8))
         if await link.waitFor("PROV-ok", timeout: 15) {
+            await setPassword(link, user: user)
             machine.markProvisioned(user)
             note("account `\(user)' created, home /usr/\(user)")
         } else {
@@ -324,6 +325,32 @@ final class Session: ObservableObject, Identifiable {
             // and every command above is guarded so a second run is safe.
             note("account creation unconfirmed — will retry next boot")
         }
+    }
+
+    /// Optionally give the new account a password.
+    ///
+    /// V8's passwd(1) is interactive and there is no `--stdin`: it prompts,
+    /// reads with echo off, and asks again to confirm. Run as root it does
+    /// not ask for the old one, which is the only reason this is possible at
+    /// all without knowing a password we never set.
+    ///
+    /// Empty means none, which is the default. A personal machine emulating a
+    /// personal machine, on a disk its owner already holds, gains nothing
+    /// from a prompt with no recovery path — but some people want their
+    /// machine to feel like a machine, so the option exists.
+    private func setPassword(_ link: ConsoleLink, user: String) async {
+        let pw = settings.accountPassword
+        guard !pw.isEmpty else { return }
+        link.send(Array("passwd \(user)\r".utf8))
+        guard await link.waitFor("assword", timeout: 15) else {
+            note("passwd did not prompt — account left without one")
+            return
+        }
+        link.send(Array("\(pw)\r".utf8))
+        try? await Task.sleep(nanoseconds: 600_000_000)
+        link.send(Array("\(pw)\r".utf8))          // the confirmation
+        try? await Task.sleep(nanoseconds: 600_000_000)
+        note("password set for `\(user)'")
     }
 
     // MARK: Bytes

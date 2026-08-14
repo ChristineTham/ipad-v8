@@ -80,6 +80,15 @@ then
 	then
 		echo '10.0.0.0	slirp-net' > /usr/inet/lib/networks
 	fi
+	# The whole of this machine's resolver configuration: one address, read
+	# by dnsq(1).  V8 has no resolver library and no resolv.conf, so there
+	# is nothing else to configure and nothing else that could read it.
+	# 10.0.2.3 is SLiRP's own forwarder, which hands the query to whatever
+	# the HOST resolves with -- so the guest follows the Mac's DNS.
+	if test ! -s /usr/inet/lib/resolv
+	then
+		echo '10.0.2.3' > /usr/inet/lib/resolv
+	fi
 	/usr/inet/etc/ipconfig /dev/il0 ipnx-v8 slirp-net /dev/il1 &
 	sleep 3
 	/usr/inet/etc/tcpconfig /dev/ip6 &

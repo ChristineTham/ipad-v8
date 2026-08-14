@@ -26,6 +26,7 @@ struct SettingsView: View {
             glassSection
             sessionSection
             diskSection
+            machineSection
             shareSection
             homeShareSection
             aboutSection
@@ -221,6 +222,25 @@ struct SettingsView: View {
     }
 
     // MARK: Shared folder
+
+    /// The machine's own switches: whether it has an Ethernet card, and
+    /// whether the account first boot created has a password.
+    private var machineSection: some View {
+        Section("Machine") {
+            Toggle("Ethernet card (NI1010)", isOn: $settings.networkEnabled)
+            Text("Gives the VAX an Interlan NI1010 on SLiRP's user-mode NAT, "
+               + "which is what lets /etc/rc bring the network up and mount "
+               + "the folders below. Takes effect at the next cold boot: V8 "
+               + "autoconfigures once and cannot be told a device appeared.")
+                .font(.caption).foregroundStyle(.secondary)
+
+            SecureField("Account password", text: $settings.accountPassword)
+            Text(settings.accountPassword.isEmpty
+                 ? "No password — the default. A personal machine on a disk you already hold; a prompt with no recovery path buys nothing."
+                 : "Applied by passwd(1) when the account is first created. Reset the disk to re-run first boot.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
 
     /// Two shares, two sections, one body — `/n/macos` is any folder the user
     /// picks and `/n/home` is meant to be their own, and on macOS each needs

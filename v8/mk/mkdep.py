@@ -1646,6 +1646,21 @@ STAGE6 = [
          dest="DESTDIR", product="ipnxfetch", install="usr/bin/ipnxfetch",
          note="ipnx: neofetch/fastfetch equivalent, read from the kernel"),
 
+    # Name resolution, such as it is. V8 predates every resolver library --
+    # there is no gethostbyname(3) here, no resolv.conf and nothing that reads
+    # one -- so this builds the DNS question by hand and takes the server as
+    # an argument, defaulting to /usr/inet/lib/resolv and then to SLiRP's own
+    # forwarder at 10.0.2.3.
+    #
+    # It lived in tools/v8/ and was catted into a running machine by the N3
+    # harness, which meant the one program that proves the network works was
+    # not part of the system the network belongs to. libin, for in_address()
+    # and the UDP device, exactly as nmount does.
+    dict(name="dnsq", dir="usr/src/cmd", objs=["dnsq.c"],
+         libs=["usr/lib/libin.a"], dest="DESTDIR",
+         product="dnsq", install="usr/inet/bin/dnsq",
+         note="ipnx: DNS query by hand; V8 has no resolver library"),
+
     # ------------------------------------------------ the yacc/lex commands
     #
     # Hand-written because they are not a family and cannot be derived. Every

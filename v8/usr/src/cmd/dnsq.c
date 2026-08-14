@@ -11,14 +11,23 @@
  * no hardship -- a DNS question is a 12-byte header, the name as
  * length-prefixed labels, and two 16-bit fields.
  *
- *	cc -o dnsq dnsq.c -lin
- *	./dnsq tuhs.org [10.0.2.3]
+ *	dnsq tuhs.org [server]
+ *
+ * The server defaults to whatever /usr/inet/lib/resolv holds, and to
+ * 10.0.2.3 -- SLiRP's own forwarder -- when that file is absent. That IS the
+ * resolver configuration: V8 has no resolv.conf and no resolver library to
+ * read one, so a file plus a default is the whole of it. /etc/rc writes the
+ * file next to hosts and networks when it brings the interface up.
+ *
+ * Ours, so it lives in the source tree and is built by the world build
+ * rather than catted into a running machine by a test harness.
  */
 #include <sys/types.h>
 #include <sys/inet/udp_user.h>
 #include <stdio.h>
 
 #define QRY_ID	0x4b21
+#define RESOLV	"/usr/inet/lib/resolv"
 
 /* Encode "tuhs.org" as 4 t u h s 3 o r g 0 */
 int
@@ -43,6 +52,30 @@ char *name;
 	return n;
 }
 
+/* The configured nameserver, or SLiRP's forwarder.  One line, an address,
+   because there is nothing here that could parse anything richer. */
+char *
+resolver()
+{
+	static char buf[64];
+	register char *p;
+	FILE *f;
+
+	if ((f = fopen(RESOLV, "r")) != NULL) {
+		if (fgets(buf, sizeof buf, f) != NULL) {
+			for (p = buf; *p; p++)
+				if (*p == '\n' || *p == ' ' || *p == '\t') {
+					*p = '\0';
+					break;
+				}
+		}
+		fclose(f);
+		if (buf[0])
+			return buf;
+	}
+	return "10.0.2.3";
+}
+
 timeout()
 {
 	printf("timed out waiting for a reply\n");
@@ -58,7 +91,7 @@ char *argv[];
 	int fd, n, i, qd, an, off;
 
 	name = argc > 1 ? argv[1] : "tuhs.org";
-	server = argc > 2 ? argv[2] : "10.0.2.3";	/* SLiRP's forwarder */
+	server = argc > 2 ? argv[2] : resolver();
 
 	dhost = in_address(server);
 	if (dhost == 0) {

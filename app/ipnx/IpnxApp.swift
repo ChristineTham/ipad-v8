@@ -124,6 +124,9 @@ struct IpnxApp: App {
     /// Start the VAX once, from whichever window opened first, and give the
     /// default window its second tab.
     private func launch(_ shape: TerminalShape) {
+        // Before start(), because start() writes boot.conf and `attach il`
+        // is a boot-time decision the guest cannot be told about later.
+        machine.networkEnabled = settings.networkEnabled
         machine.start()
         #if os(macOS)
         appDelegate.machine = machine

@@ -11,6 +11,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SIMH="${1:-$ROOT/work/opensimh}"
 
 "$ROOT/libsimh/patches/apply-il.sh" "$SIMH"
+"$ROOT/libsimh/patches/apply-restore.sh" "$SIMH"
 
 # Let a telnet console idle.
 #

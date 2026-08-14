@@ -725,8 +725,8 @@ header so `ld`'s hash-ordered symbol table cannot mask the code:
 | identical, whole file | 3 | all three shell scripts |
 | identical `text`+`data` | 21 | |
 | **reproduced** | **24** | **11.7%** |
-| code differs | 172 | |
-| not an `a.out` | 7 | |
+| code differs | 174 | |
+| not an `a.out` | 8 | |
 
 11.7% looks like a bad result. It is one difference repeated, and the
 difference is not ours.
@@ -754,6 +754,15 @@ object composition from a same-named source: the evidence points to the shipped
 **binaries** not having been built from the shipped **sources** in the same
 arrangement — a known hazard with Research tapes, and a preservation finding
 rather than a defect in this build.
+
+**This closes C4, and the closing is the reframing.** "Does the from-source
+build equal the golden image?" has the answer *no, and it should not* — we
+build newer binaries from the same source and skip the Labs' local state. The
+question that actually gates anything is containment, and `retire-check.py`
+answers it: **UNIQUE 0** of 8,940. The 11.7% is reported by
+`tools/verify-golden.sh` and deliberately **not** gated, because a build that
+had to match 1985 object-file composition byte for byte would be a build
+nobody could ever change.
 
 Two things that look like evidence and are not. `a_text` and `a_data` agreeing is
 meaningless, because `ld` page-rounds both for `ZMAGIC`; each binary's "identical
