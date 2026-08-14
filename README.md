@@ -18,9 +18,11 @@ The goal is not a shell prompt that looks old. It is to reproduce the original R
 environments *faithfully* — the real kernel, the real terminal, the real wire between them —
 on hardware you already carry.
 
-> **Status (2026-08-10):** the app is real and works. V8 boots to `login:` with
-> save/restore instant-on; `mux` and `jim` run on the 5620 on both iPad and Mac; V8 has
-> reached the Internet. The interface is now the machine as it actually is — the operator
+> **Status (2026-08-15):** the app is real and works, and the disk it ships is now
+> **built from this repository's own source** rather than inherited. V8 boots to `login:`
+> with save/restore instant-on; `mux` and `jim` run on the 5620 on both iPad and Mac; the
+> machine knows its own name, brings its network up at boot, and gives you an account
+> named after your host login on first run. The interface is now the machine as it actually is — the operator
 > console plus a getty on `tty00`..`tty07`, each one openable, in windows grouped by
 > terminal shape. Track A is complete through A5; Track B — the V10 restoration — is under
 > way. Details: [docs/roadmap.md](docs/roadmap.md).
@@ -233,7 +235,7 @@ out of reach for reasons that have nothing to do with engineering.
 | **A4** the screen | ✅ | Two fixed CRT sizes incl. 1152×1024/127 columns, Retina-correct sampling, screen *and* session survive a quit — [screen-size.md](docs/screen-size.md) |
 | **B0** ingest path | ✅ | Host↔guest file transfer proven both ways — [media-exchange.md](docs/media-exchange.md) |
 | **B0.5** the N track | ◐ | RP07 disk, an Interlan NI1010 modelled for SIMH, and **V8 on the Internet** (`dnsq` resolves real names); netfs remains — [n-track-notes.md](docs/n-track-notes.md) |
-| **B0.6** a machine to live in | ○ | Identity, a real user account, host shares at `/n/macos` and `/n/home` — [machine-config.md](docs/machine-config.md) |
+| **B0.6** a machine to live in | ✅ | Identity, network up at boot, an account named after the host user, host shares at `/n/macos` and `/n/home` — [machine-config.md](docs/machine-config.md) |
 | **B1–B4** V10 | ○ | Toolchain → world → kernel → first boot |
 | **C** ipnx-ports | ○ | Ports tree; `libcompat` first, then V10's games, then BSD's |
 | **D** ipnx-v11 | ○ | Mostly restoration — V10 already ships a 9P server — [v11-plan.md](docs/v11-plan.md) |

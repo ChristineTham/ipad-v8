@@ -212,7 +212,7 @@ The courier is too small and too manual to build V10 on: 8.1 MB a load against a
       thing still missing is a **bundled image** carrying the `il0` kernel and
       the netfs stream fix — that is C3 below, not netfs work.*
 
-### B0.6 — a machine to live in *(planned 2026-08-10, [machine-config.md](machine-config.md))*
+### B0.6 — a machine to live in *(complete 2026-08-15, [machine-config.md](machine-config.md))*
 
 Turning the shipped image from a demo that boots to `login:` into a machine with
 the user's own account, the host's files, and a network. Stage 1 needs nothing

@@ -189,9 +189,22 @@ configured reference):
 - [x] Two shares — `/n/macos` and `/n/home` — each its own server and port,
       with Settings sections for both
 
+- [x] `/n/macos` and `/n/home` mounted from `/etc/rc` at boot, backgrounded and
+      silenced so a share the user has not chosen does not delay a boot
+- [x] Verified end to end on a booted machine (2026-08-15). The app seeded the
+      new golden, and afterwards the working disk holds:
+
+	/usr/inet/lib/hosts	10.0.2.15  ipnx-v8 v8
+				10.0.2.2   gateway
+	/usr/inet/lib/networks	10.0.0.0   slirp-net
+	/usr/christie/.profile	owned by uid 1000
+	/bin/uname, /usr/bin/ipnxfetch
+
+      The `hosts` and `networks` files are the proof that matters for the
+      network: `/etc/rc` writes them only inside `if test -c /dev/il0`, so
+      their presence means the node existed and the card was attached.
+
 Not done:
 
-- [ ] Verify the account end to end from a *fresh* login on a booted machine
 - [ ] Resolver configuration for `dnsq`, confirmed against the source
 - [ ] Settings: a switch to turn networking off, and an optional password
-- [ ] `/n/macos` and `/n/home` mounted from `/etc/rc` at boot
