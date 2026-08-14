@@ -6,7 +6,7 @@
 # Sorted parents first, which is load-bearing: V8 has no
 # mkdir -p and makes one level at a time.
 #
-#	36 directories
+#	35 directories
 #
 dev
 lost+found
@@ -19,7 +19,6 @@ dev/pt
 etc/skel
 n/home
 n/macos
-tmp/dump
 usr/adm
 usr/lost+found
 usr/tmp

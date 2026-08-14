@@ -12,9 +12,9 @@
 # relative to its root -- so strip comments and pipe it in.
 #
 #	1406 files	23570698 bytes
-#	11 skipped (regenerated here, or one machine's state)
+#	16 skipped (regenerated here, or one machine's state)
 #	206 not carried because we build our own
-#	6 not carried because they are ours and not on the tape
+#	8 not carried because they are ours and not on the tape
 #
 # by tree:
 #	/usr/jerq                      365 files    5629286 bytes

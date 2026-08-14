@@ -54,6 +54,11 @@
 #define X_NSYM    3
 struct nlist nl[X_NSYM];
 
+/* getlogin() returns char *, and an undeclared function is assumed
+   to return int -- which on a VAX is the same 32 bits, so the
+   binary was right and the compiler was still right to complain
+   ("illegal pointer/integer combination, op ="). */
+char	*getlogin();
 char	*getenv();
 char	*ctime();
 char	*strchr();

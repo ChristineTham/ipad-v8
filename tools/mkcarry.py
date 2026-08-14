@@ -98,6 +98,13 @@ SKIP_EXACT = {
     # the derived rule below cannot see them.
     "/etc/profile.root": "ours -- v8/etc/profile.root",
     "/etc/profile.skel": "ours -- v8/etc/profile.skel",
+    # /etc/rc writes these on first boot if they are empty, so a reference
+    # image that has been BOOTED has them and one that has not does not.
+    # Carrying them would freeze whatever address the last boot happened to
+    # use into every future disk -- the same objection as /etc/mtab, and the
+    # reason the reference must not teach the build its own runtime state.
+    "/usr/inet/lib/hosts": "written by /etc/rc",
+    "/usr/inet/lib/networks": "written by /etc/rc",
 }
 
 
