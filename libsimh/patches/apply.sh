@@ -12,6 +12,7 @@ SIMH="${1:-$ROOT/work/opensimh}"
 
 "$ROOT/libsimh/patches/apply-il.sh" "$SIMH"
 "$ROOT/libsimh/patches/apply-restore.sh" "$SIMH"
+"$ROOT/libsimh/patches/apply-iosnet.sh" "$SIMH"
 
 # Let a telnet console idle.
 #

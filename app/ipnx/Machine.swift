@@ -354,6 +354,16 @@ final class Machine: ObservableObject {
         // Media changes the user asked for are applied HERE, at launch, while
         // nothing is mounted — swapping a disk under a running VAX (or worse,
         // under a snapshot taken against the old one) corrupts filesystems.
+        // A SNAPSHOT BELONGS TO THE DISK IT WAS TAKEN AGAINST, and both paths
+        // below replace the disk. state.sav is a running VAX's memory: its
+        // in-core superblock, inode and buffer caches, and mount table all
+        // describe the OLD filesystem. Restore it over a different disk and the
+        // guest writes that stale metadata straight back onto media it has
+        // never seen -- silent corruption of a filesystem that was fine, and
+        // the machine looks perfectly healthy while it happens. Keep both or
+        // discard both; there is no third option.
+        let dropSnapshot = { try? fm.removeItem(at: self.snapshotURL) }
+
         if fm.fileExists(atPath: resetMarkerURL.path) {
             try? fm.removeItem(at: disk)
             try? fm.removeItem(at: resetMarkerURL)
@@ -361,6 +371,7 @@ final class Machine: ObservableObject {
             // Leaving the marker would give the replacement image no account
             // and no way to notice it needed one.
             try? fm.removeItem(at: provisionedURL)
+            dropSnapshot()
         }
         if fm.fileExists(atPath: pendingDiskURL.path) {
             try? fm.removeItem(at: disk)
@@ -369,6 +380,7 @@ final class Machine: ObservableObject {
             // else's machine and carries their /etc/passwd, so this
             // installation has to be provisioned into it afresh.
             try? fm.removeItem(at: provisionedURL)
+            dropSnapshot()
         }
         if !fm.fileExists(atPath: disk.path) {
             guard let bundled = Bundle.main.url(forResource: "v8", withExtension: "disk") else {

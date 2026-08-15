@@ -1245,4 +1245,26 @@ chmod 0666 $DEV/il0
 $MKNOD $DEV/il1 c 44 1
 chmod 0666 $DEV/il1
 
-echo MAKEDEV-done 416 nodes 3 directories
+# --- UDP, char major 50 (usr/sys/dev/conf.c). Datagrams, hence DNS.
+$MKNOD $DEV/udp00 c 50 0
+chmod 0666 $DEV/udp00
+$MKNOD $DEV/udp01 c 50 1
+chmod 0666 $DEV/udp01
+$MKNOD $DEV/udp02 c 50 2
+chmod 0666 $DEV/udp02
+$MKNOD $DEV/udp03 c 50 3
+chmod 0666 $DEV/udp03
+$MKNOD $DEV/udp04 c 50 4
+chmod 0666 $DEV/udp04
+$MKNOD $DEV/udp05 c 50 5
+chmod 0666 $DEV/udp05
+$MKNOD $DEV/udp06 c 50 6
+chmod 0666 $DEV/udp06
+$MKNOD $DEV/udp07 c 50 7
+chmod 0666 $DEV/udp07
+$MKNOD $DEV/udp08 c 50 8
+chmod 0666 $DEV/udp08
+$MKNOD $DEV/udp09 c 50 9
+chmod 0666 $DEV/udp09
+
+echo MAKEDEV-done 426 nodes 3 directories

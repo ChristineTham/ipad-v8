@@ -1132,6 +1132,30 @@ mkdir $DEV 2>/dev/null
         out.append("chmod 0666 $DEV/il%d\n" % unit)
         ndev += 1
 
+    # UDP, char major 50 -- `/*udp*/ ... /*50*/' in usr/sys/dev/conf.c, read
+    # off cdevsw exactly as `il' above was.
+    #
+    # V8 shipped /dev/tcp00..09 and /dev/ip{0,6,16,17} and NO udp nodes at all,
+    # so the tape can open a TCP connection and cannot send a datagram. That is
+    # why name resolution did not work here: the stack was up -- ipconfig and
+    # tcpconfig both running, hosts/networks/resolv all populated -- and dnsq
+    # still failed with `udp_connect failed', because libin's udp_sock() walks
+    # /dev/udp00 upward (udp_lib.c) and every one of them was ENOENT.
+    #
+    # MINORS ARE UNRESTRICTED HERE, unlike TCP.  tcp_device.c refuses an even
+    # minor whose socket is not already active -- even minors are the accept
+    # side -- which is why libin's tcp_sock() counts `n = 01; n += 2'.
+    # udp_device.c has no such guard (it only does `dev = minor(dev)'), and
+    # udp_sock() correspondingly counts from 0 by ones. Ten is the same supply
+    # V8 gave TCP.
+    out.append("""
+# --- UDP, char major 50 (usr/sys/dev/conf.c). Datagrams, hence DNS.
+""")
+    for unit in range(10):
+        out.append("$MKNOD $DEV/udp%02d c 50 %d\n" % (unit, unit))
+        out.append("chmod 0666 $DEV/udp%02d\n" % unit)
+        ndev += 1
+
     out.append("\necho MAKEDEV-done %d nodes %d directories\n" % (ndev, ndir))
     return "".join(out), ndev, ndir
 

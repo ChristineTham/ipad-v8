@@ -88,7 +88,8 @@ struct SessionWindow: View {
             EmptyView()
             #else
             NavigationStack {
-                SettingsView(settings: settings, machine: machine, terminal: dmd, share: share)
+                SettingsView(settings: settings, machine: machine, terminal: dmd,
+                             share: share, homeShare: homeShare)
                     .navigationTitle("Settings")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {

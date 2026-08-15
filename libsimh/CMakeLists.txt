@@ -31,18 +31,59 @@ set(SIM_SOURCES
   sim_ether.c sim_tape.c sim_disk.c sim_serial.c sim_video.c sim_imd.c
   sim_card.c)
 
+# SLiRP: user-mode TCP/IP, and the ONLY reason the guest has a network.
+#
+# This was left out at A1 as "everything an iOS app can't or shouldn't carry",
+# alongside pcap and SDL. That was right about pcap -- which wants a raw-socket
+# capability no sandboxed app has -- and wrong about SLiRP, which is the exact
+# opposite: plain C over ordinary BSD sockets, no privilege, no kernel
+# extension, nothing to ask the OS for. The whole N track then established that
+# SLiRP is how the guest reaches the host at all, because it aliases 10.0.2.2
+# to the host's own loopback (tcp_fconnect, "It's an alias") -- so netfs needs
+# no port forwarding and works unchanged inside the sandbox.
+#
+# Without it the app gets `attach il nat:' -> "Command not allowed": the
+# NI1010 is compiled in and autoconfig finds it, so the guest boots reporting
+# a healthy il0 and cannot pass one packet. That is what shipped until now.
+#
+# HAVE_SLIRP_NETWORK is what sim_ether.c gates the `nat:' transport on;
+# USE_SIMH_SLIRP_DEBUG (in upstream's own command line) is deliberately NOT
+# set -- it only adds tracing.
+file(GLOB SLIRP_SOURCES "${SIMH_DIR}/slirp/*.c" "${SIMH_DIR}/slirp_glue/*.c")
+
 set(ALL_SOURCES ${VAX_SOURCES} ${PDP11_SOURCES} ${SIM_SOURCES})
 list(TRANSFORM ALL_SOURCES PREPEND "${SIMH_DIR}/")
+list(APPEND ALL_SOURCES ${SLIRP_SOURCES})
 
 add_library(simhvax STATIC ${ALL_SOURCES} src/simh_shim.c)
 
 target_include_directories(simhvax
   PRIVATE "${SIMH_DIR}" "${SIMH_DIR}/VAX" "${SIMH_DIR}/PDP11"
+          "${SIMH_DIR}/slirp" "${SIMH_DIR}/slirp_glue"
+          "${SIMH_DIR}/slirp_glue/qemu"
   PUBLIC  "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
 target_compile_definitions(simhvax PRIVATE
   VM_VAX VAX_780 USE_INT64 USE_ADDR64
-  _GNU_SOURCE HAVE_SYS_IOCTL HAVE_UTIME HAVE_GLOB NDEBUG=1)
+  _GNU_SOURCE HAVE_SYS_IOCTL HAVE_UTIME HAVE_GLOB NDEBUG=1
+  # BOTH of these are required and they do different jobs. USE_NETWORK is the
+  # master switch: sim_ether.c wraps its real implementation in
+  # `#if defined (USE_NETWORK) || defined (USE_SHARED)' and, failing that,
+  # compiles a stub eth_open that returns SCPE_NOFNC. HAVE_SLIRP_NETWORK then
+  # selects the `nat:' transport within it.
+  #
+  # With only HAVE_SLIRP_NETWORK the whole of slirp/ compiles and links into
+  # the archive -- its own sources do not consult the switch -- and NOTHING
+  # references it, so the linker drops every object and `attach il nat:'
+  # still answers "Command not allowed". The archive looks correct under nm
+  # (56 slirp symbols) while the app binary has none: check for an UNDEFINED
+  # _sim_slirp_open, not a defined one.
+  #
+  # NOT USE_SHARED, which upstream's own command line uses: that means dlopen
+  # a shared pcap, and it force-defines HAVE_PCAP_NETWORK. We want the
+  # opposite -- SLiRP statically linked, no pcap, no raw sockets, nothing to
+  # ask a sandbox for.
+  USE_NETWORK HAVE_SLIRP_NETWORK)
 
 target_compile_options(simhvax PRIVATE
   -std=c99 -U__STRICT_ANSI__ -O2 -fno-strict-overflow -finline-functions)

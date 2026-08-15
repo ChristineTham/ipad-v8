@@ -1,0 +1,100 @@
+#!/usr/bin/env expect
+# Does this image's NETWORK actually work?
+#
+#	expect tools/net-selftest.exp <image> [netfs-port]
+#
+# The golden brings its own network up from /etc/rc -- ipconfig, tcpconfig,
+# udpconfig, route -- and until this script existed nothing ever checked that
+# it does. Every other test asserts files are present. A machine can have
+# every daemon running, every config file correct, /dev fully populated, and
+# still not pass a single packet, and it looks perfectly healthy from inside.
+#
+# So this asserts TRAFFIC, both protocols:
+#
+#	TCP  -- mount a netfs share the caller is serving on the host and read
+#	        a file out of it. That is the /n/macos path the app depends on.
+#	UDP  -- dnsq, twice. N3 recorded that the FIRST query is the one that
+#	        triggers the ARP and the datagram that triggered it is lost, so
+#	        a single query proves nothing either way.
+#
+# Traps already paid for elsewhere and honoured here: there is no boot prompt
+# (load+run AUTOBOOTS -- a stray boot command lands at the login prompt as a
+# username and the machine answers `Password:' forever); the shell prompt is
+# spelled through a variable so expect cannot match its own echo; and every
+# exit path stops the machine rather than killing a running guest.
+
+set timeout 240
+log_user 1
+set root [file dirname [info script]]/..
+cd $root/work/myv8
+
+if {[llength $argv] < 1} { puts "usage: net-selftest.exp <image> \[port\]"; exit 2 }
+set img  [lindex $argv 0]
+set port [expr {[llength $argv] > 1 ? [lindex $argv 1] : 9200}]
+
+proc bail {msg} {
+    puts "\nNETSELF-BAIL: $msg"
+    send "\005"
+    expect { "sim>" {} timeout {} }
+    send "quit\r"
+    expect { eof {} timeout {} }
+    exit 1
+}
+
+spawn ../opensimh/BIN/vax780
+expect "sim>"
+foreach c "
+    {set noasynch}
+    {set cpu idle=4.1BSD}
+    {set tto 7b}
+    {set rp0 rp07}
+    {at rp0 $img}
+    {set il enable}
+    {attach il nat:}
+" { send "[string trim $c "{}"]\r"; expect "sim>" }
+
+send "load -o bootV8 0\r"; expect "sim>"
+send "run 2\r"
+expect { "login:" {} timeout { bail "no login:" } }
+
+send "root\r"
+expect { -re {[#$] } {} timeout { bail "no root shell" } }
+send "M=X\r"
+expect { -re {[#$] } {} timeout { bail "no shell for M" } }
+send "PS1=\"NET\$M \"\r"
+expect { "NETX " {} timeout { bail "no prompt" } }
+
+proc sh {cmd {t 120}} {
+    global timeout
+    set save $timeout; set timeout $t
+    send "$cmd\r"
+    expect { "NETX " {} timeout { puts "\nTIMEOUT: $cmd" } }
+    set timeout $save
+}
+
+puts "\n===== NETSELFTEST ====="
+sh "PATH=/bin:/etc:/usr/bin:/usr/inet/bin:/usr/inet/etc; export PATH"
+sh "OK=-ok"
+
+# What /etc/rc should already have done, reported rather than assumed.
+sh "ps ax | grep -v grep | grep inet"
+sh "cat /usr/inet/lib/hosts"
+
+# --- TCP: the share ---
+sh "test -d /n/macos || mkdir /n/macos"
+sh "/etc/nmount 10.0.2.2 $port 64 /n/macos" 120
+sh "if test -f /n/macos/greeting.txt; then echo NS-TCP\$OK; else echo NS-TCP-BAD; fi" 60
+sh "cat /n/macos/greeting.txt" 60
+
+# --- UDP: name resolution. Twice: the first loses to ARP. ---
+sh "dnsq www.tuhs.org" 60
+sh "dnsq www.tuhs.org" 60
+puts "\n===== END NETSELFTEST ====="
+
+sh "cd /; umount /n/macos 2>/dev/null; sync; sync" 60
+send "/etc/halt\r"
+expect { "Infinite loop" {} timeout { bail "halt did not confirm" } }
+send "\005"
+expect "sim>"
+send "quit\r"
+expect eof

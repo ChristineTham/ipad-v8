@@ -93,6 +93,14 @@ then
 	sleep 3
 	/usr/inet/etc/tcpconfig /dev/ip6 &
 	sleep 3
+	# UDP, and therefore every name lookup.  A /dev/ip* minor IS the IP
+	# protocol number -- 6 is TCP, 17 is UDP -- so this is the same push
+	# tcpconfig does, one protocol over.  Leave it out and the machine looks
+	# completely healthy: ipconfig and tcpconfig are running, the interface
+	# answers, TCP connects, and every resolver call fails with
+	# `udp_connect failed' because there is nothing underneath /dev/udp*.
+	/usr/inet/etc/udpconfig /dev/ip17 &
+	sleep 3
 	/usr/inet/etc/route add '*' gateway
 	echo 'network: il0 10.0.2.15, gateway 10.0.2.2'
 
