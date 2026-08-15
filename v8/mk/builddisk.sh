@@ -332,6 +332,22 @@ chmod 644 $MNT/.profile $MNT/etc/skel/.profile
 # picks it up -- it has to be named here or it silently does not ship.
 cp $SRC/jerq/bin/wmux $MNT/usr/jerq/bin/wmux
 chmod 755 $MNT/usr/jerq/bin/wmux
+
+# /usr/inet/lib/services, and the path is the whole point: cmd/inet/h/config.h
+# says SERVICES "/usr/inet/lib/services", while the copy above puts everything
+# in $SRC/etc into /etc. So the file shipped, in the wrong place, and every
+# inet client that resolves a service name -- telnet, rcp, rsh -- answered
+#
+#	/usr/inet/lib/services: No such file or directory
+#	telnet: unknown service.
+#
+# even when given a numeric port, because getservbyname() is consulted first.
+# The guest could resolve names and mount netfs and still not open a TCP
+# connection to anywhere, which reads as a network fault and is a missing
+# 200-byte text file.
+mkdir $MNT/usr/inet/lib 2>/dev/null
+cp $SRC/etc/services $MNT/usr/inet/lib/services
+chmod 644 $MNT/usr/inet/lib/services
 ls -l $MNT/unix $MNT/.profile
 
 # fsck cannot reconnect an orphaned inode without one, and an autoboot fsck

@@ -61,6 +61,9 @@ EXPECTED = {
     # tape has no /etc/copyright at all -- it is ours, and it is where motd
     # now points.
     "/etc/copyright": "ours: the licensing position, moved out of motd",
+    # cmd/inet/h/config.h looks for it at /usr/inet/lib/services; the copy in
+    # /etc is where `cp $SRC/etc/*' leaves it and is not what the code reads.
+    "/usr/inet/lib/services": "ours: installed where the inet code looks",
     "/etc/whoami": "ours: the machine is ipnx-v8",
     "/unix": "stage 7 builds our own kernel",
     # The Wide-screen preset. The configured REFERENCE was made by

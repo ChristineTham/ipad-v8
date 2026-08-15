@@ -1,6 +1,8 @@
 ftp		21/tcp
 telnet		23/tcp
 smtp		25/tcp
+domain		53/udp
+http		80/tcp
 exec		512/tcp
 rogin		513/tcp
 login		513/tcp
