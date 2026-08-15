@@ -2,31 +2,28 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- App Store distribution requires the sandbox. -->
-	<key>com.apple.security.app-sandbox</key>
-	<true/>
-	<!-- The emulators talk to each other over loopback sockets: SIMH binds the
-	     console, remote-console and DZ listeners (server) and the 5620 dials
-	     the DZ line (client). Nothing leaves the machine. -->
-	<key>com.apple.security.network.server</key>
-	<true/>
-	<key>com.apple.security.network.client</key>
-	<true/>
-	<!-- Disk image import/export the user explicitly picks. -->
-	<key>com.apple.security.files.user-selected.read-write</key>
-	<true/>
-	<!-- The shared folders (/n/macos, /n/home) must survive a relaunch, and
-	     user-selected.read-write above does NOT do that: it grants access to
-	     what the picker returned, for this launch only. Persisting it means a
-	     security-scoped bookmark, and CREATING one requires this entitlement.
+	<!-- NO App Sandbox, and that is the whole point of this file now.
 
-	     Without it FileShare.adopt() throws on the very first pick --
-	     "Could not remember that folder: The file <name> cannot be opened" --
-	     and because that throw happens before start(), the share never begins
-	     serving either. So the symptom is not "forgets on relaunch", which is
-	     what the name suggests: it is a share that never works once, and a
-	     bookmark that is never stored at all. -->
-	<key>com.apple.security.files.bookmarks.app-scope</key>
-	<true/>
+	     /n/macos and /n/home are meant to be the Mac's filesystem and the
+	     user's home directory -- that is the feature, not a placeholder. A
+	     sandboxed app cannot serve either: measured on 2026-08-15, the SAME
+	     netfs server binary exporting /Users/christie works from a plain
+	     process and hangs the guest from inside the sandbox, while a granted
+	     subfolder (~/Makan) works in both. The security-scoped bookmark is
+	     enough to mount and not enough to enumerate, so the guest blocks on a
+	     reply that never comes.
+
+	     So the Mac app is Developer ID-signed and notarised rather than
+	     sandboxed and App Store-distributed. That is a distribution decision
+	     with a real cost -- no Mac App Store -- taken deliberately, because a
+	     share of a folder the user had to nominate is not the thing that was
+	     asked for. The iPad app is unaffected: it keeps its own entitlements
+	     and there is no ~ to share there anyway.
+
+	     Hardened Runtime stays on (ENABLE_HARDENED_RUNTIME=YES in the
+	     project); notarisation requires it. Nothing else is needed: outside
+	     the sandbox the network and file entitlements that used to be here
+	     are inert, and an app may always talk to its own loopback, which is
+	     all SIMH, the 5620 and netfs ever do. -->
 </dict>
 </plist>

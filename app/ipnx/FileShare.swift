@@ -120,14 +120,15 @@ final class FileShare: ObservableObject {
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
 
         do {
-            #if os(macOS)
-            let data = try url.bookmarkData(options: .withSecurityScope,
-                                            includingResourceValuesForKeys: nil,
-                                            relativeTo: nil)
-            #else
+            // A PLAIN bookmark on both platforms now. `.withSecurityScope' is a
+            // SANDBOX mechanism: it is the sandbox that hands out scoped access
+            // and the sandbox that needs it handed back. The Mac app dropped the
+            // sandbox so /n/macos and /n/home could be what they claim to be
+            // (see ipnx-macOS.entitlements), and asking for a scoped bookmark
+            // without one fails -- which would present, once again, as a folder
+            // that cannot be remembered.
             let data = try url.bookmarkData(includingResourceValuesForKeys: nil,
                                             relativeTo: nil)
-            #endif
             // Resolve rather than keep `url': resolve() starts an access that is
             // deliberately never stopped, because the server reads on its own
             // thread long after this returns. The picker's scope, stopped by the
@@ -158,17 +159,14 @@ final class FileShare: ObservableObject {
     private static func resolve(bookmark: Data, store: UserDefaults) -> URL? {
         var stale = false
         do {
-            #if os(macOS)
-            let url = try URL(resolvingBookmarkData: bookmark, options: .withSecurityScope,
-                              relativeTo: nil, bookmarkDataIsStale: &stale)
-            #else
             let url = try URL(resolvingBookmarkData: bookmark, options: [],
                               relativeTo: nil, bookmarkDataIsStale: &stale)
-            #endif
-            // The access has to be started and then *never* stopped for as long
-            // as the share is up: the server reads on its own thread, long after
-            // whatever UI event resolved this has finished.
-            guard url.startAccessingSecurityScopedResource() else { return nil }
+            // Start access and never stop it while the share is up: the server
+            // reads on its own thread long after whatever resolved this has
+            // returned. Outside a sandbox this is a no-op returning false, and
+            // that must NOT be treated as failure -- the previous `guard' here
+            // would have rejected every folder on the unsandboxed Mac build.
+            _ = url.startAccessingSecurityScopedResource()
             return url
         } catch {
             return nil
