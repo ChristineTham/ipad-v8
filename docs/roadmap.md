@@ -144,7 +144,13 @@ Runbook: [spike-a0.md](spike-a0.md)
       holds the whole boot transcript, `tty01` reports **line 1** and logs in,
       `tty02` reports **line 2** and stops at `login:`, two windows run one VAX,
       and the iPad shows the same tab bar and `+` menu
-- [ ] Verify closing the 5620's window reclaims its CPU
+- [x] Verify closing the 5620's window reclaims its CPU — measured on the Mac
+      app, one instance, driven through the app's own File ▸ Open Terminal menu:
+      **16% → 112% → 15% → 112%** (baseline, 5620 open, window closed, reopened).
+      The dmd thread is genuinely gone, not idling — the WE32100 does not idle at
+      all, so a stopped one is the only cheap one. `close(line)` → `dmd.stop()` →
+      `stopFlag.set()` → the runloop's `while !stop.isSet` exits, and reopening
+      power-cycles it cleanly (`5620 powered on` twice in the log)
 
 ## Track B — the V10 restoration *(desktop SIMH until it boots; see [v10-restoration.md](v10-restoration.md))*
 
