@@ -177,8 +177,25 @@ final class FileShare: ObservableObject {
 
     func start() {
         guard !running, let folder else { return }
+        // OWNED BY THE PERSON WHOSE MACHINE THIS IS, not by root.
+        //
+        // The server presents every file as owned by mapUID/mapGID and the
+        // GUEST kernel runs the permission check -- iaccess() against exactly
+        // what NGET reported. Left at the default 0, a home directory arrives
+        // as root-owned mode 700, so the account first boot created (uid 1000)
+        // is refused by its own kernel and ls(1) says
+        //
+        //     /n/home unreadable
+        //
+        // which reads as a host permission problem and is not: the host let go
+        // of it long before. root could read the share and the user could not,
+        // which is the exact opposite of who it is for.
+        //
+        // 1000/1 are Provisioner's own numbers -- keep them in step.
         let cfg = NetFSConfig(root: folder.path, port: port,
-                              readOnly: !allowWrites, verbose: false)
+                              readOnly: !allowWrites,
+                              mapUID: Provisioner.guestUID,
+                              mapGID: Provisioner.guestGID, verbose: false)
         let s = NetFSServer(cfg)
         do {
             try s.start()

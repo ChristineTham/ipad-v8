@@ -56,13 +56,20 @@ final class Provisioner {
     /// discards a longer one silently — and each is followed by a marker so
     /// completion is proven by output rather than by a prompt, which the echo
     /// of the command itself would otherwise match.
+    /// The account's numbers, in one place because two subsystems need to
+    /// agree on them: the passwd line written below, and the uid/gid FileShare
+    /// presents every shared file as. Disagree and the guest kernel refuses
+    /// the user access to their own share -- see FileShare.start().
+    static let guestUID: UInt16 = 1000
+    static let guestGID: UInt16 = 1
+
     static func commands(user: String, gecos: String) -> [String] {
         let home = "/usr/\(user)"
         return [
             // Guard: if the line is already there this is a re-run, and a
             // second passwd entry for one name is worse than doing nothing.
             "grep -s '^\(user):' /etc/passwd || " +
-            "echo '\(user)::1000:1:\(gecos):\(home):/bin/sh' >> /etc/passwd",
+            "echo '\(user)::\(guestUID):\(guestGID):\(gecos):\(home):/bin/sh' >> /etc/passwd",
             "test -d \(home) || mkdir \(home)",
             "cp /etc/skel/.profile \(home)/.profile",
             "/etc/chown \(user) \(home) \(home)/.profile",
