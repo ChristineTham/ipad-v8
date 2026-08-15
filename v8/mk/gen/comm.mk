@@ -66,6 +66,7 @@ comm.o: $(SRC)/usr/src/cmd/comm.c $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/comm.c
 
 install: comm
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp comm $(DESTDIR)/usr/bin/comm
 

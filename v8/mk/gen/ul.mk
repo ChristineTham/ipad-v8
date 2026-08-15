@@ -66,6 +66,7 @@ ul.o: $(SRC)/usr/src/cmd/ul/ul.c $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/ul/ul.c
 
 install: ul
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp ul $(DESTDIR)/usr/bin/ul
 

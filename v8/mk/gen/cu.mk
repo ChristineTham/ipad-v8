@@ -66,6 +66,7 @@ cu.o: $(SRC)/usr/src/cmd/cu/cu.c $(INCDIR)/ctype.h $(INCDIR)/sgtty.h $(INCDIR)/s
 	$(COMPILE) $(SRC)/usr/src/cmd/cu/cu.c
 
 install: cu
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp cu $(DESTDIR)/usr/bin/cu
 

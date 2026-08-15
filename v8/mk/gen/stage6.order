@@ -12,6 +12,7 @@ nmount	usr/src/cmd	etc/nmount
 chroot	usr/src/cmd	etc/chroot
 uname	usr/src/cmd	bin/uname
 ipnxfetch	usr/src/cmd	usr/bin/ipnxfetch
+dnsq	usr/src/cmd	usr/inet/bin/dnsq
 expr	usr/src/cmd/expr	usr/bin/expr
 hoc	usr/src/cmd/hoc	usr/bin/hoc
 eqn	usr/src/cmd/eqn	usr/bin/eqn

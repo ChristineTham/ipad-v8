@@ -114,6 +114,7 @@ y.tab.o: y.tab.c prevy.tab.h $(TOOLS)
 	$(COMPILE) y.tab.c
 
 install: grap
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp grap $(DESTDIR)/usr/bin/grap
 

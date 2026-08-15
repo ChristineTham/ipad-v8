@@ -66,6 +66,7 @@ crypt.o: $(SRC)/usr/src/cmd/crypt.c $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/crypt.c
 
 install: crypt
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp crypt $(DESTDIR)/usr/bin/crypt
 

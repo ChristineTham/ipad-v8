@@ -66,6 +66,7 @@ tabs.o: $(SRC)/usr/src/cmd/tabs.c $(INCDIR)/sgtty.h $(INCDIR)/signal.h $(INCDIR)
 	$(COMPILE) $(SRC)/usr/src/cmd/tabs.c
 
 install: tabs
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp tabs $(DESTDIR)/usr/bin/tabs
 

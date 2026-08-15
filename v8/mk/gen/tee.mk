@@ -66,6 +66,7 @@ tee.o: $(SRC)/usr/src/cmd/tee.c $(INCDIR)/signal.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/tee.c
 
 install: tee
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp tee $(DESTDIR)/usr/bin/tee
 

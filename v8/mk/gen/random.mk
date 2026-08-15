@@ -66,6 +66,7 @@ random.o: $(SRC)/usr/src/cmd/random.c $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/random.c
 
 install: random
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp random $(DESTDIR)/usr/bin/random
 

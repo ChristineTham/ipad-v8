@@ -1,9 +1,17 @@
 #!/bin/sh
 # Stage 6: the commands.  Runs inside V8.
 #
-#	sh $SRC/mk/buildcmds.sh [srcdir] [blddir] [destdir] [toolsdir]
+#	sh $SRC/mk/buildcmds.sh [srcdir] [blddir] [destdir] [toolsdir] [only]
 #
 # Defaults: /n/src /b /b/root /b/tools3
+#
+# `only' is a space-separated list of component names to build INSTEAD of the
+# whole of stage6.order -- the same rule, the same macros, the same install,
+# just fewer of them.  A full stage 6 is three hours because it is 132 compiles
+# and links inside the emulator, and that is far too much to pay when one
+# command has been added or fixed.  The list is still the authority: a name
+# given here must have its own generated makefile, and adding a command to the
+# SYSTEM still means adding it to stage6.order.
 #
 # Driven by $MK/stage6.order, which is a LIST and not a directory scan.  The
 # tape's 113 command makefiles are not a family -- awk's says outright that it
@@ -21,6 +29,7 @@ SRC=${1-/n/src}
 BLD=${2-/b}
 DEST=${3-/b/root}
 T3=${4-$BLD/tools3}
+ONLY=${5-}
 MK=$SRC/mk/gen
 
 test -f $MK/stage6.order || { echo "buildcmds: no $MK/stage6.order" 1>&2; exit 1; }
@@ -75,6 +84,13 @@ n=0
 # directory.  Under chroot that is right -- $DEST/lib/ccom becomes /lib/ccom.
 # Run from the host it is wrong, and silently uses the running system's
 # passes.  That is a reason for the chroot rather than an inconvenience of it.
+# Skipped for a targeted build: this step exists so DESTDIR can rebuild itself
+# under chroot in stage 9, which a one-command run is not about to do.
+if test -n "$ONLY"
+then
+	echo ""
+	echo "=== stage6: TARGETED -- $ONLY ==="
+else
 echo ""
 echo "=== stage6: the toolchain, into the system ==="
 for t in `sed 's/	.*//' $MK/stage1.order`
@@ -99,7 +115,14 @@ else
 	echo "  no $BLD/objlibc -- run buildlibc.sh first"; fail=1
 fi
 echo "  toolchain in the system: `ls $DEST/bin | wc -l` in bin, `ls $DEST/lib | wc -l` in lib"
-for c in `sed 's/	.*//' $MK/stage6.order`
+fi
+
+if test -n "$ONLY"
+then	LIST="$ONLY"
+else	LIST=`sed 's/	.*//' $MK/stage6.order`
+fi
+
+for c in $LIST
 do
 	echo ""
 	echo "=== stage6: $c ==="

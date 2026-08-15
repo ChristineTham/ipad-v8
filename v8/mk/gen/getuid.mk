@@ -66,6 +66,7 @@ getuid.o: $(SRC)/usr/src/cmd/getuid.c $(INCDIR)/grp.h $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/getuid.c
 
 install: getuid
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp getuid $(DESTDIR)/usr/bin/getuid
 

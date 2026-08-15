@@ -66,6 +66,7 @@ ipnxfetch.o: $(SRC)/usr/src/cmd/ipnxfetch.c $(INCDIR)/a.out.h $(INCDIR)/ipnx.h $
 	$(COMPILE) $(SRC)/usr/src/cmd/ipnxfetch.c
 
 install: ipnxfetch
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp ipnxfetch $(DESTDIR)/usr/bin/ipnxfetch
 

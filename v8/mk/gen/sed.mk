@@ -69,6 +69,7 @@ sed1.o: $(SRC)/usr/src/cmd/sed/sed1.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/sed/s
 	$(COMPILE) $(SRC)/usr/src/cmd/sed/sed1.c
 
 install: sed
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp sed $(DESTDIR)/usr/bin/sed
 

@@ -66,6 +66,7 @@ readslow.o: $(SRC)/usr/src/cmd/readslow.c $(INCDIR)/signal.h $(INCDIR)/stdio.h $
 	$(COMPILE) $(SRC)/usr/src/cmd/readslow.c
 
 install: readslow
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp readslow $(DESTDIR)/usr/bin/readslow
 

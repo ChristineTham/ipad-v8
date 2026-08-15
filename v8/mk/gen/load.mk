@@ -66,6 +66,7 @@ load.o: $(SRC)/usr/src/cmd/load/load.c $(INCDIR)/nlist.h $(INCDIR)/stdio.h $(TOO
 	$(COMPILE) $(SRC)/usr/src/cmd/load/load.c
 
 install: load
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp load $(DESTDIR)/usr/bin/load
 

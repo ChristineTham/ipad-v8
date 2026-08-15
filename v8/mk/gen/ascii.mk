@@ -66,6 +66,7 @@ ascii.o: $(SRC)/usr/src/cmd/ascii.c $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/ascii.c
 
 install: ascii
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp ascii $(DESTDIR)/usr/bin/ascii
 

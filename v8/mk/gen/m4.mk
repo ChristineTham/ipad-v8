@@ -78,6 +78,7 @@ y.tab.o: y.tab.c $(TOOLS)
 	$(COMPILE) y.tab.c
 
 install: m4
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp m4 $(DESTDIR)/usr/bin/m4
 

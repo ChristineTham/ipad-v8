@@ -66,6 +66,7 @@ printenv.o: $(SRC)/usr/src/cmd/printenv.c $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/printenv.c
 
 install: printenv
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp printenv $(DESTDIR)/usr/bin/printenv
 

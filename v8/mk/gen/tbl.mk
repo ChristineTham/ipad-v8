@@ -129,6 +129,7 @@ tv.o: $(SRC)/usr/src/cmd/tbl/tv.c $(INCDIR)/ctype.h $(INCDIR)/stdio.h $(SRC)/usr
 	$(COMPILE) $(SRC)/usr/src/cmd/tbl/tv.c
 
 install: tbl
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp tbl $(DESTDIR)/usr/bin/tbl
 

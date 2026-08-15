@@ -66,6 +66,7 @@ uudecode.o: $(SRC)/usr/src/cmd/uudecode.c $(INCDIR)/pwd.h $(INCDIR)/signal.h $(I
 	$(COMPILE) $(SRC)/usr/src/cmd/uudecode.c
 
 install: uudecode
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp uudecode $(DESTDIR)/usr/bin/uudecode
 

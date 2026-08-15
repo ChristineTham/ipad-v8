@@ -66,6 +66,7 @@ tape.o: $(SRC)/usr/src/cmd/tape.c $(INCDIR)/errno.h $(INCDIR)/signal.h $(INCDIR)
 	$(COMPILE) $(SRC)/usr/src/cmd/tape.c
 
 install: tape
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp tape $(DESTDIR)/usr/bin/tape
 

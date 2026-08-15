@@ -66,6 +66,7 @@ find.o: $(SRC)/usr/src/cmd/find.c $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)
 	$(COMPILE) $(SRC)/usr/src/cmd/find.c
 
 install: find
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp find $(DESTDIR)/usr/bin/find
 

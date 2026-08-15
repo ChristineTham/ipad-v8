@@ -66,6 +66,7 @@ sort.o: $(SRC)/usr/src/cmd/sort.c $(INCDIR)/ctype.h $(INCDIR)/signal.h $(INCDIR)
 	$(COMPILE) $(SRC)/usr/src/cmd/sort.c
 
 install: sort
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp sort $(DESTDIR)/usr/bin/sort
 

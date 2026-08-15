@@ -66,6 +66,7 @@ mc.o: $(SRC)/usr/src/cmd/mc.c $(INCDIR)/sgtty.h $(INCDIR)/signal.h $(INCDIR)/std
 	$(COMPILE) $(SRC)/usr/src/cmd/mc.c
 
 install: mc
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp mc $(DESTDIR)/usr/bin/mc
 

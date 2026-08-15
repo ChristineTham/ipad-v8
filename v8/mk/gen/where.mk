@@ -63,6 +63,7 @@ where: $(SRC)/usr/src/cmd/where.sh
 	chmod +x where
 
 install: where
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp where $(DESTDIR)/usr/bin/where
 

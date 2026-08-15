@@ -66,6 +66,7 @@ sdiff.o: $(SRC)/usr/src/cmd/sdiff.c $(INCDIR)/ctype.h $(INCDIR)/signal.h $(INCDI
 	$(COMPILE) $(SRC)/usr/src/cmd/sdiff.c
 
 install: sdiff
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp sdiff $(DESTDIR)/usr/bin/sdiff
 

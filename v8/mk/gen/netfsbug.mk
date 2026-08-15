@@ -66,6 +66,7 @@ netfsbug.o: $(SRC)/usr/src/cmd/netfsbug.c $(INCDIR)/nlist.h $(INCDIR)/signal.h $
 	$(COMPILE) $(SRC)/usr/src/cmd/netfsbug.c
 
 install: netfsbug
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp netfsbug $(DESTDIR)/usr/bin/netfsbug
 

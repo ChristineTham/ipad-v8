@@ -66,6 +66,7 @@ diffh.o: $(SRC)/usr/src/cmd/diff/diffh.c $(INCDIR)/ctype.h $(INCDIR)/signal.h $(
 	$(COMPILE) $(SRC)/usr/src/cmd/diff/diffh.c
 
 install: diffh
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/lib
 	cp diffh $(DESTDIR)/usr/lib/diffh
 

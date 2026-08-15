@@ -72,6 +72,7 @@ tsort.o: $(SRC)/usr/src/cmd/tsort/tsort.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/t
 	$(COMPILE) $(SRC)/usr/src/cmd/tsort/tsort.c
 
 install: tsort
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp tsort $(DESTDIR)/usr/bin/tsort
 

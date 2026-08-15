@@ -66,6 +66,7 @@ id.o: $(SRC)/usr/src/cmd/id.c $(INCDIR)/grp.h $(INCDIR)/pwd.h $(INCDIR)/stdio.h 
 	$(COMPILE) $(SRC)/usr/src/cmd/id.c
 
 install: id
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp id $(DESTDIR)/usr/bin/id
 

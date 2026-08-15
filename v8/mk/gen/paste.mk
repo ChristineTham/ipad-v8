@@ -66,6 +66,7 @@ paste.o: $(SRC)/usr/src/cmd/paste.c $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/paste.c
 
 install: paste
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp paste $(DESTDIR)/usr/bin/paste
 

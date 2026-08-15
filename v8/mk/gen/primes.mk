@@ -66,6 +66,7 @@ primes.o: $(SRC)/usr/src/cmd/primes/primes.c $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/primes/primes.c
 
 install: primes
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp primes $(DESTDIR)/usr/bin/primes
 

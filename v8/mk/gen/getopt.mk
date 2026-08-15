@@ -66,6 +66,7 @@ getopt.o: $(SRC)/usr/src/cmd/getopt.c $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/getopt.c
 
 install: getopt
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp getopt $(DESTDIR)/usr/bin/getopt
 

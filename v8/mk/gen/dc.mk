@@ -66,6 +66,7 @@ dc.o: $(SRC)/usr/src/cmd/dc/dc.c $(INCDIR)/signal.h $(INCDIR)/stdio.h $(SRC)/usr
 	$(COMPILE) $(SRC)/usr/src/cmd/dc/dc.c
 
 install: dc
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp dc $(DESTDIR)/usr/bin/dc
 

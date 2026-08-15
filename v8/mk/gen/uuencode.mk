@@ -66,6 +66,7 @@ uuencode.o: $(SRC)/usr/src/cmd/uuencode.c $(INCDIR)/signal.h $(INCDIR)/stdio.h $
 	$(COMPILE) $(SRC)/usr/src/cmd/uuencode.c
 
 install: uuencode
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp uuencode $(DESTDIR)/usr/bin/uuencode
 

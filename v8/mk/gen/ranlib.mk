@@ -66,6 +66,7 @@ ranlib.o: $(SRC)/usr/src/cmd/ranlib.c $(INCDIR)/a.out.h $(INCDIR)/ar.h $(INCDIR)
 	$(COMPILE) $(SRC)/usr/src/cmd/ranlib.c
 
 install: ranlib
+	-mkdir $(TOOLDIR)/usr
 	-mkdir $(TOOLDIR)/usr/bin
 	cp ranlib $(TOOLDIR)/usr/bin/ranlib
 

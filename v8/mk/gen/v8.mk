@@ -66,6 +66,7 @@ v8.o: $(SRC)/usr/src/cmd/v8.c $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/v8.c
 
 install: v8
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp v8 $(DESTDIR)/usr/bin/v8
 

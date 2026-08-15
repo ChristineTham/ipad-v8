@@ -66,6 +66,7 @@ checkeq.o: $(SRC)/usr/src/cmd/checkeq.c $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/checkeq.c
 
 install: checkeq
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp checkeq $(DESTDIR)/usr/bin/checkeq
 

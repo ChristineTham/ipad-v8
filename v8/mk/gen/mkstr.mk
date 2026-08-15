@@ -66,6 +66,7 @@ mkstr.o: $(SRC)/usr/src/cmd/mkstr.c $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDI
 	$(COMPILE) $(SRC)/usr/src/cmd/mkstr.c
 
 install: mkstr
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp mkstr $(DESTDIR)/usr/bin/mkstr
 

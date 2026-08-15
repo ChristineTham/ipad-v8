@@ -66,6 +66,7 @@ col.o: $(SRC)/usr/src/cmd/col.c $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/col.c
 
 install: col
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp col $(DESTDIR)/usr/bin/col
 

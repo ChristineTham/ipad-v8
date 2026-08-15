@@ -66,6 +66,7 @@ atrun.o: $(SRC)/usr/src/cmd/at/atrun.c $(INCDIR)/signal.h $(INCDIR)/stdio.h $(IN
 	$(COMPILE) $(SRC)/usr/src/cmd/at/atrun.c
 
 install: atrun
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/lib
 	cp atrun $(DESTDIR)/usr/lib/atrun
 

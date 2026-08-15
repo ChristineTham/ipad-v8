@@ -66,6 +66,7 @@ w.o: $(SRC)/usr/src/cmd/w/w.c $(INCDIR)/ctype.h $(INCDIR)/errno.h $(INCDIR)/nlis
 	$(COMPILE) $(SRC)/usr/src/cmd/w/w.c
 
 install: w
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp w $(DESTDIR)/usr/bin/w
 

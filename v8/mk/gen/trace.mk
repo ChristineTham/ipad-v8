@@ -99,6 +99,7 @@ trace9.o: $(SRC)/usr/src/cmd/trace/trace9.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd
 	$(COMPILE) $(SRC)/usr/src/cmd/trace/trace9.c
 
 install: trace
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp trace $(DESTDIR)/usr/bin/trace
 

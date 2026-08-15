@@ -66,6 +66,7 @@ units.o: $(SRC)/usr/src/cmd/units.c $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/units.c
 
 install: units
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp units $(DESTDIR)/usr/bin/units
 

@@ -66,6 +66,7 @@ rcp.o: $(SRC)/usr/src/cmd/rcp.c $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/s
 	$(COMPILE) $(SRC)/usr/src/cmd/rcp.c
 
 install: rcp
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp rcp $(DESTDIR)/usr/bin/rcp
 

@@ -66,6 +66,7 @@ pack.o: $(SRC)/usr/src/cmd/pack/pack.c $(INCDIR)/signal.h $(INCDIR)/stdio.h $(IN
 	$(COMPILE) $(SRC)/usr/src/cmd/pack/pack.c
 
 install: pack
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp pack $(DESTDIR)/usr/bin/pack
 

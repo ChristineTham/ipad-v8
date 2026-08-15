@@ -66,6 +66,7 @@ news.o: $(SRC)/usr/src/cmd/news.c $(INCDIR)/pwd.h $(INCDIR)/setjmp.h $(INCDIR)/s
 	$(COMPILE) $(SRC)/usr/src/cmd/news.c
 
 install: news
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp news $(DESTDIR)/usr/bin/news
 

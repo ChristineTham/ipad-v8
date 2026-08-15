@@ -66,6 +66,7 @@ fgrep.o: $(SRC)/usr/src/cmd/fgrep.c $(INCDIR)/ctype.h $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/fgrep.c
 
 install: fgrep
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp fgrep $(DESTDIR)/usr/bin/fgrep
 

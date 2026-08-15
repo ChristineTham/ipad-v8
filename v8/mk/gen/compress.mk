@@ -66,6 +66,7 @@ compress.o: $(SRC)/usr/src/cmd/compress/compress.c $(INCDIR)/ctype.h $(INCDIR)/s
 	$(COMPILE) $(SRC)/usr/src/cmd/compress/compress.c
 
 install: compress
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp compress $(DESTDIR)/usr/bin/compress
 

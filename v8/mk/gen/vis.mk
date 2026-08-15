@@ -66,6 +66,7 @@ vis.o: $(SRC)/usr/src/cmd/vis.c $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/vis.c
 
 install: vis
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp vis $(DESTDIR)/usr/bin/vis
 

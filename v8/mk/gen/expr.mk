@@ -69,6 +69,7 @@ y.tab.o: y.tab.c $(TOOLS)
 	$(COMPILE) y.tab.c
 
 install: expr
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp expr $(DESTDIR)/usr/bin/expr
 

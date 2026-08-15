@@ -66,6 +66,7 @@ coreid.o: $(SRC)/usr/src/cmd/coreid.c $(INCDIR)/errno.h $(INCDIR)/signal.h $(INC
 	$(COMPILE) $(SRC)/usr/src/cmd/coreid.c
 
 install: coreid
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp coreid $(DESTDIR)/usr/bin/coreid
 

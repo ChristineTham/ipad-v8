@@ -66,6 +66,7 @@ deroff.o: $(SRC)/usr/src/cmd/deroff.c $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/deroff.c
 
 install: deroff
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp deroff $(DESTDIR)/usr/bin/deroff
 

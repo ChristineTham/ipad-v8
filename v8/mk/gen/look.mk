@@ -66,6 +66,7 @@ look.o: $(SRC)/usr/src/cmd/look.c $(INCDIR)/ctype.h $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/look.c
 
 install: look
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp look $(DESTDIR)/usr/bin/look
 

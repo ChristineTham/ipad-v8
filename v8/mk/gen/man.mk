@@ -66,6 +66,7 @@ man.o: $(SRC)/usr/src/cmd/man/man.c $(INCDIR)/signal.h $(INCDIR)/sys/param.h $(I
 	$(COMPILE) $(SRC)/usr/src/cmd/man/man.c
 
 install: man
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp man $(DESTDIR)/usr/bin/man
 

@@ -69,6 +69,7 @@ y.tab.o: y.tab.c $(TOOLS)
 	$(COMPILE) y.tab.c
 
 install: bc
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp bc $(DESTDIR)/usr/bin/bc
 

@@ -126,6 +126,7 @@ y.tab.o: y.tab.c pic.ydef $(TOOLS)
 	$(COMPILE) y.tab.c
 
 install: pic
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp pic $(DESTDIR)/usr/bin/pic
 

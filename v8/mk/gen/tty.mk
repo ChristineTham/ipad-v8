@@ -66,6 +66,7 @@ tty.o: $(SRC)/usr/src/cmd/tty.c $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/tty.c
 
 install: tty
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp tty $(DESTDIR)/usr/bin/tty
 

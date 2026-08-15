@@ -1,0 +1,118 @@
+#!/usr/bin/env expect
+# How many netfs FILES a minute, which is the number that decides whether a
+# build over /n/src is pleasant.
+#
+#	expect tools/netfs-latency.exp [port]
+#
+# n8-throughput.exp measures BANDWIDTH -- one multi-megabyte read -- and that
+# is the wrong ruler for this protocol. netfs costs a round trip per path
+# COMPONENT (nanami(), sys/neta.c), so its cost is per file and per directory
+# level, and a megabyte in one file says nothing about a hundred files of a
+# kilobyte each. This opens and reads a fixed set of small files and reports
+# the rate.
+#
+# The guest's clock has one-second resolution, so the run has to be long
+# enough for whole seconds to be a usable ruler -- hence a hundred files
+# rather than ten.
+#
+# TWO TRAPS, both paid for in this script's first draft:
+#
+#  * THERE IS NO BOOT PROMPT.  `load -o bootV8 0' + `run 2' AUTOBOOTS -- the
+#    proven drivers go straight from `run' to waiting for `login:'.  A script
+#    that also sends `: hp(0,0)unix' types it at the LOGIN prompt, where it
+#    becomes a username, and the machine answers `Password:' forever.  It
+#    looks exactly like a root password you do not have.
+#
+#  * EVERY EXIT PATH MUST STOP THE MACHINE.  A bare `exit' closes the spawn
+#    and kills a RUNNING guest, which is the one thing this project never
+#    does.  bail() drops to sim> first (the ^E recovery: it stops the CPU
+#    without writing stale in-core state back over the disk).
+
+set timeout 300
+log_user 1
+cd [file dirname [info script]]/../work/myv8
+set port [expr {[llength $argv] > 0 ? [lindex $argv 0] : 9375}]
+
+# Fail without ever leaving a running guest behind.
+proc bail {msg} {
+    puts "\nBAIL: $msg"
+    send "\005"
+    expect { "sim>" {} timeout {} }
+    send "quit\r"
+    expect { eof {} timeout {} }
+    exit 1
+}
+
+spawn ../opensimh/BIN/vax780
+expect "sim>"
+foreach c {
+    "set noasynch"
+    "set cpu idle=4.1BSD"
+    "set tto 7b"
+    "set rp0 rp07"
+    "at rp0 rp07v8.net"
+    "set il enable"
+    "attach il nat:"
+} { send "$c\r"; expect "sim>" }
+
+send "load -o bootV8 0\r"; expect "sim>"
+send "run 2\r"
+expect { "login:" {} timeout { bail "no login:" } }
+
+# A prompt of our own, so matching cannot collide with a `#' in output --
+# and SPELLED THROUGH A SHELL VARIABLE, which is the whole trick. The tty
+# echoes what you type, so `PS1="LATX "' puts the literal LATX into the
+# stream before the prompt ever renders, and expect matches its own echo:
+# from then on the script runs exactly one command out of phase, sending
+# each into a shell that is still busy with the last. It presents as a
+# machine that goes quiet with no error anywhere.  CLAUDE.md states the
+# rule -- markers, never prompts, and never a literal.
+send "root\r"
+expect { -re {[#$] } {} timeout { bail "no shell" } }
+send "M=X\r"
+expect { -re {[#$] } {} timeout { bail "no shell for M" } }
+send "PS1=\"LAT\$M \"\r"
+expect { "LATX " {} timeout { bail "no PS1" } }
+
+proc sh {cmd {t 300}} {
+    global timeout
+    set save $timeout; set timeout $t
+    send "$cmd\r"
+    expect { "LATX " {} timeout { puts "\nTIMEOUT: $cmd" } }
+    set timeout $save
+}
+
+sh "PATH=/bin:/etc:/usr/bin:/usr/inet/bin; export PATH"
+# The network, exactly as /etc/rc does it.
+sh "test -c /dev/il0 || /etc/mknod /dev/il0 c 44 0"
+sh "test -c /dev/il1 || /etc/mknod /dev/il1 c 44 1"
+sh "chmod 666 /dev/il0 /dev/il1 /dev/ip6"
+sh "echo '10.0.2.15\tipnx-v8 v8' > /usr/inet/lib/hosts"
+sh "echo '10.0.2.2\tgateway' >> /usr/inet/lib/hosts"
+sh "echo '10.0.0.0\tslirp-net' > /usr/inet/lib/networks"
+sh "cd /usr/inet/etc; ./ipconfig /dev/il0 ipnx-v8 slirp-net /dev/il1 &"
+sh "sleep 3"
+sh "cd /usr/inet/etc; ./tcpconfig /dev/ip6 &"
+sh "sleep 3"
+sh "test -d /n/src || mkdir /n/src"
+sh "/etc/nmount 10.0.2.2 $port 70 /n/src" 120
+
+# Prove the mount before timing it. A failed mount makes the loop below
+# finish instantly, which reads as a spectacular speedup.
+sh "ls /n/src/usr/include/sys | wc -l"
+
+puts "\n===== LATENCY ====="
+sh "date"
+sh "cd /n/src/usr/include/sys; for f in *.h; do cat \$f > /dev/null; done" 900
+sh "date"
+puts "\n===== END LATENCY ====="
+
+# The clean halt: userland flush, then boot()'s own sync, then the IPL 31
+# spin that SIMH reports as an infinite loop.
+sh "cd /; sync; sync"
+send "/etc/halt\r"
+expect { "Infinite loop" {} timeout { bail "halt did not confirm" } }
+send "\005"
+expect "sim>"
+send "quit\r"
+expect eof

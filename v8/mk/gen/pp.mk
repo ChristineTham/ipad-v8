@@ -72,6 +72,7 @@ pp.o: $(SRC)/usr/src/cmd/pp/pp.c $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/
 	$(COMPILE) $(SRC)/usr/src/cmd/pp/pp.c
 
 install: pp
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp pp $(DESTDIR)/usr/bin/pp
 

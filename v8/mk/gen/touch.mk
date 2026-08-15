@@ -66,6 +66,7 @@ touch.o: $(SRC)/usr/src/cmd/touch.c $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDI
 	$(COMPILE) $(SRC)/usr/src/cmd/touch.c
 
 install: touch
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp touch $(DESTDIR)/usr/bin/touch
 

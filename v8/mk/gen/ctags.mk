@@ -66,6 +66,7 @@ ctags.o: $(SRC)/usr/src/cmd/ctags.c $(INCDIR)/ctype.h $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/ctags.c
 
 install: ctags
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp ctags $(DESTDIR)/usr/bin/ctags
 

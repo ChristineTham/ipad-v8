@@ -112,6 +112,7 @@ simh "at rp1 rp06build"
 # `set rp0 rp06', and an RP07 would be a config change plus three times the
 # bundle. Same DESTDIR, same carry set, one argument apart -- so "retire the
 # TUHS image" can mean the product too and not just the build.
+set s6only [expr {[info exists env(S6ONLY)] ? $env(S6ONLY) : ""}]
 set target [lindex $argv 4]
 if {$target == ""} { set target rp07 }
 if {$target == "rp06"} { set targetimg rp06new } else { set targetimg rp07new }
@@ -219,7 +220,11 @@ if {$from <= 4} { sh "sh /n/src/mk/buildhdrs.sh /n/src /b/root 2>&1" 1800 }
 if {$from <= 5} { sh "sh /n/src/mk/buildlibs.sh /n/src /b /b/root /b/tools3 2>&1" 7200 }
 # 3 hours, not the 90 minutes this had when stage 6 was eleven commands: it
 # is 132 now, and each is a compile and a link inside the emulator.
-if {$from <= 6} { sh "sh /n/src/mk/buildcmds.sh /n/src /b /b/root /b/tools3 2>&1" 10800 }
+#
+# S6ONLY in the environment builds just the components named instead of all of
+# stage6.order -- same rule, same macros, same install. Set it when ONE command
+# has been added or fixed; leave it unset for a real world build.
+if {$from <= 6} { sh "sh /n/src/mk/buildcmds.sh /n/src /b /b/root /b/tools3 \"$s6only\" 2>&1" 10800 }
 if {$from <= 7} { sh "sh /n/src/mk/buildkernel.sh /n/src /b /b/root ipnx /b/tools3 2>&1" 7200 }
 if {$from <= 8} { # The golden image mounted read-only at /gold, BEFORE builddisk runs: it
 # reads gen/provenance.txt and lifts every `copy' row out of it.

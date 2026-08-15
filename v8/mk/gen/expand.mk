@@ -66,6 +66,7 @@ expand.o: $(SRC)/usr/src/cmd/expand.c $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/expand.c
 
 install: expand
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp expand $(DESTDIR)/usr/bin/expand
 

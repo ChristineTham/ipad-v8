@@ -66,6 +66,7 @@ basename.o: $(SRC)/usr/src/cmd/basename.c $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/basename.c
 
 install: basename
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp basename $(DESTDIR)/usr/bin/basename
 

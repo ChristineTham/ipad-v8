@@ -66,6 +66,7 @@ newer.o: $(SRC)/usr/src/cmd/newer.c $(INCDIR)/signal.h $(INCDIR)/sys/param.h $(I
 	$(COMPILE) $(SRC)/usr/src/cmd/newer.c
 
 install: newer
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp newer $(DESTDIR)/usr/bin/newer
 

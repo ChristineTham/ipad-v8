@@ -66,6 +66,7 @@ graph.o: $(SRC)/usr/src/cmd/graph/graph.c $(INCDIR)/ctype.h $(INCDIR)/iplot.h $(
 	$(COMPILE) $(SRC)/usr/src/cmd/graph/graph.c
 
 install: graph
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp graph $(DESTDIR)/usr/bin/graph
 

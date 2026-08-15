@@ -66,6 +66,7 @@ tail.o: $(SRC)/usr/src/cmd/tail.c $(INCDIR)/ctype.h $(INCDIR)/errno.h $(INCDIR)/
 	$(COMPILE) $(SRC)/usr/src/cmd/tail.c
 
 install: tail
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp tail $(DESTDIR)/usr/bin/tail
 

@@ -66,6 +66,7 @@ makekey.o: $(SRC)/usr/src/cmd/makekey.c $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/makekey.c
 
 install: makekey
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/lib
 	cp makekey $(DESTDIR)/usr/lib/makekey
 

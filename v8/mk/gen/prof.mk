@@ -66,6 +66,7 @@ prof.o: $(SRC)/usr/src/cmd/prof/prof.c $(INCDIR)/a.out.h $(INCDIR)/iplot.h $(INC
 	$(COMPILE) $(SRC)/usr/src/cmd/prof/prof.c
 
 install: prof
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp prof $(DESTDIR)/usr/bin/prof
 

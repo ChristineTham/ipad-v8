@@ -81,8 +81,11 @@ y.tab.o: y.tab.c $(TOOLS)
 	$(COMPILE) y.tab.c
 
 install: lex
+	-mkdir $(TOOLDIR)/usr
 	-mkdir $(TOOLDIR)/usr/bin
 	cp lex $(TOOLDIR)/usr/bin/lex
+	-mkdir $(TOOLDIR)/usr
+	-mkdir $(TOOLDIR)/usr/lib
 	-mkdir $(TOOLDIR)/usr/lib/lex
 	cp $(SRC)/usr/src/cmd/lex/ncform $(TOOLDIR)/usr/lib/lex/ncform
 

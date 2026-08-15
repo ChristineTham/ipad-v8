@@ -66,6 +66,7 @@ ptx.o: $(SRC)/usr/src/cmd/ptx.c $(INCDIR)/ctype.h $(INCDIR)/signal.h $(INCDIR)/s
 	$(COMPILE) $(SRC)/usr/src/cmd/ptx.c
 
 install: ptx
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp ptx $(DESTDIR)/usr/bin/ptx
 

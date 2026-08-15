@@ -66,6 +66,7 @@ factor.o: $(SRC)/usr/src/cmd/factor/factor.c $(INCDIR)/math.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/factor/factor.c
 
 install: factor
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp factor $(DESTDIR)/usr/bin/factor
 

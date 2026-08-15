@@ -66,6 +66,7 @@ ct.o: $(SRC)/usr/src/cmd/ct/ct.c $(INCDIR)/sgtty.h $(INCDIR)/signal.h $(INCDIR)/
 	$(COMPILE) $(SRC)/usr/src/cmd/ct/ct.c
 
 install: ct
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp ct $(DESTDIR)/usr/bin/ct
 

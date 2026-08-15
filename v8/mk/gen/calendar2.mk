@@ -66,6 +66,7 @@ calendar2.o: $(SRC)/usr/src/cmd/calendar/calendar2.c $(INCDIR)/time.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/calendar/calendar2.c
 
 install: calendar2
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/lib
 	cp calendar2 $(DESTDIR)/usr/lib/calendar2
 

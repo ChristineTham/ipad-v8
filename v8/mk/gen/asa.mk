@@ -66,6 +66,7 @@ asa.o: $(SRC)/usr/src/cmd/asa.c $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/asa.c
 
 install: asa
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp asa $(DESTDIR)/usr/bin/asa
 

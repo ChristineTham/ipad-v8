@@ -66,6 +66,7 @@ calendar1.o: $(SRC)/usr/src/cmd/calendar/calendar1.c $(INCDIR)/pwd.h $(INCDIR)/s
 	$(COMPILE) $(SRC)/usr/src/cmd/calendar/calendar1.c
 
 install: calendar1
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/lib
 	cp calendar1 $(DESTDIR)/usr/lib/calendar1
 

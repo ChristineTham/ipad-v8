@@ -66,6 +66,7 @@ dired.o: $(SRC)/usr/src/cmd/dired/dired.c $(INCDIR)/sgtty.h $(INCDIR)/signal.h $
 	$(COMPILE) $(SRC)/usr/src/cmd/dired/dired.c
 
 install: dired
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp dired $(DESTDIR)/usr/bin/dired
 

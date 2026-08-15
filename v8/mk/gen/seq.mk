@@ -66,6 +66,7 @@ seq.o: $(SRC)/usr/src/cmd/seq.c $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/seq.c
 
 install: seq
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp seq $(DESTDIR)/usr/bin/seq
 

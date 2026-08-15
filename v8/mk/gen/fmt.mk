@@ -69,6 +69,7 @@ head.o: $(SRC)/usr/src/cmd/fmt/head.c $(INCDIR)/local.h $(INCDIR)/setjmp.h $(INC
 	$(COMPILE) $(SRC)/usr/src/cmd/fmt/head.c
 
 install: fmt
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp fmt $(DESTDIR)/usr/bin/fmt
 

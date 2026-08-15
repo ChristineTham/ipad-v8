@@ -91,6 +91,7 @@ y.tab.o: y.tab.c y.tab.h $(TOOLS)
 	$(COMPILE) y.tab.c
 
 install: ratfor
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp ratfor $(DESTDIR)/usr/bin/ratfor
 

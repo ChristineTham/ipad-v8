@@ -66,6 +66,7 @@ cb.o: $(SRC)/usr/src/cmd/cb/cb.c $(INCDIR)/stdio.h $(SRC)/usr/src/cmd/cb/cbtype.
 	$(COMPILE) $(SRC)/usr/src/cmd/cb/cb.c
 
 install: cb
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp cb $(DESTDIR)/usr/bin/cb
 

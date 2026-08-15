@@ -66,6 +66,7 @@ cal.o: $(SRC)/usr/src/cmd/cal.c $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/cal.c
 
 install: cal
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp cal $(DESTDIR)/usr/bin/cal
 

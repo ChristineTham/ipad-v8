@@ -66,6 +66,7 @@ cut.o: $(SRC)/usr/src/cmd/cut.c $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/cut.c
 
 install: cut
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp cut $(DESTDIR)/usr/bin/cut
 

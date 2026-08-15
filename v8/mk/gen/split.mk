@@ -66,6 +66,7 @@ split.o: $(SRC)/usr/src/cmd/split.c $(INCDIR)/ctype.h $(INCDIR)/signal.h $(INCDI
 	$(COMPILE) $(SRC)/usr/src/cmd/split.c
 
 install: split
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp split $(DESTDIR)/usr/bin/split
 

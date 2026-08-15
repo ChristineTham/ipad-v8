@@ -66,6 +66,7 @@ xstr.o: $(SRC)/usr/src/cmd/xstr.c $(INCDIR)/ctype.h $(INCDIR)/signal.h $(INCDIR)
 	$(COMPILE) $(SRC)/usr/src/cmd/xstr.c
 
 install: xstr
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp xstr $(DESTDIR)/usr/bin/xstr
 

@@ -66,6 +66,7 @@ idiff.o: $(SRC)/usr/src/cmd/idiff.c $(INCDIR)/ctype.h $(INCDIR)/signal.h $(INCDI
 	$(COMPILE) $(SRC)/usr/src/cmd/idiff.c
 
 install: idiff
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp idiff $(DESTDIR)/usr/bin/idiff
 

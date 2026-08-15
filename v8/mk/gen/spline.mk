@@ -66,6 +66,7 @@ spline.o: $(SRC)/usr/src/cmd/spline.c $(INCDIR)/ctype.h $(INCDIR)/stdio.h $(TOOL
 	$(COMPILE) $(SRC)/usr/src/cmd/spline.c
 
 install: spline
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp spline $(DESTDIR)/usr/bin/spline
 

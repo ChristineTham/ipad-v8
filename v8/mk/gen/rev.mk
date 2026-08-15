@@ -66,6 +66,7 @@ rev.o: $(SRC)/usr/src/cmd/rev.c $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/rev.c
 
 install: rev
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp rev $(DESTDIR)/usr/bin/rev
 

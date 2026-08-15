@@ -66,6 +66,7 @@ fold.o: $(SRC)/usr/src/cmd/fold.c $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/fold.c
 
 install: fold
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp fold $(DESTDIR)/usr/bin/fold
 

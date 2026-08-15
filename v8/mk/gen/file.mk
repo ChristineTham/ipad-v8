@@ -66,6 +66,7 @@ file.o: $(SRC)/usr/src/cmd/file.c $(INCDIR)/a.out.h $(INCDIR)/ctype.h $(INCDIR)/
 	$(COMPILE) $(SRC)/usr/src/cmd/file.c
 
 install: file
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp file $(DESTDIR)/usr/bin/file
 

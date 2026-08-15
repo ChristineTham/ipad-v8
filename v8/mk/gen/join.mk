@@ -66,6 +66,7 @@ join.o: $(SRC)/usr/src/cmd/join.c $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/join.c
 
 install: join
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp join $(DESTDIR)/usr/bin/join
 

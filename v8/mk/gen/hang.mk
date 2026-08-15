@@ -66,6 +66,7 @@ hang.o: $(SRC)/usr/src/cmd/hang.c $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)
 	$(COMPILE) $(SRC)/usr/src/cmd/hang.c
 
 install: hang
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp hang $(DESTDIR)/usr/bin/hang
 

@@ -66,6 +66,7 @@ apply.o: $(SRC)/usr/src/cmd/apply.c $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/apply.c
 
 install: apply
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp apply $(DESTDIR)/usr/bin/apply
 

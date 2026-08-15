@@ -9,7 +9,7 @@
 # files, and the one time they shared a file with the directory
 # list, stage 8 mkdir'd all of them. See emit_destfiles().
 #
-#	installed paths: 460
+#	installed paths: 461
 #
 bin/adb
 bin/ar
@@ -444,6 +444,7 @@ usr/include/vfont.h
 usr/include/wait.h
 usr/include/whoami
 usr/include/xi.h
+usr/inet/bin/dnsq
 usr/lib/atrun
 usr/lib/calendar1
 usr/lib/calendar2

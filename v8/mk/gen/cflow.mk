@@ -63,6 +63,7 @@ cflow: $(SRC)/usr/src/cmd/cflow.sh
 	chmod +x cflow
 
 install: cflow
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp cflow $(DESTDIR)/usr/bin/cflow
 

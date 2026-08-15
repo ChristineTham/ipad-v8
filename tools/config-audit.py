@@ -58,6 +58,13 @@ EXPECTED = {
     "/etc/motd": "ours: the licensing position, not the 1985 joke",
     "/etc/whoami": "ours: the machine is ipnx-v8",
     "/unix": "stage 7 builds our own kernel",
+    # The Wide-screen preset. The configured REFERENCE was made by
+    # fix-identity.exp, which predates muxterm.w, so it cannot carry the block
+    # that selects it -- ours is the newer file and the difference IS the
+    # feature. Checked by reading the disk, not assumed: rp07new's /.profile
+    # has the `test -f /etc/dmdwide' arm.
+    "/.profile": "ours: adds the MUXTERM arm that picks muxterm.w on a wide screen",
+    "/etc/skel/.profile": "ours: the same MUXTERM arm, for every account we create",
     # Runtime state a freshly built disk has not had time to produce. These
     # are written BY running, so a disk that has them is a disk that has been
     # used, and a disk that lacks them is simply new.

@@ -66,6 +66,7 @@ sum.o: $(SRC)/usr/src/cmd/sum.c $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/sum.c
 
 install: sum
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp sum $(DESTDIR)/usr/bin/sum
 

@@ -105,6 +105,7 @@ subs.o: $(SRC)/usr/src/cmd/qed/subs.c $(INCDIR)/setjmp.h $(INCDIR)/sgtty.h $(INC
 	$(COMPILE) $(SRC)/usr/src/cmd/qed/subs.c
 
 install: qed
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp qed $(DESTDIR)/usr/bin/qed
 

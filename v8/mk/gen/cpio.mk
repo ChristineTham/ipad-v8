@@ -66,6 +66,7 @@ cpio.o: $(SRC)/usr/src/cmd/cpio.c $(INCDIR)/pwd.h $(INCDIR)/signal.h $(INCDIR)/s
 	$(COMPILE) $(SRC)/usr/src/cmd/cpio.c
 
 install: cpio
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp cpio $(DESTDIR)/usr/bin/cpio
 

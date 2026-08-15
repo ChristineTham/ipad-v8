@@ -63,6 +63,7 @@ bundle: $(SRC)/usr/src/cmd/bundle.sh
 	chmod +x bundle
 
 install: bundle
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp bundle $(DESTDIR)/usr/bin/bundle
 

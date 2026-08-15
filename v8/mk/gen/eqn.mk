@@ -141,6 +141,7 @@ y.tab.o: y.tab.c e.def $(TOOLS)
 	$(COMPILE) y.tab.c
 
 install: eqn
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp eqn $(DESTDIR)/usr/bin/eqn
 

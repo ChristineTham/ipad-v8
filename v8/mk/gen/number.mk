@@ -66,6 +66,7 @@ number.o: $(SRC)/usr/src/cmd/number.c $(INCDIR)/ctype.h $(INCDIR)/stdio.h $(TOOL
 	$(COMPILE) $(SRC)/usr/src/cmd/number.c
 
 install: number
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp number $(DESTDIR)/usr/bin/number
 

@@ -85,6 +85,7 @@ y.tab.o: y.tab.c y.tab.h $(TOOLS)
 	$(COMPILE) y.tab.c
 
 install: hoc
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp hoc $(DESTDIR)/usr/bin/hoc
 

@@ -66,6 +66,7 @@ byteyears.o: $(SRC)/usr/src/cmd/byteyears.c $(INCDIR)/ftw.h $(INCDIR)/signal.h $
 	$(COMPILE) $(SRC)/usr/src/cmd/byteyears.c
 
 install: byteyears
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp byteyears $(DESTDIR)/usr/bin/byteyears
 

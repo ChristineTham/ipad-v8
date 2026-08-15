@@ -66,6 +66,7 @@ fsplit.o: $(SRC)/usr/src/cmd/fsplit.c $(INCDIR)/ctype.h $(INCDIR)/stdio.h $(TOOL
 	$(COMPILE) $(SRC)/usr/src/cmd/fsplit.c
 
 install: fsplit
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp fsplit $(DESTDIR)/usr/bin/fsplit
 

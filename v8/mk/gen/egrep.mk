@@ -69,6 +69,7 @@ y.tab.o: y.tab.c $(TOOLS)
 	$(COMPILE) y.tab.c
 
 install: egrep
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp egrep $(DESTDIR)/usr/bin/egrep
 

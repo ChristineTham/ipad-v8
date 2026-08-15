@@ -66,6 +66,7 @@ at.o: $(SRC)/usr/src/cmd/at/at.c $(INCDIR)/ctype.h $(INCDIR)/dir.h $(INCDIR)/sig
 	$(COMPILE) $(SRC)/usr/src/cmd/at/at.c
 
 install: at
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp at $(DESTDIR)/usr/bin/at
 

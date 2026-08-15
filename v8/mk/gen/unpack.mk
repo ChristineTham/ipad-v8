@@ -66,8 +66,10 @@ unpack.o: $(SRC)/usr/src/cmd/pack/unpack.c $(INCDIR)/setjmp.h $(INCDIR)/signal.h
 	$(COMPILE) $(SRC)/usr/src/cmd/pack/unpack.c
 
 install: unpack
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp unpack $(DESTDIR)/usr/bin/unpack
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp unpack $(DESTDIR)/usr/bin/pcat
 

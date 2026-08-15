@@ -66,6 +66,7 @@ uniq.o: $(SRC)/usr/src/cmd/uniq.c $(INCDIR)/ctype.h $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/uniq.c
 
 install: uniq
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp uniq $(DESTDIR)/usr/bin/uniq
 

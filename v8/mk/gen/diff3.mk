@@ -66,6 +66,7 @@ diff3.o: $(SRC)/usr/src/cmd/diff3/diff3.c $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/diff3/diff3.c
 
 install: diff3
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp diff3 $(DESTDIR)/usr/bin/diff3
 

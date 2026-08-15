@@ -66,6 +66,7 @@ wc.o: $(SRC)/usr/src/cmd/wc.c $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/wc.c
 
 install: wc
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp wc $(DESTDIR)/usr/bin/wc
 

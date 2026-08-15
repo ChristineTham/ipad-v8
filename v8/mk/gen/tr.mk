@@ -66,6 +66,7 @@ tr.o: $(SRC)/usr/src/cmd/tr.c $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/tr.c
 
 install: tr
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp tr $(DESTDIR)/usr/bin/tr
 

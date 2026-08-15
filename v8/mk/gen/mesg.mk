@@ -66,6 +66,7 @@ mesg.o: $(SRC)/usr/src/cmd/mesg.c $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)
 	$(COMPILE) $(SRC)/usr/src/cmd/mesg.c
 
 install: mesg
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp mesg $(DESTDIR)/usr/bin/mesg
 

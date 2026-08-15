@@ -66,6 +66,7 @@ bcd.o: $(SRC)/usr/src/cmd/bcd.c $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/bcd.c
 
 install: bcd
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/games
 	cp bcd $(DESTDIR)/usr/games/bcd
 

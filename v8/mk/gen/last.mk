@@ -66,6 +66,7 @@ last.o: $(SRC)/usr/src/cmd/last.c $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)
 	$(COMPILE) $(SRC)/usr/src/cmd/last.c
 
 install: last
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp last $(DESTDIR)/usr/bin/last
 

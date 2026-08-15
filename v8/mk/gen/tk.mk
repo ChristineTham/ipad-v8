@@ -66,6 +66,7 @@ tk.o: $(SRC)/usr/src/cmd/tk.c $(INCDIR)/signal.h $(INCDIR)/stdio.h $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/tk.c
 
 install: tk
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp tk $(DESTDIR)/usr/bin/tk
 

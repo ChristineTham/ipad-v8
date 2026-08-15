@@ -66,6 +66,7 @@ sleep.o: $(SRC)/usr/src/cmd/sleep.c $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/sleep.c
 
 install: sleep
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/bin
 	cp sleep $(DESTDIR)/usr/bin/sleep
 

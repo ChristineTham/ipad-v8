@@ -66,6 +66,7 @@ calendar4.o: $(SRC)/usr/src/cmd/calendar/calendar4.c $(TOOLS)
 	$(COMPILE) $(SRC)/usr/src/cmd/calendar/calendar4.c
 
 install: calendar4
+	-mkdir $(DESTDIR)/usr
 	-mkdir $(DESTDIR)/usr/lib
 	cp calendar4 $(DESTDIR)/usr/lib/calendar4
 
