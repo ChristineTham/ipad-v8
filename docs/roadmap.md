@@ -218,15 +218,15 @@ Turning the shipped image from a demo that boots to `login:` into a machine with
 the user's own account, the host's files, and a network. Stage 1 needs nothing
 new; stages 2 and 3 wait on N3-into-the-image and N4–N7 respectively.
 
-- [ ] **C1** `work/config.exp` — fold the three fix-*.exp scripts into one
+- [x] **C1** `work/config.exp` — fold the three fix-*.exp scripts into one
       idempotent build-time script; add `/etc/skel` and the `/n` mount points
-- [ ] **C2** First-boot provisioner in the app: an account named after the host
+- [x] **C2** First-boot provisioner in the app: an account named after the host
       user, a real V8 home at `/usr/<user>` *(not* the host share — 14-byte
       filenames and case-folding rule that out)*
-- [ ] **C3** Golden image rebuilt on the N3 `il0` kernel; `att il0 nat:` in both
-      configs; `/etc/rc` brings the interface up *(blocked on N3 → image)*
-- [ ] **C4** `/n/macos` and `/n/home` mounted at boot *(N5–N7 done; now blocked
-      only on C3, the image)*
+- [x] **C3** Golden image rebuilt on the N3 `il0` kernel; `att il0 nat:` in both
+      configs; `/etc/rc` brings the interface up
+- [x] **C4** `/n/macos` and `/n/home` mounted at boot *(and the app's SIMH
+      given a network layer at all — see the 2026-08-15 SLiRP/UDP commit)*
 
 ### B1 — toolchain
 - [ ] Import `v10src` + `v10blit` into the running V8
@@ -291,7 +291,7 @@ the safety rules are in [build-from-source.md](build-from-source.md).
       compiled by the *tape's* `cc` (the script conflated "which compiler"
       with "which directory"), and the fixpoint test needed the classic
       stage3-vs-stage3b fallback, now in `v8/mk/fixpoint.sh`
-- [ ] **S6** Stages 4–7: headers, libraries, then everything. Four separate
+- [x] **S6** Stages 4–7: headers, libraries, then everything. Four separate
       pieces, in a forced order, each blocked on the one before:
   - [x] **4** headers — 224 files into `DESTDIR/usr/include`; nothing after
         this compiles against the running system's *(2026-08-10, first run)*

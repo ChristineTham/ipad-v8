@@ -736,10 +736,18 @@ unchanged into both app targets — `app/ipnx/FileShare.swift` runs it behind a
 folder picker. The guest reaches it at 10.0.2.2, which SLiRP aliases to the
 host's loopback, so it needs no forwarding and works inside the iOS sandbox.
 
-**What is not done**: the app still ships the RP06, which has neither the `il0`
-kernel nor the netfs stream fix, so nothing in the guest can mount the share
-yet. That is C3/B0.6 image work with an App Store size decision attached, not
-netfs work.
+**The app now ships the RP07 golden we build** (`work/myv8/rp07new`, embedded
+as `v8.disk` by both targets), with the `il0` kernel, the netfs stream fix,
+the network up from `/etc/rc`, and both mount points. Two faults that hid
+behind each other were fixed on 2026-08-15 and are worth not re-introducing:
+libsimh was built with **no network layer at all**, so `attach il nat:`
+answered "Command not allowed" while autoconfig cheerfully reported `il0`
+(needs **`USE_NETWORK` *and* `HAVE_SLIRP_NETWORK`** — the first is the master
+switch, and with only the second every slirp object links and nothing
+references it); and V8 ships **no `/dev/udp*` nodes and no `udpconfig`**, so
+name resolution failed while TCP worked perfectly. Assert traffic, not files:
+`tools/net-selftest.exp <image>` mounts a share and resolves a name, and is
+the only check that would have caught either.
 
 Next: **submit** — the remaining steps need the Apple account and a final name
 decision, all listed in [docs/app-store.md](docs/app-store.md) — and **Track B**,
