@@ -708,8 +708,16 @@ final class SessionStore: ObservableObject {
             log("unmount: no root shell on \(line.device)"); return
         }
 
-        for point in ["/n/macos", "/n/home"] {
-            link.send("/etc/umount \(point)\r")
+        // `nmount -u <unique-id>', NOT umount(8). A netfs mount is a gmount(2)
+        // object keyed by DEVICE NUMBER -- gmount(RMFSTYP, dev, 1, 0, 0), where
+        // dev is id*256 -- and umount(8) only knows ordinary block filesystems,
+        // so it never had any way to release this and said so with a bare
+        // `/n/macos: I/O error'. The ids are the same ones /etc/rc mounts with
+        // (FileShare.Role.mountID), which is what makes them addressable at all:
+        // unmounting needs neither the connection nor the mount point, which is
+        // exactly why it still works when the far end has gone.
+        for role in FileShare.Role.allCases {
+            link.send("/etc/nmount -u \(role.mountID)\r")
             _ = await link.waitFor("#", timeout: 12)
         }
         link.send("exit\r")
@@ -722,7 +730,7 @@ final class SessionStore: ObservableObject {
         // second-order symptom. Waiting for `#' proves a prompt came back, not
         // that the command worked -- the next step is to capture umount's own
         // output and find out what it actually says on a LIVE mount.
-        log("unmount pass ran on \(line.device) -- effect unverified")
+        log("shares unmounted before snapshot (via \(line.device))")
     }
 
     private func log(_ message: String) {

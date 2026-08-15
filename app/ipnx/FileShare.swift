@@ -37,7 +37,7 @@ final class FileShare: ObservableObject {
     ///
     /// Neither is the V8 account's home directory — see Provisioner for why
     /// pointing a 1985 home at a macOS one does not survive contact.
-    enum Role: String {
+    enum Role: String, CaseIterable {
         case macos, home
 
         /// Fixed rather than rotated per launch, because /etc/rc names them.
