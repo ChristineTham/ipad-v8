@@ -15,5 +15,18 @@
 	<!-- Disk image import/export the user explicitly picks. -->
 	<key>com.apple.security.files.user-selected.read-write</key>
 	<true/>
+	<!-- The shared folders (/n/macos, /n/home) must survive a relaunch, and
+	     user-selected.read-write above does NOT do that: it grants access to
+	     what the picker returned, for this launch only. Persisting it means a
+	     security-scoped bookmark, and CREATING one requires this entitlement.
+
+	     Without it FileShare.adopt() throws on the very first pick --
+	     "Could not remember that folder: The file <name> cannot be opened" --
+	     and because that throw happens before start(), the share never begins
+	     serving either. So the symptom is not "forgets on relaunch", which is
+	     what the name suggests: it is a share that never works once, and a
+	     bookmark that is never stored at all. -->
+	<key>com.apple.security.files.bookmarks.app-scope</key>
+	<true/>
 </dict>
 </plist>

@@ -210,6 +210,10 @@ final class Session: ObservableObject, Identifiable {
         case .tty(let n):
             guard let link else { return }
             state = .connecting
+            // Put last session's picture back BEFORE the line is dialled, so
+            // anything the resumed far end says lands after it rather than on
+            // top of a blank screen.
+            restoreTranscript()
             link.onBytes = { [weak self] bytes in
                 // Strip the eighth bit. V8 is a 7-bit ASCII machine whose tty
                 // driver puts *parity* there — getty's partab[] sends the
@@ -272,8 +276,17 @@ final class Session: ObservableObject, Identifiable {
     /// no `login:` will ever arrive, and typing `root` into a live shell is
     /// not a harmless mistake.
     ///
-    /// root has no password on this image (verified in work/myv8/config.log:
-    /// `login: root` goes straight to `#`), so the name is the whole exchange.
+    /// Neither account has a password by default, so the name is the whole
+    /// exchange (verified in work/myv8/config.log: `login: root` goes straight
+    /// to `#`).
+    ///
+    /// WHICH account is the point. root is needed exactly once — to create the
+    /// user — and after that this is somebody's machine, so it logs in as them
+    /// and they arrive in their own home directory with their own dotfiles and
+    /// their own umask. Coming up as root every time is a demo; the machine is
+    /// meant to be lived in. So: root only while `provisionedUser` is nil, and
+    /// on that one boot the provisioner hands the line back (below) so the
+    /// user's first session is already their own.
     private func autoLogin() async {
         guard line == .tty(1), !autoLoginDone, let link else { return }
         guard settings.autoLoginRoot else { return }
@@ -282,10 +295,50 @@ final class Session: ObservableObject, Identifiable {
             return
         }
         autoLoginDone = true
-        note("logging \(line.device) in as root")
+
+        // ROOT IS FOR ONCE, AND ONLY WHEN THERE IS SOMETHING ONLY ROOT CAN DO.
+        // Creating the account happens exactly once in the life of a disk, and
+        // /etc/dmdwide only needs rewriting when the screen preset actually
+        // changed -- it is a file on the disk and persists by itself. Any other
+        // boot must show the user ONE login, theirs, and nothing else. An
+        // earlier version of this ran the root pass unconditionally, so every
+        // single start replayed a root login, the account creation and a
+        // logout before handing over. That is wrong on a cold boot and absurd
+        // on a resumed one.
+        let wide = settings.activeScreen.romColumns > 88
+        let needsRoot = machine.provisionedUser == nil
+                     || !machine.screenMarkerMatches(wide: wide)
+        if needsRoot {
+            await rootPass(link, wide: wide)
+        }
+
+        let user = machine.provisionedUser
+        note("logging \(line.device) in as \(user ?? "root")")
+        link.send(Array("\(user ?? "root")\r".utf8))
+    }
+
+    /// The one root login, and only when `autoLogin` has decided it is owed.
+    /// Ends by handing the line back to getty so the caller can log the user
+    /// in on a fresh prompt, and wipes the view so none of it is the user's
+    /// problem. Clearing touches the VIEW only -- nothing is typed at the
+    /// guest, which matters because the far end here is getty reading a name.
+    private func rootPass(_ link: ConsoleLink, wide: Bool) async {
         link.send(Array("root\r".utf8))
-        await provisionIfNeeded(link)
-        await syncScreenMarker(link)
+        if machine.provisionedUser == nil {
+            await provisionIfNeeded(link)              // waits for `#' itself
+        } else if await link.waitFor("#", timeout: 20) == false {
+            note("no root shell — skipping this boot")
+            return
+        }
+        if !machine.screenMarkerMatches(wide: wide) {
+            await syncScreenMarker(link)
+            machine.recordScreenMarker(wide: wide)
+        }
+        link.send(Array("exit\r".utf8))
+        if await link.waitFor("login:", timeout: 30) == false {
+            note("getty did not come back — \(line.device) may still be root")
+        }
+        view?.feed(byteArray: ArraySlice(Array("\u{1b}[3J\u{1b}[2J\u{1b}[H".utf8)))
     }
 
     /// Tell the guest which 5620 screen it is talking to, so plain `mux`
@@ -380,6 +433,49 @@ final class Session: ObservableObject, Identifiable {
 
     private func receive(_ bytes: [UInt8]) {
         view?.feed(byteArray: bytes[...])
+        remember(bytes)
+    }
+
+    // MARK: Keeping the picture across a quit
+
+    /// The bytes this line has sent us, capped, so the screen can be put back.
+    ///
+    /// SIMH resumes the VAX exactly and the 5620 gets its framebuffer back from
+    /// screen.bin -- but a glass tty's picture lived only in the TerminalView,
+    /// which is a HOST object rebuilt empty at every launch. So the guest came
+    /// back mid-vi with the file open and the cursor where you left it, and the
+    /// app showed you an empty rectangle. Nothing was lost; nothing was shown.
+    /// ^L would have repainted it, which is the tell.
+    ///
+    /// Replaying the byte stream rather than serialising terminal state: the
+    /// view is a pure function of the bytes fed to it, so feeding them again
+    /// reconstructs exactly what was there, including scrollback, without
+    /// depending on SwiftTerm's internals.
+    private var transcript = [UInt8]()
+    private static let transcriptCap = 256 * 1024
+
+    private func remember(_ bytes: [UInt8]) {
+        transcript.append(contentsOf: bytes)
+        if transcript.count > Self.transcriptCap {
+            transcript.removeFirst(transcript.count - Self.transcriptCap)
+        }
+    }
+
+    /// Called on quit, before the machine is snapshotted.
+    func saveTranscript() {
+        guard shape.isGlass, !transcript.isEmpty,
+              let url = machine.transcriptURL(for: line) else { return }
+        try? Data(transcript).write(to: url, options: .atomic)
+    }
+
+    /// Called when the line is dialled, BEFORE anything new arrives, so the
+    /// replay lands underneath whatever the resumed session says next.
+    private func restoreTranscript() {
+        guard shape.isGlass, transcript.isEmpty,
+              let url = machine.transcriptURL(for: line),
+              let data = try? Data(contentsOf: url), !data.isEmpty else { return }
+        transcript = [UInt8](data)
+        view?.feed(byteArray: transcript[...])
     }
 
     /// Keystrokes, from the view.
@@ -558,6 +654,88 @@ final class SessionStore: ObservableObject {
 
     /// The default window's contents on a first run: the console, so a new
     /// user sees the machine boot, and one glass tty to work in.
+    /// Drop the host shares BEFORE the machine is snapshotted.
+    ///
+    /// A netfs mount straddles the two halves of a snapshot and only one half
+    /// comes back. The MOUNT TABLE is guest RAM, so `restore' returns it
+    /// intact; the TCP CONNECTION under it is host state that no REG describes,
+    /// so it does not. What resumes is a mount that exists and cannot speak --
+    /// and it cannot even be cleared, because umount(8) needs the connection it
+    /// no longer has:
+    ///
+    ///     # /etc/umount /n/macos
+    ///     /n/macos: I/O error
+    ///
+    /// So the only moment this CAN be fixed is BEFORE the save -- which is why
+    /// this runs here. It is not yet a fix: the pass executes, and a resumed
+    /// machine still reports the mount busy, so umount is not releasing it.
+    /// Cold boot remounts correctly; resume does not. See the note below.
+    ///
+    /// On a spare line, as root, and never on a line the user has open: the
+    /// whole point of the login rework is that the app stops typing into
+    /// somebody's session. Best-effort throughout -- a failure here must never
+    /// delay or prevent the snapshot, because a missed unmount is an
+    /// inconvenience and a missed snapshot is a lost session.
+    func unmountShares() async {
+        // A Session OBJECT exists for every line from the start -- they are
+        // dialled lazily, not created lazily -- so "no session" is the wrong
+        // test and finds nothing. What matters is whether the line is live.
+        let free = (2...7).map(Line.tty).first { sessions[$0]?.isRunning != true }
+        guard let line = free, case .tty(let n) = line else {
+            log("unmount: no free line"); return
+        }
+        log("unmount: using \(line.device) port \(machine.dzPort(n))")
+
+        let link = ConsoleLink()
+        defer { link.close() }
+        guard await link.connect(port: machine.dzPort(n), attempts: 8) else {
+            log("unmount: could not dial \(line.device)"); return
+        }
+
+        // getty printed `login:' when it started -- long before this line was
+        // dialled -- and is now blocked in getname(). An empty name makes it
+        // loop and reprint, but ONE carriage return is not reliably enough:
+        // the line is paced and the first one is often swallowed while the
+        // connection settles. Three attempts, which is what actually works.
+        var greeted = false
+        for _ in 0..<3 where !greeted {
+            link.send([0x0d])
+            greeted = await link.waitFor("login:", timeout: 6)
+        }
+        guard greeted else { log("unmount: no login: on \(line.device)"); return }
+        link.send("root\r")
+        guard await link.waitFor("#", timeout: 15) else {
+            log("unmount: no root shell on \(line.device)"); return
+        }
+
+        for point in ["/n/macos", "/n/home"] {
+            link.send("/etc/umount \(point)\r")
+            _ = await link.waitFor("#", timeout: 12)
+        }
+        link.send("exit\r")
+        _ = await link.waitFor("login:", timeout: 8)
+        // NOT YET EFFECTIVE, and measured rather than assumed: this pass runs
+        // (the line above proves it reaches here on a live machine, before the
+        // save), and a resumed machine STILL answers `gmount: Mount device
+        // busy' to a remount. So umount(8) is not releasing a live netfs mount
+        // either, and the earlier `I/O error' on a restored one was only the
+        // second-order symptom. Waiting for `#' proves a prompt came back, not
+        // that the command worked -- the next step is to capture umount's own
+        // output and find out what it actually says on a LIVE mount.
+        log("unmount pass ran on \(line.device) -- effect unverified")
+    }
+
+    private func log(_ message: String) {
+        FileHandle.standardError.write(Data("ipnx store: \(message)\n".utf8))
+    }
+
+    /// Keep every glass terminal's picture, the way the 5620 keeps its
+    /// framebuffer. Called on the quit path, before the machine is snapshotted,
+    /// so what is on disk matches the state the VAX is frozen in.
+    func saveScreens() {
+        for session in sessions.values { session.saveTranscript() }
+    }
+
     func openDefaults() {
         open(.tty(1))
     }

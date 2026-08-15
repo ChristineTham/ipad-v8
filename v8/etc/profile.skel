@@ -1,4 +1,4 @@
-PATH=:/bin:/usr/bin:/usr/games:/usr/jerq/bin
+PATH=:/bin:/usr/bin:/usr/games:/usr/jerq/bin:/usr/inet/bin
 export PATH
 case `tty` in
 /dev/tty00)	TERM=dmd
@@ -17,3 +17,4 @@ case `tty` in
 esac
 export TERM
 stty erase ^H kill ^U intr ^C
+/usr/games/fortune

@@ -102,6 +102,23 @@ final class FileShare: ObservableObject {
     /// its container the moment it relaunches, so what gets persisted is a
     /// security-scoped bookmark and what gets used is the URL resolved from it.
     func adopt(_ url: URL) {
+        // THE URL THE PICKER HANDS BACK IS SECURITY-SCOPED AND NOT YET OPEN.
+        // `.fileImporter' returns a URL the app may reach only between
+        // startAccessingSecurityScopedResource() and its stop, and that covers
+        // merely READING it -- which is what bookmarkData() does. Skip this and
+        // the bookmark call throws NSFileReadUnknownError, surfaced as
+        //
+        //     Could not remember that folder: The file "christie" cannot be opened
+        //
+        // which names the folder and so reads as a problem with the folder. It
+        // is not: every folder fails identically, and the entitlement is
+        // already right. Two separate things are needed and each looks like the
+        // other's symptom -- com.apple.security.files.bookmarks.app-scope to be
+        // ALLOWED to make a bookmark at all, and this to be able to read the
+        // URL you are making it from.
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+
         do {
             #if os(macOS)
             let data = try url.bookmarkData(options: .withSecurityScope,
@@ -111,8 +128,18 @@ final class FileShare: ObservableObject {
             let data = try url.bookmarkData(includingResourceValuesForKeys: nil,
                                             relativeTo: nil)
             #endif
+            // Resolve rather than keep `url': resolve() starts an access that is
+            // deliberately never stopped, because the server reads on its own
+            // thread long after this returns. The picker's scope, stopped by the
+            // defer above, would be gone by then -- so a fallback to `url' here
+            // would hand the share a URL it cannot read, and the failure would
+            // land much later and look like a netfs bug.
+            guard let resolved = Self.resolve(bookmark: data, store: store) else {
+                lastError = "Could not reopen that folder after remembering it."
+                return
+            }
             store.set(data, forKey: keys.bookmark)
-            folder = Self.resolve(bookmark: data, store: store) ?? url
+            folder = resolved
             lastError = nil
             if running { restart() } else { start() }
         } catch {

@@ -121,6 +121,14 @@ final class Machine: ObservableObject {
     /// back is what makes the two halves look like one continuous session.
     var screenURL: URL { supportDir.appendingPathComponent("screen.bin") }
 
+    /// Where a glass tty's picture is kept between launches -- the exact
+    /// counterpart of screen.bin for the 5620. Per line, because each terminal
+    /// has its own screen and its own scrollback.
+    func transcriptURL(for line: Line) -> URL? {
+        guard line.shape.isGlass else { return nil }
+        return supportDir.appendingPathComponent("screen-\(line.device).bin")
+    }
+
     private var snapshotURL: URL { supportDir.appendingPathComponent("state.sav") }
     private var attemptURL: URL { supportDir.appendingPathComponent("restore.attempt") }
     private var pendingDiskURL: URL { supportDir.appendingPathComponent("v8.disk.pending") }
@@ -138,6 +146,32 @@ final class Machine: ObservableObject {
 
     func markProvisioned(_ user: String) {
         try? user.write(to: provisionedURL, atomically: true, encoding: .utf8)
+    }
+
+    /// What we last told the guest about the screen, so we can tell whether it
+    /// still needs telling. `/etc/dmdwide` lives on the DISK and therefore
+    /// persists by itself; writing it costs a root login, and a root login on
+    /// the user's terminal is exactly the thing that must not happen twice.
+    /// So: remember, compare, and touch the guest only when the answer changed.
+    private var screenMarkerURL: URL { supportDir.appendingPathComponent("screenmarker") }
+
+    func screenMarkerMatches(wide: Bool) -> Bool {
+        (try? String(contentsOf: screenMarkerURL, encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines) == (wide ? "wide" : "orig")
+    }
+
+    func recordScreenMarker(wide: Bool) {
+        try? (wide ? "wide" : "orig").write(to: screenMarkerURL, atomically: true, encoding: .utf8)
+    }
+
+    /// The account first boot created, if it has. The marker file holds the
+    /// name precisely so later launches can log in AS that user rather than as
+    /// root: root is needed once, to create the account, and after that this is
+    /// somebody's machine and they should arrive in their own home directory.
+    var provisionedUser: String? {
+        guard let name = try? String(contentsOf: provisionedURL, encoding: .utf8) else { return nil }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     // MARK: - Config templates
@@ -371,6 +405,10 @@ final class Machine: ObservableObject {
             // Leaving the marker would give the replacement image no account
             // and no way to notice it needed one.
             try? fm.removeItem(at: provisionedURL)
+            // ...and what we think we told it about the screen: a pristine disk
+            // has no /etc/dmdwide, so a remembered "wide" would make the first
+            // boot skip writing one and mux would download the wrong muxterm.
+            try? fm.removeItem(at: screenMarkerURL)
             dropSnapshot()
         }
         if fm.fileExists(atPath: pendingDiskURL.path) {
@@ -380,6 +418,10 @@ final class Machine: ObservableObject {
             // else's machine and carries their /etc/passwd, so this
             // installation has to be provisioned into it afresh.
             try? fm.removeItem(at: provisionedURL)
+            // ...and what we think we told it about the screen: a pristine disk
+            // has no /etc/dmdwide, so a remembered "wide" would make the first
+            // boot skip writing one and mux would download the wrong muxterm.
+            try? fm.removeItem(at: screenMarkerURL)
             dropSnapshot()
         }
         if !fm.fileExists(atPath: disk.path) {

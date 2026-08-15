@@ -107,8 +107,10 @@ struct IpnxApp: App {
                     // Snapshot inside a UIKit background task; iOS grants a
                     // few seconds and the save handshake needs well under one.
                     dmd.saveScreen(to: machine.screenURL)
+                    store.saveScreens()
                     let token = UIApplication.shared.beginBackgroundTask(withName: "simh-save")
                     Task {
+                        await store.unmountShares()
                         await machine.background()
                         UIApplication.shared.endBackgroundTask(token)
                     }
@@ -132,6 +134,7 @@ struct IpnxApp: App {
         appDelegate.machine = machine
         appDelegate.settings = settings
         appDelegate.terminal = dmd
+        appDelegate.store = store
         #endif
         if shape == .vt100 { store.openDefaults() }
     }
@@ -197,13 +200,17 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
     weak var machine: Machine?
     weak var settings: Settings?
     weak var terminal: Terminal5620?
+    weak var store: SessionStore?
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         // Before anything else: the terminal always power-cycles, so the only
         // way the next launch can look continuous is to keep its screen.
         terminal?.saveScreen(to: machine?.screenURL)
+        store?.saveScreens()
         guard let machine, machine.canSuspend else { return .terminateNow }
         Task { @MainActor in
+            // Before the snapshot, never after: see SessionStore.unmountShares.
+            await store?.unmountShares()
             await machine.background()
             NSApp.reply(toApplicationShouldTerminate: true)
         }

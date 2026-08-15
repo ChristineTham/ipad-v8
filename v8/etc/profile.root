@@ -1,4 +1,4 @@
-PATH=:/bin:/usr/bin:/usr/games:/usr/jerq/bin
+PATH=:/bin:/usr/bin:/usr/games:/usr/jerq/bin:/usr/inet/bin:/usr/inet/etc
 export PATH
 case `tty` in
 /dev/tty00)	TERM=dmd

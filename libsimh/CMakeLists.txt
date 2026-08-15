@@ -83,7 +83,22 @@ target_compile_definitions(simhvax PRIVATE
   # a shared pcap, and it force-defines HAVE_PCAP_NETWORK. We want the
   # opposite -- SLiRP statically linked, no pcap, no raw sockets, nothing to
   # ask a sandbox for.
-  USE_NETWORK HAVE_SLIRP_NETWORK)
+  #
+  # USE_READER_THREAD is NOT optional once networking is on, and leaving it out
+  # hangs the ATTACH -- long before any guest instruction runs.
+  # eth_open -> eth_reflect -> eth_check_address_conflict_ex sends a loopback
+  # probe and then drains the queue with
+  #
+  #     do { status = eth_read (dev, &recv, NULL); } while (recv.len > 0);
+  #
+  # which terminates only on a read that returns nothing. With a reader thread
+  # eth_read pops a bounded queue and duly runs dry; polling SLiRP synchronously
+  # it does not, and SIMH spins at 100% inside attach_cmd. boot.conf never
+  # reaches `run 2', so the machine has no getty, no shell and no DZ answer --
+  # it presents as an app that came up with a dead terminal, and nothing in the
+  # log says "attach". Upstream's own vax780 command line carries this flag;
+  # ours did not, which is why the desktop binary was fine and the app was not.
+  USE_NETWORK HAVE_SLIRP_NETWORK USE_READER_THREAD)
 
 target_compile_options(simhvax PRIVATE
   -std=c99 -U__STRICT_ANSI__ -O2 -fno-strict-overflow -finline-functions)

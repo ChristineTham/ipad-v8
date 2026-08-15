@@ -122,8 +122,8 @@ struct SettingsView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
-            Toggle("Log tty01 in as root", isOn: $settings.autoLoginRoot)
-            Text("root is the only account and has no password, so the first terminal opens straight into a shell. It waits for the login: prompt rather than typing on a timer, so a resumed session that is already logged in is left alone.")
+            Toggle("Log tty01 in automatically", isOn: $settings.autoLoginRoot)
+            Text("Opens the first terminal straight into your own shell, in your own home directory. Only the very first boot uses root, and only for as long as it takes to create your account — after that this is your machine, so it logs in as you. It waits for the login: prompt rather than typing on a timer, so a resumed session that is already logged in is left alone.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
