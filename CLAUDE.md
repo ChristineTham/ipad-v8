@@ -400,12 +400,24 @@ intact?" into a three-second `shasum` instead of a judgement call.
   avoids it by running under 4.1BSD. Use `rp1` as a **raw-only courier**
   (`/dev/rrp1a` = `c 4 8`) with the work area on `/usr` — mixing raw and buffered I/O
   on one `hp` unit corrupts the filesystem *after* everything appears to work. Raw
-  transfers **must be 512 bytes**: 4 KB+ writes fail with `er1=5<RMR,ILF>` after one
-  record, and `tar`'s own blocking-20 write path silently drops everything past the
-  first 10,240 bytes while still exiting 0. **The 512-byte half of this is now
-  suspect**: `er1=5<RMR,ILF>` turned out to be the signature of a missing
-  `set noasynch` during N0, and `work/rawwrite.exp` never set it either. Re-test
-  before relying on the limit; the `tar` blocking trap is independent and real.
+  transfers were believed to need **512-byte** records, on the strength of 4 KB+
+  writes failing with `er1=5<RMR,ILF>` after one record. **That rule is wrong and
+  is now retired.** `er1=5` was the signature of a missing `set noasynch`, and
+  `work/rawwrite.exp` — the script the rule came from — never set it.
+  `tools/rawsize-probe.exp` re-tested it with `set noasynch` on, writing to
+  `/dev/rrp2a` and reading each one back:
+
+	512 B    4+0 records in/out   RS-512-ok
+	1024 B   4+0 records in/out   RS-1024-ok
+	4096 B   4+0 records in/out   RS-4096-ok
+	10240 B  4+0 records in/out   RS-10240-ok
+
+  Every size byte-identical on readback, including the two that were supposed to
+  be impossible. Stage 8 is the same result at scale and had been proving it all
+  along without anyone noticing: `mkfs` writes `BSIZE` — **1024** — through the
+  raw device, and the disk it builds fscks, mounts and boots. **The `tar`
+  blocking-20 trap is independent and still real**: it silently drops everything
+  past the first 10,240 bytes and still exits 0.
 - **V8's libc is more ANSI than its reputation; its compiler is not.** Measured with
   `tools/v8-libc-probe.exp` (`nm /lib/libc.a` on a scratch boot): `strchr`, `strrchr`,
   `strpbrk`, `strspn`, `strcspn`, `strtok`, `memcpy`, `memcmp`, `memset`, `qsort` and

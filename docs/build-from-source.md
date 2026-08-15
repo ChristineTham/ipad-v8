@@ -773,6 +773,44 @@ data are being linked.
 None of this contradicts stage 2's byte-identical libc. That compared an archive
 of **objects**, and objects are precisely where the two agree.
 
+## Stage 6's coverage, and what the 116 skipped components actually are
+
+Stage 6 builds **195 commands with zero failures**. `gen/stage6-skipped.txt`
+names every component it does not, with the reason, generated rather than
+written — and the reasons sort into two very different piles.
+
+**81 are not gaps at all:**
+
+| | |
+|---:|---|
+| 37 | no binary of that name on the image — there is nothing to build |
+| 23 | a loose file or hand-written entry already provides the command |
+| 21 | the directory name is not a binary on the image |
+
+**35 need a build mechanism this generator does not have yet**, and they group
+by the mechanism rather than by the command:
+
+| | mechanism |
+|---:|---|
+| 8 | yacc/lex generated sources — `config` already does this, but each of these adds a wrinkle: `neqn` copies `y.tab.h` to `e.def`, `awk` builds a helper (`maketab`) and *runs* it to generate `proctab.c` |
+| 5 | several programs from one directory, needing the makefile's own object split (`ex`/`expreserve`/`exrecover`, `spell`, `refer`, …) |
+| 6 | include a header the tape does not ship (`tokdefs`, `bio.h`, `UNET/tcp.h`, …) |
+| 4 | link an archive built inside the component |
+| 6 | installed to a second directory as well |
+| 6 | one-offs: `xstr`'s multi-step `.c.o`, assembly-with-cpp, a `non-constant case expression` `/bin/cc` rejects, and `cfront`'s `munch.c`, which needs a C++ compiler V8 does not have |
+
+**None of this is missing from the disk.** Every one of these commands is on
+the golden as a `copy` row — a Bell Labs binary carried by `gen/carry.txt` —
+so `awk`, `ex`, `refer`, `spell`, `calendar` and `eqn` are all present and
+work. What is incomplete is their *provenance*: they are inherited rather than
+rebuilt, which `provenance.txt` records honestly and `retire-check.py` does
+not care about, because the tape's sources for them are in git either way.
+
+So this is a **build-coverage backlog, not a defect**, and it is deliberately
+left as one: each of the five mechanisms above is a real change to `mkdep.py`
+whose only honest test is a full stage 6, and landing five of them together
+unvalidated is how a working build stops working.
+
 ## Sources
 
 - [FreeBSD `Makefile.inc1`](https://github.com/freebsd/freebsd-src/blob/main/Makefile.inc1) — stage comments and the lib-before-bin rationale
