@@ -129,6 +129,12 @@ struct IpnxApp: App {
         // Before start(), because start() writes boot.conf and `attach il`
         // is a boot-time decision the guest cannot be told about later.
         machine.networkEnabled = settings.networkEnabled
+        // A resume comes back with no shares by design (they are dropped before
+        // the snapshot so they can be retaken cleanly); /etc/rc only mounts on a
+        // cold boot, so this is what puts them back.
+        machine.onRestored = { [store, share, homeShare] in
+            Task { await store.mountShares([share, homeShare]) }
+        }
         machine.start()
         #if os(macOS)
         appDelegate.machine = machine

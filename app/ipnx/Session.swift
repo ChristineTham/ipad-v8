@@ -676,65 +676,93 @@ final class SessionStore: ObservableObject {
     /// somebody's session. Best-effort throughout -- a failure here must never
     /// delay or prevent the snapshot, because a missed unmount is an
     /// inconvenience and a missed snapshot is a lost session.
+    /// Put the host shares back after a resume.
+    ///
+    /// /etc/rc mounts them once, at boot, and a restored machine never boots
+    /// again -- so without this a resumed session comes back to empty mount
+    /// points forever, and the instant-on that is meant to put you exactly
+    /// where you were quietly does not. Only shares that are actually serving
+    /// are attempted: a folder the user never granted has nothing listening,
+    /// and nmount would sit there failing.
+    func mountShares(_ shares: [FileShare]) async {
+        let live = shares.filter { $0.running }
+        guard !live.isEmpty else { return }
+        await onSpareLine { link in
+            for share in live {
+                link.send("/etc/nmount 10.0.2.2 \(share.port) \(share.role.mountID) \(share.role.mountPoint)\r")
+                _ = await link.waitFor("#", timeout: 60)
+            }
+            self.log("remounted \(live.count) share(s) after resume")
+        }
+    }
+
     func unmountShares() async {
-        // A Session OBJECT exists for every line from the start -- they are
-        // dialled lazily, not created lazily -- so "no session" is the wrong
-        // test and finds nothing. What matters is whether the line is live.
+        await onSpareLine { link in
+            // `nmount -u <unique-id>', NOT umount(8). A netfs mount is a
+            // gmount(2) object keyed by DEVICE NUMBER -- gmount(RMFSTYP, dev,
+            // 1, 0, 0), dev being id*256 -- and umount(8) knows only ordinary
+            // block filesystems, so it never had any way to release this. It
+            // answered a bare `/n/macos: I/O error', which reads as the dead
+            // connection being the problem and is not: it fails the same way on
+            // a LIVE mount. Unmounting by id needs neither the connection nor
+            // the mount point, which is exactly why it still works when the far
+            // end has gone.
+            for role in FileShare.Role.allCases {
+                link.send("/etc/nmount -u \(role.mountID)\r")
+                _ = await link.waitFor("#", timeout: 12)
+            }
+            self.log("shares unmounted before snapshot")
+        }
+    }
+
+    /// Borrow a terminal the user is not using, become root on it, do something
+    /// that needs root, and give it back.
+    ///
+    /// Every line has its own listen port, so this needs no UI and disturbs
+    /// nothing. Two things it must get right, both learned the hard way: a
+    /// Session OBJECT exists for every line from the start -- they are dialled
+    /// lazily, not created lazily -- so "a line with no session" matches
+    /// nothing and the whole pass returns silently; and getty printed `login:'
+    /// when it started, long before this line was dialled, so it is blocked in
+    /// getname() and must be nudged into reprinting. One carriage return is not
+    /// reliably enough on a paced line.
+    private func log(_ message: String) {
+        FileHandle.standardError.write(Data("ipnx store: \(message)\n".utf8))
+    }
+
+    private func onSpareLine(_ work: (ConsoleLink) async -> Void) async {
         let free = (2...7).map(Line.tty).first { sessions[$0]?.isRunning != true }
         guard let line = free, case .tty(let n) = line else {
-            log("unmount: no free line"); return
+            log("no spare line"); return
         }
-        log("unmount: using \(line.device) port \(machine.dzPort(n))")
-
         let link = ConsoleLink()
         defer { link.close() }
         guard await link.connect(port: machine.dzPort(n), attempts: 8) else {
-            log("unmount: could not dial \(line.device)"); return
+            log("could not dial \(line.device)"); return
         }
 
-        // getty printed `login:' when it started -- long before this line was
-        // dialled -- and is now blocked in getname(). An empty name makes it
-        // loop and reprint, but ONE carriage return is not reliably enough:
-        // the line is paced and the first one is often swallowed while the
-        // connection settles. Three attempts, which is what actually works.
+        // Let the connection settle before the first nudge. tmxr has just
+        // accepted the socket and is still doing telnet negotiation; a CR sent
+        // into that is simply lost, and the probe that finally worked by hand
+        // read for two seconds before typing anything. Five attempts because
+        // this runs on the quit path, where giving up early means the share
+        // stays mounted across the snapshot and the next resume is broken.
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
         var greeted = false
-        for _ in 0..<3 where !greeted {
+        for _ in 0..<5 where !greeted {
             link.send([0x0d])
-            greeted = await link.waitFor("login:", timeout: 6)
+            greeted = await link.waitFor("login:", timeout: 8)
         }
-        guard greeted else { log("unmount: no login: on \(line.device)"); return }
+        guard greeted else { log("no login: on \(line.device)"); return }
         link.send("root\r")
         guard await link.waitFor("#", timeout: 15) else {
-            log("unmount: no root shell on \(line.device)"); return
+            log("no root shell on \(line.device)"); return
         }
 
-        // `nmount -u <unique-id>', NOT umount(8). A netfs mount is a gmount(2)
-        // object keyed by DEVICE NUMBER -- gmount(RMFSTYP, dev, 1, 0, 0), where
-        // dev is id*256 -- and umount(8) only knows ordinary block filesystems,
-        // so it never had any way to release this and said so with a bare
-        // `/n/macos: I/O error'. The ids are the same ones /etc/rc mounts with
-        // (FileShare.Role.mountID), which is what makes them addressable at all:
-        // unmounting needs neither the connection nor the mount point, which is
-        // exactly why it still works when the far end has gone.
-        for role in FileShare.Role.allCases {
-            link.send("/etc/nmount -u \(role.mountID)\r")
-            _ = await link.waitFor("#", timeout: 12)
-        }
+        await work(link)
+
         link.send("exit\r")
         _ = await link.waitFor("login:", timeout: 8)
-        // NOT YET EFFECTIVE, and measured rather than assumed: this pass runs
-        // (the line above proves it reaches here on a live machine, before the
-        // save), and a resumed machine STILL answers `gmount: Mount device
-        // busy' to a remount. So umount(8) is not releasing a live netfs mount
-        // either, and the earlier `I/O error' on a restored one was only the
-        // second-order symptom. Waiting for `#' proves a prompt came back, not
-        // that the command worked -- the next step is to capture umount's own
-        // output and find out what it actually says on a LIVE mount.
-        log("shares unmounted before snapshot (via \(line.device))")
-    }
-
-    private func log(_ message: String) {
-        FileHandle.standardError.write(Data("ipnx store: \(message)\n".utf8))
     }
 
     /// Keep every glass terminal's picture, the way the 5620 keeps its

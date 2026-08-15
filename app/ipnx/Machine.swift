@@ -35,6 +35,11 @@ final class Machine: ObservableObject {
     /// path asks before deciding to defer termination).
     var canSuspend: Bool { phase == .up && control.isConnected }
 
+    /// Called once, after a snapshot has been restored and the machine is
+    /// running again. Cold boots do not fire it: /etc/rc has already done the
+    /// equivalent work for them.
+    var onRestored: (() -> Void)?
+
     /// Console bytes for the terminal view (wired up by the view layer).
     var onOutput: (([UInt8]) -> Void)?
 
@@ -87,7 +92,13 @@ final class Machine: ObservableObject {
     /// V8 hangs up the session and getty starts over.
     private var dzAttachments: String {
         (0...7).map { line in
-            "att dz \(line == 0 ? "-m " : "")Line=\(line),Speed=*32,127.0.0.1:\(dzPort(line))"
+            // `;nomessage' suppresses tmxr's "Connected to the VAX 11/780
+            // simulator DZ device, line N" greeting, which is SIMH talking to
+            // the user over a line that is supposed to carry only V8. NOT
+            // `;notelnet', which would also switch the line to a raw socket:
+            // these lines speak the telnet wire protocol and ConsoleLink's IAC
+            // handling depends on it.
+            "att dz \(line == 0 ? "-m " : "")Line=\(line),Speed=*32,127.0.0.1:\(dzPort(line));nomessage"
         }.joined(separator: "\n")
     }
     private var simThread: Thread?
@@ -357,6 +368,12 @@ final class Machine: ObservableObject {
                 consumeSnapshot()   // machine is running again: sav now stale
                 Machine.note("restored")
                 phase = .up
+                // A resumed machine has no shares: they were dropped before the
+                // snapshot precisely so they could be taken up cleanly now.
+                // /etc/rc mounts them on a cold boot and never runs again, so
+                // this is the only thing that can -- and putting the user back
+                // exactly where they were is the whole point of a resume.
+                onRestored?()
             } else {
                 phase = .booting
                 // With a telnet console V8 autoboots — fsck (self-healing
