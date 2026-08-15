@@ -58,7 +58,14 @@ test -x $DEST/bin/config -o -x $DEST/etc/config || {
 CONFIG=$DEST/etc/config
 test -x $CONFIG || CONFIG=$DEST/bin/config
 
+# Bracketed with the guest's own clock because this copy is the one phase of
+# the whole build that is purely netfs: a few hundred small files pulled off
+# the share, one round trip per path component. It is therefore the honest
+# benchmark for anything that claims to make netfs faster -- stage 8 is not
+# (it copies with cpio off a locally attached disk) and neither is a
+# multi-megabyte read (netfs is latency bound, so bytes tell you nothing).
 echo "=== stage 7: copying usr/sys -> $SYS ==="
+echo "NETFS-COPY-START `date`"
 rm -rf $SYS
 mkdir $BLD 2>/dev/null
 mkdir $SYS || { echo "buildkernel: cannot make $SYS" 1>&2; exit 1; }
@@ -113,6 +120,7 @@ do
 		done
 	done
 done
+echo "NETFS-COPY-END `date`"
 echo "copied: `ls $SYS | wc -l` directories, `find $SYS -type f -print | wc -l` files"
 
 # config writes conf.c, ioconf.c, ubglue.s, a makefile and a pile of headers

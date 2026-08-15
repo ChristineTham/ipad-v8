@@ -168,6 +168,7 @@ static struct il_ctx {
     struct il_rxbuf     rxq[IL_RXQ];
     int                 rxq_head;
     int                 rxq_count;
+    int                 rxburst;                /* fast-poll calls left */
     uint8               rxframe[IL_MAXFRAME + IL_HDRLEN];   /* frame in flight */
     uint32              rxtotal;                            /* bytes to hand over */
     uint32              rxoff;                              /* handed over so far */
@@ -392,7 +393,7 @@ switch (cmd) {
         il.online = 0;
         il.promisc = 0;
         il.loopback = 0;
-        il.rxq_head = il.rxq_count = 0;
+        il.rxq_head = il.rxq_count = il.rxburst = 0;
         il.txlen = 0;
         il.lost = 0;
         il.csr &= ~(ILCSR_CDONE | ILCSR_RDONE);
@@ -677,9 +678,14 @@ il_setrint ();
 
 /* Receive polling */
 
+/* How long to keep polling fast after a packet, in service calls.  netfs is
+   strictly request/response, so a frame arriving is very good evidence that
+   another is about to. */
+#define IL_BURST        200
+
 t_stat il_svc (UNIT *uptr)
 {
-int count;
+int count, got = 0;
 
 if (il.eth) {
     il_rxpump ();                                       /* finish any chain */
@@ -689,12 +695,35 @@ if (il.eth) {
             break;
         eth_read (il.eth, &il.rxpkt, NULL);
         if (il.rxpkt.len > 0) {
-            count = 1;
+            count = got = 1;
             il_deliver (il.rxpkt.msg, il.rxpkt.len);
             }
         } while (count && il.rxq_count && !il.rxbusy);
     }
-sim_clock_coschedule (uptr, tmxr_poll);
+
+/* THE LATENCY THIS AVOIDS IS THE WHOLE COST OF netfs.  The protocol costs one
+   round trip per PATH COMPONENT -- nanami() in sys/neta.c walks a name a piece
+   at a time -- so opening one file is several exchanges, and each used to wait
+   for the next calibrated clock poll to notice the reply had arrived.
+   tmxr_poll rides the 10 ms system clock, which is why this measured ~16 ms a
+   request and ~30 files a minute regardless of file size.  It is a LATENCY
+   bound and not a bandwidth one; counting bytes tells you nothing.
+
+   So after a frame, poll hard for a bounded window, then go back to riding the
+   clock.  The fallback is what keeps the machine idle-friendly: sim_idle()
+   sleeps only when the unit at the head of the event queue has UNIT_IDLE --
+   this one does -- but a unit that reschedules itself every few hundred
+   microseconds FOREVER would keep the queue busy and pin a core anyway.  The
+   window is bounded for exactly that reason: a quiet machine is back on the
+   clock within IL_BURST calls and costs what it always did. */
+if (got)
+    il.rxburst = IL_BURST;
+if (il.rxburst > 0) {
+    il.rxburst--;
+    sim_activate (uptr, 1000);                          /* ~200 us at 5 MHz */
+    }
+else
+    sim_clock_coschedule (uptr, tmxr_poll);
 return SCPE_OK;
 }
 

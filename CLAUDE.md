@@ -619,11 +619,20 @@ intact?" into a three-second `shasum` instead of a judgement call.
   bytes in a different order — pick wrong and the inode addresses look almost
   plausible. This turned "what is actually on that disk?" from a five-minute boot
   into a one-second question, which is what made the retirement audit possible at all.
-- **netfs costs a round trip per file, not per byte** — measured at ~30 files/minute
-  through the emulated VAX + Interlan + SLiRP. So it is excellent for a build reading
-  sources on demand and hopeless for bulk installs: 2264 runtime files over the wire
-  is ninety minutes, and the same set via `cpio` off a mounted disk is four seconds.
-  Diagnose by counting *files*, never bytes.
+- **netfs costs a round trip per path component, not per byte** — so diagnose it by
+  counting *files*, never bytes, and never benchmark it with one big read.
+  **The round trip was the emulator's, not the protocol's.** `il_svc()` ended in
+  `sim_clock_coschedule (uptr, tmxr_poll)`, which rides the calibrated 10 ms clock,
+  so every reply waited for the next tick to be noticed — and a path is several
+  exchanges, so the cost compounded with directory depth. A bounded fast-poll window
+  after each received frame (`IL_BURST`, `libsimh/patches/pdp11_il.c`) took stage 7's
+  copy of usr/sys — 389 small files off the share — from **290 s to 11 s, 26×**,
+  measured between the `NETFS-COPY-START`/`END` stamps `buildkernel.sh` now prints on
+  every build. The window is bounded so an idle machine falls back to the clock
+  within 200 service calls and keeps the 2.7% idle property: sampled across an
+  identical boot-and-assert run, patched and unpatched are the same distribution
+  (peaks 79.8 vs 78.6, lows 7.6 vs 6.6). Bulk installs are still better off with
+  `cpio` off a mounted disk, but "hopeless" was a property of our device model.
 - **`cp` per file is what makes stage 8 slow, not I/O.** 400 copies took longer than
   the `mkfs` of a 475 MB filesystem. `cpio -p` reads its path list from stdin, which
   is exactly the shape of a generated manifest — one process for the whole set.
