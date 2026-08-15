@@ -373,6 +373,37 @@ intact?" into a three-second `shasum` instead of a judgement call.
   starts before the VAX so the boot transcript has somewhere to land, and a window holding
   one terminal hangs up its line when closed. Full record, including the traps:
   [docs/ui-redesign.md](docs/ui-redesign.md).
+- **The app's SIMH needs THREE defines to have a network, and each missing one
+  fails differently.** `USE_NETWORK` is the master switch: without it
+  `sim_ether.c` compiles a stub `eth_open` returning SCPE_NOFNC, so
+  `attach il nat:` answers **"Command not allowed"** while the NI1010 is
+  compiled in and autoconfig cheerfully reports `il0` — a guest that boots and
+  cannot pass a packet. `HAVE_SLIRP_NETWORK` then selects the `nat:` transport;
+  with only that one, all of `slirp/` compiles and links and *nothing
+  references it*, so the linker drops every object and the error is unchanged —
+  the archive reads as correct under `nm` (56 slirp symbols) while the app
+  binary has none. **Check for an UNDEFINED `_sim_slirp_open`, never a defined
+  one.** `USE_READER_THREAD` is not optional either: `eth_open` →
+  `eth_reflect` → `eth_check_address_conflict_ex` drains with
+  `do { eth_read(...) } while (recv.len > 0)`, which ends only on a read that
+  returns nothing, and polling SLiRP synchronously it never does — SIMH spins
+  at 100% *inside* `attach_cmd`, `boot.conf` never reaches `run 2`, and the app
+  comes up with no guest at all. Upstream's own vax780 command line carries it.
+  Not `USE_SHARED` (that means dlopen'd pcap and force-defines
+  `HAVE_PCAP_NETWORK`). iOS also needs `apply-iosnet.sh`: `sim_ether.c` calls
+  `gethostuuid(2)`, which iOS lacks, and only the *device* slice fails — macOS
+  and the simulator build it happily.
+- **A netfs mount is released by `nmount -u <id>`, never by `umount(8)`.** It is
+  a `gmount(2)` object keyed by **device number** (`gmount(RMFSTYP, id*256, 1,
+  0, 0)`), and umount knows only ordinary block filesystems, so it answers a
+  bare `/n/macos: I/O error` — which reads as the connection being at fault and
+  is not: it fails identically on a *live* mount. Unmounting by id needs
+  neither the connection nor the mount point, which is exactly why it still
+  works after the far end has gone. Consequence for the app: a snapshot taken
+  with a share mounted comes back with a mount that cannot speak *and* cannot
+  be cleared, because the mount table is guest RAM and survives while the TCP
+  connection is host state and does not — so the shares are dropped **before**
+  the save and remounted after the restore (`SessionStore`).
 - `libsimh` compiles without `SIM_ASYNCH_IO`, so `set noasynch` errors ("Command not
   allowed") and is unnecessary — the V8-safe synchronous mode is a build-time guarantee.
   **The desktop `work/opensimh/BIN/vax780` is the opposite**: it *is* built with async
