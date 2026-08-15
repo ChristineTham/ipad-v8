@@ -55,7 +55,12 @@ EXPECTED = {
     "/etc/fstab": "geometry: /usr is partition g on an RP06 and f on an RP07",
     "/etc/mtab": "runtime state — what was mounted on whichever machine",
     "/etc/utmp": "runtime state — who was logged in",
-    "/etc/motd": "ours: the licensing position, not the 1985 joke",
+    "/etc/motd": "ours: a greeting and a pointer, not the 1985 joke",
+    # The licensing position moved out of motd and into a file of its own, so
+    # what greets you at every login is two lines rather than seventeen. The
+    # tape has no /etc/copyright at all -- it is ours, and it is where motd
+    # now points.
+    "/etc/copyright": "ours: the licensing position, moved out of motd",
     "/etc/whoami": "ours: the machine is ipnx-v8",
     "/unix": "stage 7 builds our own kernel",
     # The Wide-screen preset. The configured REFERENCE was made by
