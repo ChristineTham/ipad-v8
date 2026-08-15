@@ -716,7 +716,21 @@ if (il.eth) {
    microseconds FOREVER would keep the queue busy and pin a core anyway.  The
    window is bounded for exactly that reason: a quiet machine is back on the
    clock within IL_BURST calls and costs what it always did. */
-if (got)
+/* RE-ARM ONLY WHEN THE LAST WINDOW HAS FULLY EXPIRED.  `if (got)' was wrong
+   and the comment above was wrong with it: any packet reset the counter to
+   full, so under steady traffic -- which SLiRP produces merely by existing --
+   the window never closed and the unit rescheduled itself every 1000
+   instructions forever.  UNIT_IDLE does not save you there: sim_idle() will
+   not sleep across a sub-millisecond gap, so it spins instead.  Measured in
+   the app: 99.5% of a core at an idle login: with networking on, against
+   8.7-20% with it off, and a guest so starved that `date' took 30 s.  That is
+   the stock unpatched figure -- the idle work of A1 undone by an optimisation
+   that claimed to be bounded and was not.
+
+   Expiring first means a burst is followed by at least one clock-paced poll,
+   so the duty cycle is bounded no matter how much traffic arrives, while a
+   request/response exchange still completes inside one window. */
+if (got && il.rxburst == 0)
     il.rxburst = IL_BURST;
 if (il.rxburst > 0) {
     il.rxburst--;
