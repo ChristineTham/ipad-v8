@@ -1,0 +1,196 @@
+#!/usr/bin/env expect
+# Put a userland in the Tenth Edition filesystem, so the kernel that already
+# boots has something to exec.  Phase K5.
+#
+#	expect tools/v10-userland.exp <image> <tree> <ours> <mk> <scratch>
+#
+# Normally run through tools/v10-userland.sh.
+#
+# WHERE THIS PICKS UP.  tools/v10-mkimage.sh made the filesystem and put
+# seki.u in as /unix; the 750 boots it and prints
+#
+#	unix
+#	Unix 10e Mar 15 04:03 1990
+#	mem = 6623232
+#
+# and then stops, because that is where it mounts root and execs /etc/init,
+# and the filesystem holds exactly one file.
+#
+# WHAT SINGLE-USER ACTUALLY NEEDS, from cmd/init.c:
+#
+#	ctty[]  = "/dev/console"    opened before anything else
+#	shell[] = "/bin/sh"         execl'd with "-" as argv[0]
+#
+# and nothing else.  RB_SINGLE is 2 (sys/reboot.h), so the console command
+# file's `D R5 0' becomes `D R5 2'.
+#
+# WHY DESTDIR POINTS AT THE MOUNT.  v10/mk/gen/*.mk already install through
+# $(DESTDIR), and B2.1 proved they build under V8's make with the V10
+# toolchain (tools/v10-make.sh, 30/30).  Pointing DESTDIR at the mounted V10
+# filesystem is the whole installation step -- no staging tree, no second
+# copy, and the makefiles are unchanged.
+#
+# WHY THE TOOLCHAIN IS ASSEMBLED HERE AND WAS NOT IN v10-mkimage.  These
+# binaries have to run on the V10 KERNEL, where 16 of 128 syscall slots
+# differ from V8's, so they are built by V10's compiler and linked against
+# V10's libc.  mkbitfs only ever ran on V8, which is why building it with
+# V8's cc was right there and would be wrong here.
+
+set timeout 900
+log_user 1
+source [file dirname [info script]]/v8drive.exp
+source [file dirname [info script]]/v10tc.exp
+
+if {[llength $argv] < 5} {
+    puts "usage: v10-userland.exp <image> <tree> <ours> <mk> <scratch>"
+    exit 2
+}
+set img   [lindex $argv 0]
+set tport [lindex $argv 1]
+set oport [lindex $argv 2]
+set mport [lindex $argv 3]
+set sport [lindex $argv 4]
+
+set L   /usr/v10/lib
+set V   /n/v10/src
+set INC /usr/v10/include
+set OBJ /usr/v10obj
+set R   /mnt
+
+# Built from V10 source by the V10 toolchain, installed through DESTDIR.
+set BUILT {init getty login mount umount mkfs fsck icheck sync date stty
+           cat cp mv rm mkdir echo}
+
+# Taken from the tarball as linked 1995 binaries: these are the ones with no
+# source-build needed, and sh is the one single-user cannot start without.
+#   dest                     source
+set PREBUILT {
+    {bin/sh        cmd/sh/sh}
+    {bin/ls        cmd/ls}
+    {bin/sed       cmd/sed/sed}
+    {bin/make      cmd/make/make}
+    {lib/ccom      cmd/ccom/vax/comp}
+    {bin/as        cmd/as/as}
+    {lib/libc.a    libc/libc.a}
+    {usr/bin/ranlib cmd/ranlib}
+}
+
+set results {}
+proc note {name ok} {
+    global results
+    lappend results [list $name $ok]
+}
+proc report {} {
+    global results
+    puts "\n===== V10 USERLAND RESULTS ====="
+    set failed 0
+    foreach r $results {
+        puts [format "  %-36s %s" [lindex $r 0] [expr {[lindex $r 1] ? "ok" : "NO"}]]
+        if {![lindex $r 1]} { incr failed }
+    }
+    puts "===== [expr {[llength $results] - $failed}]/[llength $results] =====\n"
+    return $failed
+}
+
+v8_boot $img {"set il enable" "attach il nat:" "set rp1 rp07" "attach rp1 v10root.img"}
+v8_login root
+
+puts "\n===== V10 USERLAND (K5) ====="
+v8_sh "PATH=/bin:/etc:/usr/bin; export PATH"
+v8_sh "OK=-ok"
+
+v8_sh "mkdir /n/v10 /n/v10ours /n/v10mk /n/t" 60
+v8_sh "/etc/nmount 10.0.2.2 $tport 78 /n/v10" 120
+v8_sh "/etc/nmount 10.0.2.2 $oport 79 /n/v10ours" 120
+v8_sh "/etc/nmount 10.0.2.2 $mport 80 /n/v10mk" 120
+v8_sh "/etc/nmount 10.0.2.2 $sport 81 /n/t" 120
+note "tree mounted" [v8_try "cat $V/cmd/adb/vax/hello.c" "hello, world" 120]
+
+# ------------------------------------------------- mount the V10 filesystem ---
+#
+# minor 74 = 64 | (1<<3) | 2 : BITFS set, unit 1, partition c.  dkunit masks
+# bit 6 out before the shift, so V8 reaches the right drive and BITFS(dev)
+# still reads true -- see tools/v10-mkimage.exp.
+v8_sh "rm -f /dev/rp1c; /etc/mknod /dev/rp1c b 0 74" 120
+v8_sh "rm -rf $R; mkdir $R" 60
+note "V10 filesystem mounted" [v8_try "/etc/mount /dev/rp1c $R && echo MNT\$OK" "MNT-ok" 300]
+note "/unix is where we left it" [v8_try "ls -l $R/unix" "234855" 120]
+
+# --------------------------------------------------------------- toolchain ---
+foreach r [v10_tc_build $L $V] { note "tc: [lindex $r 0]" [lindex $r 1] }
+note "tc: toolchain smoke test" [v10_tc_smoke $L]
+
+v8_sh "rm -rf $INC; mkdir $INC" 120
+# V8's mkdir makes ONE level, so the object root has to exist before any
+# component directory under it.  Left out once, and all eighteen builds
+# failed with `mkdir: cannot access /usr/v10obj/.' -- the same trap
+# mkgen.mkdirs_for() exists to handle for install paths.
+v8_sh "rm -rf $OBJ; mkdir $OBJ" 120
+v8_sh "cd /n/v10/include; find . -print | cpio -pd $INC" 900
+note "headers staged" [v8_try "test -s $INC/sys/param.h && echo HDR\$OK" "HDR-ok" 120]
+
+# ------------------------------------------------------ the directory tree ---
+foreach d {bin etc lib dev tmp usr usr/bin usr/lib usr/include usr/adm} {
+    v8_sh "mkdir $R/$d" 60
+}
+v8_sh "chmod 777 $R/tmp" 60
+
+# /dev/console is char major 0 -- from seki's own generated config,
+# lsys/astro/seki.c.c, whose cdevsw[] opens
+#	&cncdev,  /* 0 */
+#	&dzcdev,  /* 1 */
+# and whose bdevsw[] puts &rabdev at 7.  Those are V10's numbers, not V8's;
+# a node is just an inode and sys/ino.h is byte-identical between the
+# editions, so V8's mknod writes one V10 will read correctly.
+v8_sh "/etc/mknod $R/dev/console c 0 0" 120
+v8_sh "/etc/mknod $R/dev/null c 3 2" 120
+v8_sh "/etc/mknod $R/dev/ra0a b 7 64" 120
+v8_sh "/etc/mknod $R/dev/rra0a c 8 64" 120
+note "/dev/console made" [v8_try "test -c $R/dev/console && echo DEV\$OK" "DEV-ok" 120]
+
+# ------------------------------------------------- the prebuilt 1995 binaries ---
+foreach p $PREBUILT {
+    set dest [lindex $p 0]
+    set src  [lindex $p 1]
+    v8_sh "cp $V/$src $R/$dest" 600
+    v8_sh "chmod 755 $R/$dest" 60
+}
+# ranlib AFTER the copy, always: cp gives the archive a new mtime while
+# __.SYMDEF keeps its 1995 one, which demotes a good table of contents to a
+# stale one and drops ld back to a single forward pass.  V8's ranlib writes
+# the same format -- ranlib.h is byte-identical between the editions.
+v8_sh "cd $R/lib; ranlib libc.a" 600
+note "sh and the toolchain in place" [v8_try "ls -l $R/bin/sh $R/lib/ccom" "36864" 120]
+
+# ------------------------------- what has to be BUILT, straight into the image ---
+foreach c $BUILT {
+    note "build $c" \
+        [v8_try "rm -rf $OBJ/$c; mkdir $OBJ/$c; cd $OBJ/$c; if make -f /n/v10mk/$c.mk DESTDIR=$R install > m.log 2>&1; then echo MK\$OK; fi" \
+                "MK-ok" 900]
+}
+# cpp, c2 and ld were built by v10_tc_build into $L; the image wants them too
+foreach f {cpp c2 ld} { v8_sh "cp $L/$f $R/lib/$f; chmod 755 $R/lib/$f" 300 }
+v8_sh "cp $L/crt0.o $R/lib/crt0.o" 300
+v8_sh "cp $L/ld $R/bin/ld; chmod 755 $R/bin/ld" 300
+
+# cc, the driver.  Built last because it is the thing that ties the rest
+# together, and its absence is the difference between a machine with a
+# compiler on it and a machine that can compile.
+v8_sh "rm -rf $OBJ/cc; mkdir $OBJ/cc; cd $OBJ/cc; cp $V/cmd/cc.c ." 300
+note "cc builds" \
+    [v8_try "cd $OBJ/cc; if cc -B$L/ -t02palc -I$INC -o $R/bin/cc cc.c > m.log 2>&1; then echo CC\$OK; fi" \
+            "CC-ok" 900]
+
+# V10's own headers, so the compiler on the image has something to include.
+v8_sh "cd /n/v10/include; find . -print | cpio -pd $R/usr/include" 900
+note "usr/include populated" [v8_try "test -s $R/usr/include/stdio.h && echo INC\$OK" "INC-ok" 120]
+
+v8_sh "ls -l $R $R/bin $R/etc $R/lib" 300
+v8_sh "df" 120
+
+report
+v8_sh "cd /; sync; sync" 120
+v8_sh "/etc/umount /dev/rp1c" 300
+v8_sh "/etc/nmount -u 78; /etc/nmount -u 79; /etc/nmount -u 80; /etc/nmount -u 81" 120
+v8_halt
+exit 0
