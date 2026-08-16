@@ -1,6 +1,9 @@
 # Building V8 from source
 
-*Track C. The goal is a disk built entirely from [`v8/`](../v8/README.md) that is
+*Track **S** — the world build; complete 2026-08-15, and the disk the app ships is its
+output. (This was written as "Track C" before that letter was given to ipnx-ports; see
+the note on the letter C in [roadmap.md](roadmap.md).)
+The goal is a disk built entirely from [`v8/`](../v8/README.md) that is
 functionally the golden image — which is the only real proof that our source is
 complete and that the ownership claim in `v8/README.md` means anything.*
 

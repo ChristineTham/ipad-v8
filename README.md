@@ -18,14 +18,20 @@ The goal is not a shell prompt that looks old. It is to reproduce the original R
 environments *faithfully* — the real kernel, the real terminal, the real wire between them —
 on hardware you already carry.
 
-> **Status (2026-08-15):** the app is real and works, and the disk it ships is now
-> **built from this repository's own source** rather than inherited. V8 boots to `login:`
-> with save/restore instant-on; `mux` and `jim` run on the 5620 on both iPad and Mac; the
-> machine knows its own name, brings its network up at boot, and gives you an account
-> named after your host login on first run. The interface is now the machine as it actually is — the operator
-> console plus a getty on `tty00`..`tty07`, each one openable, in windows grouped by
-> terminal shape. Track A is complete through A5; Track B — the V10 restoration — is under
-> way. Details: [docs/roadmap.md](docs/roadmap.md).
+> **Status (2026-08-16): V8 is finished.** The app is real, it works, and the disk it
+> ships is **built from this repository's own source** rather than inherited. V8 boots to
+> `login:` with save/restore instant-on; `mux` and `jim` run on the 5620 on both iPad and
+> Mac; the machine knows its own name, brings its network up at boot, mounts your Mac
+> folders at `/n/macos` and `/n/home`, and logs you in on first run as an account named
+> after your host login — not as root. It reaches the real Internet: `dnsq` resolves
+> names over UDP and `telnet` opens a TCP stream to a live web server. The interface is
+> the machine as it actually is — the operator console plus a getty on `tty00`..`tty07`,
+> each one openable, in windows grouped by terminal shape. The Mac app is Developer ID
+> signed and notarised.
+>
+> Track A is complete through A5, Track S built the shipped disk, and B0/B0.5/B0.6 are
+> done. **Next is Track B — the V10 restoration.** Details:
+> [docs/roadmap.md](docs/roadmap.md).
 
 ## The name
 
@@ -130,6 +136,12 @@ system, and the Blit/5620 terminal the whole graphical experience depends on. Th
 with save/restore, a real 5620 with two screen sizes, plain glass ttys for quick sessions,
 and — since the N track — a working TCP/IP stack reaching the outside world.
 
+The network file system is the part worth pausing on. Weinberger's **netfs** client has been
+compiled into every V8 kernel since 1985 and has had nothing to talk to since Datakit was
+switched off; ipnx gives it a server again, so **a macOS folder is mounted inside Research
+Unix, read/write**, at `/n/macos` and `/n/home`. It needs no port forwarding and works
+inside the iOS sandbox, because SLiRP aliases the guest's view of the host to loopback.
+
 ### ipnx-v10 — Tenth Edition (1989) · *the restoration*
 
 Tenth Edition survives as **source only** and **has never been booted by anyone**. The plan
@@ -233,13 +245,14 @@ out of reach for reasons that have nothing to do with engineering.
 | **A2** the Blit experience | ✅ | dmd_core on iOS, Metal phosphor screen, touch-as-mouse; `mux` + `jim` end to end — [a2-notes.md](docs/a2-notes.md) |
 | **A3** ship v1 | ✅ | Settings, media management, licences, App Store prep — **plus a native Mac app** sharing every line of code — [a3-notes.md](docs/a3-notes.md) |
 | **A4** the screen | ✅ | Two fixed CRT sizes incl. 1152×1024/127 columns, Retina-correct sampling, screen *and* session survive a quit — [screen-size.md](docs/screen-size.md) |
+| **A5** the interface | ✅ | Nine sessions in windows grouped by terminal shape; every DZ line its own port, so a tab labelled `tty03` *is* `tty03` — [ui-redesign.md](docs/ui-redesign.md) |
+| **S** the world build | ✅ | The shipped disk is **built from this repo's V8 source** — toolchain fixpoint, libraries, commands, kernel, and a disk that rebuilds itself — [build-from-source.md](docs/build-from-source.md) |
 | **B0** ingest path | ✅ | Host↔guest file transfer proven both ways — [media-exchange.md](docs/media-exchange.md) |
-| **B0.5** the N track | ◐ | RP07 disk, an Interlan NI1010 modelled for SIMH, and **V8 on the Internet** (`dnsq` resolves real names); netfs remains — [n-track-notes.md](docs/n-track-notes.md) |
+| **B0.5** the N track | ✅ | N0–N7: RP07 disk, an Interlan NI1010 modelled for SIMH, **V8 on the Internet**, and **a macOS folder mounted read/write inside V8** over Weinberger's netfs — [n-track-notes.md](docs/n-track-notes.md) |
 | **B0.6** a machine to live in | ✅ | Identity, network up at boot, an account named after the host user, host shares at `/n/macos` and `/n/home` — [machine-config.md](docs/machine-config.md) |
-| **B1–B4** V10 | ○ | Toolchain → world → kernel → first boot |
+| **B1–B4** V10 | ○ | Toolchain → world → kernel → first boot — **next** |
 | **C** ipnx-ports | ○ | Ports tree; `libcompat` first, then V10's games, then BSD's |
 | **D** ipnx-v11 | ○ | Mostly restoration — V10 already ships a 9P server — [v11-plan.md](docs/v11-plan.md) |
-| — | ○ | Interface rebuild: tabs per tty, windows by terminal shape, Liquid Glass — [ui-redesign.md](docs/ui-redesign.md) |
 | — | ○ | App Store submission (needs the Apple account) — [app-store.md](docs/app-store.md) |
 
 ## Repository map
@@ -296,6 +309,34 @@ To exercise the whole machine protocol — boot, suspend, save, restore — with
 
 ```bash
 bash work/verify-libcli.sh
+```
+
+### Checking it
+
+The build embeds the golden's sha256 beside the image, and the app replaces its working
+copy whenever the two differ — so a rebuilt disk reaches the running machine rather than
+waiting for a Reset. This asserts that whole chain, and a Stop hook runs it:
+
+```bash
+tools/app-check.sh --full
+```
+
+The network self-test builds the netfs server, serves a share, and drives the guest through
+TCP to the host, TCP to a real web server, and DNS — asserting **traffic**, not files, since
+a machine with every daemon running and every config correct can still pass no packets:
+
+```bash
+bash tools/net-selftest.sh rp07new
+```
+
+Every guest harness sources `tools/v8drive.exp`, which matches output **markers** rather
+than shell prompts — a prompt repeats, and the tty echoes what you type into whatever is
+already printing, so prompt-matching drivers silently run one command out of phase. Run
+them against a clone, never the golden: booting a disk mounts it, and mounting rewrites the
+superblock.
+
+```bash
+cp -c work/myv8/rp07new work/myv8/rp07test && expect tools/boot-newdisk.exp rp07test
 ```
 
 ## Licensing

@@ -5,8 +5,12 @@ research moonshot that lands into the same app shell. C and D are later and decl
 the README's scope has somewhere to point. Update checkboxes and the status line as work
 completes.*
 
-**Current phase: Track A complete through A4 (2026-08-10) bar the human submission steps;
-Track B under way — B0 and B0.5's N0–N3 are done, so V8 has an Internet connection.** A0
+**Current phase: V8 is closed out (2026-08-16). Track A is complete through A5, Track S
+built the disk the app ships, and B0/B0.5/B0.6 are all done — V8 has an Internet
+connection, mounts the host's folders, and comes up as an account named after you.
+What remains before Track B is nothing: the only unexercised item is `mux`/`jim` under
+the Mac's real pointer, which needs a human at a mouse, and the App Store steps need
+the Apple account.** A0
 proved the machinery on the desktop ([spike-a0-results.md](spike-a0-results.md));
 A1 shipped the text-mode app (open-simh as a library, V8 to `login:` in ~25–30 s,
 save/restore instant-on — [a1-notes.md](a1-notes.md)); A2 shipped the Blit experience
@@ -169,7 +173,7 @@ Runbook: [spike-a0.md](spike-a0.md)
       two courier loads. Longest stored path is 51 bytes, so V7 tar's 100-byte name
       field is a non-issue
 
-### B0.5 — infrastructure scope-up *(planned 2026-08-09, [networking-plan.md](networking-plan.md))*
+### B0.5 — infrastructure scope-up *(complete 2026-08-10, N0–N7; [networking-plan.md](networking-plan.md), results in [n-track-notes.md](n-track-notes.md))*
 
 The courier is too small and too manual to build V10 on: 8.1 MB a load against a
 243 MB tree. Three changes, the last of which the iPad app needs anyway.

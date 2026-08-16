@@ -32,7 +32,7 @@ opinion about what it is.
 
 That was reasonable for a research group with one machine. It is not reasonable
 for something people install, so ipnx adopts a release discipline. We can,
-because [Track C](build-from-source.md) gives us the thing Bell Labs never had:
+because [Track S](build-from-source.md) gives us the thing Bell Labs never had:
 a build that produces an artifact rather than mutating a system.
 
 ## The scheme
@@ -105,7 +105,7 @@ A release is not a git tag. It is:
    the previous release.
 
 Point 2 is the load-bearing one and the reason this document could not have been
-written before Track C. An image assembled by patching a running machine cannot
+written before Track S. An image assembled by patching a running machine cannot
 be a release, because there is no answer to "what is in it" other than "whatever
 was there before, plus whatever we did". An image built from a tagged tree has an
 answer.
@@ -116,9 +116,29 @@ fix — were made by booting the tape's binaries and editing them. They are
 useful, they are reproducible in the weak sense that the scripts that made them
 are in the repo, and they are **not** built from source. So:
 
-- **0.x** — derived from the tape by patching. Today's state.
-- **1.0.0** — the first image built end to end from `v8/`, which is Track C's
+- **0.x** — derived from the tape by patching.
+- **1.0.0** — the first image built end to end from `v8/`, which is Track S's
   finish line and is what makes the number mean something.
+
+**Where that now stands (2026-08-16).** The paragraph above describes a state this
+project has left. Track S completed on 2026-08-15 and the image the app ships,
+`work/myv8/rp07new`, is its output: stages 4–7 build the headers, libraries,
+commands and kernel from `v8/`, stage 8 lays down a filesystem from that
+`DESTDIR`, and stage 9 has the result rebuild itself under `chroot`. Nothing is
+patched into a running machine any more.
+
+The one honest qualification is `v8/mk/gen/carry.txt` — 1,442 paths the tape
+shipped as **machine code with no source**, so no build could ever produce them:
+the jerq/5620 binaries (`mux`, `muxterm`, `jim`), the games, and the manual.
+They are carried from the previous image rather than compiled, which is why
+`image/ipnx-v8-rp07.img.xz` is the single binary allowed into git — it is the
+*input* to the next build, and with it committed the build's only external input
+is the tapes, which `v8/MANIFEST` already accounts for.
+
+So the 1.0.0 criterion is met in substance. The version string still reads
+`0.3.0-CURRENT`, because cutting the tag is a decision about *when to promise
+stability*, not a fact about the build — and it should be taken deliberately
+rather than inherited from this note.
 
 ## Ports are not part of this
 
