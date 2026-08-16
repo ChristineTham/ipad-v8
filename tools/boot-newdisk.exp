@@ -2,13 +2,13 @@
 #
 # Boot the disk stage 8 built, as drive 0, and see whether it is a system.
 #
-#	expect tools/boot-newdisk.exp
+#	expect tools/boot-newdisk.exp [image]
 #
 # This is the only test of stage 8 that means anything. Everything stage 8
 # reports about itself -- mkfs succeeded, fsck is clean, N files copied -- is
 # true of a disk that cannot boot, and was true of several.
 #
-# It boots the image ALONE: rp0 is rp07new and nothing else is attached. A
+# It boots the image ALONE: rp0 is the image and nothing else is attached. A
 # second disk would let a missing file on the new root be satisfied from
 # somewhere else and the test would pass for the wrong reason.
 #
@@ -20,82 +20,50 @@
 #
 # Reaching a shell then proves the binaries stage 6 built actually run on a
 # machine that is not the one that built them.
+#
+# The console discipline lives in v8drive.exp. This file used to carry its own
+# copy, whose `must' called exit on timeout -- and expect's exit closes the
+# spawn, which KILLS A RUNNING GUEST. It never fired because the script always
+# passed, which is precisely why it survived: the bug was only reachable on
+# the day something else broke. v8_bail stops the machine first.
 
 set timeout 420
-log_file -a boot-newdisk.log
-proc sendline {x} { send "$x\r" }
+source [file dirname [info script]]/v8drive.exp
+# Into work/, which is gitignored, and by absolute path -- `log_file' opens
+# relative to the CURRENT directory, and v8_boot has not moved to the media
+# directory yet, so a bare name lands wherever the caller happened to be. It
+# appends, so at the repo root it became an untracked file that grew on every
+# run and belonged to nothing.
+log_file -a [file join $V8_MEDIA .. boot-newdisk.log]
 
-proc must {pat {t 0}} {
-    global timeout
-    set use [expr {$t > 0 ? $t : $timeout}]
-    expect -timeout $use "$pat" {
-    } timeout {
-        send_user "\n*** GAVE UP waiting after ${use}s ***\n"; exit 3
-    } eof {
-        send_user "\n*** simulator exited ***\n"; exit 4
-    }
-}
+set img [expr {[llength $argv] > 0 ? [lindex $argv 0] : "rp07new"}]
+send_user "\n=== booting $img alone ===\n"
+v8_boot $img
+v8_login root
 
-set SEQ 0
-proc sh {cmd {t 0}} {
-    global SEQ
-    incr SEQ
-    sendline "M=+ok$SEQ"
-    sendline "$cmd"
-    sendline "echo \$M+"
-    must "+ok$SEQ+" $t
-}
-proc shmust {cmd pat {t 0}} {
-    global SEQ
-    incr SEQ
-    sendline "M=+ok$SEQ"
-    sendline "$cmd"
-    sendline "echo \$M+"
-    must "$pat" $t
-    must "+ok$SEQ+" $t
-}
-proc simh {cmd {t 0}} { must "sim>" $t; sendline $cmd }
-
-spawn vax780
-simh "set noasynch"
-simh "set cpu idle=4.1BSD"
-simh "set tto 7b"
-# Which disk. Stage 8 builds both geometries from one DESTDIR -- the RP07
-# for the build and Track B, the RP06 as the drop-in for what the app
-# bundles -- and "it boots alone" has to be shown of each.
-set img [lindex $argv 0]
-if {$img == ""} { set img "rp07new" }
-if {[string match "*rp06*" $img]} { set dtype rp06 } else { set dtype rp07 }
-send_user "\n=== booting $img ($dtype) alone ===\n"
-simh "set rp0 $dtype"
-simh "at rp0 $img"
-simh "load -o bootV8 0"
-simh "run 2"
-
-must "login:" 400
-sendline "root"
-must "# " 120
-sendline "PS1='new%%% '"
-sh "OK=-ok" 120
-sh "stty erase '^H'" 60
-sh "echo BN-SHELL\$OK"
+# EVERY MARKER IS SPELLED THROUGH $OK. The tty echoes the command, so a
+# literal `echo BN-MUX-ok' would put the answer in the stream before the test
+# ran -- the script would pass on its own echo. CLAUDE.md: never a literal.
+v8_sh "OK=-ok" 120
+v8_sh "stty erase '^H'" 60
+v8_shmust "echo BN-SHELL\$OK" "BN-SHELL-ok" 60
 
 # Does the system we built agree with itself about what it is? These are the
 # cheapest possible checks and each one is a different subsystem: the kernel
 # (its own name), the filesystems it mounted, and a command stage 6 compiled
 # doing real work on a machine that did not build it.
-sh "cat /etc/whoami"
-sh "df"
-sh "ls -l /unix"
-sh "ls /bin | wc -l"
-sh "ls /usr/bin | wc -l"
+v8_sh "cat /etc/whoami"
+v8_sh "df"
+v8_sh "ls -l /unix"
+v8_sh "ls /bin | wc -l"
+v8_sh "ls /usr/bin | wc -l"
 
 # /bin/sh is already proven by having a prompt at all. cc is the interesting
 # one: if the compiler stage 6 installed runs here, this disk can rebuild
 # itself, which is the whole of stage 9.
-shmust "if test -x /bin/cc; then echo BN-HAVE-CC\$OK; fi" "BN-HAVE-CC-ok" 60
-sh "echo 'main(){printf(\"BN-COMPILED\");}' > /tmp/t.c"
-shmust "cd /tmp; if cc -o t t.c; then ./t; echo \$OK; fi" "BN-COMPILED-ok" 300
+v8_shmust "if test -x /bin/cc; then echo BN-HAVE-CC\$OK; fi" "BN-HAVE-CC-ok" 60
+v8_sh "echo 'main(){printf(\"BN-COMPILED\");}' > /tmp/t.c"
+v8_shmust "cd /tmp; if cc -o t t.c; then ./t; echo \$OK; fi" "BN-COMPILED-ok" 300
 
 # The content the build CARRIES rather than makes, checked on the disk that
 # will replace the one it was carried from. Each is a different origin:
@@ -105,25 +73,25 @@ shmust "cd /tmp; if cc -o t t.c; then ./t; echo \$OK; fi" "BN-COMPILED-ok" 300
 # to ours; wmux and /.profile are ours and are named individually in
 # builddisk.sh, which is exactly the kind of thing that silently does not
 # ship. A disk missing all of these still boots to login: perfectly.
-shmust "if test -x /usr/jerq/bin/mux -a -x /usr/jerq/lib/muxterm; then echo BN-MUX\$OK; fi" \
-       "BN-MUX-ok" 60
-shmust "if test -x /usr/jerq/bin/wmux -a -f /usr/jerq/lib/muxterm.w; then echo BN-WMUX\$OK; fi" \
-       "BN-WMUX-ok" 60
-shmust "if test -x /usr/games/fortune -a -x /usr/games/bcd; then echo BN-GAMES\$OK; fi" \
-       "BN-GAMES-ok" 60
-shmust "if test -f /usr/man/man1/ls.1 -a -f /usr/lib/tmac/tmac.an; then echo BN-MAN\$OK; fi" \
-       "BN-MAN-ok" 60
-shmust "if test -x /usr/bin/yacc -a -x /usr/bin/strip; then echo BN-YACC\$OK; fi" \
-       "BN-YACC-ok" 60
+v8_shmust "if test -x /usr/jerq/bin/mux -a -x /usr/jerq/lib/muxterm; then echo BN-MUX\$OK; fi" \
+          "BN-MUX-ok" 60
+v8_shmust "if test -x /usr/jerq/bin/wmux -a -f /usr/jerq/lib/muxterm.w; then echo BN-WMUX\$OK; fi" \
+          "BN-WMUX-ok" 60
+v8_shmust "if test -x /usr/games/fortune -a -x /usr/games/bcd; then echo BN-GAMES\$OK; fi" \
+          "BN-GAMES-ok" 60
+v8_shmust "if test -f /usr/man/man1/ls.1 -a -f /usr/lib/tmac/tmac.an; then echo BN-MAN\$OK; fi" \
+          "BN-MAN-ok" 60
+v8_shmust "if test -x /usr/bin/yacc -a -x /usr/bin/strip; then echo BN-YACC\$OK; fi" \
+          "BN-YACC-ok" 60
+# The network config the app depends on, on the disk rather than in the repo:
+# /usr/inet/lib/services is where cmd/inet/h/config.h looks, and its absence
+# made every service lookup fail while the network itself was perfectly fine.
+v8_shmust "if test -f /usr/inet/lib/services -a -f /etc/copyright; then echo BN-INET\$OK; fi" \
+          "BN-INET-ok" 60
 # TERM comes from /.profile, which V8 itself ships none of -- so this is
 # both "the file is there" and "login actually read it".
-sh "echo term=\$TERM"
+v8_sh "echo term=\$TERM"
 
-sh "echo BN-DONE\$OK"
-sh "cd /; sync; sync" 60
-sendline "/etc/halt"
-must "Infinite loop" 120
-simh "quit" 60
-expect eof
-wait
+v8_shmust "echo BN-DONE\$OK" "BN-DONE-ok" 60
+v8_halt
 send_user "\n=== BOOT-NEWDISK DONE ===\n"

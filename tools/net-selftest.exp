@@ -1,7 +1,11 @@
 #!/usr/bin/env expect
 # Does this image's NETWORK actually work?
 #
-#	expect tools/net-selftest.exp <image> [netfs-port]
+#	expect tools/net-selftest.exp <image> [netfs-port] [tcp-host]
+#
+# Normally run through tools/net-selftest.sh, which builds and starts the
+# netfs server this needs. Run directly only if something is already serving
+# the share on <netfs-port>.
 #
 # The golden brings its own network up from /etc/rc -- ipconfig, tcpconfig,
 # udpconfig, route -- and until this script existed nothing ever checked that
@@ -9,92 +13,96 @@
 # every daemon running, every config file correct, /dev fully populated, and
 # still not pass a single packet, and it looks perfectly healthy from inside.
 #
-# So this asserts TRAFFIC, both protocols:
+# So this asserts TRAFFIC, on all three paths that can fail independently:
 #
-#	TCP  -- mount a netfs share the caller is serving on the host and read
-#	        a file out of it. That is the /n/macos path the app depends on.
-#	UDP  -- dnsq, twice. N3 recorded that the FIRST query is the one that
-#	        triggers the ARP and the datagram that triggered it is lost, so
-#	        a single query proves nothing either way.
+#   TCP to the HOST   mount a netfs share and read a file out of it. This is
+#                     the /n/macos path the app depends on -- but it proves
+#                     less than it looks, because 10.0.2.2 is aliased by
+#                     SLiRP to the host's loopback and never reaches a wire.
+#   TCP to the WORLD  telnet to a real web server and make it answer. The
+#                     reply is a 400, and that is the good part: telnet sends
+#                     CRLF where a bare CR was typed, so Apache rejects the
+#                     request -- which it can only do having RECEIVED it. A
+#                     refused connection looks nothing like a server parsing
+#                     your request and complaining about it.
+#   UDP to the WORLD  dnsq, twice. N3 recorded that the FIRST query triggers
+#                     the ARP and the datagram that triggered it is lost, so a
+#                     single query proves nothing either way.
 #
-# Traps already paid for elsewhere and honoured here: there is no boot prompt
-# (load+run AUTOBOOTS -- a stray boot command lands at the login prompt as a
-# username and the machine answers `Password:' forever); the shell prompt is
-# spelled through a variable so expect cannot match its own echo; and every
-# exit path stops the machine rather than killing a running guest.
+# The TCP-out target is minnie.tuhs.org by ADDRESS, so this stage cannot fail
+# for want of DNS -- name resolution is what the UDP stage is for, and a test
+# that folds two independent faults into one answer cannot say which broke.
 
 set timeout 240
 log_user 1
-set root [file dirname [info script]]/..
-cd $root/work/myv8
+source [file dirname [info script]]/v8drive.exp
 
-if {[llength $argv] < 1} { puts "usage: net-selftest.exp <image> \[port\]"; exit 2 }
+if {[llength $argv] < 1} {
+    puts "usage: net-selftest.exp <image> \[netfs-port\] \[tcp-host\]"
+    exit 2
+}
 set img  [lindex $argv 0]
 set port [expr {[llength $argv] > 1 ? [lindex $argv 1] : 9200}]
+set tcph [expr {[llength $argv] > 2 ? [lindex $argv 2] : "173.230.156.51"}]
 
-proc bail {msg} {
-    puts "\nNETSELF-BAIL: $msg"
-    send "\005"
-    expect { "sim>" {} timeout {} }
-    send "quit\r"
-    expect { eof {} timeout {} }
-    exit 1
-}
-
-spawn ../opensimh/BIN/vax780
-expect "sim>"
-foreach c "
-    {set noasynch}
-    {set cpu idle=4.1BSD}
-    {set tto 7b}
-    {set rp0 rp07}
-    {at rp0 $img}
-    {set il enable}
-    {attach il nat:}
-" { send "[string trim $c "{}"]\r"; expect "sim>" }
-
-send "load -o bootV8 0\r"; expect "sim>"
-send "run 2\r"
-expect { "login:" {} timeout { bail "no login:" } }
-
-send "root\r"
-expect { -re {[#$] } {} timeout { bail "no root shell" } }
-send "M=X\r"
-expect { -re {[#$] } {} timeout { bail "no shell for M" } }
-send "PS1=\"NET\$M \"\r"
-expect { "NETX " {} timeout { bail "no prompt" } }
-
-proc sh {cmd {t 120}} {
-    global timeout
-    set save $timeout; set timeout $t
-    send "$cmd\r"
-    expect { "NETX " {} timeout { puts "\nTIMEOUT: $cmd" } }
-    set timeout $save
-}
+v8_boot $img {"set il enable" "attach il nat:"}
+v8_login root
 
 puts "\n===== NETSELFTEST ====="
-sh "PATH=/bin:/etc:/usr/bin:/usr/inet/bin:/usr/inet/etc; export PATH"
-sh "OK=-ok"
+v8_sh "PATH=/bin:/etc:/usr/bin:/usr/inet/bin:/usr/inet/etc; export PATH"
+# EVERY MARKER IS SPELLED THROUGH A SHELL VARIABLE. The tty echoes the
+# command, so a literal `echo NS-SERVICES-ok' puts the answer into the stream
+# before the test has run and the script passes on its own echo. With $OK the
+# echo carries `NS-SERVICES$OK' and only the result carries `NS-SERVICES-ok'.
+v8_sh "OK=-ok"
 
 # What /etc/rc should already have done, reported rather than assumed.
-sh "ps ax | grep -v grep | grep inet"
-sh "cat /usr/inet/lib/hosts"
+v8_sh "ps ax | grep -v grep | grep inet" 120
+v8_sh "cat /usr/inet/lib/hosts" 60
+# The file whose absence made every service lookup fail while the network
+# itself was perfectly healthy. Checked by name because that is the bug.
+v8_shmust "test -f /usr/inet/lib/services && echo NS-SERVICES\$OK" "NS-SERVICES-ok" 60
 
-# --- TCP: the share ---
-sh "test -d /n/macos || mkdir /n/macos"
-sh "/etc/nmount 10.0.2.2 $port 64 /n/macos" 120
-sh "if test -f /n/macos/greeting.txt; then echo NS-TCP\$OK; else echo NS-TCP-BAD; fi" 60
-sh "cat /n/macos/greeting.txt" 60
+# --- TCP to the host: the share, MOUNTED BY /etc/rc ---
+#
+# Deliberately not mounted here. /etc/rc already ran `nmount 10.0.2.2 9200 64
+# /n/macos', which is the exact path the app depends on, so mounting it again
+# by hand would test a command nothing in production runs and would mask a
+# broken boot. The mount is backgrounded at boot, so poll rather than assume
+# it has landed by the time login finishes.
+v8_shmust "n=0; while test \$n -lt 12; do test -f /n/macos/greeting.txt && { echo NS-HOSTTCP\$OK; break; }; sleep 3; n=`expr \$n + 1`; done" \
+          "NS-HOSTTCP-ok" 120
+v8_sh "cat /n/macos/greeting.txt" 60
 
-# --- UDP: name resolution. Twice: the first loses to ARP. ---
-sh "dnsq www.tuhs.org" 60
-sh "dnsq www.tuhs.org" 60
+# --- TCP to the world: a real stream to a real machine ---
+puts "\n--- TCP out to $tcph:80 ---"
+send "telnet $tcph 80\r"
+v8_must "Escape character" 90
+send "HEAD / HTTP/1.0\r"
+send "\r"
+v8_must "HTTP/1." 90
+v8_must "Apache" 30
+# The far end hangs up on an HTTP/1.0 request, so telnet exits by itself and
+# hands the tty back. Re-sync with a marker before trusting the shell again.
+v8_must "Connection closed" 60
+v8_sh ":" 60
+
+# --- UDP to the world: name resolution. Twice: the first loses to ARP. ---
+#
+# The result is asserted through a FILE, not by matching the reply directly.
+# `expect "tuhs.org"' would match the echo of the command that asked for
+# tuhs.org, so it would pass with the network unplugged. What is checked
+# instead is that the answer contains something shaped like an address.
+v8_sh "dnsq www.tuhs.org" 90
+v8_sh "dnsq www.tuhs.org > /tmp/dns.out 2>&1; cat /tmp/dns.out" 90
+v8_shmust "grep '\[0-9\]\\.\[0-9\]' /tmp/dns.out > /dev/null && echo NS-DNS\$OK" \
+          "NS-DNS-ok" 60
 puts "\n===== END NETSELFTEST ====="
 
-sh "cd /; umount /n/macos 2>/dev/null; sync; sync" 60
-send "/etc/halt\r"
-expect { "Infinite loop" {} timeout { bail "halt did not confirm" } }
-send "\005"
-expect "sim>"
-send "quit\r"
-expect eof
+# The share must go before the halt: a netfs mount is guest RAM and the TCP
+# connection under it is host state, so a mount that outlives the server can
+# be neither used nor cleared -- and umount(8) cannot release it in any case
+# (it is a gmount object keyed by device number, so `nmount -u <id>').
+v8_sh "cd /; /etc/nmount -u 64" 60
+v8_halt
+puts "\n=== NET-SELFTEST DONE ==="

@@ -54,6 +54,28 @@ cd app && xcodebuild -project ipnx.xcodeproj -scheme ipnxMac -destination 'platf
 bash work/verify-libcli.sh
 ```
 
+```bash
+# Is the app you would launch RIGHT NOW the latest? (a Stop hook runs this)
+tools/app-check.sh --full
+```
+
+```bash
+# The network self-test, one command: builds netfsd, serves a share, drives
+# the guest through TCP-to-host, TCP-to-the-Internet and DNS, cleans up
+bash tools/net-selftest.sh rp07new
+```
+
+```bash
+# How fast is the share, in FILES (the ruler that matters for netfs)
+bash tools/netfs-latency.sh rp07new
+```
+
+**Run every guest harness against a CLONE, never the golden.** Booting a disk
+mounts it, and mounting rewrites the superblock — so a clean, successful,
+properly halted run still leaves the image with a different hash than the one
+in git. That is what "golden drift" was. `cp -c` makes an APFS clone in no
+time and no space: `cp -c work/myv8/rp07new work/myv8/rp07test`.
+
 The **Phase A0 desktop spike** commands are in [docs/spike-a0.md](docs/spike-a0.md)
 (build SIMH `vax780`, produce `v8.disk` via timnewsham/myv8, connect a 5620/Blit terminal
 emulator, run `mux`), all inside the gitignored `work/` directory.
@@ -172,6 +194,35 @@ attempt at the original and its repairs cannot be undone.
 
 This is why `image/ipnx-v8-rp07.img.xz` is in git: it turns "is this disk
 intact?" into a three-second `shasum` instead of a judgement call.
+
+## The app must always be the latest, and that is checked
+
+**"It is in the golden, it will arrive on Reset" is not shipping it.** The app
+copies its system image into Application Support on first launch and then used
+that working copy forever, so a rebuilt golden reached the bundle and stopped
+there: `/etc/motd`, `/etc/copyright` and `/usr/inet/lib/services` were all
+correct in the repo, on the disk, and absent from the running machine. Nothing
+failed. Every test passed. The tests were not looking at the artefact the user
+opens.
+
+The working copy diverges from the golden the moment the guest writes to it, so
+it cannot be recognised by hashing its own content — it needs a record of its
+ORIGIN. The `Embed V8 media` build phase writes `v8.disk.id` (the golden's
+sha256) beside the image; `Machine.provision()` compares it with `image.id` in
+the support directory and **replaces the working disk, the snapshot and the
+provisioning markers whenever they differ**. No prompt, no Reset: an app update
+is not a user decision. Reset stays user-initiated and is a different thing.
+
+`tools/app-check.sh` asserts the whole chain — no stray simulators, golden
+present and matching the committed image, every built bundle carrying that
+golden, and no source newer than the binary — and `tools/hook-app-current.sh`
+runs it as a **Stop hook**, so the work cannot be reported finished while the
+app is stale. Prove the gate still bites (`touch app/ipnx/Machine.swift`) before
+trusting a pass; a check that cannot fail is not a check.
+
+Machine state lives at `~/Library/Application Support/ipnx/v8` — app first,
+edition inside, because V10 will be a second machine beside this one. Anything
+at the old flat `v8/` is moved on first launch, never abandoned.
 
 ## Gotchas (each cost the community real debugging time)
 
@@ -617,6 +668,25 @@ intact?" into a three-second `shasum` instead of a judgement call.
   the 69/70 window; set the time with `-u` and UTC digits (`stime(2)` takes GMT), then
   `sync` so the superblock carries the year forward. Safe while running — `cron`'s
   `slp()` resynchronises on any delta over an hour.
+- **Every guest harness sources `tools/v8drive.exp`; none rolls its own.** Three
+  scripts (net-selftest, netfs-latency, show-fetch) each grew a private "log in
+  and run a command" built on matching a PS1 prompt, and all three hung — while
+  `boot-newdisk.exp`, which matched markers, never failed once. The library now
+  holds the boot, the login, the marker protocol, the safe bail and the clean
+  halt, and all four harnesses use it. Two traps it exists to make unrepeatable:
+  **`spawn` inside a proc sets `spawn_id` in that proc's scope**, so every other
+  proc then talks to the global default, which is stdin — expect reads EOF at
+  once and reports *"simulator exited"*, so a scoping bug arrives dressed as a
+  simulator that started and died (`global spawn_id` fixes it; boot-newdisk
+  escaped only by spawning at top level). And **a bare `exit` closes the spawn**,
+  killing a running guest — the one thing this project never does. Dry-run any
+  change under `tclsh` with the interactive verbs stubbed before spending a boot
+  on it.
+- **A command that takes the tty needs `v8_run`, not `v8_sh`.** `v8_sh` sends
+  the command and its `echo $M+` marker together, so against `telnet` the marker
+  is read by telnet and transmitted to the far end — and the script then waits
+  forever for a string nobody will print. `v8_run` waits for the program's own
+  closing output and re-syncs with a fresh marker afterwards.
 - **Driving V8 over the console: markers, never prompts, and never a literal.** The tty
   echoes typed characters as they arrive and they interleave *into* whatever is
   printing, so a marker lands mid-line (`echC3-CASE-clean`) — which defeats a
@@ -664,6 +734,13 @@ intact?" into a three-second `shasum` instead of a judgement call.
   identical boot-and-assert run, patched and unpatched are the same distribution
   (peaks 79.8 vs 78.6, lows 7.6 vs 6.6). Bulk installs are still better off with
   `cpio` off a mounted disk, but "hopeless" was a property of our device model.
+  Re-measured 2026-08-16 with `tools/netfs-latency.sh`: **530 file reads in 2 s**
+  (4,399 netfs requests, ~265 files/s). One pass over the 107 headers now
+  finishes inside a single second — which is a fine result and a useless
+  measurement, since the guest's clock has one-second resolution and would
+  report zero again if it got four times slower. **When the workload outruns the
+  ruler, grow the workload** (the script does five passes), and never let a
+  "0 seconds" reading stand as a number.
 - **`cp` per file is what makes stage 8 slow, not I/O.** 400 copies took longer than
   the `mkfs` of a 475 MB filesystem. `cpio -p` reads its path list from stdin, which
   is exactly the shape of a generated manifest — one process for the whole set.

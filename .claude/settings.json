@@ -35,6 +35,18 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/tools/hook-app-current.sh\"",
+            "timeout": 60,
+            "statusMessage": "Checking the built app is current"
+          }
+        ]
+      }
     ]
   }
 }

@@ -8,62 +8,22 @@
 # audited without anybody ever being shown its OUTPUT -- which is the only part
 # of it a person actually wants.
 #
-# Traps honoured (each paid for elsewhere): load+run AUTOBOOTS, so there is no
-# boot prompt to answer; the shell prompt is spelled through a variable so
-# expect cannot match its own echo; every exit path halts the machine.
+# The console discipline (markers, never prompts) and the clean halt both live
+# in v8drive.exp; this file is only the questions.
 
 set timeout 240
 log_user 1
-cd [file dirname [info script]]/../work/myv8
+source [file dirname [info script]]/v8drive.exp
 set img [expr {[llength $argv] > 0 ? [lindex $argv 0] : "rp07new"}]
 
-proc bail {msg} {
-    puts "\nSHOWFETCH-BAIL: $msg"
-    send "\005"
-    expect { "sim>" {} timeout {} }
-    send "quit\r"
-    expect { eof {} timeout {} }
-    exit 1
-}
-
-spawn ../opensimh/BIN/vax780
-expect "sim>"
-foreach c "
-    {set noasynch}
-    {set cpu idle=4.1BSD}
-    {set tto 7b}
-    {set rp0 rp07}
-    {at rp0 $img}
-" { send "[string trim $c "{}"]\r"; expect "sim>" }
-
-send "load -o bootV8 0\r"; expect "sim>"
-send "run 2\r"
-expect { "login:" {} timeout { bail "no login:" } }
-send "root\r"
-expect { -re {[#$] } {} timeout { bail "no root shell" } }
-send "M=X\r"
-expect { -re {[#$] } {} timeout { bail "no shell for M" } }
-send "PS1=\"FET\$M \"\r"
-expect { "FETX " {} timeout { bail "no prompt" } }
-
-proc sh {cmd {t 120}} {
-    global timeout
-    set save $timeout; set timeout $t
-    send "$cmd\r"
-    expect { "FETX " {} timeout { puts "\nTIMEOUT: $cmd" } }
-    set timeout $save
-}
+v8_boot $img
+v8_login root
 
 puts "\n===== WHAT THE MACHINE SAYS ABOUT ITSELF ====="
-sh "ipnxfetch"
-sh "uname -a"
-sh "echo TERM=\$TERM; tty; who am i"
+v8_sh "ipnxfetch" 120
+v8_sh "uname -a" 60
+v8_sh "echo TERM=\$TERM; tty; who am i" 60
 puts "\n===== END ====="
 
-sh "cd /; sync; sync"
-send "/etc/halt\r"
-expect { "Infinite loop" {} timeout { bail "halt did not confirm" } }
-send "\005"
-expect "sim>"
-send "quit\r"
-expect eof
+v8_halt
+puts "\n=== SHOW-FETCH DONE ==="

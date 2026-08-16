@@ -110,10 +110,32 @@ final class Machine: ObservableObject {
 
     // MARK: - Paths
 
-    private var supportDir: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("v8", isDirectory: true)
-    }
+    /// Where this installation's machine lives: `ipnx/v8`.
+    ///
+    /// The APP owns the directory and the EDITION is a folder inside it,
+    /// because V10 is the point of the project and will be a second machine
+    /// beside this one rather than a replacement for it. It was a flat `v8/`
+    /// until 2026-08-16, which put the edition where the app belongs and left
+    /// the next one nowhere to go.
+    ///
+    /// Resolved once per process, and anything already at the old path is
+    /// MOVED rather than abandoned — the disk in it is somebody's machine,
+    /// with their account and their files on it.
+    private static let support: URL = {
+        let fm = FileManager.default
+        let root = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let dir = root.appendingPathComponent("ipnx", isDirectory: true)
+                      .appendingPathComponent("v8", isDirectory: true)
+        let legacy = root.appendingPathComponent("v8", isDirectory: true)
+        if !fm.fileExists(atPath: dir.path), fm.fileExists(atPath: legacy.path) {
+            try? fm.createDirectory(at: dir.deletingLastPathComponent(),
+                                    withIntermediateDirectories: true)
+            try? fm.moveItem(at: legacy, to: dir)
+        }
+        return dir
+    }()
+
+    private var supportDir: URL { Self.support }
 
     /// The live working disk — what the user exports.
     var workingDiskURL: URL { supportDir.appendingPathComponent("v8.disk") }
@@ -144,6 +166,31 @@ final class Machine: ObservableObject {
     private var attemptURL: URL { supportDir.appendingPathComponent("restore.attempt") }
     private var pendingDiskURL: URL { supportDir.appendingPathComponent("v8.disk.pending") }
     private var resetMarkerURL: URL { supportDir.appendingPathComponent("reset.pending") }
+
+    /// WHICH SYSTEM IMAGE THE WORKING DISK WAS CUT FROM.
+    ///
+    /// The working copy diverges from the golden the instant the guest writes
+    /// to it — a mounted V8 rewrites its superblock on the way up — so it can
+    /// never be recognised by hashing its own content. What it needs is a
+    /// record of its ORIGIN, and that is what this is: the sha256 of the
+    /// golden, written into the bundle beside the image by the `Embed V8
+    /// media` build phase and copied here when the image is installed.
+    ///
+    /// Without it a rebuilt golden reached the bundle and stopped there, since
+    /// provision() only copies the image when no working disk exists. The app
+    /// would launch, boot, and run last week's system with no sign anything
+    /// was stale — every fix present in the repo, absent on the machine.
+    private var bundledImageID: String? {
+        guard let u = Bundle.main.url(forResource: "v8.disk", withExtension: "id"),
+              let s = try? String(contentsOf: u, encoding: .utf8) else { return nil }
+        let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.isEmpty ? nil : t
+    }
+    private var imageIDURL: URL { supportDir.appendingPathComponent("image.id") }
+    private var installedImageID: String? {
+        (try? String(contentsOf: imageIDURL, encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     /// Records that this installation's account has been created, so first
     /// boot happens exactly once. Beside v8.disk deliberately: `Reset disk`
@@ -400,6 +447,19 @@ final class Machine: ObservableObject {
         noBackup.isExcludedFromBackup = true          // 516 MB of rebuildable state
         try? dir.setResourceValues(noBackup)
 
+        // SIMH's remote console opens `sim_remote_console_<pid>.temporary_log'
+        // in the working directory and never removes it, so one accumulates
+        // per launch under a name that can never repeat. Left alone they are
+        // the only thing in here that grows without bound. Swept at startup
+        // rather than at exit, because the launch that made one is often the
+        // launch that was killed.
+        if let strays = try? fm.contentsOfDirectory(atPath: supportDir.path) {
+            for f in strays where f.hasPrefix("sim_remote_console_")
+                              && f.hasSuffix(".temporary_log") {
+                try? fm.removeItem(at: supportDir.appendingPathComponent(f))
+            }
+        }
+
         let disk = workingDiskURL
 
         // Media changes the user asked for are applied HERE, at launch, while
@@ -441,6 +501,33 @@ final class Machine: ObservableObject {
             try? fm.removeItem(at: screenMarkerURL)
             dropSnapshot()
         }
+        // A REBUILT SYSTEM IMAGE SUPERSEDES THE WORKING COPY, WITHOUT ASKING.
+        //
+        // The two clauses above are things the USER asked for. This one is not:
+        // it is the app noticing that the system image it ships is no longer
+        // the one installed, which happens on every app update and after every
+        // golden rebuild. Left to a user-initiated Reset, a fix could be built,
+        // verified, committed and shipped while the running machine quietly
+        // kept the old behaviour -- and nothing anywhere would say so.
+        //
+        // Safe to do silently because the DISK IS THE SYSTEM, not the user's
+        // data: the account is re-provisioned on first boot, and what people
+        // actually keep lives on the host shares. The outgoing disk is
+        // DELETED, not kept aside — a half-superseded machine lying around is
+        // 516 MB of something nothing will ever boot again, and the one thing
+        // worse than a stale working copy is two of them.
+        if let want = bundledImageID, fm.fileExists(atPath: disk.path),
+           installedImageID != want {
+            try? fm.removeItem(at: disk)
+            // The account was on the disk that just went, and so was
+            // /etc/dmdwide. Both markers describe a machine that no longer
+            // exists, and a kept `provisioned' would leave the replacement
+            // with no account and no way to notice it needed one.
+            try? fm.removeItem(at: provisionedURL)
+            try? fm.removeItem(at: screenMarkerURL)
+            dropSnapshot()
+        }
+
         if !fm.fileExists(atPath: disk.path) {
             guard let bundled = Bundle.main.url(forResource: "v8", withExtension: "disk") else {
                 throw MachineError.mediaMissing
@@ -448,6 +535,12 @@ final class Machine: ObservableObject {
             try await Task.detached(priority: .userInitiated) {
                 try FileManager.default.copyItem(at: bundled, to: disk)
             }.value
+            // Stamp AFTER the copy succeeds: a stamp written first would claim
+            // a disk that a failed copy never produced, and the next launch
+            // would agree it was current.
+            if let want = bundledImageID {
+                try? want.write(to: imageIDURL, atomically: true, encoding: .utf8)
+            }
         }
 
         let boot = supportDir.appendingPathComponent("bootV8")

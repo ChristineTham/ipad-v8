@@ -202,7 +202,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\nMEDIA=\"$SRCROOT/../work/myv8\"\nDEST=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nif [ ! -f \"$MEDIA/rp07new\" ]; then\n  echo \"warning: $MEDIA/rp07new not found - building without V8 media (build it per docs/spike-a0.md)\"\n  exit 0\nfi\nmkdir -p \"$DEST\"\nrsync -a \"$MEDIA/rp07new\" \"$DEST/v8.disk\"\nrsync -a \"$MEDIA/bootV8\" \"$DEST/bootV8\"\necho \"embedded v8.disk + bootV8\"\n";
+			shellScript = "set -e\nMEDIA=\"$SRCROOT/../work/myv8\"\nDEST=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nif [ ! -f \"$MEDIA/rp07new\" ]; then\n  echo \"warning: $MEDIA/rp07new not found - building without V8 media (build it per docs/spike-a0.md)\"\n  exit 0\nfi\nmkdir -p \"$DEST\"\nrsync -a \"$MEDIA/rp07new\" \"$DEST/v8.disk\"\nrsync -a \"$MEDIA/bootV8\" \"$DEST/bootV8\"\n# THE IDENTITY OF THE IMAGE. The working copy in Application Support\n# diverges from the golden as soon as the guest writes to it, so the app\n# cannot recognise a stale one by hashing it -- what it needs is a record\n# of WHICH image it was cut from. Without this a rebuilt golden reaches\n# the bundle and stops there, and the app keeps booting last week.\nshasum -a 256 \"$MEDIA/rp07new\" | cut -d' ' -f1 > \"$DEST/v8.disk.id\"\necho \"embedded v8.disk + bootV8 (image $(cut -c1-12 < \"$DEST/v8.disk.id\"))\"\n";
 		};
 		ED17A20000000000000000C8 /* Embed V8 media */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -217,7 +217,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\nMEDIA=\"$SRCROOT/../work/myv8\"\nDEST=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nif [ ! -f \"$MEDIA/rp07new\" ]; then\n  echo \"warning: $MEDIA/rp07new not found - building without V8 media (build it per docs/spike-a0.md)\"\n  exit 0\nfi\nmkdir -p \"$DEST\"\nrsync -a \"$MEDIA/rp07new\" \"$DEST/v8.disk\"\nrsync -a \"$MEDIA/bootV8\" \"$DEST/bootV8\"\necho \"embedded v8.disk + bootV8\"\n";
+			shellScript = "set -e\nMEDIA=\"$SRCROOT/../work/myv8\"\nDEST=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nif [ ! -f \"$MEDIA/rp07new\" ]; then\n  echo \"warning: $MEDIA/rp07new not found - building without V8 media (build it per docs/spike-a0.md)\"\n  exit 0\nfi\nmkdir -p \"$DEST\"\nrsync -a \"$MEDIA/rp07new\" \"$DEST/v8.disk\"\nrsync -a \"$MEDIA/bootV8\" \"$DEST/bootV8\"\n# THE IDENTITY OF THE IMAGE. The working copy in Application Support\n# diverges from the golden as soon as the guest writes to it, so the app\n# cannot recognise a stale one by hashing it -- what it needs is a record\n# of WHICH image it was cut from. Without this a rebuilt golden reaches\n# the bundle and stops there, and the app keeps booting last week.\nshasum -a 256 \"$MEDIA/rp07new\" | cut -d' ' -f1 > \"$DEST/v8.disk.id\"\necho \"embedded v8.disk + bootV8 (image $(cut -c1-12 < \"$DEST/v8.disk.id\"))\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
