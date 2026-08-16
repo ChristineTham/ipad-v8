@@ -1,0 +1,93 @@
+---
+import ManualLayout from '../../layouts/ManualLayout.astro';
+import { href } from '../../lib/paths';
+---
+
+<ManualLayout
+  slug="the-5620"
+  title="The DMD 5620"
+  description="The bitmapped terminal with its own processor: what it is, its two screen sizes, the phosphor, and why it costs CPU when nothing is happening."
+>
+  <h2>A computer that happens to have a screen</h2>
+  <p>
+    The Blit — sold by Teletype as the DMD 5620 — was designed by Bart Locanthi at Bell Labs and
+    is the reason Eighth Edition looks like anything at all. It has its own 32-bit processor, a
+    megabyte of memory, and an 800×1024 one-bit display, and it connects to the host over a single
+    serial line.
+  </p>
+  <p>
+    The important part is what that made possible: programs could be <em>downloaded into the
+    terminal</em> and run there. The host sends a binary down the wire, the terminal executes it,
+    and from then on the two are cooperating processes on two different computers. That is what
+    <a href={href('/manual/mux-and-layers')}><code>mux</code></a> is.
+  </p>
+
+  <h2>The two screens</h2>
+  <p>
+    ipnx offers two sizes, in <strong>Settings → Screen</strong>:
+  </p>
+  <table>
+    <thead>
+      <tr><th>Preset</th><th>Pixels</th><th>Text</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Original</td><td>800 × 1024</td><td>88 columns</td></tr>
+      <tr><td>Wide</td><td>1152 × 1024</td><td>127 columns</td></tr>
+    </tbody>
+  </table>
+  <p>
+    Original is the machine as it shipped. Wide is not — it is a real modification to the
+    terminal's firmware data, made at runtime, and it is included because a portrait CRT on a
+    modern display leaves a great deal of desk unused.
+  </p>
+  <p>
+    The window is locked to the shape of the screen rather than the other way round. You can scale
+    it, but you cannot reshape it, because the terminal has a fixed number of pixels and pretending
+    otherwise would just stretch them.
+  </p>
+  <p>
+    One consequence worth knowing: on the Wide screen, <code>mux</code> needs a differently-built
+    window system, and the login profile arranges that for you. If you ever run the window system
+    by an explicit path and get a blank screen on Wide, that is why.
+  </p>
+
+  <h2>Phosphor</h2>
+  <p>
+    A one-bit display has no colours, only lit and unlit, so the colour of "lit" is yours to
+    choose — green, amber or white, in Settings. It is a tint applied to the emulated raster, not a
+    filter over the app, so it affects nothing else.
+  </p>
+
+  <h2>Scaling, and the moiré</h2>
+  <p>
+    Eighth Edition's window system draws with stipple patterns — alternating pixels — for grey.
+    At a fractional zoom those patterns beat against the display grid and crawl unpleasantly.
+    <strong>Crisp</strong> scaling fixes it by rounding to a whole-number multiple, so one terminal
+    pixel is exactly two or three screen pixels. <strong>Fill</strong> uses the whole window and
+    accepts the shimmer.
+  </p>
+  <p>
+    Crisp cannot always be honoured — below 1:1 there is no whole number to round to — so in a very
+    small window it falls back to filling.
+  </p>
+
+  <h2>Why it uses CPU when nothing is happening</h2>
+  <p>
+    Because a real 5620 did. The VAX idles properly: its kernel executes a wait instruction and the
+    simulator sleeps, so a machine sitting at a login prompt costs almost nothing. The terminal has
+    no such instruction — its processor genuinely spins, polling its keyboard and its serial port —
+    and emulating that faithfully means emulating the spin.
+  </p>
+  <p>
+    <strong>Closing the 5620 window stops it.</strong> The thread ends and the core comes back. If
+    you are working in the glass terminals and want the fans quiet, close the terminal you are not
+    using.
+  </p>
+
+  <h2>Its memory survives</h2>
+  <p>
+    The 5620 had non-volatile memory for its settings, and so does this one — baud rate and the
+    rest persist between launches. So does the screen: what was last drawn is painted back when you
+    resume, so a restored session looks like the one you left rather than a blank tube.
+  </p>
+</ManualLayout>

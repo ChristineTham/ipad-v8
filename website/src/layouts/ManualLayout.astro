@@ -1,0 +1,110 @@
+---
+import Layout from './Layout.astro';
+import Nav from '../components/Nav.astro';
+import Footer from '../components/Footer.astro';
+import Prose from '../components/Prose.astro';
+import { href } from '../lib/paths';
+import { MANUAL } from '../lib/site';
+
+interface Props {
+  /** Slug of the current section — drives the sidebar mark and prev/next. */
+  slug: string;
+  title: string;
+  description: string;
+}
+
+const { slug, title, description } = Astro.props;
+
+const index = MANUAL.findIndex((s) => s.slug === slug);
+const section = MANUAL[index];
+const prev = index > 0 ? MANUAL[index - 1] : undefined;
+const next = index < MANUAL.length - 1 ? MANUAL[index + 1] : undefined;
+
+/** Sections are numbered like a manual's, because that is what this is. */
+const number = index + 1;
+---
+
+<Layout title={`${section.title} — ipnx manual`} description={description}>
+  <Nav />
+
+  <div class="mx-auto max-w-[1080px] px-6">
+    <div class="grid gap-12 py-10 lg:grid-cols-[14rem_minmax(0,1fr)] lg:items-start">
+      <!-- Contents -->
+      <nav aria-label="Manual contents" class="lg:sticky lg:top-8">
+        <a
+          href={href('/manual')}
+          class="font-sans text-[12px] font-bold tracking-[0.1em] text-muted uppercase hover:text-emphasis"
+        >
+          ← Manual
+        </a>
+        <ol class="mt-4 space-y-1 border-t border-rule pt-4">
+          {
+            MANUAL.map((s, i) => (
+              <li>
+                <a
+                  href={href(`/manual/${s.slug}`)}
+                  aria-current={s.slug === slug ? 'page' : undefined}
+                  class:list={[
+                    'flex gap-2.5 py-1 text-[14px] leading-snug',
+                    s.slug === slug ? 'font-semibold text-ink' : 'text-muted hover:text-emphasis',
+                  ]}
+                >
+                  <span class="font-mono text-[12px] opacity-60">{i + 1}</span>
+                  <span>{s.title}</span>
+                </a>
+              </li>
+            ))
+          }
+        </ol>
+      </nav>
+
+      <!-- The section -->
+      <article>
+        <p class="font-mono text-[11px] tracking-[0.14em] text-muted uppercase">
+          Manual · Section {number} of {MANUAL.length}
+        </p>
+        <h1 class="mt-2 font-serif text-[clamp(28px,4.5vw,40px)] font-bold tracking-[-0.02em]">
+          {title}
+        </h1>
+        <p class="mt-3 max-w-[68ch] text-[18px] text-muted">{section.blurb}</p>
+        <div class="mt-6 mb-2 border-b border-rule"></div>
+
+        <Prose>
+          <slot />
+        </Prose>
+
+        <!-- Prev / next -->
+        <nav class="mt-14 grid gap-4 border-t border-rule pt-6 sm:grid-cols-2">
+          {
+            prev ? (
+              <a href={href(`/manual/${prev.slug}`)} class="group block">
+                <span class="font-sans text-[12px] tracking-[0.1em] text-muted uppercase">
+                  Previous
+                </span>
+                <span class="mt-1 block font-serif text-[19px] font-bold text-ink group-hover:text-emphasis">
+                  {prev.title}
+                </span>
+              </a>
+            ) : (
+              <span />
+            )
+          }
+          {
+            next && (
+              <a href={href(`/manual/${next.slug}`)} class="group block sm:text-right">
+                <span class="font-sans text-[12px] tracking-[0.1em] text-muted uppercase">
+                  Next
+                </span>
+                <span class="mt-1 block font-serif text-[19px] font-bold text-ink group-hover:text-emphasis">
+                  {next.title}
+                </span>
+              </a>
+            )
+          }
+        </nav>
+      </article>
+    </div>
+  </div>
+
+  <Footer />
+</Layout>

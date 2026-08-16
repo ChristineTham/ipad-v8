@@ -1,0 +1,74 @@
+---
+import PageLayout from '../../layouts/PageLayout.astro';
+import { href } from '../../lib/paths';
+import { APP, MANUAL } from '../../lib/site';
+---
+
+<PageLayout
+  title="Manual — ipnx"
+  description="How to use ipnx: first launch, the terminals, the DMD 5620 and mux, sharing folders with your Mac, networking, settings and troubleshooting."
+  eyebrow="Documentation"
+  heading="Manual"
+  intro="Eight sections. Enough to be at home on a machine from 1985 without having been there the first time."
+>
+  <div class="py-8">
+    {/*
+      The manual-page header, used once and here: NAME(section) on both
+      margins with the title between. It is a reference rather than a costume —
+      this app ships the Eighth Edition manual, and anyone who has read one
+      will recognise the shape immediately.
+    */}
+    <div class="manpage-rule pb-1 text-[12px] tracking-[0.08em] text-muted uppercase">
+      <span>IPNX(1)</span>
+      <span class="hidden sm:inline">{APP.system}</span>
+      <span>IPNX(1)</span>
+    </div>
+
+    <div class="mt-8 max-w-[68ch]">
+      <h2 class="font-sans text-[12px] font-bold tracking-[0.12em] text-ink uppercase">Name</h2>
+      <p class="mt-2 text-[17px] text-body">
+        ipnx — Research Unix Eighth Edition on an emulated VAX-11/780
+      </p>
+
+      <h2 class="mt-7 font-sans text-[12px] font-bold tracking-[0.12em] text-ink uppercase">
+        Description
+      </h2>
+      <p class="mt-2 text-[17px] text-body">
+        This manual covers the app: what it does on first launch, what the windows are, and how to
+        get at the parts of the machine that are not obvious. It does not try to teach Unix — the
+        system carries its own manual, and <code class="bg-chip px-1 font-mono text-[0.86em]"
+          >man</code
+        > works inside it exactly as it did.
+      </p>
+    </div>
+
+    <h2 class="mt-12 font-sans text-[12px] font-bold tracking-[0.12em] text-ink uppercase">
+      Contents
+    </h2>
+    <ol class="mt-4 border-t border-rule">
+      {
+        MANUAL.map((s, i) => (
+          <li class="border-b border-rule">
+            <a
+              href={href(`/manual/${s.slug}`)}
+              class="group grid gap-x-5 gap-y-1 py-4 sm:grid-cols-[3rem_minmax(0,22rem)_minmax(0,1fr)] sm:items-baseline"
+            >
+              <span class="font-mono text-[13px] text-muted">{String(i + 1).padStart(2, '0')}</span>
+              <span class="font-serif text-[20px] font-bold text-ink group-hover:text-emphasis">
+                {s.title}
+              </span>
+              <span class="text-[15px] text-muted">{s.blurb}</span>
+            </a>
+          </li>
+        ))
+      }
+    </ol>
+
+    <p class="mt-10 text-[15px] text-muted">
+      Something missing or wrong? <a
+        href={href('/support')}
+        class="text-accent underline underline-offset-2 hover:text-emphasis">Tell me</a
+      > — the manual is as much a part of this as the code.
+    </p>
+  </div>
+</PageLayout>

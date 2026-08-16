@@ -1,0 +1,49 @@
+---
+import PageLayout from '../layouts/PageLayout.astro';
+import { Image } from 'astro:assets';
+import { href } from '../lib/paths';
+import dmd from '../assets/screens/dmd-5620.png';
+---
+
+<PageLayout
+  title="Screenshots — ipnx"
+  description="The emulated DMD 5620 terminal running Research Unix Eighth Edition on a Mac."
+  eyebrow="Plates"
+  heading="Screenshots"
+  intro="Photographed off a working machine, not mocked up."
+>
+  <div class="py-8">
+    <figure>
+      <Image
+        src={dmd}
+        alt="The ipnx DMD 5620 window: green phosphor text on black showing a login as christie, the welcome message, a fortune, and the output of ipnxfetch reporting ipnx Edition 8 Release 1.0 on an emulated VAX-11/780 with 8128 KiB of memory."
+        widths={[720, 1080, 1440]}
+        sizes="(max-width: 900px) 100vw, 900px"
+        loading="eager"
+        class="w-full border border-rule shadow-card"
+      />
+      <figcaption class="mt-3 max-w-[68ch] font-sans text-[14px] text-muted">
+        The DMD 5620 at a shell. The window is locked to the terminal's own 800×1024 portrait
+        shape; the toolbar carries the mouse-button hints, the pointer grab and a BREAK key,
+        because a real 5620 had one and Research Unix expects it.
+      </figcaption>
+    </figure>
+
+    <div class="mt-12 max-w-[68ch] border-t border-rule pt-8">
+      <h2 class="font-serif text-[24px] font-bold tracking-[-0.02em]">More to come</h2>
+      <p class="mt-3 text-[17px] text-body">
+        <code class="bg-chip px-1 font-mono text-[0.86em]">mux</code> with a layer swept open, and
+        <code class="bg-chip px-1 font-mono text-[0.86em]">jim</code> editing inside it, are the
+        two pictures this page most wants and does not yet have — both need a mouse in a human
+        hand, and a screenshot of them faked from anything else would be worth nothing. They will
+        appear here once taken properly.
+      </p>
+      <p class="mt-3 text-[17px] text-body">
+        In the meantime, <a
+          href={href('/manual/mux-and-layers')}
+          class="text-accent underline underline-offset-2 hover:text-emphasis">the manual</a
+        > describes exactly what to do, and it takes about a minute on your own machine.
+      </p>
+    </div>
+  </div>
+</PageLayout>

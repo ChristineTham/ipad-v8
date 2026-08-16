@@ -276,8 +276,8 @@ out of reach for reasons that have nothing to do with engineering.
 | [docs/licensing.md](docs/licensing.md) | Binding licensing posture for every component |
 | [CLAUDE.md](CLAUDE.md) | Working context for AI-assisted sessions — including the hard-won gotchas |
 
-*(The repository directory is still named `ipad-v8`, from before the scope grew past one
-device and one edition.)*
+*(The repository was called `ipad-v8` until 2026-08-16, from before the scope grew past one
+device and one edition. GitHub redirects the old URL, but the remote is worth updating.)*
 
 ## Building and running
 

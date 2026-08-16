@@ -1,0 +1,99 @@
+---
+import ManualLayout from '../../layouts/ManualLayout.astro';
+import Crt from '../../components/Crt.astro';
+import { href } from '../../lib/paths';
+
+const halt = `$ cd /
+$ sync; sync
+$ /etc/halt
+syncing disks... done
+halting (in tight loop); hit
+	^P
+	HALT`;
+---
+
+<ManualLayout
+  slug="troubleshooting"
+  title="Troubleshooting"
+  description="What to do when the emulated machine misbehaves: clean shutdowns, unclean ones, a silent terminal, and starting again."
+>
+  <h2>The rule that matters</h2>
+  <p>
+    <strong>Never force-quit ipnx.</strong> The emulated machine has a filesystem with data in
+    memory that has not reached the disk, exactly as a real Unix does, and killing the app is
+    pulling the plug on a VAX.
+  </p>
+  <p>
+    Quitting normally is safe and is not a shutdown — it takes a snapshot of the running machine
+    and resumes it next time. That is the right behaviour for closing a lid, and it is what the
+    app does when you quit or when the system suspends it.
+  </p>
+
+  <h2>Shutting down properly</h2>
+  <p>
+    If you want the machine genuinely stopped — before backing up its disk, say — do it from
+    inside, as an operator would have:
+  </p>
+  <Crt text={halt} caption="The kernel flushes, waits for the I/O to drain, and then spins. That is a clean stop." />
+  <p>
+    Two <code>sync</code>s is not superstition, it is the habit of a generation: the first
+    schedules the writes, the second gives them time to happen. <code>/etc/halt</code> then does
+    its own flush before stopping. Once you see the halt message, quitting the app is safe.
+  </p>
+
+  <h2>If it was force-quit anyway</h2>
+  <p>
+    The next launch will notice and run a filesystem check automatically. Usually it repairs
+    itself and boots normally.
+  </p>
+  <p>
+    <em>Usually</em> is carrying weight in that sentence. <code>fsck</code> restores
+    <strong>consistency</strong>, not data: it makes the filesystem mountable again, and several
+    of its repairs work by throwing something away — truncating a file to a length it can prove,
+    clearing an inode it cannot reconcile, moving an orphaned directory into
+    <code>lost+found</code> under a number. A clean pass is not evidence that your work survived.
+  </p>
+  <p>
+    If the boot stops at a single-user prompt instead of a login, the automatic check found
+    something it could not decide alone. The most reliable way forward is Reset (below); the disk
+    can also be exported first and examined on a desktop SIMH if what is on it matters.
+  </p>
+
+  <h2>A terminal that has gone quiet</h2>
+  <p>
+    Press <kbd>Return</kbd>. This is nearly always it. A resumed session has nothing left to say
+    — <code>getty</code> printed its prompt once, before the snapshot, and a logged-in shell
+    prints nothing unasked — so a perfectly healthy restored terminal can look frozen. The app
+    sends a nudge for you; Return is the manual version.
+  </p>
+  <p>
+    If Return does nothing on the 5620 specifically, use <strong>Restart terminal</strong>. That
+    power-cycles the terminal only, leaving the VAX and your session untouched. It is the fix when
+    a <code>mux</code> session was snapshotted and resumed — the window system lived in the
+    terminal's memory, and the terminal always power-cycles.
+  </p>
+
+  <h2>Everything is slow</h2>
+  <p>
+    Check whether a large build or a <code>find</code> is running inside the machine — a
+    VAX-11/780 was about one MIPS and it is being simulated honestly. If the machine is idle and
+    the app is still busy, the 5620 window is the likely cost: it does not idle, because the real
+    terminal did not. Close it.
+  </p>
+
+  <h2>Starting again</h2>
+  <p>
+    <strong>Settings → Disk → Reset</strong> replaces the emulated disk with the one the app
+    shipped and re-creates your account on first boot. Everything inside the emulated machine is
+    lost; everything on your Mac, including shared folders, is untouched. Export the disk first if
+    there is anything on it you want.
+  </p>
+
+  <h2>Still stuck</h2>
+  <p>
+    <a href={href('/support')}>Support</a> has what to include in a report. The one thing worth
+    adding here: if the machine printed anything unusual, the exact text is far more useful than a
+    description of it — this is a system whose error messages are precise and occasionally
+    beautiful.
+  </p>
+</ManualLayout>

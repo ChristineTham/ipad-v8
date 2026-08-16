@@ -1,0 +1,89 @@
+---
+import ManualLayout from '../../layouts/ManualLayout.astro';
+import Crt from '../../components/Crt.astro';
+import { href } from '../../lib/paths';
+
+const use = `$ ls /n/home
+Desktop     Documents   Downloads   Pictures
+
+$ cp /n/home/notes.txt .
+$ wc -l notes.txt
+      42 notes.txt`;
+
+const remount = `$ /etc/nmount 10.0.2.2 9200 64 /n/macos`;
+---
+
+<ManualLayout
+  slug="sharing-files"
+  title="Sharing files with your Mac"
+  description="Mounting a macOS folder inside Research Unix over Peter Weinberger's network file system, at /n/macos and /n/home."
+>
+  <h2>A folder from 1985's point of view</h2>
+  <p>
+    Choose a folder in <strong>Settings → Shared folder</strong> and it appears inside the
+    emulated machine at <code>/n/macos</code>. Your home folder is offered separately at
+    <code>/n/home</code>. Both are ordinary directories to the Unix side — you can
+    <code>ls</code> them, <code>cat</code> from them, copy in and out, and compile from them.
+  </p>
+
+  <Crt text={use} caption="An Eighth Edition shell reading a folder on macOS." />
+
+  <h2>What is actually happening</h2>
+  <p>
+    This is not a bridge invented for the app. Peter Weinberger wrote a network file system for
+    Research Unix in the mid-1980s, to bind the lab's machines into one logical system, and its
+    client has been compiled into every Eighth Edition kernel since. It has had nothing to talk
+    to since Datakit was switched off.
+  </p>
+  <p>
+    ipnx gives it a server again. The kernel's own <code>netfs</code> client does the mounting,
+    speaking its original protocol, to a server running inside the app. The Unix side has no idea
+    anything unusual is happening; as far as it is concerned another machine on the network is
+    exporting a filesystem, which in 1985 it would have been.
+  </p>
+
+  <h2>Read-only unless you say otherwise</h2>
+  <p>
+    A share starts read-only. Turn on <strong>Allow the VAX to write</strong> for a folder and the
+    emulated machine can create and modify files in it — which is genuinely useful and worth a
+    moment's thought first, because the writer is a 1985 Unix with fourteen-character file names
+    and no notion of your Mac's conventions.
+  </p>
+
+  <h2>Why your home folder is not the home directory</h2>
+  <p>
+    It would be the obvious design and it does not work. Eighth Edition file names are limited to
+    fourteen characters, the filesystem is case-sensitive in a way macOS usually is not, and a
+    great many names in a modern home folder simply cannot be represented. Making that the
+    account's home directory would produce a machine that broke in a different place every day.
+  </p>
+  <p>
+    So the account's home is on the emulated disk, where 1985 rules apply consistently, and your
+    Mac's files are reachable next door at <code>/n/home</code>.
+  </p>
+
+  <h2>Across a suspend</h2>
+  <p>
+    Shares are dropped before the app takes its snapshot and remounted after it resumes, and this
+    is deliberate rather than incidental. The mount table lives in the emulated machine's memory
+    and survives a snapshot perfectly; the network connection underneath it lives on your Mac and
+    does not. Left alone, you would resume with a mount that could neither be used nor cleared.
+  </p>
+  <p>
+    You should not have to think about this — it is automatic. If you ever need to mount by hand,
+    the command is:
+  </p>
+  <Crt text={remount} caption="Port 9200 is /n/macos; 9201 is /n/home. The third number is the mount id." />
+
+  <h2>Speed</h2>
+  <p>
+    Fast enough to build software from. The protocol costs a round trip per path component rather
+    than per byte, so its performance is measured in <em>files per second</em>, not megabytes —
+    about 265 small files a second as it stands. Copying one large file will feel slower than you
+    expect and reading a thousand small ones faster.
+  </p>
+  <p>
+    If the share is not there, check that the folder is still chosen in Settings and that
+    networking is enabled — see <a href={href('/manual/networking')}>networking</a>.
+  </p>
+</ManualLayout>

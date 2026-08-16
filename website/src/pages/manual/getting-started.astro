@@ -1,0 +1,90 @@
+---
+import ManualLayout from '../../layouts/ManualLayout.astro';
+import Crt from '../../components/Crt.astro';
+import { href } from '../../lib/paths';
+
+const firstBoot = `Boot
+: hp(0,0)unix
+Unix Edition 8 -- ipnx Release 1.0 (2026-08-16)
+real mem  = 8388608
+avail mem = 7294976
+hp0: RP07
+network: il0 10.0.2.15, gateway 10.0.2.2
+
+login: christie
+Welcome to ipnx v8 (Eighth Edition Research Unix).
+
+For copyright, please refer to /etc/copyright
+
+Fortune favours the brave.
+$ `;
+---
+
+<ManualLayout
+  slug="getting-started"
+  title="Getting started"
+  description="What happens on first launch of ipnx: the account it creates for you, how to log in, and how the machine keeps its state between launches."
+>
+  <h2>First launch</h2>
+  <p>
+    Open the app and leave it alone for about half a minute. It is not loading — it is
+    <em>booting</em>. The boot block reads the kernel off an emulated RP07 disk, the kernel probes
+    its hardware, <code>/etc/rc</code> checks the filesystems and starts the network, and
+    <code>init</code> puts a login prompt on each terminal line.
+  </p>
+  <p>
+    While that happens the app also does something a 1985 machine could not do for itself: it
+    creates an account. Your macOS short user name becomes a Unix account with a home directory
+    under <code>/usr</code>, and the terminal marked <strong>tty01</strong> logs itself in as that
+    account.
+  </p>
+
+  <Crt text={firstBoot} caption="A first boot, abridged. The fortune is different every time." />
+
+  <h2>The account it makes</h2>
+  <p>
+    You are not root, deliberately. Research Unix has no <code>sudo</code>, so becoming the
+    superuser is <code>su</code> at a shell — but ordinary work should not happen there, and the
+    machine is more interesting as somebody's account than as an administrator's console.
+  </p>
+  <p>
+    There is <strong>no password</strong>. This is a personal machine emulating a personal
+    machine, on a disk you already have in your hands, and a password prompt with no recovery path
+    would be a nuisance protecting nothing. If you want one, <code>passwd</code> works as it
+    always did.
+  </p>
+  <p>
+    The name is truncated where it has to be: Eighth Edition allows eight characters for a login
+    and fourteen for any file name, and it does not negotiate.
+  </p>
+
+  <h2>Quitting, and coming back</h2>
+  <p>
+    Quit normally (<kbd>⌘Q</kbd>) and the app takes a snapshot of the running machine —
+    processors, memory, open files, everything — and writes it beside the disk. Next launch
+    restores it, so you come back in a couple of seconds to precisely where you were, mid-command
+    if that is where you stopped.
+  </p>
+  <p>
+    <strong>Do not force-quit it.</strong> That is the one rule this machine has, and it is the
+    same rule a real VAX had: a filesystem keeps data in memory that has not yet reached the disk,
+    and pulling the power loses it. See <a href={href('/manual/troubleshooting')}>troubleshooting</a>
+    for what a clean shutdown looks like and what to do if it happens anyway.
+  </p>
+
+  <h2>Where your things live</h2>
+  <p>
+    Everything the emulated machine knows is inside one file,
+    <code>~/Library/Application&nbsp;Support/ipnx/v8/v8.disk</code>. You can copy it, back it up,
+    or export it from Settings. Files you keep on your Mac are better kept on your Mac and
+    <a href={href('/manual/sharing-files')}>reached through a shared folder</a>, which is what
+    <code>/n/macos</code> and <code>/n/home</code> are for.
+  </p>
+
+  <h2>Where to go next</h2>
+  <p>
+    If you know Unix, you already know what to do — but the two things worth trying immediately
+    are <code>mux</code>, which downloads a window system into the terminal, and the manual:
+    <code>man man</code> works, and the whole Eighth Edition manual is on the disk.
+  </p>
+</ManualLayout>

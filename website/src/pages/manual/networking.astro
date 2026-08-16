@@ -1,0 +1,99 @@
+---
+import ManualLayout from '../../layouts/ManualLayout.astro';
+import Crt from '../../components/Crt.astro';
+import { href } from '../../lib/paths';
+
+const dns = `$ dnsq www.tuhs.org
+asking 10.0.2.3 for www.tuhs.org (30 byte query)
+reply: 70 bytes, id 4b21, rcode 0, 1 question(s), 2 answer(s)
+www.tuhs.org has address 50.116.15.146
+THE INTERNET IS REACHABLE FROM V8`;
+
+const tcp = `$ telnet 173.230.156.51 80
+Escape character is '^]'.
+HEAD / HTTP/1.0
+
+HTTP/1.1 400 Bad Request
+Server: Apache/2.4.68 (Debian)
+<address>Apache/2.4.68 (Debian) Server at minnie.tuhs.org Port 80</address>
+Connection closed by foreign host.`;
+---
+
+<ManualLayout
+  slug="networking"
+  title="Networking"
+  description="The emulated Interlan Ethernet card, Research Unix's own TCP/IP, name resolution, and reaching the real Internet from 1985."
+>
+  <h2>The machine is on the network</h2>
+  <p>
+    It has an Interlan NI1010 Ethernet card, and it uses Research Unix's own TCP/IP — not a
+    modern stack bolted on. That implementation is worth a moment: it is built as
+    <em>stream line disciplines</em>, and its interface is opening a device file and writing a
+    structure to it, which is Plan&nbsp;9's <code>/net</code> model years before Plan&nbsp;9.
+    Sockets, as everyone else came to know them, are a different lineage.
+  </p>
+  <p>
+    <code>/etc/rc</code> brings it all up at boot: the interface, the TCP and UDP disciplines, a
+    default route, and the two shared folders. There is nothing to configure.
+  </p>
+
+  <h2>Addresses</h2>
+  <table>
+    <thead>
+      <tr><th>Address</th><th>What it is</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>10.0.2.15</code></td><td>The emulated machine</td></tr>
+      <tr><td><code>10.0.2.2</code></td><td>Your Mac, from inside</td></tr>
+      <tr><td><code>10.0.2.3</code></td><td>Name resolution</td></tr>
+    </tbody>
+  </table>
+  <p>
+    Traffic leaves through a user-mode network translator, so nothing needs configuring on your
+    Mac, no privileged interface is created, and nothing is exposed to your local network. The
+    emulated machine can reach out; nothing can reach in.
+  </p>
+
+  <h2>Resolving names</h2>
+  <p>
+    Eighth Edition predates the resolver library, so there is no <code>resolv.conf</code> and
+    nothing that would recognise one. <code>dnsq</code> asks a nameserver directly:
+  </p>
+  <Crt text={dns} caption="The first query after boot often times out — it triggers the ARP that carries it. Ask twice." />
+
+  <h2>Connecting to something</h2>
+  <p>
+    <code>telnet</code> is on the machine and works to any host and port:
+  </p>
+  <Crt text={tcp} caption="A 1985 Unix talking to a 2026 web server. The 400 is the interesting part." />
+  <p>
+    That <code>400 Bad Request</code> is the proof rather than a failure. <code>telnet</code>
+    sends CRLF where a bare CR was typed, so Apache rejected the request — which it could only do
+    having <em>received</em> it. A refused connection looks nothing like a server parsing your
+    request and complaining about it.
+  </p>
+  <p>
+    The machine at the other end there is minnie.tuhs.org, which is The Unix Heritage Society's
+    own, and a fitting first correspondent for a restored Eighth Edition.
+  </p>
+
+  <h2>Turning it off</h2>
+  <p>
+    <strong>Settings → Machine → Ethernet card</strong> removes the card from the emulated
+    computer. This is not a firewall toggle: the hardware is gone, <code>/etc/rc</code> sees no
+    interface, and the machine boots as one that never had networking — which is also exactly how
+    an Eighth Edition machine without an Ethernet board behaved.
+  </p>
+  <p>
+    Note that shared folders go with it. They travel over the same emulated network, even though
+    they never leave your Mac. See <a href={href('/manual/sharing-files')}>sharing files</a>.
+  </p>
+
+  <h2>What is not there</h2>
+  <p>
+    There is no web browser, and there will not be one. There is <code>telnet</code>,
+    <code>ftp</code>, <code>rsh</code>, <code>rlogin</code> and the mail system, which is what
+    1985 had. Modern TLS is far beyond this machine — not in principle, but a VAX-11/780 at five
+    MHz would take a noticeable while over a single handshake.
+  </p>
+</ManualLayout>

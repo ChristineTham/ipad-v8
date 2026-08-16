@@ -9,7 +9,10 @@
 # One-shot: hard watchdog, and the app is killed on every exit path.
 set -u
 
-APP=${1:-/tmp/claude-501/-Users-christie-Repositories-Unix-ipad-v8/a0379025-e887-4776-b041-733dfd764a1c/scratchpad/dd/Build/Products/Debug/ipnx.app}
+# Default to the app this repo builds, not to whatever scratch directory the
+# measurement happened to be taken from once — that path pointed into a
+# temporary folder belonging to a session that ended long ago.
+APP=${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/app/build/DerivedData/Build/Products/Debug/ipnx.app}
 SETTLE=${2:-75}
 WINDOW=${3:-20}
 LOG=${TMPDIR:-/tmp}/ipnx-cpu.log

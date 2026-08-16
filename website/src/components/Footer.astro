@@ -1,0 +1,86 @@
+---
+import { href } from '../lib/paths';
+import { APP, AUTHOR, REPO, MANUAL } from '../lib/site';
+
+const year = new Date().getFullYear();
+---
+
+{/*
+  The colophon. A technical report ends with where it came from and who to
+  write to, not with a call to action.
+*/}
+<footer class="mt-20 border-t-[3px] border-ink">
+  <div class="mx-auto max-w-[1080px] px-6 py-12">
+    <div class="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
+      <div>
+        <p class="font-serif text-[22px] font-bold tracking-[-0.02em]">{APP.name}</p>
+        <p class="mt-2 text-[15px] text-muted">
+          Research Unix Eighth Edition, running on an emulated VAX-11/780 and shown through an
+          emulated DMD 5620.
+        </p>
+        <p class="mt-3 font-mono text-[12px] text-muted">{APP.system}</p>
+      </div>
+
+      <div>
+        <h2 class="font-sans text-[12px] font-bold tracking-[0.1em] text-ink uppercase">
+          The program
+        </h2>
+        <ul class="mt-3 space-y-2 text-[15px]">
+          <li><a href={href('/machine')} class="text-muted hover:text-emphasis">The machine</a></li>
+          <li><a href={href('/screenshots')} class="text-muted hover:text-emphasis">Screenshots</a></li>
+          <li><a href={href('/download')} class="text-muted hover:text-emphasis">Download</a></li>
+          <li><a href={REPO} class="text-muted hover:text-emphasis">Source on GitHub ↗</a></li>
+        </ul>
+      </div>
+
+      <div>
+        <h2 class="font-sans text-[12px] font-bold tracking-[0.1em] text-ink uppercase">Manual</h2>
+        <ul class="mt-3 space-y-2 text-[15px]">
+          <li><a href={href('/manual')} class="text-muted hover:text-emphasis">Contents</a></li>
+          {
+            MANUAL.slice(0, 3).map((s) => (
+              <li>
+                <a href={href(`/manual/${s.slug}`)} class="text-muted hover:text-emphasis">
+                  {s.title}
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+
+      <div>
+        <h2 class="font-sans text-[12px] font-bold tracking-[0.1em] text-ink uppercase">About</h2>
+        <ul class="mt-3 space-y-2 text-[15px]">
+          <li><a href={href('/about')} class="text-muted hover:text-emphasis">About the project</a></li>
+          <li><a href={href('/support')} class="text-muted hover:text-emphasis">Support</a></li>
+          <li><a href={href('/privacy')} class="text-muted hover:text-emphasis">Privacy</a></li>
+          <li><a href={href('/licensing')} class="text-muted hover:text-emphasis">Licensing</a></li>
+        </ul>
+      </div>
+    </div>
+
+    {/*
+      The licensing line is not boilerplate — it is the condition under which
+      any of this may exist, so it goes where a copyright notice would.
+    */}
+    <div class="mt-10 border-t border-rule pt-6 text-[14px] text-muted">
+      <p>
+        Research Unix Editions 8, 9 and 10 are copyright Bell Laboratories. In March 2017
+        Alcatel-Lucent, now Nokia, stated it would not assert its copyright against
+        non-commercial use of them; {APP.name} is distributed free on those terms and on no
+        others. UNIX is a registered trademark of The Open Group. See{' '}
+        <a href={href('/licensing')} class="text-accent underline underline-offset-2 hover:text-emphasis">
+          licensing
+        </a>.
+      </p>
+      <p class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span>© {year} {AUTHOR.name}</span>
+        <span aria-hidden="true">·</span>
+        <span>Requires {APP.minOS}</span>
+        <span aria-hidden="true">·</span>
+        <a href={`mailto:${AUTHOR.email}`} class="hover:text-emphasis">{AUTHOR.email}</a>
+      </p>
+    </div>
+  </div>
+</footer>

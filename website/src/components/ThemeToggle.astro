@@ -1,0 +1,153 @@
+---
+/**
+ * Appearance control: Auto / Paper / Terminal.
+ *
+ * "Auto" is the absence of a stored choice, not a third stored value — it
+ * means the CSS falls through to `prefers-color-scheme`, so a reader who never
+ * touches this still tracks their system when they change it later.
+ *
+ * Rendered as a radiogroup rather than a cycling button so all three states are
+ * visible and directly reachable; a cycle hides what the current mode even is.
+ */
+
+const MODES = [
+  {
+    value: 'auto',
+    label: 'Auto',
+    path: 'M8 1.75a6.25 6.25 0 1 0 0 12.5 6.25 6.25 0 0 0 0-12.5Zm0 1.5v9.5a4.75 4.75 0 0 1 0-9.5Z',
+  },
+  {
+    value: 'light',
+    label: 'Paper',
+    path: 'M8 4.75a3.25 3.25 0 1 0 0 6.5 3.25 3.25 0 0 0 0-6.5ZM8 .75v1.9m0 10.7v1.9M15.25 8h-1.9M2.65 8H.75m11.55-5.3-1.35 1.35M5.15 10.85 3.8 12.2m8.5 0-1.35-1.35M5.15 5.15 3.8 3.8',
+    stroke: true,
+  },
+  {
+    value: 'dark',
+    label: 'Terminal',
+    path: 'M13.35 9.7A5.9 5.9 0 0 1 6.3 2.65a5.9 5.9 0 1 0 7.05 7.05Z',
+  },
+];
+---
+
+<div class="theme-toggle" role="radiogroup" aria-label="Appearance">
+  {
+    MODES.map((m) => (
+      <button
+        type="button"
+        role="radio"
+        aria-checked="false"
+        aria-label={m.label}
+        title={`${m.label} appearance`}
+        data-mode={m.value}
+      >
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+          {m.stroke ? (
+            <path
+              d={m.path}
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            />
+          ) : (
+            <path d={m.path} fill="currentColor" />
+          )}
+        </svg>
+      </button>
+    ))
+  }
+</div>
+
+<style>
+  .theme-toggle {
+    display: inline-flex;
+    gap: 1px;
+    padding: 2px;
+    border: 1px solid var(--color-rule);
+    background-color: var(--color-card);
+  }
+  .theme-toggle button {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 24px;
+    color: var(--color-muted);
+    cursor: pointer;
+    transition:
+      background-color 0.15s,
+      color 0.15s;
+  }
+  .theme-toggle button:hover {
+    color: var(--color-emphasis);
+  }
+  .theme-toggle button[aria-checked='true'] {
+    background-color: var(--color-chip);
+    color: var(--color-emphasis);
+  }
+  .theme-toggle button:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+</style>
+
+<script>
+  const KEY = 'theme';
+
+  const read = (): string => {
+    try {
+      const v = localStorage.getItem(KEY);
+      return v === 'light' || v === 'dark' ? v : 'auto';
+    } catch {
+      return 'auto';
+    }
+  };
+
+  const resolved = (mode: string): 'light' | 'dark' =>
+    mode === 'auto'
+      ? window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light'
+      : (mode as 'light' | 'dark');
+
+  const apply = (mode: string) => {
+    const root = document.documentElement;
+    if (mode === 'auto') delete root.dataset.theme;
+    else root.dataset.theme = mode;
+
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute('content', resolved(mode) === 'dark' ? '#0a0c0b' : '#fbf9f4');
+
+    // There can be more than one control on a page (masthead + mobile menu).
+    document.querySelectorAll<HTMLButtonElement>('.theme-toggle button').forEach((b) => {
+      b.setAttribute('aria-checked', String(b.dataset.mode === mode));
+    });
+  };
+
+  const store = (mode: string) => {
+    try {
+      if (mode === 'auto') localStorage.removeItem(KEY);
+      else localStorage.setItem(KEY, mode);
+    } catch {
+      /* Private mode: the choice just won't survive the session. */
+    }
+  };
+
+  document.querySelectorAll<HTMLElement>('.theme-toggle').forEach((group) => {
+    group.addEventListener('click', (e) => {
+      const button = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-mode]');
+      if (!button) return;
+      const mode = button.dataset.mode!;
+      store(mode);
+      apply(mode);
+    });
+  });
+
+  // On Auto, track the system if the reader changes it while the page is open.
+  window
+    .matchMedia('(prefers-color-scheme: dark)')
+    .addEventListener('change', () => read() === 'auto' && apply('auto'));
+
+  apply(read());
+</script>

@@ -1,0 +1,122 @@
+---
+import PageLayout from '../layouts/PageLayout.astro';
+import Prose from '../components/Prose.astro';
+import { href } from '../lib/paths';
+import { APP, AUTHOR, REPO } from '../lib/site';
+---
+
+<PageLayout
+  title="About ipnx"
+  description="Why Research Unix Editions 8 to 10 matter, what the name means, and who wrote the system this project restores."
+  eyebrow="Colophon"
+  heading="About"
+  intro="What this is, what the name means, and whose work it is."
+>
+  <div class="py-8">
+    <Prose>
+      <h2>The editions nobody got to have</h2>
+      <p>
+        Unix spread in the 1970s partly <em>because</em> a 1956 consent decree kept AT&amp;T out
+        of the computer business. The system went to universities with its source for a nominal
+        fee, and a generation learned to program by reading it. The 1984 divestiture removed that
+        restriction, and what followed is the part everyone remembers: System V against BSD,
+        lawsuits, a trademark parked at X/Open, and finally the SCO litigation grinding through
+        the 2000s over copyrights the courts eventually found SCO had never owned.
+      </p>
+      <p>
+        Meanwhile the actual research carried on quietly at the same lab, on the same machines.
+        Editions 8, 9 and 10 — 1985 to 1989 — were never released outside Bell Labs.
+        <code>/proc</code>, the stream I/O system, the file system switch and a network file
+        system all appeared there first, and then the same people went and wrote Plan&nbsp;9. The
+        line did not stop because it was finished. It stopped because the company that owned it
+        had become a different kind of company.
+      </p>
+      <p>
+        The code came back on 7 March 2017, when Alcatel-Lucent stated it would not assert
+        copyright against non-commercial use of Editions 8, 9 and 10. {APP.name} is what that
+        permission is for: not a museum piece behind glass, but Bell Labs Unix booted, usable, and
+        carried forward into a world that never got to have it.
+      </p>
+
+      <h2>The name</h2>
+      <p>
+        <strong>ipnx</strong> began as <em>iPad is not Unix</em> — in the recursive-acronym
+        tradition of GNU's Not Unix, and also a plain statement of fact, since UNIX is a
+        registered trademark of The Open Group and an app that runs Research Unix may not call
+        itself one.
+      </p>
+      <p>
+        It has a second reading, and that is the one that matters: <strong
+          >Intellectual Property is not Unix.</strong
+        > Unix the idea won completely. Unix the property was carved up among companies that, for
+        the most part, no longer make operating systems.
+      </p>
+
+      <h2>Whose work this is</h2>
+      <p>
+        Almost none of it is mine. The system was built by a group that was never on an
+        organisation chart — it coalesced voluntarily — and the manual's own convention was to
+        attribute programs to individuals so that questions went to the right desk. That
+        convention is worth keeping, so the <a href={REPO}>repository</a> names as many of them as
+        I can properly credit, following Doug McIlroy's
+        <em>A Research Unix Reader</em>.
+      </p>
+      <p>The parts you touch most directly in this app:</p>
+      <ul>
+        <li>
+          <strong>Ken Thompson</strong> and <strong>Dennis Ritchie</strong> — the system, and the
+          stream I/O that Eighth Edition is built on.
+        </li>
+        <li>
+          <strong>Bart Locanthi</strong> — designed the bitmapped terminal, and programmed it from
+          <code>bitblt</code> upward.
+        </li>
+        <li>
+          <strong>Rob Pike</strong> — <code>mux</code>, the window system that downloads itself
+          into that terminal, and the editors that culminate in <code>sam</code>.
+        </li>
+        <li>
+          <strong>Peter Weinberger</strong> — the network file system that mounts your Mac's
+          folders, written to bind a lab's machines into one logical system.
+        </li>
+        <li>
+          <strong>Tom Killian</strong> — <code>/proc</code>, and so one of the ideas that made
+          Plan&nbsp;9 thinkable.
+        </li>
+        <li>
+          <strong>Norman Wilson</strong> — waged a campaign against entropy across the software
+          and the manual. Without him these materials would not exist to be run at all.
+        </li>
+      </ul>
+      <p>
+        And for making any of it reachable today: <strong>The Unix Heritage Society</strong>,
+        <strong>Dan Cross</strong>, <strong>Nokia</strong> for the 2017 statement,
+        <strong>Seth Morabito</strong> for the 5620 emulator, and the
+        <strong>open-simh</strong> project.
+      </p>
+
+      <h2>Where it is going</h2>
+      <p>
+        Eighth Edition is the rehearsal. Tenth Edition survives as source only and has never been
+        booted by anyone; the plan is to cross-build it inside the running Eighth, which is how a
+        1989 system would have been built in the first place. If it lands, it is a first.
+      </p>
+      <p>
+        After that: a ports tree for bringing software back to a machine from 1985, and an
+        eleventh edition that never existed — the idea of finishing the sentence the Research line
+        was in the middle of when it stopped.
+      </p>
+
+      <h2>Who made this app</h2>
+      <p>
+        {AUTHOR.name}, as a personal project, in her own time. It is free and always will be —
+        that is a condition of the licence, not a marketing decision. Corrections, especially to
+        the historical and attribution material, are genuinely welcome:
+        <a href={`mailto:${AUTHOR.email}`}>{AUTHOR.email}</a>.
+      </p>
+      <p>
+        See <a href={href('/licensing')}>licensing</a> for the terms every part of this runs under.
+      </p>
+    </Prose>
+  </div>
+</PageLayout>

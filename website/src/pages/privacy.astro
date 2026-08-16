@@ -1,0 +1,122 @@
+---
+import PageLayout from '../layouts/PageLayout.astro';
+import Prose from '../components/Prose.astro';
+import { href } from '../lib/paths';
+import { APP, AUTHOR, REPO } from '../lib/site';
+
+/** Kept in one place: the date this text last changed, not the build date. */
+const UPDATED = '16 August 2026';
+---
+
+<PageLayout
+  title="Privacy — ipnx"
+  description="ipnx collects nothing. No accounts, no analytics, no telemetry, no crash reporting. This page explains exactly what the app does and does not do with your data."
+  eyebrow="Legal"
+  heading="Privacy"
+  intro="ipnx collects nothing about you. This page says so precisely, including the parts a shorter policy would leave out."
+>
+  <Prose>
+    <p><strong>Last updated:</strong> {UPDATED}</p>
+
+    <h2>The short version</h2>
+    <p>
+      {APP.name} has no accounts, no analytics, no telemetry, no crash reporting and no
+      advertising. It does not contact any server belonging to this project, because there is no
+      such server. Nothing you type into the emulated machine, and nothing about how you use the
+      app, is transmitted anywhere or seen by anyone.
+    </p>
+
+    <h2>What is stored, and where</h2>
+    <p>
+      Everything {APP.name} keeps lives on your Mac, in your own account, and is removed when you
+      delete the app and its support folder:
+    </p>
+    <ul>
+      <li>
+        <strong>The emulated machine's disk</strong> —
+        <code>~/Library/Application Support/ipnx/v8/v8.disk</code>. Its contents are whatever you
+        do inside the emulated Unix: files you create, commands you run, mail you send to
+        yourself. It is an ordinary file and you can copy, export or delete it.
+      </li>
+      <li>
+        <strong>A snapshot of the running machine</strong> — <code>state.sav</code>, written when
+        you quit so the session can resume where it stopped.
+      </li>
+      <li>
+        <strong>Terminal contents</strong> — what was last on each screen, so a resumed session
+        looks like the one you left.
+      </li>
+      <li>
+        <strong>Your settings</strong> — screen size, phosphor colour, scaling and similar, in the
+        standard macOS preferences for the app.
+      </li>
+      <li>
+        <strong>A bookmark to any folder you choose to share</strong>, so the choice survives a
+        relaunch. The bookmark records which folder; the folder's contents are not copied
+        anywhere.
+      </li>
+    </ul>
+
+    <h2>The network, stated honestly</h2>
+    <p>
+      This is the part a boilerplate policy would skip, and it is the part most worth being
+      straight about. {APP.name} contains a complete 1985 TCP/IP implementation, running inside
+      the emulated machine, and the app gives it a way out to the real Internet through a
+      user-mode network translator. That means:
+    </p>
+    <ul>
+      <li>
+        <strong>The app itself never initiates a network connection.</strong> It has no
+        update check, no beacon, no first-run ping.
+      </li>
+      <li>
+        <strong>The emulated machine can, if you tell it to.</strong> If you run a command in
+        Eighth Edition that resolves a name or opens a connection, that traffic leaves your Mac
+        exactly as any other program's would, to whoever you directed it at. It is your traffic,
+        under your control, and this project neither sees nor records it.
+      </li>
+      <li>
+        <strong>Name lookups follow your Mac.</strong> The emulated machine asks the network
+        translator, which asks whatever resolver macOS is already using.
+      </li>
+      <li>
+        <strong>You can switch the card off.</strong> Settings → Machine → Ethernet card removes
+        the network hardware from the emulated computer entirely, and it then boots as a machine
+        with no networking at all.
+      </li>
+    </ul>
+
+    <h2>Folders you share</h2>
+    <p>
+      {APP.name} can mount a folder of your choosing inside the emulated machine, at
+      <code>/n/macos</code>, and your home folder at <code>/n/home</code>. This is served in-process
+      over the local loopback interface — it never leaves your Mac and is not reachable from
+      another computer. The emulated machine gets read-only access unless you explicitly allow
+      writing.
+    </p>
+    <p>
+      Choose deliberately. A folder you share is a folder the emulated Unix can read, and a
+      1985 system has 1985 ideas about file names and permissions.
+    </p>
+
+    <h2>Children</h2>
+    <p>
+      {APP.name} is not directed at children, collects nothing from anyone, and contains no
+      user-generated content, purchases or communication features.
+    </p>
+
+    <h2>Changes</h2>
+    <p>
+      If this policy changes, the date above changes with it and the previous wording remains in
+      the <a href={REPO}>repository's</a> history — there is no version of it you cannot go back
+      and read.
+    </p>
+
+    <h2>Contact</h2>
+    <p>
+      Questions about this policy, or about anything the app does: <a href={`mailto:${AUTHOR.email}`}
+        >{AUTHOR.email}</a
+      >. See also <a href={href('/support')}>support</a>.
+    </p>
+  </Prose>
+</PageLayout>

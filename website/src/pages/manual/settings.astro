@@ -1,0 +1,122 @@
+---
+import ManualLayout from '../../layouts/ManualLayout.astro';
+import { href } from '../../lib/paths';
+---
+
+<ManualLayout
+  slug="settings"
+  title="Settings"
+  description="Every setting in ipnx and what it actually changes: screen, phosphor, scaling, terminals, the saved session, the disk and the Ethernet card."
+>
+  <h2>Screen</h2>
+  <dl>
+    <dt>Phosphor</dt>
+    <dd>
+      Green, amber or white. A tint on the emulated raster — the display is one bit deep, so this
+      is simply the colour of "lit".
+    </dd>
+    <dt>Screen shape</dt>
+    <dd>
+      Original (800×1024, 88 columns) or Wide (1152×1024, 127). Changing it restarts the terminal,
+      because the size is set during its power-on self-test.
+      See <a href={href('/manual/the-5620')}>the DMD 5620</a>.
+    </dd>
+    <dt>Scaling</dt>
+    <dd>
+      <strong>Crisp</strong> rounds to a whole-number multiple so stipple patterns do not shimmer;
+      <strong>Fill</strong> uses the whole window. Crisp falls back to filling below 1:1, where
+      there is no whole number available.
+    </dd>
+    <dt>Pointer speed</dt>
+    <dd>
+      How far the emulated mouse moves for a given movement of yours. The 5620 integrates deltas
+      from free-running counters rather than being told a position, so this is a feel setting
+      rather than a precise one.
+    </dd>
+  </dl>
+
+  <h2>Glass terminals</h2>
+  <dl>
+    <dt>Colours and text size</dt>
+    <dd>For the vt100 windows only. The 5620 is a raster and takes no part in this.</dd>
+    <dt>Log tty01 in automatically</dt>
+    <dd>
+      On by default. The app watches for the login prompt on <code>tty01</code> and logs in as
+      your account. Turn it off if you would rather do it yourself, or want that line free.
+    </dd>
+  </dl>
+
+  <h2>Terminal</h2>
+  <dl>
+    <dt>Terminal speed</dt>
+    <dd>
+      How fast the emulated serial line runs. The default is well above 1985 — the wire is the one
+      place where authenticity costs you a minute and a half of watching a progress-free download.
+      Lower it if you want the period-correct experience.
+    </dd>
+    <dt>Remember terminal settings</dt>
+    <dd>
+      Keeps the 5620's non-volatile memory between launches, as the real one did. Off means it
+      powers on factory-fresh every time.
+    </dd>
+    <dt>Log wire diagnostics</dt>
+    <dd>
+      Writes throughput and queue statistics beside the machine. For diagnosing the serial line;
+      off unless you are asked for it.
+    </dd>
+  </dl>
+
+  <h2>Saved session</h2>
+  <p>
+    Shows whether a snapshot exists and when it was taken, and lets you discard it. Discarding
+    means the next launch is a cold boot — which is slower, and occasionally what you want.
+  </p>
+  <p>
+    <strong>The snapshot and the disk are a pair.</strong> A snapshot describes a machine whose
+    filesystem is in a particular state, and restoring one over a different disk would write stale
+    metadata onto media it has never seen. The app keeps them together or discards them together;
+    there is no third option, and this is why nothing here offers to delete just one.
+  </p>
+
+  <h2>Disk</h2>
+  <dl>
+    <dt>Export</dt>
+    <dd>
+      Writes the emulated machine's disk out as a file. It is a plain disk image — usable with
+      SIMH on a desktop, and a perfectly good backup.
+    </dd>
+    <dt>Import</dt>
+    <dd>
+      Replaces the machine's disk with one you supply. Staged: it takes effect at the next launch,
+      because swapping a disk under a running VAX is exactly as bad an idea as it sounds.
+    </dd>
+    <dt>Reset</dt>
+    <dd>
+      Puts back the disk the app shipped with. <strong>This erases everything inside the emulated
+      machine</strong> — your files there, not on your Mac. Files on shared folders are on your
+      Mac and are untouched.
+    </dd>
+  </dl>
+  <p>
+    Worth knowing: when an app update carries a newer system image, the working disk is replaced
+    automatically at launch — no prompt, and Reset is not involved. An update is not a decision
+    you should have to make. Reset stays yours and means something different.
+  </p>
+
+  <h2>Machine</h2>
+  <dl>
+    <dt>Ethernet card (NI1010)</dt>
+    <dd>
+      Adds or removes the network hardware. Off is a machine that never had a card, not a machine
+      with networking disabled — and shared folders go with it, since they travel over the same
+      emulated network. See <a href={href('/manual/networking')}>networking</a>.
+    </dd>
+  </dl>
+
+  <h2>Shared folders</h2>
+  <p>
+    Choose a folder for <code>/n/macos</code>, optionally offer your home folder at
+    <code>/n/home</code>, and decide whether the machine may write to either. Full detail in
+    <a href={href('/manual/sharing-files')}>sharing files</a>.
+  </p>
+</ManualLayout>

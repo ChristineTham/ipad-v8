@@ -1,0 +1,43 @@
+---
+/**
+ * Typographic styling for hand-written content (manual sections, privacy,
+ * support). Scoped with arbitrary-variant selectors so the pages themselves
+ * stay plain semantic HTML instead of repeating utility classes on every
+ * element.
+ *
+ * The measure is 68 characters or so — the manual's, and about as wide as
+ * serif text stays comfortable. Headings are set in the same face as the body
+ * (a technical report does not change voice for a section title) and separated
+ * by a hairline rule rather than by weight alone.
+ *
+ * Inline <code> gets `overflow-wrap: anywhere` because a long unbreakable
+ * token — a container path, a checksum — is otherwise wider than a phone and
+ * pushes the whole page sideways. It is inert inside <pre>, where
+ * `white-space: pre` already forbids wrapping and the block scrolls instead.
+ */
+---
+
+<div
+  class="max-w-[68ch] text-[17px]
+         [&_h2]:mt-11 [&_h2]:mb-3 [&_h2]:scroll-mt-8 [&_h2]:border-b [&_h2]:border-rule [&_h2]:pb-2 [&_h2]:font-serif [&_h2]:text-[27px] [&_h2]:font-bold [&_h2]:tracking-[-0.015em]
+         [&_h3]:mt-8 [&_h3]:mb-2 [&_h3]:scroll-mt-8 [&_h3]:font-serif [&_h3]:text-[20px] [&_h3]:font-bold
+         [&_p]:my-4 [&_p]:text-body
+         [&_ul]:my-4 [&_ul]:ml-6 [&_ul]:list-disc [&_ol]:my-4 [&_ol]:ml-6 [&_ol]:list-decimal
+         [&_li]:my-2 [&_li]:text-body [&_li>ul]:my-1
+         [&_a]:text-accent [&_a]:underline [&_a]:underline-offset-2 hover:[&_a]:text-emphasis
+         [&_strong]:font-semibold [&_strong]:text-ink
+         [&_code]:bg-chip [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.86em]
+         [&_code]:[overflow-wrap:anywhere]
+         [&_kbd]:border [&_kbd]:border-rule [&_kbd]:bg-chip [&_kbd]:px-1.5 [&_kbd]:py-0.5 [&_kbd]:font-sans [&_kbd]:text-[0.8em] [&_kbd]:font-semibold [&_kbd]:text-ink
+         [&_table]:my-6 [&_table]:w-full [&_table]:border-collapse [&_table]:text-left [&_table]:text-[15px]
+         [&_th]:border-y [&_th]:border-ink [&_th]:py-2 [&_th]:pr-4 [&_th]:font-sans [&_th]:text-[12px] [&_th]:font-bold [&_th]:tracking-[0.06em] [&_th]:text-ink [&_th]:uppercase
+         [&_td]:border-b [&_td]:border-rule [&_td]:py-2 [&_td]:pr-4 [&_td]:align-top [&_td]:text-body
+         [&_blockquote]:my-6 [&_blockquote]:border-l-2 [&_blockquote]:border-accent [&_blockquote]:pl-5 [&_blockquote]:text-body [&_blockquote]:italic
+         [&_blockquote_p]:my-2
+         [&_figure]:my-7
+         [&_figcaption]:mt-2 [&_figcaption]:font-sans [&_figcaption]:text-[13px] [&_figcaption]:text-muted
+         [&_hr]:my-10 [&_hr]:border-rule
+         [&_dl]:my-4 [&_dt]:mt-4 [&_dt]:font-semibold [&_dt]:text-ink [&_dd]:ml-6 [&_dd]:text-body"
+>
+  <slot />
+</div>

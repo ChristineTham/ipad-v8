@@ -1,0 +1,48 @@
+---
+/**
+ * A terminal, quoted.
+ *
+ * Real selectable text rather than a screenshot, which matters more here than
+ * on most sites: the whole subject is a machine that prints things, and a
+ * picture of output cannot be copied, searched, read aloud by a screen reader,
+ * or checked against your own machine.
+ *
+ * THE TEXT IS A PROP, NOT A SLOT, and that is not a style preference.
+ * Astro compiles element children as JSX children and normalises the
+ * whitespace between them, so a multi-line block passed as a slot arrives as
+ * ONE LINE — inside a <pre>, where the whole point is that it did not. A
+ * single JavaScript string has no such problem, so the transcript is passed
+ * as `text` and split here.
+ *
+ * Stays dark in both appearances — see the `crt` utility in global.css. `<pre>`
+ * scrolls rather than wraps, because a terminal has a column count and
+ * reflowing its output misrepresents what it looked like.
+ */
+interface Props {
+  /** The transcript, newlines and all. */
+  text: string;
+  /** Optional label, printed below the block like a figure caption. */
+  caption?: string;
+  class?: string;
+}
+const { text, caption, class: klass = '' } = Astro.props;
+
+/** A leading `$ ` or `# ` is the shell's, not the user's — dim it so the eye
+ *  goes to the command. Everything else is reproduced exactly. */
+const lines = text.replace(/\n+$/, '').split('\n');
+const PROMPT = /^([$#]) (.*)$/;
+---
+
+<figure class={`my-7 ${klass}`}>
+  <div class="crt overflow-x-auto p-4 text-[13px] leading-[1.55]">
+    <pre class="min-w-max"><code>{lines.map((line) => {
+      const m = line.match(PROMPT);
+      return m ? (
+        <span><span class="opacity-55" aria-hidden="true">{m[1]} </span>{m[2]}{'\n'}</span>
+      ) : (
+        <span>{line}{'\n'}</span>
+      );
+    })}</code></pre>
+  </div>
+  {caption && <figcaption class="mt-2 font-sans text-[13px] text-muted">{caption}</figcaption>}
+</figure>

@@ -1,0 +1,110 @@
+---
+import ThemeToggle from './ThemeToggle.astro';
+import { href } from '../lib/paths';
+import { NAV, APP } from '../lib/site';
+
+/** Current path (base-stripped, extension-stripped) so the active link is marked. */
+const raw = Astro.url.pathname.replace(/\/index\.html$/, '/').replace(/\.html$/, '');
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const current = raw.startsWith(base) ? raw.slice(base.length) || '/' : raw;
+const isActive = (path: string) => current === path || current.startsWith(path + '/');
+---
+
+{/*
+  A MASTHEAD, not a product nav bar. The standing line above the rule is the
+  journal's running head — the same place a Computing Science Technical Report
+  puts its series and number — and it carries the one fact a visitor most needs
+  to orient themselves: which system this is.
+
+  Not sticky. A printed page does not follow you down itself, and a 62px bar
+  hovering over a typeset column is the single fastest way to stop looking like
+  one.
+*/}
+<header class="border-b-[3px] border-ink">
+  <div class="mx-auto max-w-[1080px] px-6">
+    <!-- Running head -->
+    <div
+      class="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-rule py-2 font-mono text-[11px] tracking-[0.14em] text-muted uppercase"
+    >
+      <span>Computing Science</span>
+      <span aria-hidden="true" class="text-rule">|</span>
+      <span>{APP.system}</span>
+      <span class="flex-1"></span>
+      {/* Factual, not costume. The running head names the system's origin and
+          the fact that this is a restoration of it — saying "Murray Hill, New
+          Jersey" here would read as a claim that this page is a Bell Labs
+          document, which it very much is not. */}
+      <span class="hidden sm:inline">Bell Laboratories 1985 · restored 2026</span>
+    </div>
+
+    <!-- Masthead -->
+    <div class="flex items-center gap-4 py-5">
+      <a href={href('/')} class="group flex shrink-0 items-baseline gap-3" aria-label={`${APP.name} home`}>
+        <span class="font-serif text-[34px] leading-none font-bold tracking-[-0.02em] text-ink group-hover:text-emphasis">
+          {APP.name}
+        </span>
+        <span class="hidden font-serif text-[15px] text-muted italic sm:inline">
+          iPad is not Unix
+        </span>
+      </a>
+
+      <span class="flex-1"></span>
+
+      <!-- Wide screens: every link inline. -->
+      <nav class="hidden items-center gap-6 font-sans text-[13px] font-semibold tracking-[0.06em] uppercase md:flex">
+        {
+          NAV.map((l) => (
+            <a
+              href={href(l.href)}
+              aria-current={isActive(l.href) ? 'page' : undefined}
+              class:list={[
+                'whitespace-nowrap border-b-2 pb-0.5 transition-colors hover:text-emphasis',
+                isActive(l.href)
+                  ? 'border-accent text-ink'
+                  : 'border-transparent text-muted hover:border-edge',
+              ]}
+            >
+              {l.label}
+            </a>
+          ))
+        }
+      </nav>
+
+      <div class="hidden md:block"><ThemeToggle /></div>
+
+      <!-- Narrow screens: a disclosure menu, so no link is clipped off-screen.
+           <details> needs no JavaScript and closes itself when the page navigates. -->
+      <details class="relative md:hidden">
+        <summary
+          class="flex cursor-pointer list-none items-center gap-2 border border-rule px-3 py-1.5 font-sans text-[13px] font-semibold tracking-[0.06em] text-ink uppercase"
+          aria-label="Menu"
+        >
+          <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" fill="none">
+            <path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path>
+          </svg>
+          Menu
+        </summary>
+        <div class="absolute right-0 z-40 mt-2 w-60 border border-rule bg-card shadow-menu">
+          {
+            NAV.map((l) => (
+              <a
+                href={href(l.href)}
+                aria-current={isActive(l.href) ? 'page' : undefined}
+                class:list={[
+                  'block border-b border-rule px-4 py-3 font-sans text-[14px] font-semibold last:border-b-0 hover:bg-paper2 hover:text-emphasis',
+                  isActive(l.href) ? 'text-ink' : 'text-muted',
+                ]}
+              >
+                {l.label}
+              </a>
+            ))
+          }
+          <div class="flex items-center justify-between border-t border-rule px-4 py-3">
+            <span class="font-sans text-[14px] font-semibold text-muted">Appearance</span>
+            <ThemeToggle />
+          </div>
+        </div>
+      </details>
+    </div>
+  </div>
+</header>

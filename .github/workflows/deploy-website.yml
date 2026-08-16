@@ -1,0 +1,61 @@
+name: Deploy website to GitHub Pages
+
+# The site (website/, an Astro + Tailwind project) is built from source on
+# every push to main, so the built output is never committed to the repo.
+#
+# The published URL is https://christham.net/ipnx/ — a PROJECT page served
+# under the account's user-site custom domain. This repo therefore needs no
+# CNAME file of its own; it inherits the domain from
+# ChristineTham/christinetham.github.io. See website/astro.config.mjs for why
+# `site` names the custom domain rather than github.io.
+#
+# INJECTION SAFETY. There is no `run:` step in this workflow at all, and no
+# step interpolates event data — no issue title, branch name, commit message
+# or author reaches a shell. The single `${{ }}` expression is
+# `steps.deployment.outputs.page_url`, which is produced by the deploy action
+# itself and is consumed by `environment.url`, a metadata field rather than a
+# command. Should a `run:` step ever be added here, event data must be passed
+# through `env:` and quoted, never interpolated inline.
+on:
+  push:
+    branches: [main]
+    # Only rebuild when the site or this workflow changes — commits to the app,
+    # the emulator cores or the V8 tree don't need a deploy.
+    paths:
+      - 'website/**'
+      - '.github/workflows/deploy-website.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a newer push supersede an in-flight run, but never cancel a deploy
+# half-way through.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Build with Astro
+        uses: withastro/action@v6
+        with:
+          # The Astro project lives in a subdirectory of this repo.
+          path: ./website
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

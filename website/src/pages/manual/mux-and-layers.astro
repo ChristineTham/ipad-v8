@@ -1,0 +1,92 @@
+---
+import ManualLayout from '../../layouts/ManualLayout.astro';
+import Crt from '../../components/Crt.astro';
+import { href } from '../../lib/paths';
+
+const run = `$ mux
+`;
+---
+
+<ManualLayout
+  slug="mux-and-layers"
+  title="mux and layers"
+  description="Downloading Rob Pike's window system into the terminal, sweeping a layer with the mouse, and running jim inside it."
+>
+  <h2>What mux is</h2>
+  <p>
+    <code>mux</code> is Rob Pike's window system, and it does not run on the computer you think.
+    Typing <code>mux</code> at a shell on the 5620 sends a program down the serial line
+    <em>into the terminal</em>, which then executes it. From that moment the terminal is running a
+    window manager of its own, multiplexing several host sessions over the one wire.
+  </p>
+  <p>
+    This is 1984, and it is still a startling design: the window system is on the display device,
+    the applications are on the host, and the wire between them carries a protocol rather than
+    pixels. X11 arrived at a similar idea from the other direction and needed a great deal more of
+    everything.
+  </p>
+
+  <h2>Running it</h2>
+  <Crt text={run} caption="On the 5620 terminal (tty00). The download takes about fifteen seconds." />
+  <p>
+    The screen clears and you get a cursor. The download is roughly fifty kilobytes over an
+    emulated serial line, and fifteen seconds is fast for it — the original took closer to a
+    minute, and getting this one down from a hundred seconds meant finding two separate 9600-baud
+    throttles in series.
+  </p>
+
+  <h2>Sweeping a layer</h2>
+  <p>
+    Layers are made with the mouse, in the idiom the Blit invented:
+  </p>
+  <ol>
+    <li>
+      <strong>Park the cursor near the middle of the screen.</strong> The menu appears centred on
+      the pointer, and near an edge it will be clipped and your selection lost. This is the single
+      most common way a first attempt fails.
+    </li>
+    <li><strong>Press and hold button 3</strong> (right button) to bring up the menu.</li>
+    <li><strong>Choose <em>New</em></strong> and release.</li>
+    <li>
+      The cursor becomes a sweep corner — that is your confirmation the sweep is armed. Press
+      button 1 and drag out the rectangle you want.
+    </li>
+    <li>Release. A shell starts in the new layer.</li>
+  </ol>
+  <p>
+    The same menu holds <em>Reshape</em>, <em>Move</em>, <em>Delete</em>, <em>Top</em> and
+    <em>Bottom</em>. Clicking in a layer makes it current.
+  </p>
+
+  <h2>Then run jim</h2>
+  <p>
+    <code>jim</code> is the editor that runs in the terminal rather than on the host — the
+    ancestor of <code>sam</code>, mouse-driven, with the text held in the 5620's own memory. In a
+    layer, type <code>jim</code> and a file name.
+  </p>
+  <p>
+    It is worth doing once just to see what it is: a full-screen mouse-driven editor, from 1984,
+    running on a terminal, over a serial line, on a machine with eight megabytes of memory.
+  </p>
+
+  <h2>Mouse buttons</h2>
+  <p>
+    Everything here assumes three buttons, which the Blit had. On a trackpad, use a two-finger
+    click for button 3 and hold <kbd>⌥</kbd> and click for button 2, or set the pointer buttons to
+    taste in Settings. Pointer speed is adjustable there too — the 5620 integrates movement from
+    counters rather than being told where the cursor is, so the right speed is a matter of feel.
+  </p>
+
+  <h2>If the screen stays blank</h2>
+  <p>
+    On the Wide screen preset the window system has to be the build that knows where the wider
+    framebuffer lives. The login profile selects it for you, so plain <code>mux</code> is correct
+    on both presets — but if you invoke the stock binary by an explicit path on a Wide screen, it
+    will download, run, and draw into the address the framebuffer used to occupy. The symptom is a
+    terminal that looks hung with the old text still on it. Switch to Original, or just type
+    <code>mux</code>.
+  </p>
+  <p>
+    See also <a href={href('/manual/the-5620')}>the DMD 5620</a> for the screen presets themselves.
+  </p>
+</ManualLayout>

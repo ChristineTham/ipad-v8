@@ -1,0 +1,142 @@
+---
+import PageLayout from '../layouts/PageLayout.astro';
+import Prose from '../components/Prose.astro';
+import Crt from '../components/Crt.astro';
+import { href } from '../lib/paths';
+import { APP, AUTHOR, REPO } from '../lib/site';
+
+const halt = `$ cd /
+$ sync; sync
+$ /etc/halt`;
+---
+
+<PageLayout
+  title="Support — ipnx"
+  description="How to get help with ipnx: where to report a problem, what to include, and answers to the questions a 1985 Unix raises most often."
+  eyebrow="Help"
+  heading="Support"
+  intro="Where to ask, what to include, and the handful of things that surprise everyone the first time."
+>
+  <div class="grid gap-12 py-8 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+    <Prose>
+      <h2>Getting help</h2>
+      <p>
+        The best place is <a href={`${REPO}/issues`}>GitHub Issues</a>, because the answer is then
+        readable by the next person with the same problem. If you would rather write privately,
+        <a href={`mailto:${AUTHOR.email}`}>{AUTHOR.email}</a> reaches the same person.
+      </p>
+      <p>Whatever you use, it helps enormously to include:</p>
+      <ul>
+        <li>Your macOS version and Mac model.</li>
+        <li>
+          The {APP.name} version, from <strong>ipnx → About</strong>, and what the emulated machine
+          says when you run <code>ipnxfetch</code>.
+        </li>
+        <li>What you did, what happened, and what you expected instead.</li>
+        <li>
+          A screenshot if anything looked wrong. A photograph of a screen is fine too — this is a
+          project about terminals.
+        </li>
+      </ul>
+
+      <h2>Things that surprise people</h2>
+
+      <h3>Never force-quit it</h3>
+      <p>
+        This is the one rule that matters. The emulated machine has a filesystem with data in
+        memory that has not reached the disk, exactly as a real one does, and killing the app is
+        the equivalent of pulling the plug on a VAX. Quitting normally is safe — ⌘Q snapshots the
+        running machine and resumes it next time. If you want the machine properly shut down,
+        type this into a shell first:
+      </p>
+      <Crt text={halt} caption="What a 1985 operator would have typed before going home." />
+      <p>
+        If it is ever force-quit anyway, the next launch runs a filesystem check and repairs
+        itself. That usually works. <strong>Usually</strong> is doing real work in that sentence:
+        <code>fsck</code> restores consistency, not data.
+      </p>
+
+      <h3>The keyboard seems dead after resuming</h3>
+      <p>
+        Press <kbd>Return</kbd>. A restored session has nothing left to say — the login prompt was
+        printed once, before the snapshot — so the screen can look alive and silent at the same
+        time. The app sends that nudge for you, but if a window looks frozen, Return is the first
+        thing to try.
+      </p>
+
+      <h3>Backspace, and other 1985 opinions</h3>
+      <p>
+        The Delete key sends <kbd>^H</kbd>, which is what Eighth Edition expects. Interrupt is
+        <kbd>^C</kbd> and line-kill is <kbd>^U</kbd>. There is no command history and no
+        completion; <code>sh</code> in 1985 had neither.
+      </p>
+
+      <h3>File names are short, and case matters</h3>
+      <p>
+        Fourteen characters, maximum, and no exceptions. This is why your Mac home folder is
+        mounted at <code>/n/home</code> rather than being used as the account's home directory —
+        the emulated Unix simply cannot represent many of the names your Mac contains.
+      </p>
+
+      <h3>It is using CPU while apparently idle</h3>
+      <p>
+        Two processors are running. The VAX idles properly and costs very little; the 5620
+        terminal does not idle at all, because a real one did not. Closing the 5620 window stops
+        it and gives the core back.
+      </p>
+
+      <h2>Something is genuinely broken</h2>
+      <p>
+        Start again from a clean machine: <strong>Settings → Disk → Reset</strong> replaces the
+        emulated disk with the one the app shipped. This <em>erases everything inside the emulated
+        machine</em> — your files there, not on your Mac — so export anything you want first.
+        Files on shared folders are on your Mac and are untouched.
+      </p>
+
+      <h2>Feature requests and the rest of the project</h2>
+      <p>
+        Very welcome, with one caveat worth stating early: {APP.name} is a restoration, so
+        "Eighth Edition does not do that" is sometimes the correct and final answer. The
+        interesting question is usually whether the real system could have done it. See the
+        <a href={href('/about')}>project notes</a> for where this is going.
+      </p>
+    </Prose>
+
+    <aside class="border border-rule bg-card p-6 lg:sticky lg:top-8">
+      <p class="font-sans text-[12px] font-bold tracking-[0.1em] text-muted uppercase">
+        Quick links
+      </p>
+      <ul class="mt-3 space-y-2 font-sans text-[14px]">
+        <li>
+          <a href={`${REPO}/issues`} class="text-accent underline underline-offset-2 hover:text-emphasis">
+            Report an issue ↗
+          </a>
+        </li>
+        <li>
+          <a href={href('/manual')} class="text-accent underline underline-offset-2 hover:text-emphasis">
+            The manual
+          </a>
+        </li>
+        <li>
+          <a href={href('/manual/troubleshooting')} class="text-accent underline underline-offset-2 hover:text-emphasis">
+            Troubleshooting
+          </a>
+        </li>
+        <li>
+          <a href={href('/privacy')} class="text-accent underline underline-offset-2 hover:text-emphasis">
+            Privacy
+          </a>
+        </li>
+      </ul>
+      <p class="mt-5 border-t border-rule pt-4 font-sans text-[13px] text-muted">
+        This is a personal project maintained by one person in their own time. Answers may take a
+        few days; they will come.
+      </p>
+      <p class="mt-3 font-sans text-[13px]">
+        <a href={`mailto:${AUTHOR.email}`} class="text-accent underline underline-offset-2 hover:text-emphasis">
+          {AUTHOR.email}
+        </a>
+      </p>
+    </aside>
+  </div>
+</PageLayout>

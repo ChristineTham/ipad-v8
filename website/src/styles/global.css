@@ -1,0 +1,219 @@
+@import "tailwindcss";
+
+/*
+  THE DESIGN IS A BELL LABS TECHNICAL REPORT, not a product page.
+
+  Research Unix's documentary culture is the strongest thing this project could
+  look like, and it is specific rather than decorative: the Eighth Edition
+  manual was typeset with troff in Times, on cream stock, with hairline rules
+  and no ornament whatsoever. Volume 2 is a stack of Computing Science
+  Technical Reports that look the same. So:
+
+    * PAPER AND INK are the surfaces. Light is the primary appearance here —
+      the opposite of the usual dark-first product site — because a typeset
+      page is what is being evoked. Dark is a genuine second appearance, not an
+      afterthought: a phosphor terminal, which is the project's other half.
+    * SERIF for prose, because the manual is set in a serif and because long
+      technical writing reads better in one.
+    * SANS for chrome (nav, buttons, labels) — the furniture is not the
+      document, and 1985 had no opinion about it.
+    * MONO whenever the machine speaks. Real selectable text, never a picture
+      of text.
+    * ONE ACCENT: Bell blue. The Bell System's own colour, and restrained
+      enough that a page of black-on-cream stays black-on-cream.
+
+  Every colour below is SEMANTIC — paper, ink, body, muted, rule, accent —
+  because the site has two appearances and no component may know which is
+  showing. Nothing outside this file contains a colour literal.
+
+  The values in @theme are the LIGHT (paper) palette, which doubles as the
+  fallback for a browser without light-dark(); the dark palette is introduced
+  in the @supports block, in one place.
+*/
+@theme {
+  --color-paper: #fbf9f4;
+  --color-paper2: #f3efe6;
+  --color-card: #ffffff;
+  --color-ink: #15130f;
+  /* Long-form body copy: a step off pure ink, the way printed text never is
+     quite black. */
+  --color-body: #33302a;
+  --color-muted: #6b665c;
+  /* Hairlines. troff rules are thin and quiet; so are these. */
+  --color-rule: #ddd6c7;
+  /* A rule that has to be seen — hover, active outline, table head. */
+  --color-edge: #b9b09c;
+  /* Tinted surface for inline code, kbd, secondary buttons. */
+  --color-chip: #15130f0a;
+  --color-accent: #0b4f9e;
+  --color-emphasis: #000000;
+
+  /* Used for tints, never for body text. */
+  --color-bell: #0b4f9e;
+  --color-phosphor: #7fe3ac;
+  --color-amber: #e9a33a;
+
+  --shadow-page: 0 24px 60px var(--shadow-tint-strong);
+  --shadow-card: 0 12px 32px var(--shadow-tint);
+  --shadow-menu: 0 20px 50px var(--shadow-tint-strong);
+
+  /* The typeset voice. Iowan and Palatino are the closest things a Mac has to
+     the manual's Times without pulling a webfont down the wire — this site
+     ships no fonts at all, which is also why it loads instantly. */
+  --font-serif: "Iowan Old Style", "Palatino", "Palatino Linotype",
+    "Book Antiqua", ui-serif, Georgia, "Times New Roman", serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+    system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+
+  /* Paper has corners, not pills. */
+  --radius-card: 4px;
+}
+
+:root {
+  --shadow-tint: rgb(40 34 20 / 0.08);
+  --shadow-tint-strong: rgb(40 34 20 / 0.14);
+}
+
+/*
+  The two appearances.
+
+  light-dark() is the whole mechanism: it resolves against the element's
+  `color-scheme`, so switching appearance is one declaration rather than a
+  duplicated palette. `color-scheme` also fixes form controls, scrollbars and
+  the default canvas for free.
+
+    no [data-theme]      → `light dark` → follows the reader's system
+    [data-theme=light]   → pinned paper
+    [data-theme=dark]    → pinned terminal
+
+  A browser without light-dark() skips this block and keeps the paper palette
+  above — the site's primary appearance, not a broken one.
+*/
+@supports (color: light-dark(#000, #fff)) {
+  :root {
+    color-scheme: light dark;
+
+    --color-paper: light-dark(#fbf9f4, #0a0c0b);
+    --color-paper2: light-dark(#f3efe6, #101413);
+    --color-card: light-dark(#ffffff, #131817);
+    --color-ink: light-dark(#15130f, #e9efec);
+    --color-body: light-dark(#33302a, #c6d2cc);
+    --color-muted: light-dark(#6b665c, #8b9a93);
+    --color-rule: light-dark(#ddd6c7, #1e2624);
+    --color-edge: light-dark(#b9b09c, #3b4a45);
+    --color-chip: light-dark(#15130f0a, #ffffff10);
+    /* Bell blue is unreadable on near-black (2.6:1). The dark appearance is a
+       CRT, so the accent becomes phosphor — the same role, a different tube. */
+    --color-accent: light-dark(#0b4f9e, #7fe3ac);
+    --color-emphasis: light-dark(#000000, #ffffff);
+
+    --shadow-tint: light-dark(rgb(40 34 20 / 0.08), rgb(0 0 0 / 0.5));
+    --shadow-tint-strong: light-dark(rgb(40 34 20 / 0.14), rgb(0 0 0 / 0.6));
+  }
+
+  :root[data-theme="light"] {
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+  }
+}
+
+/*
+  A block of machine output — a terminal, quoted.
+
+  Deliberately the SAME in both appearances: a VT100 is not a light-mode
+  object, and a white-backed terminal would be a lie about what the app shows.
+  It is the one place on the site that stays dark when the page is paper, which
+  is exactly how a screen looks sitting on a desk covered in manuals.
+*/
+@utility crt {
+  font-family: var(--font-mono);
+  background-color: #08100c;
+  color: #7fe3ac;
+  border: 1px solid #1b2b23;
+}
+
+/*
+  The man-page header rule: NAME(section) ... NAME(section), justified to both
+  margins with the title centred. Used once, on the docs index, where it is a
+  reference rather than a costume.
+*/
+@utility manpage-rule {
+  font-family: var(--font-mono);
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--color-rule);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    /* Prose is the default voice on this site; chrome opts into sans. */
+    font-family: var(--font-serif);
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    line-height: 1.15;
+    text-wrap: balance;
+  }
+
+  /* The mobile menu is a <details> disclosure — no JavaScript. */
+  summary::-webkit-details-marker {
+    display: none;
+  }
+}
+
+/*
+  Appearance-specific content — used by the product screenshots, which exist in
+  a paper and a terminal shot of the same scene.
+
+  Paper is the base here (the inverse of a dark-first site), so `.only-dark`
+  starts hidden. The attribute rules come last so a pinned appearance always
+  beats the media query. The hidden one is `display: none`, which keeps a lazy
+  <img> from being fetched at all.
+*/
+.only-dark {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .only-dark {
+    display: block;
+  }
+  :root:not([data-theme="light"]) .only-light {
+    display: none;
+  }
+}
+
+:root[data-theme="dark"] .only-dark {
+  display: block;
+}
+:root[data-theme="dark"] .only-light {
+  display: none;
+}
+:root[data-theme="light"] .only-dark {
+  display: none;
+}
+:root[data-theme="light"] .only-light {
+  display: block;
+}

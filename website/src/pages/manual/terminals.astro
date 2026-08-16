@@ -1,0 +1,88 @@
+---
+import ManualLayout from '../../layouts/ManualLayout.astro';
+import { href } from '../../lib/paths';
+---
+
+<ManualLayout
+  slug="terminals"
+  title="The terminals"
+  description="The operator console, tty01 to tty07, and why ipnx opens windows grouped by terminal shape rather than tabs."
+>
+  <h2>Nine ways in</h2>
+  <p>
+    The machine has an operator console and eight terminal lines, and ipnx lets you open all of
+    them. This is not a metaphor: they are real lines on an emulated DZ11 serial multiplexer, each
+    with its own <code>getty</code>, each independently loggable-in. Log in twice on different
+    lines and you have two sessions on one machine, exactly as two people at two desks would have
+    had.
+  </p>
+
+  <table>
+    <thead>
+      <tr><th>Line</th><th>Terminal</th><th>What it is for</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>console</code></td>
+        <td>Operator console</td>
+        <td>The boot transcript and kernel messages. Read-only.</td>
+      </tr>
+      <tr>
+        <td><code>tty00</code></td>
+        <td>DMD 5620</td>
+        <td>The bitmapped terminal. <code>TERM=dmd</code>.</td>
+      </tr>
+      <tr>
+        <td><code>tty01</code>–<code>tty06</code></td>
+        <td>vt100</td>
+        <td>Ordinary glass terminals, 80×24.</td>
+      </tr>
+      <tr>
+        <td><code>tty07</code></td>
+        <td>vt100w</td>
+        <td>A wide one, 132 columns.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Why the console is read-only</h2>
+  <p>
+    Because on this machine it genuinely is. Eighth Edition's <code>/etc/ttys</code> runs no
+    <code>getty</code> on the console, so there is nothing there to type at — the boot messages
+    arrive, and that is all it does. Presenting it as an input you could use would be a lie about
+    the machine, so it is shown behind a lock.
+  </p>
+
+  <h2>Windows, not tabs</h2>
+  <p>
+    Terminals are grouped into windows by <em>shape</em>: the 5620 in one, the 80-column vt100s in
+    another, the 132-column one in a third. Within a window they are tabs; across shapes they are
+    separate windows.
+  </p>
+  <p>
+    This is forced rather than chosen. Eighth Edition's kernel predates
+    <code>TIOCGWINSZ</code> — the mechanism by which a modern terminal tells the system it has
+    been resized — so nothing inside the machine can be told that a window changed size. A
+    terminal is the size it was when it was created, permanently. Mixing an 80-column and a
+    132-column session in one resizable window would mean one of them was always wrong.
+  </p>
+
+  <h2>A tab labelled tty03 really is tty03</h2>
+  <p>
+    Each line gets its own port on the emulated multiplexer, so the label tells you the truth. It
+    matters more than it sounds: the login profile picks <code>TERM</code> from which line you are
+    on, so if connections landed on arbitrary lines the machine's idea of what terminal you were
+    using would depend on the order you opened tabs.
+  </p>
+
+  <h2>Closing one</h2>
+  <p>
+    Closing a window hangs up its lines, exactly as unplugging a terminal would. The session ends,
+    the shell gets a hangup, and <code>getty</code> starts again on that line ready for the next
+    login. Nothing else on the machine notices.
+  </p>
+  <p>
+    Closing the 5620's window has a second effect worth knowing: it stops that emulated processor
+    entirely and gives the CPU back. See <a href={href('/manual/the-5620')}>the DMD 5620</a>.
+  </p>
+</ManualLayout>

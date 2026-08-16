@@ -1,0 +1,251 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Nav from '../components/Nav.astro';
+import Footer from '../components/Footer.astro';
+import Crt from '../components/Crt.astro';
+import { href } from '../lib/paths';
+import { APP, DOWNLOAD, REPO } from '../lib/site';
+
+/**
+ * The landing page is laid out as a technical report: a title block, an
+ * abstract, then numbered sections. It is not a funnel — the download is one
+ * plain link, offered twice, because someone who wants a 1985 Unix on their
+ * Mac does not need to be persuaded, only told where it is.
+ */
+
+/** A real transcript. `ipnxfetch` is ours — Research Unix has no uname(1) and
+ *  certainly no neofetch — and every line here is what a booted machine prints. */
+const transcript = `$ ipnxfetch
+                   christie@ipnx-v8
+                   ------------------------------
+OS:        ${APP.system}
+Host:      VAX-11/780 (emulated)
+Kernel:    ${APP.system} (2026-08-16)
+Uptime:    3 mins
+Shell:     /bin/sh
+Terminal:  dmd
+CPU:       VAX-11/780 @ 5 MHz (emulated)
+Memory:    8128 KiB
+
+$ ls /n/macos
+Applications  Library       Users         Volumes`;
+
+const sections = [
+  {
+    n: '1',
+    title: 'The whole machine, not an impression of one',
+    body: [
+      'ipnx runs a VAX-11/780 — the open-simh <code>vax780</code> simulator, compiled into the app as a library — and boots an unmodified Research Unix kernel on it. Nothing is reimplemented and nothing is shimmed. The kernel schedules, pages and forks inside the emulated machine, so iOS and macOS restrictions on spawning processes or generating code never come near it.',
+      'The screen is a second computer. The DMD 5620 was a bitmapped terminal with its own WE32100 processor, and programs were <em>downloaded into it</em> over the serial line. ipnx emulates that too, and joins the two with a virtual wire. It is the 1985 topology exactly: a smart terminal, an RS-232 line, and a headless host at the other end.',
+    ],
+  },
+  {
+    n: '2',
+    title: 'A system built from its own source',
+    body: [
+      'The disk the app ships is not a museum image passed hand to hand. It is <strong>built</strong>, from the source in this repository, by a world build that Research Unix never had — a staged bootstrap that compiles the toolchain with the tape’s compiler, recompiles the toolchain with itself until the two agree byte for byte, then builds the libraries, the commands and the kernel, lays down a filesystem, and has the result rebuild itself under <code>chroot</code>.',
+      'What cannot be built is carried and named: 1,406 paths the tape shipped as machine code with no source — the 5620 binaries, the games, the manual. Everything else has a rule.',
+    ],
+  },
+  {
+    n: '3',
+    title: 'Connected to the world it never met',
+    body: [
+      'Peter Weinberger’s network file system has been compiled into every Research Unix kernel since 1985 and has had nothing to talk to since Datakit was switched off. ipnx gives it a server again, so <strong>a folder on your Mac is mounted inside Eighth Edition, read and write</strong>, at <code>/n/macos</code> and <code>/n/home</code>.',
+      'The machine also reaches the actual Internet. It has an Interlan NI1010 Ethernet card — modelled for the simulator because none existed — and Research Unix’s own TCP/IP, the one built as stream line disciplines that predates the sockets everyone remembers. It resolves names and opens connections.',
+    ],
+  },
+];
+---
+
+<Layout
+  title="ipnx — Bell Labs Research Unix, booted and carried forward"
+  description="ipnx runs Research Unix Eighth Edition on an emulated VAX-11/780 inside a native Mac app, shown through an emulated DMD 5620 terminal. Free, signed and notarised."
+  appSchema
+>
+  <Nav />
+
+  <main>
+    <!-- Title block -->
+    <header class="mx-auto max-w-[1080px] px-6 pt-16 pb-10">
+      <div class="max-w-[76ch]">
+        <p class="font-mono text-[11px] tracking-[0.14em] text-muted uppercase">
+          A restoration · {APP.system}
+        </p>
+        <h1 class="mt-4 font-serif text-[clamp(38px,6.5vw,62px)] leading-[1.05] font-bold tracking-[-0.03em]">
+          Bell Labs Research Unix,<br class="hidden sm:block" /> booted and carried forward.
+        </h1>
+        <p class="mt-6 text-[clamp(19px,2.3vw,23px)] text-body">
+          Eighth Edition — the one with <code class="bg-chip px-1.5 py-0.5 font-mono text-[0.85em]"
+            >/proc</code
+          >, streams, and the Blit — running on an emulated VAX-11/780 inside a native Mac app,
+          and displayed the way it was meant to be seen: through an emulated DMD 5620.
+        </p>
+
+        <div class="mt-8 flex flex-wrap items-center gap-x-5 gap-y-3">
+          <a
+            href={href('/download')}
+            class="inline-flex items-center gap-2 border-2 border-ink bg-ink px-6 py-3 font-sans text-[15px] font-bold text-paper transition hover:bg-transparent hover:text-ink"
+          >
+            Download for Mac
+          </a>
+          <a
+            href={href('/machine')}
+            class="font-sans text-[15px] font-semibold text-accent underline underline-offset-4 hover:text-emphasis"
+          >
+            How it works
+          </a>
+          <a
+            href={REPO}
+            class="font-sans text-[15px] font-semibold text-muted underline underline-offset-4 hover:text-emphasis"
+          >
+            Source on GitHub
+          </a>
+        </div>
+        <p class="mt-4 font-sans text-[14px] text-muted">
+          Version {APP.version} · {APP.minOS} · {APP.architectures} · Free · Signed and notarised
+        </p>
+      </div>
+    </header>
+
+    <!-- Abstract -->
+    <section class="border-y border-rule bg-paper2/50">
+      <div class="mx-auto max-w-[1080px] px-6 py-10">
+        <div class="max-w-[72ch]">
+          <h2 class="font-sans text-[12px] font-bold tracking-[0.12em] text-ink uppercase">
+            Abstract
+          </h2>
+          <p class="mt-3 text-[17px] leading-[1.7] text-body">
+            Research Unix Editions 8, 9 and 10 were written at Bell Laboratories between 1985 and
+            1989 and never released outside it. They are where <code
+              class="bg-chip px-1 font-mono text-[0.86em]">/proc</code
+            >, the stream I/O system, the file system switch and a network file system first
+            appeared, and they are what the people who then wrote Plan&nbsp;9 were using at the
+            time. In March 2017 Alcatel-Lucent stated it would not assert copyright against
+            non-commercial use of them.
+          </p>
+          <p class="mt-3 text-[17px] leading-[1.7] text-body">
+            This program is what that permission is for. It is not a museum piece behind glass: it
+            is a working Eighth Edition machine that boots in half a minute, keeps its state
+            between launches, mounts your own folders, and reaches the network — on hardware you
+            already own.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- What the machine says about itself -->
+    <section class="mx-auto max-w-[1080px] px-6 py-14">
+      <div class="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:items-center">
+        <div class="max-w-[60ch]">
+          <h2 class="font-serif text-[clamp(26px,3.4vw,34px)] font-bold tracking-[-0.02em]">
+            It is a real system, and it will tell you so
+          </h2>
+          <p class="mt-4 text-[17px] text-body">
+            Not a shell that looks old. The kernel is the one Bell Labs wrote, compiled from the
+            source in this repository by its own compiler, running on a simulated VAX with its own
+            clock, disks and Ethernet card.
+          </p>
+          <p class="mt-3 text-[17px] text-body">
+            The banner is generated at build time from <code
+              class="bg-chip px-1 font-mono text-[0.86em]">v8/RELEASE</code
+            >, so the machine and the repository can never disagree about which release you are
+            looking at.
+          </p>
+        </div>
+
+        <Crt text={transcript} caption="Output from a booted machine, transcribed exactly." />
+      </div>
+    </section>
+
+    <!-- Numbered sections -->
+    <section class="mx-auto max-w-[1080px] px-6 pb-6">
+      {
+        sections.map((s) => (
+          <article class="border-t border-rule py-10">
+            <div class="grid gap-6 lg:grid-cols-[7rem_minmax(0,1fr)]">
+              <p class="font-mono text-[13px] tracking-[0.1em] text-muted uppercase">
+                Section {s.n}
+              </p>
+              <div class="max-w-[68ch]">
+                <h2 class="font-serif text-[clamp(24px,3vw,31px)] font-bold tracking-[-0.02em]">
+                  {s.title}
+                </h2>
+                {s.body.map((p) => (
+                  <p
+                    class="mt-4 text-[17px] leading-[1.7] text-body [&_code]:bg-chip [&_code]:px-1 [&_code]:font-mono [&_code]:text-[0.86em] [&_strong]:text-ink"
+                    set:html={p}
+                  />
+                ))}
+              </div>
+            </div>
+          </article>
+        ))
+      }
+    </section>
+
+    <!-- The editions -->
+    <section class="border-t border-rule">
+      <div class="mx-auto max-w-[1080px] px-6 py-14">
+        <h2 class="font-serif text-[clamp(24px,3vw,31px)] font-bold tracking-[-0.02em]">
+          Where this is going
+        </h2>
+        <p class="mt-3 max-w-[68ch] text-[17px] text-body">
+          Eighth Edition is what ships today. It is also the host for the part that has never been
+          done.
+        </p>
+
+        <dl class="mt-8 grid gap-px border border-rule bg-rule sm:grid-cols-3">
+          <div class="bg-paper p-6">
+            <dt class="font-serif text-[20px] font-bold">Edition 8 · 1985</dt>
+            <dd class="mt-2 text-[15px] text-body">
+              Shipping. Boots to <code class="bg-chip px-1 font-mono text-[0.86em]">login:</code> in
+              about thirty seconds, with the 5620, <code class="bg-chip px-1 font-mono text-[0.86em]"
+                >mux</code
+              >, networking and your folders mounted.
+            </dd>
+          </div>
+          <div class="bg-paper p-6">
+            <dt class="font-serif text-[20px] font-bold">Edition 10 · 1989</dt>
+            <dd class="mt-2 text-[15px] text-body">
+              The restoration. Tenth Edition survives as source only and
+              <strong class="text-ink">has never been booted by anyone</strong>. The plan is to
+              cross-build it inside the running Eighth.
+            </dd>
+          </div>
+          <div class="bg-paper p-6">
+            <dt class="font-serif text-[20px] font-bold">Edition 9</dt>
+            <dd class="mt-2 text-[15px] text-body">
+              Deliberately skipped. What survives of it is a Sun-3 port with no VAX kernel code, so
+              there is nothing there to boot.
+            </dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+
+    <!-- Closing download -->
+    <section class="border-t border-rule bg-paper2/50">
+      <div class="mx-auto flex max-w-[1080px] flex-wrap items-center gap-6 px-6 py-12">
+        <div class="max-w-[52ch]">
+          <h2 class="font-serif text-[26px] font-bold tracking-[-0.02em]">
+            Free, and necessarily so
+          </h2>
+          <p class="mt-2 text-[16px] text-body">
+            The 2017 statement covers non-commercial use only, so ipnx has no price, no
+            advertising and nothing to buy — not as a policy but as a condition of existing.
+          </p>
+        </div>
+        <span class="flex-1"></span>
+        <a
+          href={href('/download')}
+          class="inline-flex items-center gap-2 border-2 border-ink bg-ink px-6 py-3 font-sans text-[15px] font-bold text-paper transition hover:bg-transparent hover:text-ink"
+        >
+          Download {DOWNLOAD.fileName}
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <Footer />
+</Layout>

@@ -1,0 +1,147 @@
+---
+import PageLayout from '../layouts/PageLayout.astro';
+import Prose from '../components/Prose.astro';
+import { APP, REPO } from '../lib/site';
+
+const STATEMENT =
+  'https://www.tuhs.org/Archive/Distributions/Research/Dan_Cross_v8/statement_regarding_Unix_3-7-17.pdf';
+---
+
+<PageLayout
+  title="Licensing — ipnx"
+  description="Why ipnx is free and must remain so: the 2017 Nokia/Alcatel-Lucent statement on Research Unix Editions 8, 9 and 10, and the terms of every other component."
+  eyebrow="Legal"
+  heading="Licensing"
+  intro="Why this is free, why it is not called Unix, and the terms every component runs under."
+>
+  <div class="py-8">
+    <Prose>
+      <p>
+        This page mirrors the posture recorded in the repository, which is the authoritative
+        version and carries the sources for every claim. It is not legal advice; it deliberately
+        follows what the preservation community has done publicly since 2017.
+      </p>
+
+      <h2>The governing instrument</h2>
+      <p>
+        Research Unix Editions 8, 9 and 10 are distributable because of a statement made by
+        Alcatel-Lucent, now Nokia, in March 2017:
+      </p>
+      <blockquote>
+        <p>
+          “…it will not assert its copyright rights with respect to any <strong
+            >non-commercial</strong
+          > copying, distribution, performance, display or creation of derivative works of Research
+          Unix® Editions 8, 9, and 10.”
+        </p>
+      </blockquote>
+      <p>Three properties of it decide everything else:</p>
+      <ol>
+        <li>
+          It is a <strong>covenant not to assert, not a licence</strong> — hedged “to the extent
+          of its ability to do so”, and it grants no third-party rights.
+        </li>
+        <li>It is <strong>non-commercial only</strong>.</li>
+        <li>It covers all three editions equally.</li>
+      </ol>
+      <p>
+        The statement itself is <a href={STATEMENT}>published by The Unix Heritage Society</a>.
+      </p>
+
+      <h2>What follows for this app</h2>
+      <ul>
+        <li>
+          <strong>{APP.name} is free.</strong> No price, no advertising, no purchases. This is a
+          condition of distributing the system at all, not a pricing strategy, and it cannot
+          change while the app contains Research Unix.
+        </li>
+        <li>
+          <strong>It is not called Unix.</strong> UNIX is a registered trademark of The Open
+          Group and the 2017 statement grants no trademark rights, so the name and branding avoid
+          it. “Edition 8”, “Research”, “Blit”, “5620” are all safe vocabulary; the product name is
+          not.
+        </li>
+        <li>
+          <strong>It is published personally, not by a company.</strong> A commercial publisher
+          sits badly against a permission that reaches non-commercial use only, whatever the
+          intent. The code signature names an enrolled Apple developer team because Apple requires
+          one — that is a key-holding arrangement, not a publisher.
+        </li>
+        <li>
+          <strong>The disk image ships inside the app.</strong> Nothing is downloaded at runtime,
+          which keeps the app self-contained.
+        </li>
+      </ul>
+
+      <h2>Every component</h2>
+      <table>
+        <thead>
+          <tr><th>Component</th><th>Terms</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Research Unix Edition 8 system and disk image</td>
+            <td>2017 covenant — non-commercial</td>
+          </tr>
+          <tr>
+            <td>Edition 10 source, and its future disk image</td>
+            <td>The same covenant</td>
+          </tr>
+          <tr>
+            <td>4.1BSD-derived code inside the system</td>
+            <td>UCB BSD licence — attribution in the credits</td>
+          </tr>
+          <tr>
+            <td>open-simh (the VAX)</td>
+            <td>MIT</td>
+          </tr>
+          <tr>
+            <td>dmd_core (the 5620)</td>
+            <td>MIT</td>
+          </tr>
+          <tr>
+            <td>AT&amp;T 5620 ROM source</td>
+            <td>AT&amp;T copyright, GPL-2.0, released 1994 — <strong>read, never linked</strong></td>
+          </tr>
+          <tr>
+            <td>SwiftTerm (the glass terminals)</td>
+            <td>MIT</td>
+          </tr>
+          <tr>
+            <td>The Edition 10 manual (1990)</td>
+            <td>A published book, treated as encumbered — linked, never bundled</td>
+          </tr>
+          <tr>
+            <td>This project's own code</td>
+            <td>MIT</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>The ROM source, and how far it was used</h2>
+      <p>
+        AT&amp;T published the 5620's firmware source in 1994 under the GPL, and it names the
+        exact firmware this app runs. It was used to answer questions — where a structure lives,
+        what a table contains — and its boundary is written down precisely in the repository:
+        <strong>read, not linked</strong>. No line of it is compiled into anything shipped here.
+      </p>
+
+      <h2>The one open question, stated rather than buried</h2>
+      <p>
+        Edition 10's native C compiler descends from System III/V code, which sits outside both
+        the 2017 covenant's power (“to the extent of its ability”) and the licence that freed the
+        early editions. It remains inside the disk image, exactly as it has at TUHS since 2017 and
+        unchallenged, and it is never linked into app code. It is the sharpest open item in this
+        project and it is recorded as one.
+      </p>
+
+      <h2>If you are reading this to decide whether you may do something</h2>
+      <p>
+        The full table, the reasoning and the primary sources are in
+        <a href={`${REPO}/blob/main/docs/licensing.md`}>docs/licensing.md</a>, alongside the
+        research file that cites each claim. If something there is wrong, please say so — it is
+        the part of this project where being wrong matters most.
+      </p>
+    </Prose>
+  </div>
+</PageLayout>

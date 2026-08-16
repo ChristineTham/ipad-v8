@@ -1,0 +1,171 @@
+---
+import PageLayout from '../layouts/PageLayout.astro';
+import Prose from '../components/Prose.astro';
+import Crt from '../components/Crt.astro';
+import { href } from '../lib/paths';
+import { REPO } from '../lib/site';
+
+const boot = `Boot
+: hp(0,0)unix
+280120+62356+81364 start 0x11c
+Unix Edition 8 -- ipnx Release 1.0 (2026-08-16)
+built Sun Aug 16 07:48:53 2026
+real mem  = 8388608
+avail mem = 7294976
+hp0: RP07
+il0 at uba0 csr 164000 vec 400
+network: il0 10.0.2.15, gateway 10.0.2.2
+
+login:`;
+---
+
+<PageLayout
+  title="The machine — how ipnx works"
+  description="Two emulated computers and a wire between them: a VAX-11/780 running the Research Unix kernel, and a DMD 5620 bitmapped terminal with its own processor."
+  eyebrow="Architecture"
+  heading="The machine"
+  intro="Two computers and a wire between them, which is exactly what sat on a desk at Bell Labs in 1985."
+>
+  <div class="py-8">
+    <Prose>
+      <p>
+        Most retrocomputing apps are one emulator and a screen. ipnx is two emulators, because the
+        thing being reproduced was two machines. The Blit — sold by Teletype as the DMD 5620 — was
+        not a display. It was a computer with its own processor and memory, connected to a
+        headless host by a serial line, and programs ran <em>on it</em> after being downloaded
+        <em>into it</em> over that line.
+      </p>
+    </Prose>
+
+    <!-- The diagram -->
+    <figure class="my-12">
+      <div class="overflow-x-auto border border-rule bg-card p-6">
+        <svg
+          viewBox="0 0 900 260"
+          class="mx-auto block h-auto w-full min-w-[680px] max-w-[860px] text-ink"
+          role="img"
+          aria-label="Block diagram: a VAX-11/780 running Research Unix connects over a DZ11 serial line to a DMD 5620 terminal, which draws to a Metal screen; the VAX also connects to an Interlan Ethernet card and a network file system server on the Mac."
+        >
+          <g fill="none" stroke="currentColor" stroke-width="1.5">
+            <!-- VAX -->
+            <rect x="20" y="40" width="250" height="120" />
+            <!-- 5620 -->
+            <rect x="630" y="40" width="250" height="120" />
+            <!-- wire -->
+            <line x1="270" y1="100" x2="630" y2="100" />
+            <!-- host services -->
+            <rect x="20" y="196" width="250" height="46" stroke-dasharray="4 3" />
+            <line x1="145" y1="160" x2="145" y2="196" stroke-dasharray="4 3" />
+          </g>
+
+          <g class="fill-current font-sans" font-size="13">
+            <text x="36" y="62" font-weight="700">VAX-11/780</text>
+            <text x="36" y="82" class="opacity-70">open-simh · C interpreter</text>
+            <text x="36" y="104" class="opacity-70">Research Unix Edition 8 kernel</text>
+            <text x="36" y="126" class="opacity-70">RP07 disk · DZ11 lines · NI1010</text>
+            <text x="36" y="148" class="opacity-55" font-size="11">Headless. No screen of its own.</text>
+
+            <text x="646" y="62" font-weight="700">DMD 5620</text>
+            <text x="646" y="82" class="opacity-70">dmd_core · WE32100 · Rust</text>
+            <text x="646" y="104" class="opacity-70">Firmware 8;7;3 · 1 MB RAM</text>
+            <text x="646" y="126" class="opacity-70">800×1024×1 framebuffer</text>
+            <text x="646" y="148" class="opacity-55" font-size="11">Runs mux, jim — downloaded.</text>
+
+            <text x="36" y="218" class="opacity-70">Your Mac</text>
+            <text x="36" y="234" class="opacity-55" font-size="11">
+              netfs server · NAT to the Internet
+            </text>
+          </g>
+
+          <!-- wire label -->
+          <g class="font-mono" font-size="11">
+            <rect x="378" y="86" width="146" height="28" class="fill-card" stroke="none" />
+            <text x="451" y="104" text-anchor="middle" class="fill-current opacity-70">
+              serial line · 9600 ×32
+            </text>
+          </g>
+
+          <g class="fill-current font-sans opacity-55" font-size="11">
+            <text x="290" y="130">DZ11 line 0</text>
+            <text x="560" y="130" text-anchor="end">DUART port A</text>
+            <text x="155" y="182">netfs / TCP</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption class="mt-2 font-sans text-[13px] text-muted">
+        One process. Two interpreters, each on its own thread, joined by a loopback socket that
+        stands in for the RS-232 cable.
+      </figcaption>
+    </figure>
+
+    <Prose>
+      <h2>Why emulate the whole machine</h2>
+      <p>
+        The alternative — translating 1985 system calls into modern ones, the way iSH does — runs
+        into a wall on Apple platforms: apps may not spawn processes and may not generate code at
+        runtime. A Unix that cannot <code>fork</code> is not a Unix.
+      </p>
+      <p>
+        Full-system emulation dissolves the problem rather than fighting it. The Research Unix
+        kernel forks its processes <em>inside</em> the emulated VAX, where the host operating
+        system has no opinion about it, and both emulator cores are ordinary ahead-of-time
+        compiled interpreters — the same pattern App Store review has accepted from UTM SE,
+        iDOS and the SIMH-derived iAltair.
+      </p>
+
+      <h2>What actually boots</h2>
+      <p>
+        Not a prepared script. The boot block finds <code>hp(0,0)unix</code>, the kernel probes
+        its hardware, <code>/etc/rc</code> mounts the filesystems and brings the network up, and
+        <code>init</code> starts a <code>getty</code> on each terminal line:
+      </p>
+
+      <Crt text={boot} caption="A cold boot, abridged only in the middle." />
+
+      <h2>The wire</h2>
+      <p>
+        The two emulators talk over a loopback socket. That is a stand-in for the cable, and it
+        turned out to be the least interesting part of the problem: the throttles were at each
+        end, not in the middle. The 5620's DUART paced characters at its programmed baud rate,
+        and the simulator's serial device rate-limited the socket to whatever speed the guest
+        kernel asked for. Both were 9600 baud, in series, which is exactly as slow as it sounds.
+      </p>
+      <p>
+        Raising both took the <code>mux</code> download from about a hundred seconds to fifteen.
+        The lesson generalises: when something is slow at both ends, fixing one end buys you
+        almost nothing, and the measurement that tells you so is queue depth rather than
+        throughput.
+      </p>
+
+      <h2>Idling</h2>
+      <p>
+        A simulator that is doing nothing should cost nothing, and this one did not — a stock
+        <code>vax780</code> burns most of a core sitting at a login prompt. The fix was three
+        flags upstream had not set, on the periodic units that sit at the head of the event
+        queue. Patched, the VAX thread idles at under three per cent with the guest's clock still
+        keeping correct time.
+      </p>
+      <p>
+        The 5620 is the honest remaining cost. It does not idle, because a real one did not: its
+        processor genuinely spun. Closing its window stops the thread and returns the core.
+      </p>
+
+      <h2>Read the rest</h2>
+      <p>
+        The full technical record is in the <a href={REPO}>repository</a> — the architecture spec,
+        the phase notes, the network file system wire format, and a long list of the mistakes that
+        produced each of the rules above. Nothing in it is summarised for effect; it was written
+        while the thing was being built.
+      </p>
+    </Prose>
+
+    <p class="mt-10">
+      <a
+        href={href('/manual')}
+        class="inline-flex items-center gap-2 border-2 border-ink px-5 py-2.5 font-sans text-[14px] font-bold text-ink transition hover:bg-ink hover:text-paper"
+      >
+        Read the manual
+      </a>
+    </p>
+  </div>
+</PageLayout>
