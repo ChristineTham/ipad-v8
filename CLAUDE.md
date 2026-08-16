@@ -88,6 +88,16 @@ bash tools/v10-probe.sh rp07new
 bash tools/v10-toolchain.sh rp07new     # ~6 min, 10 assertions
 ```
 
+```bash
+# Do the 17 programs the first boot needs compile?  Twice: V8 headers, then r70
+bash tools/v10-bootpath.sh rp07new      # ~25 min, 46 assertions
+```
+
+```bash
+# Which syscalls does a V10 program get wrong on a V8 kernel?  (host-side, 1 s)
+tools/v10-syscalls.py --callers
+```
+
 **Run every guest harness against a CLONE, never the golden.** Booting a disk
 mounts it, and mounting rewrites the superblock — so a clean, successful,
 properly halted run still leaves the image with a different hash than the one
@@ -419,12 +429,42 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   boot, because the build then died on the one that was not.
 - V10's `/usr/include` is a 1997 reconstruction of a 1995 tree (`r70include.tar`, now
   imported as `work/v10/include`) — expect header/source skew during Track B and log every
-  reconciliation as a patch. Measured so far: `ranlib.h`, `pagsiz.h`, `ctype.h`, `setjmp.h`
-  and `struct _iobuf` are **identical** to V8's; `a.out.h` differs by one bit-field *name*
-  in the relocation record at the same width, so the object formats agree; but V10's
-  `stdio.h` includes a `<tmpnam.h>` V8 has never had and its `sys/types.h` drops the
-  `major()`/`minor()` macros. So do not point `-I` at the whole r70 tree by reflex —
-  anything linking against V8's libc wants V8's headers.
+  reconciliation as a patch. Measured: `ranlib.h`, `pagsiz.h`, `ctype.h`, `setjmp.h`,
+  `sys/dir.h`, `utmp.h`, `sys/ino.h` and `struct _iobuf` are **identical** to V8's;
+  `a.out.h` differs by one bit-field *name* in the relocation record at the same width, so
+  the object formats agree; V10's `stdio.h` includes a `<tmpnam.h>` V8 has never had; and
+  V8 has **no** `sys/ttyio.h`, `sys/nttyio.h`, `sys/filio.h`, `utsname.h` or `libc.h` at
+  all. **But the r70 tree is the right default for V10 source** — B2.0 built 15 of 17
+  boot-path commands against it and 10 against V8's. Reserve V8's headers for programs
+  linking V8's libc.
+- **The r70 reconstruction has defects, and the 1995 source is what finds them.**
+  V10's `mv.c` uses `ROOTINO` and includes no `sys/param.h`; it compiles against V8's
+  headers because **V8's `sys/types.h` includes `sys/param.h`** and r70's does not. A
+  1995 program that only builds against a header carrying that include is evidence about
+  the *1997 header*, not about the program. Read the skew in that direction — the source
+  is primary, the reconstructed header is not. (Second one found the same way: `fsck.c`
+  includes a bare `<stat.h>` that exists nowhere in either tree; it was built with `sys`
+  on the include path.)
+- **The V10 tty interface is a header repackaging, not a new kernel interface.** V8 uses
+  `sgtty.h`, V10 `sys/ttyio.h`, which looks like a wall and is not: every `TIOC*` V10
+  shares with V8 has the same `(('t'<<8)|N)` number, `struct sgttyb` is unchanged in
+  layout, and V10 adds exactly two ioctls — `TIOCGDEV` (23) and `TIOCSDEV` (24), into
+  slots V8 leaves free — to move line speed out into a separate `ttydevb`. So `init`,
+  `getty`, `login` and `stty` need the *header*, not a kernel change.
+- **Compiling is not running, and one table separates them** (`tools/v10-syscalls.py`).
+  **112 of 128 syscall slots hold the same call at the same index.** Six are filled in
+  V10 and `nosys` in V8 — `fmount` 26, `funmount` 50, `setruid` 56, `getlogname` 67,
+  `setgroups` 74, `getgroups` 75 — and a program reaching one of those traps with a bare
+  errno naming nothing. In the whole boot path exactly two callers exist: **`mount` uses
+  `fmount` and `umount` uses `funmount`**, so both build, link, and cannot run until a
+  V10 kernel is under them. That costs nothing (they are only ever needed by that
+  kernel), but do not read their failure as a build problem.
+- **Both editions number the upper half of `sysent[]` `64 +9`, not `73`** — the author
+  wrote the offset from where the file is `#include`d rather than the sum, and V8 splits
+  the table across `sysent.c` and `vmsysent.c` besides. A scan understanding only a bare
+  number reads a 128-entry table as a 64-entry one and then reports a **clean 64/64
+  agreement**, which looks exactly like a result. `v10-syscalls.py` refuses to run on a
+  short parse for this reason.
 - The Alhadis GitHub mirrors are incomplete (v10 mirror omits `630/`) — TUHS tarballs are
   the source of truth.
 - SIMH channel semantics differ per path: ^E stops the sim **only** on a local-tty
@@ -1051,9 +1091,25 @@ Also settled by B1: the whole 243 MB tree is **served over netfs at `/n/v10`**
 and read in place. Nothing is copied to guest disk, so the courier disk and the
 subset it forced are both out of the picture for source.
 
-Next: **B2** — V10's libc and userland, where the r70 header skew becomes the
-live problem and `mk` (or a generated-makefile pass) replaces the hand-written
-`cc` lines. Also **submit** — the remaining steps need the Apple account and a
+**B2.0 — the boot path already compiles** (2026-08-16, same log). Run ahead of
+the build mechanism on purpose: B1 was won by putting the decisive experiment
+before the machinery, and the risk in B2 sat in the headers, not the makefiles.
+`tools/v10-bootpath.sh` builds the seventeen programs the first boot needs,
+twice — against V8's headers and against r70's — and **fifteen build against
+r70**, with all five that are safe to execute then running. The two that do not
+are each one line: `fsck` includes a bare `<stat.h>` that exists only as
+`sys/stat.h`, and `mv` wants `ROOTINO`, which reaches it through V8's
+`sys/types.h` including `sys/param.h` where r70's does not — so the 1995
+source is evidence the 1997 reconstruction dropped that include, not the
+reverse. Three claims fell: **V10 does not "build with `mk`"** (205 `mkfile`
+against 153 `Makefile` and 209 `makefile`, and `cmd/make/make` is a prebuilt
+0413 binary), **V10 has no world build** (`src/makefile` builds a Datakit
+daemon), and the **boot path has no build file at all** — seventeen loose `.c`
+files under a `cmd/` with no makefile, which is the same shape as V8's and
+settles B2.1 as "reuse `v8/mk/mkdep.py`".
+
+Next: **B2.1–B2.5** — the mechanism, then libc, then the rest of the userland.
+Also **submit** — the remaining steps need the Apple account and a
 final name decision, all listed in [docs/app-store.md](docs/app-store.md).
 **Not yet exercised — one thing, and it needs a human at a mouse**: `mux`/`jim`
 driven by the Mac's real pointer, and `jim` looked at inside a *widened* layer.

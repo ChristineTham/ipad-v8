@@ -164,9 +164,11 @@ Runbook: [spike-a0.md](spike-a0.md)
 
 ## Track B — the V10 restoration *(desktop SIMH until it boots; see [v10-restoration.md](v10-restoration.md))*
 
-**Where this stands (2026-08-16).** The infrastructure is finished and **a Tenth
-Edition toolchain runs on the Eighth Edition machine**. What remains is a
-userland, a kernel, and a boot block — the last of which nobody has ever made.
+**Where this stands (2026-08-16).** The infrastructure is finished, **a Tenth
+Edition toolchain runs on the Eighth Edition machine**, and **fifteen of the
+seventeen programs the first boot depends on already compile**. What remains
+is the rest of a userland, a kernel, and a boot block — the last of which
+nobody has ever made.
 
 ### The facts every phase below depends on
 
@@ -180,6 +182,8 @@ done in the nine years it has been public
 | Linked VAX executables | **483**, including `ccom`, `as`, `make`, `sh`, `sed`, `ls`, `ps` |
 | Objects / archives | 1,525 `0407` objects, 150 `ar` archives — including a complete 262-member `libc.a` |
 | Do they run on V8? | **Yes.** 9/9, `tools/v10-probe.sh` |
+| Syscall slots shared | **112 of 128** identical, `tools/v10-syscalls.py`. Six are V10-only; two of those have a boot-path caller |
+| Build files | Mixed and irrelevant: 205 `mkfile`, 153 `Makefile`, 209 `makefile` — and **no world build, and none at all for the boot path** |
 | Boot media | **None.** That has not changed, and it is the whole of B3 |
 
 Three consequences that reshape everything after B1:
@@ -256,20 +260,49 @@ for the one case netfs cannot serve — moving a *disk image*.
 The toolchain is trusted; now it has to build a system. Ordered by what B3
 cannot start without.
 
-- [ ] **B2.1 A build mechanism.** V10 builds with `mk`, and its `mkfile`s
-      assume a source directory you can write to — which a read-only share is
-      not. B1 dodged this by copying seven files and writing the `cc` lines by
-      hand; a userland cannot. Both `mk` and `make` have prebuilt binaries in
-      the tree, so try those first; failing that, a generated-makefile pass in
-      the shape of Track S's `v8/mk/mkdep.py`
-- [ ] **B2.2 The header question, settled per header and logged.** r70 (1997)
-      against the 1995 source, and the answer will not be uniform: a V10
-      userland compiled against V10 headers still calls a **V8** kernel until
-      B3 replaces it. Measured so far — `ranlib.h`, `pagsiz.h`, `ctype.h`,
-      `setjmp.h` and `struct _iobuf` are identical to V8's; `a.out.h` differs
-      by one bit-field *name* at the same width, so the object formats agree;
-      but V10's `stdio.h` includes a `<tmpnam.h>` V8 has never had and its
-      `sys/types.h` drops `major()`/`minor()`
+- [x] **B2.0 Probe the boot path before building anything** *(2026-08-16,
+      `tools/v10-bootpath.sh`, 35/46)*. Run first, against the roadmap's own
+      ordering, because B1 was won by putting the decisive experiment ahead of
+      the machinery and the same risk sat here. **Fifteen of the seventeen
+      boot-path commands already compile** against r70 headers, and all five
+      that are safe to execute on the machine that built them then ran. The
+      two that do not are each one line: `fsck` wants a bare `<stat.h>` that
+      exists only as `sys/stat.h`, and `mv` wants `ROOTINO`, which reaches it
+      through V8's `sys/types.h` including `sys/param.h` where r70's does not
+- [x] **B2.0a Compiling is not running** *(`tools/v10-syscalls.py`)*. **112 of
+      128 syscall slots hold the same call at the same index** — six are
+      filled in V10 and `nosys` in V8, and exactly two of those have a caller
+      in the boot path: `mount` uses `fmount` (slot 26) and `umount` uses
+      `funmount` (slot 50). Both build, link, and cannot run until a V10
+      kernel is under them — which costs nothing, since they are the two
+      programs that only ever need to work on that kernel
+- [x] **B2.1 A build mechanism — settled: reuse `v8/mk/mkdep.py`.** The
+      premise this item carried was wrong twice over. **V10 does not build
+      with `mk`**: the tree is mixed (205 `mkfile`, 153 `Makefile`, 209
+      `makefile`, 78 `*.mk`) and `cmd/make/make` is a prebuilt 0413 binary, so
+      `make` is at least as native to it. And **V10 has no world build** — the
+      one candidate, `src/makefile`, builds a Datakit daemon called `fshare`.
+      What decides it is that the **boot path has no build file of any kind**:
+      seventeen loose `.c` files under a `cmd/` with no makefile, which is the
+      same shape as V8's `cmd/` (120 dirs + 168 loose `.c` + no makefile;
+      V10's is 171 + 207 + none). `mkdep.py` was written for exactly that, and
+      its V8-specific weight — the fifteen-entry `STAGE1` table — is the
+      toolchain bootstrap V10 does not need
+- [ ] **B2.2 The header question, settled per header and logged.** Smaller
+      than feared: the answer is r70 first with V8 filling the gaps, plus a
+      short list of reconciliations. Measured — `ranlib.h`, `pagsiz.h`,
+      `ctype.h`, `setjmp.h`, `sys/dir.h`, `utmp.h`, `sys/ino.h` and `struct
+      _iobuf` are identical to V8's; `a.out.h` differs by one bit-field *name*
+      at the same width, so the object formats agree; V8 has **no**
+      `sys/ttyio.h`, `sys/nttyio.h`, `sys/filio.h`, `utsname.h` or `libc.h` at
+      all. The tty divergence is the one that looked fatal and is not: every
+      `TIOC*` V10 shares with V8 has the same `(('t'<<8)|N)` number, V10 adds
+      only `TIOCGDEV`/`TIOCSDEV` into slots 23 and 24 which V8 leaves free,
+      and `struct sgttyb` is unchanged in layout — V10 moved line speed out
+      into a `ttydevb` reached by those two ioctls, and that is the whole of
+      it. Two reconciliations open: r70's `sys/types.h` should include
+      `sys/param.h` (the 1995 source says so and the 1997 reconstruction
+      dropped it), and `fsck` needs `sys` on its include path
 - [ ] **B2.3 libc from source, checked against the 1995 archive.** The
       strongest test available anywhere in this track: `src/libc/libc.a` is 262
       members with a valid `__.SYMDEF` that already links and runs, so a
@@ -278,7 +311,11 @@ cannot start without.
 - [ ] **B2.4 The boot path, none of which is prebuilt.** `init`, `getty`,
       `login`, `mount`, `umount`, `mkfs`, `fsck`, `icheck`, `sync`, `date`,
       `stty`, and the `/bin` core (`cat`, `cp`, `mv`, `rm`, `mkdir`, `echo`).
-      B3 is blocked on this list and on nothing else in B2
+      B3 is blocked on this list and on nothing else in B2.
+      **B2.0 has already built fifteen of the seventeen**, so what is left
+      here is the two header reconciliations, an install layout, and the same
+      question `provenance.txt` answers for V8: which of these is on the disk,
+      and where it came from
 - [ ] **B2.5 The rest of the userland, with the 46 as an oracle.** Every
       command that has a 1995 binary is a check on ours; every command that
       does not is a build to be trusted on other grounds. Record which is
@@ -296,7 +333,10 @@ device support is the one part already known to be present.
       snapshots of the same kernel: 522 files in common of which **131 differ**,
       and different sets of machine configurations (`sys/astro` has 10, `lsys`
       has 17 including `crab`, `pipe`, `west`). This has to be settled *before*
-      anything is compiled, not discovered halfway through
+      anything is compiled, not discovered halfway through.
+      One constraint removed early: `lsys/os/sysent.c` and `sys/os/sysent.c`
+      are **byte-identical**, so the choice does not change the system-call
+      interface and can be made on other grounds
 - [ ] **B3.2 The machine description.** `star` is the 780 family and
       `astro/alice.m` is a real 780 config. Ours joins it — `ipnx.m`, declaring
       the machine we actually emulate — exactly as `usr/sys/ipnx/conf` did for

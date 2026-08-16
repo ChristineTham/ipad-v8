@@ -1,0 +1,125 @@
+# Assemble the Tenth Edition toolchain on a running Eighth Edition machine.
+#
+# Sourced, never run.  Callers source tools/v8drive.exp first, then this, and
+# call v10_tc_build with the two directories it works between:
+#
+#	v10_tc_build /usr/v10/lib /n/v10/src
+#	              ^ where the passes go   ^ the served V10 tree
+#
+# It returns a list of {name ok} pairs so the caller can fold them into its own
+# results table, and it leaves the seven passes in place:
+#
+#	ccom	<- cmd/ccom/vax/comp	prebuilt, off the tarball
+#	as	<- cmd/as/as		prebuilt
+#	libc.a	<- libc/libc.a		prebuilt, re-ranlib'd (see below)
+#	crt0.o	<- libc/csu/crt0.s	assembled here
+#	cpp	<- cmd/cpp/		BUILT here, by V8's cc
+#	c2	<- cmd/c2/		BUILT here
+#	ld	<- cmd/ld.c		BUILT here
+#
+# WHY THIS IS A LIBRARY.  B1 proved the assembly once, inside
+# v10-toolchain.exp.  Every phase of B2 needs the same seven files in place
+# before it can compile a line, and CLAUDE.md already records what happens
+# when harnesses each grow their own copy of a shared guest procedure: three
+# of them grew a private "log in and run a command" and all three hung, which
+# is why v8drive.exp exists.  This is the same rule one level up.
+#
+# WHAT IT DOES NOT DO.  Mount anything, decide which headers to use, or halt
+# the machine.  Those are the caller's, because they are exactly what differs
+# between B1 (V8 headers, on purpose) and B2 (the header question itself).
+
+# The three passes with no prebuilt binary are compiled by V8's cc, which is
+# not a compromise: they are 1985-era K&R C and every header they reach --
+# stdio.h, ctype.h, a.out.h, ar.h, ranlib.h, pagsiz.h -- is already V8's.
+# cpp.c includes no system header at all except libc.h, handled below.
+proc v10_tc_build {L V} {
+    set out {}
+
+    # ------------------------------------------------ the one V10 header ---
+    #
+    # cpp.c opens with `# include <libc.h>' -- a space after the #, ordinary
+    # 1970s style, and the reason a host-side scan for `#include' declared
+    # every header present and cost a whole boot.  V8 has no libc.h.
+    #
+    # Exactly that header and no more.  It is 36 lines of extern declarations
+    # and one #define, so nothing about V8's libc can disagree with it;
+    # pointing -I at the whole r70 tree is a much larger decision and it
+    # belongs to B2, not here.
+    v8_sh "rm -rf /usr/v10inc; mkdir /usr/v10inc" 120
+    v8_sh "cp /n/v10/include/libc.h /usr/v10inc" 120
+
+    v8_sh "rm -rf /usr/v10src; mkdir /usr/v10src" 120
+    v8_sh "rm -rf $L; mkdir /usr/v10 $L" 120
+
+    # ------------------------------------------- phase 1: the prebuilt set ---
+    v8_sh "cp $V/cmd/ccom/vax/comp $L/ccom; chmod 755 $L/ccom" 300
+    v8_sh "cp $V/cmd/as/as $L/as; chmod 755 $L/as" 300
+    v8_sh "cp $V/libc/libc.a $L/libc.a" 300
+
+    # ranlib AFTER the copy, ALWAYS.  cp gives the copy a new mtime while the
+    # __.SYMDEF member keeps its 1995 one, so V8's ld demotes a perfectly good
+    # table of contents to a stale one (getfile() case 3) and falls back to a
+    # single forward pass.  B1's first run died here with
+    #	Undefined: __cleanup __exit cerror
+    # which is the signature of a backward reference, not of a missing library.
+    v8_sh "cd $L; ranlib libc.a" 300
+
+    v8_sh "cp $V/libc/csu/crt0.s /usr/v10src/crt0.s" 120
+    lappend out [list "crt0 assembles" \
+        [v8_try "cd /usr/v10src; $L/as -o $L/crt0.o crt0.s; test -s $L/crt0.o && echo CRT0\$OK" \
+                "CRT0-ok" 300]]
+
+    # ---------------------------------------- phase 2: the three built passes ---
+    #
+    # Each in its own directory: V8's cc writes its .o beside the .c, so two
+    # builds sharing a directory would race on names like `main.o'.
+
+    # c2, the peephole optimiser.  Three files, no header beyond stdio/ctype.
+    lappend out [list "c2 builds" \
+        [v10_tc_cc c2 "$V/cmd/c2/c20.c $V/cmd/c2/c21.c $V/cmd/c2/c22.c $V/cmd/c2/c2.h" c2 "-O"]]
+    v8_sh "cp /usr/v10src/c2/c2 $L/c2; chmod 755 $L/c2" 120
+
+    # ld.  One file, and the one the plan said was not in the tree at all --
+    # missed for being a loose cmd/ld.c rather than a cmd/ld/ directory.
+    lappend out [list "ld builds" [v10_tc_cc ld "$V/cmd/ld.c" ld "-O"]]
+    v8_sh "cp /usr/v10src/ld/ld $L/ld; chmod 755 $L/ld" 120
+
+    # cpp.  Its mkfile runs yacc, then `sh :yyfix' to lift the parser tables
+    # into a rodata.c and `:rofix' to move them into .text.  That is a 1983
+    # memory optimisation -- the tables are read-only either way -- so we skip
+    # both and compile yacc's output as it comes.  The deviation is deliberate
+    # and costs a few KB of data segment; recorded because a later reader will
+    # find :yyfix in the tree and wonder why nothing runs it.
+    v8_sh "mkdir /usr/v10src/cpp" 60
+    v8_sh "cd /usr/v10src/cpp; cp $V/cmd/cpp/cpp.c $V/cmd/cpp/cpy.y $V/cmd/cpp/yylex.c ." 300
+    v8_sh "cd /usr/v10src/cpp; yacc -d cpy.y; mv y.tab.c cpy.c" 600
+    lappend out [list "cpp builds" \
+        [v8_try "cd /usr/v10src/cpp; cc -O -DPRAGMA -DFLEXNAMES -DPD_MACH=D_vax -DPD_SYS=D_unix -I. -I/usr/v10inc -o cpp cpp.c cpy.c yylex.c; test -s cpp && echo BUILD\$OK" \
+                "BUILD-ok" 1200]]
+    v8_sh "cp /usr/v10src/cpp/cpp $L/cpp; chmod 755 $L/cpp" 120
+
+    v8_sh "ls -l $L" 120
+    return $out
+}
+
+# Build one program from V10 source with V8's cc, in its own directory.
+proc v10_tc_cc {dir srcs out flags {t 900}} {
+    v8_sh "mkdir /usr/v10src/$dir" 60
+    v8_sh "cd /usr/v10src/$dir; cp $srcs ." 300
+    return [v8_try "cd /usr/v10src/$dir; cc $flags -o $out *.c; test -s $out && echo BUILD\$OK" \
+                   "BUILD-ok" $t]
+}
+
+# The smoke test that says the assembly above equals what B1 assembled: every
+# pass out of the V10 directory, compiling a real #include.  -t 0 ccom, 2 c2,
+# p cpp, a as, l ld, c crt0.o+libc.a -- so V8 supplies the cc driver and
+# nothing else.
+proc v10_tc_smoke {L {dir /usr/v10src}} {
+    v8_sh "cd $dir; rm -f hello.c hello" 120
+    v8_sh "cd $dir; echo '#include <stdio.h>' > hello.c" 120
+    v8_sh "cd $dir; echo 'main(){printf(\"V10TC alive\\n\"); return 0;}' >> hello.c" 120
+    set built [v8_try "cd $dir; cc -B$L/ -t02palc -o hello hello.c; test -s hello && echo SMOKE\$OK" \
+                      "SMOKE-ok" 900]
+    if {!$built} { return 0 }
+    return [v8_try "cd $dir; ./hello" "V10TC alive" 120]
+}

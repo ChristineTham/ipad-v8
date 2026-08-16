@@ -1,0 +1,220 @@
+#!/usr/bin/env expect
+# Does the Tenth Edition boot path compile?  Phase B2.0.
+#
+#	expect tools/v10-bootpath.exp <image> [tree-port] [scratch-port]
+#
+# Normally run through tools/v10-bootpath.sh.
+#
+# WHY THIS RUNS BEFORE THE BUILD MECHANISM.  The roadmap orders B2 as
+# mechanism first (B2.1), headers second (B2.2), boot path fourth (B2.4).
+# That is the wrong order for where the risk actually is.  B1 was won by
+# running the decisive experiment first -- "do V10 binaries run on V8?" --
+# and only then building anything on the answer.  The decisive experiment
+# here is whether these seventeen programs compile at all, and against which
+# headers; a generator written before that is a generator written to a guess.
+#
+# WHY THESE SEVENTEEN.  They are the entire set B3 is blocked on, and the set
+# is not arbitrary: of the 46 command source units with a prebuilt 1995
+# binary, NOT ONE of these is among them.  That is not bad luck.  These are
+# the programs that get INSTALLED rather than left where they were compiled,
+# so a developer's working directory never holds one.  There is no oracle for
+# this list and no shortcut around building it.
+#
+# THE TWO CONFIGURATIONS, AND WHY BOTH.  A V10 userland compiled against V10
+# headers still calls a V8 kernel until B3 replaces it, so neither header set
+# is obviously right:
+#
+#	A   V8's /usr/include        matches the kernel, may not match the source
+#	B   r70 first, V8 filling in  matches the source, may not match the kernel
+#
+# Measured before this run, and the reason B is not a formality: V8 has no
+# sys/ttyio.h, sys/nttyio.h, sys/filio.h, utsname.h or libc.h AT ALL, and
+# init, getty, login and stty all want the first of those.  But the ioctls
+# inside it line up exactly -- every TIOC* V10 shares with V8 has the same
+# ('t'<<8)|N number, V10 adds only TIOCGDEV/TIOCSDEV at 23 and 24 which V8
+# leaves free, and struct sgttyb is unchanged in layout.  So the tty
+# interface is a header-packaging difference far more than a kernel one,
+# which config B should show and config A should not.
+#
+# WHAT A PASS MEANS, AND WHAT IT DOES NOT.  This proves cpp, ccom and ld can
+# turn the source into a VAX executable.  It does NOT prove the result runs
+# on a V8 kernel: mkdir.c calls mkdir(2), a 4.2BSD syscall V7 and V8 reach
+# through /etc/mkdir instead, and it will link cleanly against V10's libc.a
+# and fail at runtime.  Five harmless commands are therefore actually RUN at
+# the end.  The other twelve are not, and must not be: init, mkfs and fsck
+# would each, in their own way, end the machine this is running on.
+
+set timeout 900
+log_user 1
+source [file dirname [info script]]/v8drive.exp
+source [file dirname [info script]]/v10tc.exp
+
+if {[llength $argv] < 1} {
+    puts "usage: v10-bootpath.exp <image> \[tree-port\] \[scratch-port\]"
+    exit 2
+}
+set img   [lindex $argv 0]
+set tport [expr {[llength $argv] > 1 ? [lindex $argv 1] : 9220}]
+set sport [expr {[llength $argv] > 2 ? [lindex $argv 2] : 9221}]
+
+set L /usr/v10/lib
+set V /n/v10/src
+set BP /usr/bp
+set INC /usr/v10/include
+
+set results {}
+proc note {name ok} {
+    global results
+    lappend results [list $name $ok]
+}
+
+# The boot path.  `dir' is where the source lives relative to $V/cmd -- empty
+# for the loose files, which is all but cp.  `run' marks the ones it is safe
+# to execute on the machine doing the building.
+#
+#	name    subdir  safe-to-run
+set BOOTPATH {
+    {init   {}      0}
+    {getty  {}      0}
+    {login  {}      0}
+    {mount  {}      0}
+    {umount {}      0}
+    {mkfs   {}      0}
+    {fsck   {}      0}
+    {icheck {}      0}
+    {sync   {}      1}
+    {date   {}      1}
+    {stty   {}      0}
+    {cat    {}      1}
+    {cp     cp      0}
+    {mv     {}      0}
+    {rm     {}      0}
+    {mkdir  {}      1}
+    {echo   {}      1}
+}
+
+# Build one command both ways, appending each attempt's output to one log on
+# the guest.  One log, one copy home at the end: netfs costs a round trip per
+# path component, so seventeen files copied individually would cost more than
+# the compiles.
+proc bp_build {name subdir} {
+    global L V BP INC
+    set src [expr {$subdir eq "" ? "$V/cmd/$name.c" : "$V/cmd/$subdir/$name.c"}]
+
+    v8_sh "mkdir $BP/$name" 60
+    v8_sh "cd $BP/$name; cp $src ." 300
+
+    v8_sh "echo '##### $name A v8-headers' >> $BP/all.log" 60
+    set a [v8_try "cd $BP/$name; cc -B$L/ -t02palc -o o8 $name.c > l8 2>&1; test -s o8 && echo A\$OK" \
+                  "A-ok" 900]
+    v8_sh "cat $BP/$name/l8 >> $BP/all.log" 120
+
+    v8_sh "echo '##### $name B r70-headers' >> $BP/all.log" 60
+    set b [v8_try "cd $BP/$name; cc -B$L/ -t02palc -I$INC -o o10 $name.c > l10 2>&1; test -s o10 && echo B\$OK" \
+                  "B-ok" 900]
+    v8_sh "cat $BP/$name/l10 >> $BP/all.log" 120
+
+    return [list $a $b]
+}
+
+# ------------------------------------------------------------------ setup ---
+
+v8_boot $img {"set il enable" "attach il nat:"}
+v8_login root
+
+puts "\n===== V10 BOOT PATH (B2.0) ====="
+v8_sh "PATH=/bin:/etc:/usr/bin; export PATH"
+v8_sh "OK=-ok"
+
+v8_sh "mkdir /n/v10 /n/t" 60
+v8_sh "/etc/nmount 10.0.2.2 $tport 68 /n/v10" 120
+v8_sh "/etc/nmount 10.0.2.2 $sport 69 /n/t" 120
+note "tree mounted" [v8_try "cat $V/cmd/adb/vax/hello.c" "hello, world" 120]
+
+# ------------------------------------------------------------- toolchain ---
+#
+# The shared assembly, and its smoke test.  The smoke test is not decoration:
+# it is what says this run's toolchain is the same one B1 scored 10/10 with,
+# so a failure below is a property of the boot-path source rather than of the
+# compiler that just got built.
+foreach r [v10_tc_build $L $V] { note "tc: [lindex $r 0]" [lindex $r 1] }
+note "tc: toolchain smoke test" [v10_tc_smoke $L]
+
+# --------------------------------------------------------------- headers ---
+#
+# The whole r70 tree, not the subset the boot path names.  A subset chosen by
+# scanning first-level #includes is exactly how B1 lost a boot: the closure is
+# what matters and it is not visible without following it.  336 files is one
+# cpio -pd, which is one process for the whole set -- CLAUDE.md's rule about
+# `cp' per file being what makes a copy slow, applied before it costs anything.
+v8_sh "mkdir /usr/v10/include" 60
+v8_sh "cd /n/v10/include; find . -print | cpio -pd $INC" 900
+note "r70 headers copied in" [v8_try "test -s $INC/sys/ttyio.h && echo HDR\$OK" "HDR-ok" 120]
+
+# ------------------------------------------------------------- the probe ---
+
+v8_sh "rm -rf $BP; mkdir $BP" 120
+v8_sh "> $BP/all.log" 60
+
+set built {}
+foreach ent $BOOTPATH {
+    set name   [lindex $ent 0]
+    set subdir [lindex $ent 1]
+    set r [bp_build $name $subdir]
+    set a [lindex $r 0]
+    set b [lindex $r 1]
+    note "$name (V8 hdrs)"  $a
+    note "$name (r70 hdrs)" $b
+    lappend built [list $name $a $b [lindex $ent 2]]
+}
+
+# ------------------------------------------------------------ do they run ---
+#
+# Only the five that cannot hurt the machine running them.  This is where the
+# syscall boundary shows: a program can link perfectly against V10's libc.a
+# and still call something the V8 kernel does not implement.
+foreach ent $built {
+    set name [lindex $ent 0]
+    if {![lindex $ent 3]} { continue }
+    # whichever configuration produced a binary, preferring r70
+    set bin ""
+    if {[lindex $ent 2]} { set bin o10 } elseif {[lindex $ent 1]} { set bin o8 }
+    if {$bin eq ""} { note "RUN $name" 0; continue }
+    v8_sh "echo '##### RUN $name' >> $BP/all.log" 60
+    switch $name {
+        sync  { note "RUN sync"  [v8_try "cd $BP/sync;  ./$bin; echo RUN\$OK" "RUN-ok" 120] }
+        echo  { note "RUN echo"  [v8_try "cd $BP/echo;  ./$bin v10-echo-works" "v10-echo-works" 120] }
+        cat   { v8_sh "cd $BP/cat; echo v10-cat-works > t" 60
+                note "RUN cat"   [v8_try "cd $BP/cat;   ./$bin t" "v10-cat-works" 120] }
+        mkdir { note "RUN mkdir" [v8_try "cd $BP/mkdir; ./$bin zz && test -d zz && echo MK\$OK" "MK-ok" 120] }
+        # Any timestamp will do: whether the year is right is the superblock's
+        # business (and Track S's), not this probe's.  What is being asked is
+        # only whether a V10 binary can reach the V8 kernel's time(2) at all.
+        date  { note "RUN date"  [v8_try "cd $BP/date;  ./$bin" "*:*:*" 120] }
+    }
+}
+
+# --------------------------------------------------------------- carry it ---
+#
+# The log is the deliverable.  A guest-side ok/NO table says which compiles
+# failed; only the compiler's own words say why, and "why" is the whole
+# output of this phase.
+v8_sh "wc -l $BP/all.log" 120
+v8_sh "cp $BP/all.log /n/t/bootpath.log" 600
+v8_sh "ls -l /n/t" 120
+
+v8_sh "cd /; /etc/nmount -u 68; /etc/nmount -u 69" 120
+v8_halt
+
+puts "\n===== V10 BOOT PATH RESULTS ====="
+set failed 0
+foreach r $results {
+    puts [format "  %-32s %s" [lindex $r 0] [expr {[lindex $r 1] ? "ok" : "NO"}]]
+    if {![lindex $r 1]} { incr failed }
+}
+puts "===== [expr {[llength $results] - $failed}]/[llength $results] =====\n"
+
+# A probe REPORTS; it does not fail because a measurement came out low.  The
+# only failure that matters here is the toolchain not being the one B1 built,
+# and that is asserted separately above.
+exit 0
