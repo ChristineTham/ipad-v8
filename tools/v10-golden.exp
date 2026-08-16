@@ -1,0 +1,218 @@
+#!/usr/bin/env expect
+# Build the first Tenth Edition golden image.  Phase K6.
+#
+#	expect tools/v10-golden.exp <image> <tree> <ours> <mk> <scratch>
+#
+# Normally run through tools/v10-golden.sh.
+#
+# THE LAYOUT IS THE TAPE'S, NOT ONE WE CHOSE.  lsys/io/ra.c carries the
+# partition table and seki.m carries the root and swap devices, and together
+# they say exactly where things go on an RA disk:
+#
+#	a   10240 sectors at 0        5 MB    root   `root regfs ra 0100'
+#	b   20480 sectors at 10240   10 MB    swap   `swap ra 01 20480'
+#	c  249848 sectors at 30720  122 MB    /usr
+#
+# `root regfs ra 0100' is PART(64) = 64 & 07 = 0, partition a -- and that is
+# five megabytes, not the hundred the first filesystem claimed.  A filesystem
+# that spans the whole drive from block 0 does not merely waste space: reads
+# past 10240 sectors are clamped by rastrategy, so the far end is unreachable,
+# and the FIRST TIME THE MACHINE SWAPS it writes partition b straight through
+# the middle of it.  A short single-user session never swaps, which is why the
+# earlier image looked fine and was not.
+#
+# So two filesystems, each built in its own file at offset zero -- no
+# partition arithmetic inside the guest, because V8's hp table and V10's ra
+# table do not agree about where anything starts.  tools/v10-golden.sh puts
+# them at the right sectors afterwards, where the offsets can be shown.
+
+set timeout 1200
+log_user 1
+source [file dirname [info script]]/v8drive.exp
+source [file dirname [info script]]/v10tc.exp
+
+if {[llength $argv] < 5} {
+    puts "usage: v10-golden.exp <image> <tree> <ours> <mk> <scratch>"
+    exit 2
+}
+set img   [lindex $argv 0]
+set tport [lindex $argv 1]
+set oport [lindex $argv 2]
+set mport [lindex $argv 3]
+set sport [lindex $argv 4]
+
+set L    /usr/v10/lib
+set V    /n/v10/src
+set INC  /usr/v10/include
+set BIN  /usr/v10/bin
+set OBJ  /usr/v10obj
+set R    /mnt          ;# the root filesystem
+set U    /mnt2         ;# the /usr filesystem
+
+# partition a = 10240 sectors = 1280 blocks of 4096
+#
+# /usr goes on partition c (249848 sectors at 30720), but NOT all of it.
+# mkbitfs has two free-space layouts and only one is readable here:
+#
+#	if (size - isize <= MAXSMALL) smallfree(); else largefree(fd);
+#	MAXSMALL = BITMAP*BITCELL = 961*32 = 30752 blocks
+#
+# smallfree() keeps the bitmap IN the superblock -- the `B' arm of the
+# filsys union.  largefree() puts it in blocks of its own and sets the `N'
+# arm, and **V8's sys/filsys.h has no N arm at all**: its union is R and B
+# and nothing else.  So a filesystem over MAXSMALL is one V8 cannot read,
+# and V8 is what mounts this to fill it.  The first attempt asked for 93693
+# blocks and got `bad count' from mkdir and a df reading 100% used on an
+# empty filesystem.
+#
+# 30752 blocks is 120 MB and partition c holds 31231, so 479 blocks of it
+# go unused.  That is the price of a filesystem both editions understand.
+set ROOTBLK 1280
+set USRBLK  30752
+
+set BOOTPATH {init getty login mount umount mkfs fsck icheck sync date stty
+              cat cp mv rm mkdir echo}
+
+set results {}
+proc note {name ok} { global results; lappend results [list $name $ok] }
+proc report {} {
+    global results
+    puts "\n===== V10 GOLDEN RESULTS ====="
+    set failed 0
+    foreach r $results {
+        puts [format "  %-40s %s" [lindex $r 0] [expr {[lindex $r 1] ? "ok" : "NO"}]]
+        if {![lindex $r 1]} { incr failed }
+    }
+    puts "===== [expr {[llength $results] - $failed}]/[llength $results] =====\n"
+    return $failed
+}
+
+v8_boot $img {"set il enable" "attach il nat:"
+              "set rp1 rp07" "attach rp1 v10root.part"
+              "set rp2 rp07" "attach rp2 v10usr.part"}
+v8_login root
+
+puts "\n===== V10 GOLDEN (K6) ====="
+v8_sh "PATH=/bin:/etc:/usr/bin; export PATH"
+v8_sh "OK=-ok"
+
+v8_sh "mkdir /n/v10 /n/v10ours /n/v10mk /n/t" 60
+v8_sh "/etc/nmount 10.0.2.2 $tport 82 /n/v10" 120
+v8_sh "/etc/nmount 10.0.2.2 $oport 83 /n/v10ours" 120
+v8_sh "/etc/nmount 10.0.2.2 $mport 84 /n/v10mk" 120
+v8_sh "/etc/nmount 10.0.2.2 $sport 85 /n/t" 120
+note "tree mounted" [v8_try "cat $V/cmd/adb/vax/hello.c" "hello, world" 120]
+
+# --------------------------------------------------- the V10 fs tool, ported ---
+v8_sh "rm -rf /usr/v10 $INC $BIN; mkdir /usr/v10 $INC $BIN" 120
+v8_sh "cd /n/v10/include; find . -print | cpio -pd $INC" 900
+v8_sh "rm -rf $OBJ; mkdir $OBJ $OBJ/mkbitfs" 120
+v8_sh "cd $OBJ/mkbitfs; cp /n/v10ours/cmd/mkbitfs.c ." 300
+note "v10mkbitfs builds" \
+    [v8_try "cd $OBJ/mkbitfs; if cc -O -I$INC -o $BIN/v10mkbitfs mkbitfs.c > c.log 2>&1; then echo CC\$OK; fi" \
+            "CC-ok" 900]
+
+# ------------------------------------------------------ two filesystems ---
+#
+# minor = 64 | unit<<3 | 2 : BITFS set, partition c (V8's whole volume), so
+# each file is written from its own byte zero.  dkunit masks bit 6 out before
+# the shift, which is what lets the same number mean "bitmapped" to V10 and
+# "unit N" to V8.
+v8_sh "rm -f /dev/rp1c /dev/rp2c" 60
+v8_sh "/etc/mknod /dev/rp1c b 0 74" 120
+v8_sh "/etc/mknod /dev/rp2c b 0 82" 120
+note "root filesystem" \
+    [v8_try "$BIN/v10mkbitfs /dev/rp1c $ROOTBLK && echo MK1\$OK" "MK1-ok" 900]
+note "usr filesystem" \
+    [v8_try "$BIN/v10mkbitfs /dev/rp2c $USRBLK && echo MK2\$OK" "MK2-ok" 1200]
+
+v8_sh "rm -rf $R $U; mkdir $R $U" 60
+note "root mounts" [v8_try "/etc/mount /dev/rp1c $R && echo M1\$OK" "M1-ok" 300]
+note "usr mounts"  [v8_try "/etc/mount /dev/rp2c $U && echo M2\$OK" "M2-ok" 300]
+
+# --------------------------------------------------------------- toolchain ---
+foreach r [v10_tc_build $L $V] { note "tc: [lindex $r 0]" [lindex $r 1] }
+note "tc: smoke test" [v10_tc_smoke $L]
+
+# ------------------------------------------------------------ the root tree ---
+foreach d {bin etc lib dev tmp usr} { v8_sh "mkdir $R/$d" 60 }
+v8_sh "chmod 777 $R/tmp" 60
+
+# /unix first, so it lands at the front of the filesystem: lsys/boot/README
+# requires it there and no more than singly indirect.
+note "/unix installed" \
+    [v8_try "cp $V/lsys/astro/seki.u $R/unix && ls -l $R/unix && echo UNX\$OK" "UNX-ok" 900]
+
+# ------------------------------------------------------------------- /dev ---
+#
+# Every number here is read out of seki's own generated config,
+# lsys/astro/seki.c.c.  cdevsw[]: cn 0, dz 1, mm 3, te16 5, sw 7, ra 28,
+# ip 42, tcp 43, il 44, udp 50.  bdevsw[]: te16 1, sw 4, ra 7.
+#
+# The ra minors carry bit 6 -- BITFS -- exactly as the kernel's own root
+# device does, because these name the same bitmapped filesystems.
+v8_sh "/etc/mknod $R/dev/console c 0 0" 120
+v8_sh "/etc/mknod $R/dev/mem c 3 0; /etc/mknod $R/dev/kmem c 3 1; /etc/mknod $R/dev/null c 3 2" 120
+v8_sh "/etc/mknod $R/dev/swap b 4 1" 120
+foreach n {0 1 2 3 4 5 6 7} {
+    v8_sh "/etc/mknod $R/dev/tty0$n c 1 $n" 60
+}
+# ra unit 0: root is partition a (64), usr is partition g (64|6 = 70)
+v8_sh "/etc/mknod $R/dev/ra0a b 7 64;  /etc/mknod $R/dev/rra0a c 28 64" 120
+v8_sh "/etc/mknod $R/dev/ra0b b 7 65;  /etc/mknod $R/dev/rra0b c 28 65" 120
+# /usr is partition c -- PART(66) = 66 & 07 = 2 -- because c is the one that
+# fits inside MAXSMALL.  g would have been the roomier choice and is the one
+# V8 cannot read.
+v8_sh "/etc/mknod $R/dev/ra0c b 7 66;  /etc/mknod $R/dev/rra0c c 28 66" 120
+v8_sh "/etc/mknod $R/dev/ra0h b 7 71;  /etc/mknod $R/dev/rra0h c 28 71" 120
+v8_sh "/etc/mknod $R/dev/il0 c 44 0" 120
+v8_sh "chmod 622 $R/dev/console; chmod 666 $R/dev/null" 60
+v8_sh "N=`ls $R/dev | wc -l`" 120
+note "/dev populated" [v8_try "echo DEV\$N\$OK" "DEV" 120]
+
+# ---------------------------------------------------- /etc's config files ---
+v8_sh "cp /n/t/etc/passwd /n/t/etc/group /n/t/etc/ttys /n/t/etc/rc /n/t/etc/motd $R/etc" 300
+v8_sh "chmod 644 $R/etc/passwd $R/etc/group $R/etc/ttys $R/etc/motd; chmod 755 $R/etc/rc" 60
+note "/etc config in place" [v8_try "cat $R/etc/ttys" "console" 120]
+
+# ------------------------------------------- what has to be built, into root ---
+foreach c $BOOTPATH {
+    note "build $c" \
+        [v8_try "rm -rf $OBJ/$c; mkdir $OBJ/$c; cd $OBJ/$c; if make -f /n/v10mk/$c.mk DESTDIR=$R install > m.log 2>&1; then echo MK\$OK; fi" \
+                "MK-ok" 900]
+}
+
+# the toolchain, into /lib and /bin
+foreach f {cpp c2 ld} { v8_sh "cp $L/$f $R/lib/$f; chmod 755 $R/lib/$f" 300 }
+v8_sh "cp $L/crt0.o $R/lib/crt0.o; cp $L/libc.a $R/lib/libc.a" 600
+v8_sh "cp $L/ccom $R/lib/ccom; chmod 755 $R/lib/ccom" 600
+v8_sh "cp $L/as $R/bin/as; cp $L/ld $R/bin/ld; chmod 755 $R/bin/as $R/bin/ld" 300
+# ranlib AFTER the copy: cp gives the archive a new mtime while __.SYMDEF
+# keeps its 1995 one, which drops ld back to a single forward pass.
+v8_sh "cd $R/lib; ranlib libc.a" 600
+
+# /usr's directories, BEFORE anything is copied into them -- the installer
+# writes into $U/bin and the header copy into $U/include.
+foreach d {bin lib include adm tmp} { v8_sh "mkdir $U/$d" 60 }
+v8_sh "chmod 777 $U/tmp" 60
+
+# ------------------------------------------------ the prebuilt 1995 commands ---
+#
+# v10/mk/gen/prebuilt.txt is the map, and its fourth column says whether the
+# path came from V10's manual, from V8's measured disk, from us, or is a
+# default -- so a guess never reads as a citation.
+v8_sh "sh /n/t/instpre.sh $V $R $U > /n/t/prebuilt.log 2>&1; echo done" 1200
+note "prebuilt commands installed" [v8_try "test -s $R/bin/sh && echo PRE\$OK" "PRE-ok" 120]
+v8_sh "cd /n/v10/include; find . -print | cpio -pd $U/include" 1200
+note "/usr/include populated" [v8_try "test -s $U/include/stdio.h && echo INC\$OK" "INC-ok" 120]
+
+v8_sh "ls -l $R $R/bin $R/etc $R/lib $R/dev" 600
+v8_sh "ls $U/bin | wc -l" 120
+v8_sh "df" 120
+
+report
+v8_sh "cd /; sync; sync" 120
+v8_sh "/etc/umount /dev/rp1c; /etc/umount /dev/rp2c" 600
+v8_sh "/etc/nmount -u 82; /etc/nmount -u 83; /etc/nmount -u 84; /etc/nmount -u 85" 120
+v8_halt
+exit 0
