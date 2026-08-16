@@ -233,8 +233,19 @@ proc v8_halt {} {
     send "/etc/halt\r"
     v8_must "Infinite loop" 180
     set V8_RUNNING 0        ;# stopped cleanly: quitting now is safe
-    send "\005"
-    expect { "sim>" {} timeout {} }
+    # NO ^E HERE.  `Infinite loop' is SIMH's own STOP message -- it has already
+    # halted the CPU and returned to sim> by the time we read it, so there is
+    # nothing left to interrupt.  Sending ^E anyway put a stray 0x05 at the
+    # head of scp's command line, so the next line arrived as `\005quit', scp
+    # rejected it as an unknown command, and the harness then waited the full
+    # timeout for an eof that could never come.  Four minutes at the end of
+    # every run that halts, on every harness that sources this file, all of it
+    # after the work was already done and passing -- which is exactly why it
+    # went unnoticed.
+    expect {
+        "sim>"  {}
+        timeout { v8_bail "halted, but never reached sim> to quit" }
+    }
     send "quit\r"
     expect { eof {} timeout {} }
 }

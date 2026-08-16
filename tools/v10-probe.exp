@@ -1,0 +1,186 @@
+#!/usr/bin/env expect
+# Does a 1995 Tenth Edition binary run on a 1985 Eighth Edition kernel?
+#
+#	expect tools/v10-probe.exp <image> [tree-port] [scratch-port]
+#
+# Normally run through tools/v10-probe.sh, which starts the two netfs servers.
+#
+# WHY THIS IS THE FIRST EXPERIMENT OF TRACK B.  docs/v10-restoration.md has
+# planned since it was written to cross-build a V10 toolchain from source with
+# V8's 1985 cc, on the stated ground that V10 "survives as a source-only
+# snapshot ... no binaries".  That is not what is in the tarball.  It carries
+# 483 linked VAX a.out executables, and among them:
+#
+#	src/cmd/ccom/vax/comp	340,498 B   the V10 C compiler
+#	src/cmd/as/as		 57,203 B   the V10 assembler
+#	src/libc/libc.a		169,296 B   V10 libc, 262 members, with __.SYMDEF
+#	src/cmd/adb/vax/hello	 11,215 B   `hello, world', already linked
+#
+# If those RUN, the bootstrap is not a cross-build at all -- it is a matter of
+# putting V10's own passes where a cc driver will find them.
+#
+# THE STATIC EVIDENCE SAYS THEY SHOULD, which is exactly why it has to be
+# tested rather than assumed.  Comparing v8/usr/sys/sys/sysent.c (plus
+# vmsysent.c) against work/v10/src/sys/os/sysent.c, 111 of 129 slots hold the
+# same call at the same index, and every one a compiler uses is among them:
+# open 5, read 3, write 4, close 6, creat 8, unlink 10, break 17, stat 18,
+# seek 19, dup 41, pipe 42, exece 59.  The eighteen that differ are mounts,
+# reboot, credentials -- and slot 11, where V8 kept V7's vestigial `exec' and
+# V10 put a 64-bit lseek.  Nothing in a compiler calls slot 11.
+#
+# But a syscall table is not an ABI.  struct stat could have grown, crt0 could
+# expect a different stack, the a.out could carry a header field V8 rejects.
+# Those are invisible in a diff and obvious in an exec, so: exec.
+#
+# WHAT COUNTS AS AN ANSWER.  Each stage is run with v8_try, which reports
+# whether a pattern appeared WITHOUT bailing when it does not, because absence
+# is a result here rather than a failure.  A binary V8 refuses outright says
+# `cannot execute'; one that dies on a bad syscall says nothing and takes a
+# signal, which the shell reports as `Killed' or a fault -- so the stages look
+# for the SUCCESS string and print the transcript either way.
+
+set timeout 240
+log_user 1
+source [file dirname [info script]]/v8drive.exp
+
+if {[llength $argv] < 1} {
+    puts "usage: v10-probe.exp <image> \[tree-port\] \[scratch-port\]"
+    exit 2
+}
+set img   [lindex $argv 0]
+set tport [expr {[llength $argv] > 1 ? [lindex $argv 1] : 9210}]
+set sport [expr {[llength $argv] > 2 ? [lindex $argv 2] : 9211}]
+
+# Results, printed as one table at the end.  A probe that scatters its
+# findings through 400 lines of transcript is a probe nobody reads twice.
+set results {}
+proc note {name ok} {
+    global results
+    lappend results [list $name $ok]
+}
+
+v8_boot $img {"set il enable" "attach il nat:"}
+v8_login root
+
+puts "\n===== V10 PROBE ====="
+v8_sh "PATH=/bin:/etc:/usr/bin; export PATH"
+# Markers spelled through a variable: the tty echoes what is typed, so a
+# literal would put the answer in the stream before the test ran.
+v8_sh "OK=-ok"
+
+# ---------------------------------------------------------------- mounts ---
+#
+# 64 and 65 belong to /n/macos and /n/home, which /etc/rc claims at boot.
+# 66 and 67 are ours.  nmount's third argument is its own mount id, not a
+# device minor -- the kernel multiplies it by 256.
+v8_sh "mkdir /n/v10 /n/t" 60
+v8_sh "/etc/nmount 10.0.2.2 $tport 66 /n/v10" 120
+v8_sh "/etc/nmount 10.0.2.2 $sport 67 /n/t" 120
+# Read something small and known before trusting the mount.  A mount that
+# succeeded and serves nothing fails every later stage for the wrong reason.
+note "mount /n/v10" [v8_try "cat /n/v10/src/cmd/adb/vax/hello.c" "hello, world" 120]
+note "mount /n/t"   [v8_try "cat /n/t/fixture.txt" "V10-FIXTURE" 120]
+
+# ------------------------------------------------------- stage 1: hello ---
+#
+# The smallest possible question.  11 KB, one printf, linked in 1995 by a
+# compiler calling itself vaxpcc2.  Copied to local disk rather than exec'd
+# off the share: netfs is a gmount filesystem and whether V8's exec can page
+# a text segment out of one is a SEPARATE question, which folding it in here
+# would confuse with this one.
+v8_sh "cp /n/v10/src/cmd/adb/vax/hello /usr/tmp/v10hello" 180
+v8_sh "chmod 755 /usr/tmp/v10hello" 60
+v8_sh "ls -l /usr/tmp/v10hello" 60
+note "V10 hello runs" [v8_try "/usr/tmp/v10hello" "hello, world" 120]
+
+# ---------------------------------------------------------- stage 2: as ---
+#
+# The assembler, given a program of one instruction.  `as' is the pass most
+# likely to be portable across the two kernels (it opens, reads, writes and
+# exits) and the one everything else needs, so it is worth knowing on its own.
+v8_sh "cp /n/v10/src/cmd/as/as /usr/tmp/v10as; chmod 755 /usr/tmp/v10as" 180
+v8_sh "cd /usr/tmp; cp /n/t/t.s ." 60
+note "V10 as assembles" \
+    [v8_try "cd /usr/tmp; rm -f t.o; ./v10as -o t.o t.s; test -s t.o && echo V10AS\$OK" \
+            "V10AS-ok" 180]
+v8_sh "ls -l /usr/tmp/t.o" 60
+
+# -------------------------------------------------------- stage 3: ccom ---
+#
+# The compiler proper, on a preprocessed source.  The interface is
+# `ccom input.i output.s' -- identical in V8's and V10's cc.c, which are the
+# same program eight years apart, so this is not a guess.
+#
+# t.i deliberately includes nothing: a .i is post-cpp by definition, and
+# reaching for a header here would test V8's /usr/include against V10's
+# compiler, which is B2's question and not this one.
+v8_sh "cp /n/v10/src/cmd/ccom/vax/comp /usr/tmp/v10ccom; chmod 755 /usr/tmp/v10ccom" 240
+v8_sh "cd /usr/tmp; cp /n/t/t.i ." 60
+note "V10 ccom compiles" \
+    [v8_try "cd /usr/tmp; rm -f t.s; ./v10ccom t.i t.s; test -s t.s && echo V10CC\$OK" \
+            "V10CC-ok" 240]
+# sed, not head: V8 has no head(1), and `head: not found' costs a run to
+# discover because the stage around it still passes.
+v8_sh "cd /usr/tmp; sed -n '1,20p' t.s" 60
+
+# ------------------------------------------- stage 4: the whole pipeline ---
+#
+# ccom's output through V10's own as, then linked by V8's ld against V10's
+# libc.a and crt0 -- because V10 ships no linker binary (cmd/ld.c is source,
+# and building it is B1d).  The a.out format is shared, so V8's ld is a
+# legitimate stand-in and this stage says whether the object formats agree.
+v8_sh "cd /usr/tmp; cp /n/v10/src/libc/libc.a v10libc.a" 300
+# RANLIB AFTER THE COPY, AND THIS IS NOT OPTIONAL.  V8's ld reads an archive
+# in one sequential pass unless the __.SYMDEF is CURRENT, and `current' means
+# not older than the archive itself -- so cp, which sets a fresh mtime on the
+# copy while the member keeps the 1995 one, demotes a perfectly good table of
+# contents to a stale one.  The first run of this probe hit it exactly:
+#
+#	ld:v10libc.a: warning: table of contents ... rerun ranlib(1)
+#	Undefined: __cleanup __exit cerror
+#
+# and those three are the signature of a backward reference, not of a missing
+# library: cerror.o sorts before write.o, so a single forward pass has already
+# gone past it by the time write.o asks for it.  Nothing was wrong with V10's
+# libc.  CLAUDE.md states the general rule -- any rule that copies an archive
+# must re-ranlib it at the destination -- and it applies across the edition
+# boundary for the same reason it applies within one.
+v8_sh "cd /usr/tmp; ranlib v10libc.a" 300
+v8_sh "cd /usr/tmp; cp /n/v10/src/libc/csu/crt0.s ." 120
+note "V10 crt0 assembles" \
+    [v8_try "cd /usr/tmp; rm -f crt0.o; ./v10as -o crt0.o crt0.s; test -s crt0.o && echo CRT0\$OK" \
+            "CRT0-ok" 180]
+note "V10 as output assembles" \
+    [v8_try "cd /usr/tmp; rm -f t2.o; ./v10as -o t2.o t.s; test -s t2.o && echo ASOUT\$OK" \
+            "ASOUT-ok" 180]
+note "links with V8 ld" \
+    [v8_try "cd /usr/tmp; rm -f a.out; ld crt0.o t2.o v10libc.a && test -s a.out && echo LINK\$OK" \
+            "LINK-ok" 240]
+note "the linked program runs" \
+    [v8_try "cd /usr/tmp; ./a.out" "V10-COMPILED-AND-RUN" 120]
+
+# Carry the products back to the host, where file(1) and nm(1) can say what
+# they actually are.  A guest-side `it worked' is worth much less than an
+# object someone can take apart afterwards.
+v8_sh "cd /usr/tmp; cp t.s t.o t2.o crt0.o a.out /n/t 2>/dev/null; echo copied" 300
+v8_sh "ls -l /n/t" 120
+
+# ------------------------------------------------------------- teardown ---
+#
+# Shares go before the halt.  A netfs mount lives in guest RAM while the TCP
+# connection under it is host state, so a mount that outlives its server can
+# be neither used nor released -- and umount(8) cannot clear it in any case,
+# it being a gmount object keyed by device number.
+v8_sh "cd /; /etc/nmount -u 66; /etc/nmount -u 67" 120
+v8_halt
+
+puts "\n===== V10 PROBE RESULTS ====="
+set failed 0
+foreach r $results {
+    set name [lindex $r 0]
+    set ok   [lindex $r 1]
+    puts [format "  %-28s %s" $name [expr {$ok ? "ok" : "NO"}]]
+    if {!$ok} { incr failed }
+}
+puts "===== [expr {[llength $results] - $failed}]/[llength $results] =====\n"
+exit [expr {$failed ? 1 : 0}]

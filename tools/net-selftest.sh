@@ -9,13 +9,18 @@
 # starts the server, runs the guest side against it and cleans up -- so the
 # check is one command rather than a procedure someone has to remember.
 #
-# Everything lives under work/ and is disposable. The image is NOT: it is
-# passed through untouched and the guest halts cleanly, so a pass leaves the
-# disk exactly as it found it.
+# Everything lives under work/ and is disposable, INCLUDING THE IMAGE: this
+# boots a clone.  The header used to claim the image was "passed through
+# untouched ... a pass leaves the disk exactly as it found it", and that was
+# simply false -- booting mounts, and mounting rewrites the superblock.  One
+# run of this script moved the golden's hash on 2026-08-16.  See v8clone.sh.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-IMG="${1:-rp07new}"
+source "$ROOT/tools/v8clone.sh"
+SRC="${1:-rp07new}"
+IMG=$(v8_clone "$SRC" selftest) || exit 1
+echo "== booting $IMG (clone of $SRC) =="
 PORT="${PORT:-9200}"
 SHARE="$ROOT/work/netfs-selftest"
 NETFSD="$ROOT/netfs/.build/release/netfsd"

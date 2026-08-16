@@ -1,0 +1,210 @@
+#!/usr/bin/env expect
+# Assemble a complete Tenth Edition toolchain on a running Eighth Edition
+# machine, and compile V10 programs with it.  Phase B1d + B1e.
+#
+#	expect tools/v10-toolchain.exp <image> [tree-port] [scratch-port]
+#
+# Normally run through tools/v10-toolchain.sh.
+#
+# WHAT THIS IS, given what tools/v10-probe.exp settled.  V10's own compiler,
+# assembler and libc are in the tarball as linked VAX binaries and they run
+# unmodified on a V8 kernel -- 111 of 129 syscall slots are the same call at
+# the same index, and every one a compiler uses is among them.  So there is no
+# cross-build to do.  What is missing is three passes that survive only as
+# source, and a place to put the set where a cc driver will look:
+#
+#	/usr/v10/lib/ccom	<- src/cmd/ccom/vax/comp	prebuilt
+#	/usr/v10/lib/as		<- src/cmd/as/as		prebuilt
+#	/usr/v10/lib/libc.a	<- src/libc/libc.a		prebuilt
+#	/usr/v10/lib/crt0.o	<- src/libc/csu/crt0.s		assembled here
+#	/usr/v10/lib/cpp	<- src/cmd/cpp/			BUILT here
+#	/usr/v10/lib/c2		<- src/cmd/c2/			BUILT here
+#	/usr/v10/lib/ld		<- src/cmd/ld.c			BUILT here
+#
+# WHY ONE DIRECTORY.  V8's cc and V10's cc are the same program eight years
+# apart: same passes, same `-B' prefix, same `-t' pass selection.  Ours has
+# S5's extension, where -t also covers as, ld, crt0.o and libc.a, so a single
+# prefix names every program cc executes.  That seal was built to stop V8's
+# own build reaching into the running system; it turns out to be exactly the
+# lever that points a cc at a DIFFERENT EDITION's toolchain.  `-B/usr/v10/lib/
+# -t02palc' and nothing of V8's is used but the driver.
+#
+# THE THREE BUILT PASSES ARE BUILT BY V8's cc, and that is not a compromise:
+# they are 1985-era K&R C, and their every #include -- stdio.h, ctype.h,
+# a.out.h, ar.h, ranlib.h, pagsiz.h -- is already in v8/usr/include.  cpp.c
+# includes no system header at all.
+#
+# ld.c IS THE INTERESTING ONE.  docs/v10-restoration.md says "No system linker
+# is present under cmd/" and that the only ld source in the tree belongs to
+# the terminal.  Both are wrong: cmd/ld.c is 1,946 lines, "string table
+# version for VAX", complete, and supports the -X our cc passes.  It was
+# missed because it is a loose file rather than a cmd/ld/ directory.
+#
+# THE LAST PHASE IS THE POINT.  Once the set is in place, V10's compiler
+# rebuilds V10's linker, and THAT linker links a V10 program which runs.  A
+# toolchain that can reproduce a part of itself is a toolchain worth trusting
+# with libc, which is B2.
+
+set timeout 600
+log_user 1
+source [file dirname [info script]]/v8drive.exp
+
+if {[llength $argv] < 1} {
+    puts "usage: v10-toolchain.exp <image> \[tree-port\] \[scratch-port\]"
+    exit 2
+}
+set img   [lindex $argv 0]
+set tport [expr {[llength $argv] > 1 ? [lindex $argv 1] : 9210}]
+set sport [expr {[llength $argv] > 2 ? [lindex $argv 2] : 9211}]
+
+set results {}
+proc note {name ok} {
+    global results
+    lappend results [list $name $ok]
+}
+
+# Build a program from V10 source with V8's cc, in its own directory, and
+# report whether the binary appeared.  Each pass gets its own directory
+# because V8's cc writes its .o beside the .c and two builds sharing a
+# directory would race on names like `main.o'.
+proc build {dir srcs out flags {t 900}} {
+    v8_sh "mkdir /usr/v10src/$dir" 60
+    v8_sh "cd /usr/v10src/$dir; cp $srcs ." 300
+    return [v8_try "cd /usr/v10src/$dir; cc $flags -o $out *.c; test -s $out && echo BUILD\$OK" \
+                   "BUILD-ok" $t]
+}
+
+v8_boot $img {"set il enable" "attach il nat:"}
+v8_login root
+
+puts "\n===== V10 TOOLCHAIN ====="
+v8_sh "PATH=/bin:/etc:/usr/bin; export PATH"
+v8_sh "OK=-ok"
+
+# ---------------------------------------------------------------- mounts ---
+v8_sh "mkdir /n/v10 /n/t" 60
+v8_sh "/etc/nmount 10.0.2.2 $tport 66 /n/v10" 120
+v8_sh "/etc/nmount 10.0.2.2 $sport 67 /n/t" 120
+note "tree mounted" [v8_try "cat /n/v10/src/cmd/adb/vax/hello.c" "hello, world" 120]
+
+v8_sh "rm -rf /usr/v10 /usr/v10src; mkdir /usr/v10 /usr/v10/lib /usr/v10src" 120
+set L /usr/v10/lib
+set V /n/v10/src
+
+# ONE V10 HEADER, AND ONLY ONE, ON PURPOSE.
+#
+# cpp.c opens with `# include <libc.h>' -- note the space after the #, which
+# is 1970s style and which a naive scan for `#include' misses; that is how
+# this got as far as a wasted boot.  V8 has no libc.h, so the build died with
+#
+#	cpp.c: 14: Can't find include file libc.h
+#
+# and every later stage failed for want of a cpp.  V10's own /usr/include is
+# now imported (work/v10/include, from Norman Wilson's r70 reconstruction),
+# so the header is available -- but pointing -I at the WHOLE tree would be a
+# different and much larger decision, and would fold B2's question into B1's.
+# These three passes link against V8's libc, and V10's headers do not all
+# describe it: V10's stdio.h pulls in a <tmpnam.h> V8 has never had, and its
+# sys/types.h drops the major()/minor() macros V8's carries.  Those are real
+# r70-vs-1995 skew and reconciling them is B2.
+#
+# So: exactly the header that was missing, taken from the authoritative tree
+# rather than from one of the copies scattered through cmd/ (cmd/mk/export/'s
+# is this file minus memmove()).  It is 36 lines of extern declarations and
+# one #define -- no struct layouts, so nothing about V8's libc can disagree
+# with it.  Checked before relying on it: V8's and V10's `struct _iobuf' are
+# byte-identical, as are ranlib.h, pagsiz.h and ctype.h.
+v8_sh "mkdir /usr/v10inc; cp /n/v10/include/libc.h /usr/v10inc" 120
+
+# ----------------------------------------- phase 1: the prebuilt V10 set ---
+v8_sh "cp $V/cmd/ccom/vax/comp $L/ccom; chmod 755 $L/ccom" 300
+v8_sh "cp $V/cmd/as/as $L/as; chmod 755 $L/as" 300
+v8_sh "cp $V/libc/libc.a $L/libc.a" 300
+# ranlib AFTER the copy, always.  cp gives the copy a new mtime while the
+# __.SYMDEF member keeps its 1995 one, so V8's ld demotes a perfectly good
+# table of contents to a stale one and falls back to a single forward pass.
+# The probe's first run failed here with `Undefined: __cleanup __exit cerror'
+# -- the signature of a backward reference, not of a missing library.
+v8_sh "cd $L; ranlib libc.a" 300
+v8_sh "cp $V/libc/csu/crt0.s /usr/v10src/crt0.s" 120
+note "crt0 assembles" \
+    [v8_try "cd /usr/v10src; $L/as -o $L/crt0.o crt0.s; test -s $L/crt0.o && echo CRT0\$OK" \
+            "CRT0-ok" 300]
+
+# ------------------------------------- phase 2: the three missing passes ---
+#
+# c2, the peephole optimiser.  Four files, no system header beyond stdio and
+# ctype.
+note "c2 builds" [build c2 "$V/cmd/c2/c20.c $V/cmd/c2/c21.c $V/cmd/c2/c22.c $V/cmd/c2/c2.h" c2 "-O"]
+v8_sh "cp /usr/v10src/c2/c2 $L/c2; chmod 755 $L/c2" 120
+
+# ld.  One file, and the one the plan said did not exist.
+note "ld builds" [build ld "$V/cmd/ld.c" ld "-O"]
+v8_sh "cp /usr/v10src/ld/ld $L/ld; chmod 755 $L/ld" 120
+
+# cpp.  The awkward one, and the awkwardness is documented rather than fought:
+# its mkfile runs yacc, then `sh :yyfix' to lift the parser tables out into a
+# rodata.c and `:rofix' to move them into .text.  That is a 1983 memory
+# optimisation -- the tables are read-only either way -- so we skip both and
+# compile yacc's output as it comes.  The deviation is deliberate and its only
+# cost is a few KB of data segment.  Logged here because a later reader will
+# find :yyfix in the tree and wonder why nothing runs it.
+v8_sh "mkdir /usr/v10src/cpp" 60
+v8_sh "cd /usr/v10src/cpp; cp $V/cmd/cpp/cpp.c $V/cmd/cpp/cpy.y $V/cmd/cpp/yylex.c ." 300
+v8_sh "cd /usr/v10src/cpp; yacc -d cpy.y; mv y.tab.c cpy.c" 600
+note "cpp builds" \
+    [v8_try "cd /usr/v10src/cpp; cc -O -DPRAGMA -DFLEXNAMES -DPD_MACH=D_vax -DPD_SYS=D_unix -I. -I/usr/v10inc -o cpp cpp.c cpy.c yylex.c; test -s cpp && echo BUILD\$OK" \
+            "BUILD-ok" 1200]
+v8_sh "cp /usr/v10src/cpp/cpp $L/cpp; chmod 755 $L/cpp" 120
+v8_sh "ls -l $L" 120
+
+# ------------------------------------------- phase 3: hello, through V10 ---
+#
+# Every pass from the V10 directory: -t 0 ccom, 2 c2, p cpp, a as, l ld,
+# c crt0.o+libc.a.  V8 supplies the cc driver and /usr/include, and nothing
+# else.  (The headers are V8's on purpose -- reconciling V10's r70 include
+# tree is B2, and folding it in here would confuse two questions.)
+v8_sh "cd /usr/v10src; cp /n/t/hello.c ." 120
+note "V10 toolchain builds hello" \
+    [v8_try "cd /usr/v10src; rm -f hello; cc -B$L/ -t02palc -o hello hello.c && test -s hello && echo HELLO\$OK" \
+            "HELLO-ok" 900]
+note "hello runs" [v8_try "cd /usr/v10src; ./hello" "hello from the Tenth Edition" 120]
+
+# --------------------------- phase 4: the toolchain reproduces a part of itself ---
+#
+# V10's compiler builds V10's linker -- 1,946 lines, the mid-size program the
+# roadmap asks for -- and then that linker links hello.  If the object format,
+# the archive format and the compiler all agree, this closes; if any of them
+# is subtly wrong, a 1,946-line program is where it shows.
+note "V10 cc builds V10 ld" \
+    [v8_try "cd /usr/v10src/ld; rm -f ld10; cc -B$L/ -t02palc -o ld10 ld.c && test -s ld10 && echo LD10\$OK" \
+            "LD10-ok" 1800]
+v8_sh "ls -l /usr/v10src/ld/ld /usr/v10src/ld/ld10" 120
+v8_sh "cp /usr/v10src/ld/ld10 $L/ld; chmod 755 $L/ld" 120
+note "self-built ld links hello" \
+    [v8_try "cd /usr/v10src; rm -f hello2; cc -B$L/ -t02palc -o hello2 hello.c && test -s hello2 && echo SELF\$OK" \
+            "SELF-ok" 900]
+note "that hello runs too" [v8_try "cd /usr/v10src; ./hello2" "hello from the Tenth Edition" 120]
+
+# Carry the products home so file(1), nm(1) and a hash can be applied to them
+# on the host.  A guest-side "ok" is an assertion; an artifact is evidence.
+#
+# ccom and as are deliberately NOT copied back: they came off the share
+# unmodified, so sending 400 KB back over netfs a block at a time would prove
+# only that cp works.  What comes home is what was MADE here.
+v8_sh "cd $L; cp cpp c2 crt0.o /n/t 2>/dev/null; echo copied" 900
+v8_sh "cd /usr/v10src; cp hello hello2 ld/ld ld/ld10 /n/t 2>/dev/null; echo copied" 900
+v8_sh "ls -l /n/t" 120
+
+# ------------------------------------------------------------- teardown ---
+v8_sh "cd /; /etc/nmount -u 66; /etc/nmount -u 67" 120
+v8_halt
+
+puts "\n===== V10 TOOLCHAIN RESULTS ====="
+set failed 0
+foreach r $results {
+    puts [format "  %-32s %s" [lindex $r 0] [expr {[lindex $r 1] ? "ok" : "NO"}]]
+    if {![lindex $r 1]} { incr failed }
+}
+puts "===== [expr {[llength $results] - $failed}]/[llength $results] =====\n"
+exit [expr {$failed ? 1 : 0}]

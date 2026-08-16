@@ -11,7 +11,12 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-IMG="${1:-rp07new}"
+# A clone, never the image itself -- booting mounts, and mounting rewrites the
+# superblock.  See tools/v8clone.sh for the run that proved it the hard way.
+source "$ROOT/tools/v8clone.sh"
+SRC="${1:-rp07new}"
+IMG=$(v8_clone "$SRC" latency) || exit 1
+echo "== booting $IMG (clone of $SRC) =="
 PORT="${PORT:-9375}"
 NETFSD="$ROOT/netfs/.build/release/netfsd"
 SRV_PID=""

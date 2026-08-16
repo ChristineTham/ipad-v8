@@ -70,11 +70,51 @@ bash tools/net-selftest.sh rp07new
 bash tools/netfs-latency.sh rp07new
 ```
 
+Track B (V10). The tree is **not** in git — `v10/` holds only MANIFEST and
+CASEMAP, and `work/v10/` is rebuilt from the TUHS tarballs:
+
+```bash
+# Unpack v10src + v10blit + r70include into work/v10/ (25,682 files)
+tools/v10-import.py            # --verify re-checks every hash in ~15 s
+```
+
+```bash
+# Does a 1995 V10 binary run on the 1985 V8 kernel?  (9 assertions)
+bash tools/v10-probe.sh rp07new
+```
+
+```bash
+# Assemble a V10 toolchain inside V8 and compile V10 programs with it
+bash tools/v10-toolchain.sh rp07new     # ~6 min, 10 assertions
+```
+
 **Run every guest harness against a CLONE, never the golden.** Booting a disk
 mounts it, and mounting rewrites the superblock — so a clean, successful,
 properly halted run still leaves the image with a different hash than the one
 in git. That is what "golden drift" was. `cp -c` makes an APFS clone in no
-time and no space: `cp -c work/myv8/rp07new work/myv8/rp07test`.
+time and no space.
+
+**The rule now lives in `tools/v8clone.sh`, because stating it here was not
+enough.** Three harnesses defaulted to booting `rp07new` — the golden —
+directly: `net-selftest.sh`, `netfs-latency.sh` and `boot-newdisk.sh`, the
+first of which claimed in its own header that "a pass leaves the disk exactly
+as it found it". On 2026-08-16 one net-selftest run, made to check an unrelated
+change, moved the golden from `8ccbf05614e8` to `396f994339f8`. **Nothing was
+damaged and that is what made it dangerous** — the run halted cleanly, every
+assertion passed, and the exit status was 0. Only `tools/app-check.sh` noticed,
+which is exactly why `image/ipnx-v8-rp07.img.xz` is committed:
+
+```bash
+# put the golden back, in eight seconds, hash-checked
+python3 tools/image-pack.py unpack
+```
+
+New harnesses source the helper and boot what it returns:
+
+```bash
+source "$ROOT/tools/v8clone.sh"
+IMG=$(v8_clone "${1:-rp07new}" mytag) || exit 1
+```
 
 The **Phase A0 desktop spike** commands are in [docs/spike-a0.md](docs/spike-a0.md)
 (build SIMH `vax780`, produce `v8.disk` via timnewsham/myv8, connect a 5620/Blit terminal
@@ -336,8 +376,55 @@ at the old flat `v8/` is moved on first launch, never abandoned.
 - The 5620 mouse registers (0x400000 y, 0x400002 x) are free-running counters; muxterm
   integrates sample deltas with **y counting up the screen** from a (0,0) cursor. Feed
   deltas, not absolute positions (see the bridge's mouse model).
-- V10's `/usr/include` is a 1997 reconstruction of a 1995 tree — expect header/source skew
-  during Track B; log every reconciliation as a patch.
+- **V10 is not source-only, and its own toolchain runs on V8.** The tarball carries
+  **483 linked VAX executables** — `cmd/ccom/vax/comp` (the C compiler), `cmd/as/as`,
+  a complete 262-member `libc.a` — plus 1,525 objects. `tools/v10-probe.sh` proved 9/9
+  that they run unmodified on a V8 kernel, so there is **no cross-build**: only `cpp`,
+  `c2` and `ld` had to be built from source. The syscall tables explain why — 111 of 129
+  slots hold the same call at the same index, and every one a compiler uses is among
+  them; the notable difference is slot 11, V7's vestigial `exec` in V8 and a 64-bit
+  `lseek` in V10, which nothing in a compiler calls. **`cmd/ld.c` exists** (1,946 lines,
+  "string table version for VAX"); the plan said it did not, because it is a loose file
+  under `cmd/` rather than a `cmd/ld/` directory — the same reason `cmd/cc.c` is easy to
+  miss. Details: [docs/v10-log/2026-08-16.md](docs/v10-log/2026-08-16.md).
+- **`-B` crosses the edition boundary.** V8's `cc.c` and V10's are the same program eight
+  years apart — same passes, same `-B` prefix, same `-t` selection — so S5's extended
+  `-t02palc`, built to stop V8's own build reaching into the running system, is what
+  points a `cc` at a *V10* toolchain: `cc -B/usr/v10/lib/ -t02palc` uses nothing of V8's
+  but the driver and `/usr/include`.
+- **V10's prebuilt binaries are an ORACLE, not a shortcut.** 46 of ~283 command source
+  units have a linked binary, and the split is not random: `sh`, `sed`, `ls`, `ps`,
+  `make`, `cpio`, `cron` are present; `init`, `getty`, `login`, `mount`, `mkfs`, `fsck`,
+  `cat`, `cp`, `rm`, `echo`, `date` are **not**. These are developers' working
+  directories, so what survived is whatever was last compiled in place — the boot path
+  was *installed* elsewhere and has to be built regardless. Use the 46 to check what we
+  build, never to skip building it.
+- **V10 has drivers for the machine we already emulate**: `lsys/io/hp.c` (Massbus RP),
+  `dz.c` (DZ11) and **`ni1010a.c`** (Interlan). So `libsimh/patches/pdp11_il.c` may serve
+  V10 unchanged — but V8's driver is `ill.c` and V10's carries an **A**, so confirm it is
+  the same card rather than assuming. `star` is the VAX-11/780 family (`md/machstar.c`,
+  `consstar.c`, `nexstar.c`, `ubastar.c`, `ml/trapstar.s`) and `astro/alice.m` is a real
+  CSRC 780 config (`ms780`, `dw780`, `mba`). The configs are named after comets, plus
+  `research` (the main CSRC machine) and `r70` (where `r70include.tar` came from).
+- **There are TWO V10 kernel trees.** `sys/` (756 files) and `lsys/` (763) share 522 files
+  of which **131 differ**, with different machine-config sets (10 against 17). Settle
+  which one is the kernel before compiling anything, not halfway through.
+- **`vaxpcc2` in a binary does NOT mean it came from V10.** It looks like a signature and
+  is not: V8's own `/bin/echo`, off our golden disk, carries the same `.stabs` string,
+  because both editions' `ccom` descend from pcc2. Provenance comes from where a thing
+  was built, never from grepping it.
+- **Scan for `^[ \t]*#[ \t]*include`, never `#include`.** V10's `cpp.c` opens with
+  `# include <libc.h>` — a space after the `#`, ordinary 1970s style and common in that
+  tree. A host-side scan that missed it declared every header present and cost a whole
+  boot, because the build then died on the one that was not.
+- V10's `/usr/include` is a 1997 reconstruction of a 1995 tree (`r70include.tar`, now
+  imported as `work/v10/include`) — expect header/source skew during Track B and log every
+  reconciliation as a patch. Measured so far: `ranlib.h`, `pagsiz.h`, `ctype.h`, `setjmp.h`
+  and `struct _iobuf` are **identical** to V8's; `a.out.h` differs by one bit-field *name*
+  in the relocation record at the same width, so the object formats agree; but V10's
+  `stdio.h` includes a `<tmpnam.h>` V8 has never had and its `sys/types.h` drops the
+  `major()`/`minor()` macros. So do not point `-I` at the whole r70 tree by reflex —
+  anything linking against V8's libc wants V8's headers.
 - The Alhadis GitHub mirrors are incomplete (v10 mirror omits `630/`) — TUHS tarballs are
   the source of truth.
 - SIMH channel semantics differ per path: ^E stops the sim **only** on a local-tty
@@ -462,6 +549,15 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   `show asynch`). Omitting it looks like a hardware fault, not a config error —
   `hp06: hard error er1=5<RMR,ILF>` on both drives and silent file loss — and only
   once two units have overlapping transfers, so light I/O hides it entirely.
+- **The 2026-08-10 rename left build caches pinned to the old absolute path**, and they
+  fail in ways that do not mention it. `netfs/.build` gave *"missing required module
+  'SwiftShims'"*; `libsimh/build` gave a CMake cache-directory error that only appears in
+  `libsimh/build/cmake-*.log`, so the top-level script just exited 1 with the last line
+  being `apply: done`. Both were fixed by deleting the directory. If a build fails
+  strangely and the repo has not changed, check for `ipad-v8` first:
+  `grep -rl ipad-v8 <builddir> | head`. Still present in `app/build` and
+  `tools/dmdbridge`, both of which build correctly anyway; clear them only if they start
+  misbehaving.
 - macOS gotchas (A3): our preferences type `Settings` **shadows SwiftUI's `Settings`
   scene** — write `SwiftUI.Settings { … }` or the scene silently resolves to the wrong
   initialiser. Exec'ing the app binary directly gets **no WindowServer connection** (it
@@ -734,13 +830,34 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   identical boot-and-assert run, patched and unpatched are the same distribution
   (peaks 79.8 vs 78.6, lows 7.6 vs 6.6). Bulk installs are still better off with
   `cpio` off a mounted disk, but "hopeless" was a property of our device model.
-  Re-measured 2026-08-16 with `tools/netfs-latency.sh`: **530 file reads in 2 s**
-  (4,399 netfs requests, ~265 files/s). One pass over the 107 headers now
-  finishes inside a single second — which is a fine result and a useless
-  measurement, since the guest's clock has one-second resolution and would
-  report zero again if it got four times slower. **When the workload outruns the
-  ruler, grow the workload** (the script does five passes), and never let a
-  "0 seconds" reading stand as a number.
+  One pass over the 107 headers finishes inside a single second — a fine
+  result and a useless measurement, since the guest's clock has one-second
+  resolution and would report zero again if it got four times slower. **When
+  the workload outruns the ruler, grow the workload** (the script does five
+  passes), and never let a "0 seconds" reading stand as a number.
+
+  **The "530 file reads in 2 s (~265 files/s)" figure that stood here is
+  withdrawn — it does not reproduce.** Measured 2026-08-16 on the desktop
+  `vax780`, five runs of the same five-pass workload, three on the committed
+  device model and two on the hardened one:
+
+  	committed model   32 s   47 s   49 s
+  	hardened model    50 s   60 s
+
+  So ~530 reads take **32–60 s**, or 9–17 files/s — an order of magnitude off
+  the retired claim, on an unmodified model. Two lessons, and the second
+  matters more:
+
+  - **`netfs-latency.sh` has ~50% run-to-run variance**, so it cannot detect a
+    regression smaller than about 2×. The overlap above is why the hardened
+    model is reported as "no measurable difference" rather than "1.3× slower":
+    the baseline's own spread (32→49) is wider than the gap between the groups,
+    and a ring-size constant has no mechanism to slow a driver that queues one
+    buffer. Treat this script as a smoke test, not a benchmark, until it is
+    made repeatable.
+  - The withdrawn number was almost certainly a one-pass timing written up as
+    if it were the five-pass one — which is precisely the error the paragraph
+    above warns against, committed in the same breath as the warning.
 - **`cp` per file is what makes stage 8 slow, not I/O.** 400 copies took longer than
   the `mkfs` of a 475 MB filesystem. `cpio -p` reads its path list from stdin, which
   is exactly the shape of a generated manifest — one process for the whole set.
@@ -919,9 +1036,25 @@ name resolution failed while TCP worked perfectly. Assert traffic, not files:
 `tools/net-selftest.exp <image>` mounts a share and resolves a name, and is
 the only check that would have caught either.
 
-Next: **submit** — the remaining steps need the Apple account and a final name
-decision, all listed in [docs/app-store.md](docs/app-store.md) — and **Track B**,
-whose ingest path and source are both now in place — the TUHS tarballs are in `work/`, and B1 needs only 14.87 MB of the 243 MB tree.
+**B1 — the V10 toolchain is COMPLETE** (2026-08-16,
+[docs/v10-log/2026-08-16.md](docs/v10-log/2026-08-16.md)). The plan was a
+cross-build and did not need to be: V10's own `ccom`, `as` and `libc.a` are in
+the tarball as linked VAX binaries and **run on the V8 kernel**
+(`tools/v10-probe.sh`, 9/9). `tools/v10-toolchain.sh` builds the three passes
+that have no binary — `cpp`, `c2`, `ld` — assembles all seven into one
+directory, and drives them with `cc -B/usr/v10/lib/ -t02palc`: **10/10**,
+including V10's compiler rebuilding V10's linker and that linker linking a
+working program. The two linkers' output is byte-identical but for a `time_t`
+in a `.stabs` record.
+
+Also settled by B1: the whole 243 MB tree is **served over netfs at `/n/v10`**
+and read in place. Nothing is copied to guest disk, so the courier disk and the
+subset it forced are both out of the picture for source.
+
+Next: **B2** — V10's libc and userland, where the r70 header skew becomes the
+live problem and `mk` (or a generated-makefile pass) replaces the hand-written
+`cc` lines. Also **submit** — the remaining steps need the Apple account and a
+final name decision, all listed in [docs/app-store.md](docs/app-store.md).
 **Not yet exercised — one thing, and it needs a human at a mouse**: `mux`/`jim`
 driven by the Mac's real pointer, and `jim` looked at inside a *widened* layer.
 Everything around it is proven and the claims that used to sit here were stale:

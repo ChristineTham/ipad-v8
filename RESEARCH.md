@@ -29,12 +29,24 @@ by [timnewsham/myv8](https://github.com/timnewsham/myv8)), and Seth Morabito's D
 emulator runs `mux` against V8/V9/V10 today. **The V8 product is integration + iPad UX, not
 research.**
 
-**The end goal is Edition 10 — and the road to it runs through V8.** V10 survives as
-*source only* and **has never been booted by anyone** (Warren Toomey's 2017 call for
-volunteers remains unanswered); the natural build host for constructing the first bootable
-V10 is a running V8 under SIMH. So V8 is not a detour: it is simultaneously the shippable
-v1 image and the V10 cross-build machine. **V9 is skipped entirely** — the surviving V9 is a
+**The end goal is Edition 10 — and the road to it runs through V8.** V10 has
+**never been booted by anyone** (Warren Toomey's 2017 call for volunteers remains
+unanswered) and there is no boot media, so a running V8 under SIMH is the natural host for
+building the first bootable one. So V8 is not a detour: it is simultaneously the shippable
+v1 image and the machine V10 gets built on. **V9 is skipped entirely** — the surviving V9 is a
 Sun-3 port with no VAX kernel code at all, useless to this lineage. Details in §7.
+
+> **Correction, 2026-08-16.** This section and the table in §7 said V10 survives
+> as *source only* with *zero binaries*, and described V8's role as a
+> **cross-build** machine. Measured against the actual tarball, the first is
+> false and the second is therefore too strong. `tools/v10-import.py`
+> classifies all 25,682 files by magic number: **483 are linked VAX
+> executables**, including the C compiler, the assembler and a complete
+> `libc.a` — and `tools/v10-probe.sh` showed 9/9 that they run unmodified on
+> the V8 kernel. There is no cross-build; V10's own toolchain runs, and only
+> `cpp`, `c2` and `ld` had to be built from source. See
+> [docs/v10-log/2026-08-16.md](docs/v10-log/2026-08-16.md). The claim that
+> *nobody has booted it* stands, and remains the point of Track B.
 
 ---
 
@@ -230,7 +242,7 @@ is not actually on the menu, and V9 contributes nothing to a VAX lineage.
 
 | | V8 | V9 (surviving) | V10 (surviving) |
 |---|---|---|---|
-| Form | Running-system tar + jerq tape — **restorable** | 1987-vintage **Sun-3 port** snapshot; **no VAX kernel code at all** ([V9 sys tree](https://www.tuhs.org/cgi-bin/utree.pl?file=V9/sys): `3-50`, `3-75`, `sun3` — no VAX dirs) | Source-only snapshot of the post-V10 CSRC tree (~1995); **zero binaries, no boot media** |
+| Form | Running-system tar + jerq tape — **restorable** | 1987-vintage **Sun-3 port** snapshot; **no VAX kernel code at all** ([V9 sys tree](https://www.tuhs.org/cgi-bin/utree.pl?file=V9/sys): `3-50`, `3-75`, `sun3` — no VAX dirs) | Snapshot of the post-V10 CSRC tree (~1995): source **plus 483 linked VAX executables, 1,525 objects and a complete `libc.a`** — but **no boot media** ([corrected 2026-08-16](docs/v10-log/2026-08-16.md); this row read "zero binaries") |
 | Ever booted? | Yes — turnkey ([myv8](https://github.com/timnewsham/myv8)) | Only on an emulated Sun-3 ([TME, April 2017](https://virtuallyfun.com/2017/04/01/research-unix-v9/), fragile, "disk errors") | **Never, by anyone.** [Toomey's 2017 call for volunteers](https://www.tuhs.org/pipermail/tuhs/2017-April/011079.html) is still open; a 2022 guide judged it "cannot currently be emulated" |
 | Userland | Complete running system | ~104 commands; no C compiler source; no man-page sources | **378 commands** (awk, yacc, mk, troff+pic+grap+ideal, upas, lcc 2.0, cfront 2.0), structurally complete libc, full docs |
 | Kernel targets | VAX-11/750, 780 | Sun-3 only | 750 (`comet`), 780 (`star`), **MicroVAX II** (`mflow`), MicroVAX III (`mfair`), **VAX 8200** (`bvax`), 8550/8700 (`naut`) — per [`lsys/ml`](https://www.tuhs.org/cgi-bin/utree.pl?file=V10/lsys/ml) and the [boot README](https://www.tuhs.org/cgi-bin/utree.pl?file=V10/lsys/boot/README) |
@@ -239,14 +251,24 @@ is not actually on the menu, and V9 contributes nothing to a VAX lineage.
 
 ### Why "straight to V10" isn't possible
 
-V10 ships zero binaries: the compiler (Research-modified **pcc2**), assembler, linker, libc,
-kernel, and even the 512-byte boot block all exist only as source *written to be built on a
-Research Unix system*. Someone has to host that first build, and the only bootable Research
-VAX system on Earth is V8 under SIMH. The community reached the same conclusion in 2017
+V10 ships **no boot media**: the kernel and the 512-byte boot block exist only as source
+*written to be built on a Research Unix system*. Someone has to host that first build, and
+the only bootable Research VAX system on Earth is V8 under SIMH. The community reached the
+same conclusion in 2017
 (Warner Losh: ["we need to reconstruct v8, v9 and v10 to varying degrees"](https://www.tuhs.org/pipermail/tuhs/2017-April/011084.html)) —
-though nobody has demonstrated it; this would be a **first**. The alternative (reconstructing
-pcc2 and the SGS as modern cross-tools on macOS) is more total work for a less authentic
-result — keep it as an escape hatch, not the plan.
+though nobody has demonstrated it; this would be a **first**.
+
+> **Corrected 2026-08-16.** This paragraph opened *"V10 ships zero binaries: the compiler
+> (Research-modified pcc2), assembler, linker, libc, kernel, and even the 512-byte boot
+> block all exist only as source"*. The clause about the boot block and kernel is right
+> and is the whole reason this section exists. The rest is wrong: the compiler, the
+> assembler and libc all ship as **linked VAX binaries**, and they run on V8. Only the
+> linker was genuinely absent as a binary — and its source, `cmd/ld.c`, is present too.
+> So the conclusion survives and its stated reason does not, which is worth more than
+> either: V8 is needed as a *host*, not as a cross-compilation platform. The escape hatch
+> that used to end this paragraph — reconstructing pcc2 and the SGS as modern cross-tools
+> on macOS — is retired, being strictly more work for a less authentic result now that
+> the originals run. See [docs/v10-log/2026-08-16.md](docs/v10-log/2026-08-16.md).
 
 ### Why V9 drops out
 

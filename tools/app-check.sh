@@ -81,17 +81,25 @@ while IFS= read -r app; do
     if [[ ! -f "$res/v8.disk.id" ]]; then
         bad "$rel" "no v8.disk.id -- rebuild to stamp it"; continue
     fi
-    if [[ -f "$GOLD" ]]; then
-        a=$(stat -f"%z %m" "$GOLD"); b=$(stat -f"%z %m" "$res/v8.disk")
-        if [[ "$a" != "$b" ]]; then
-            bad "$rel" "bundled image is not the current golden"
-            continue
-        fi
-    fi
-    if [[ $FULL == 1 ]]; then
+    # THE HASH IS THE AUTHORITY WHEN WE HAVE IT.  size+mtime is a cheap proxy
+    # for "same file", and it is only a proxy: restoring the golden from the
+    # committed image (tools/image-pack.py unpack, which is the normal repair
+    # after a harness has drifted it) writes byte-identical content with a NEW
+    # mtime.  The proxy then disagrees with the sha256 -- and the first cut of
+    # this script let the proxy `continue' before the hash was ever consulted,
+    # so it reported "bundled image is not the current golden" about a bundle
+    # whose contents provably were.  A check that can veto stronger evidence
+    # with weaker evidence is worse than not having it.
+    if [[ $FULL == 1 && -f "$GOLD" ]]; then
         want=$(shasum -a 256 "$GOLD" | cut -d' ' -f1)
         got=$(tr -d '[:space:]' < "$res/v8.disk.id")
         [[ "$want" == "$got" ]] || { bad "$rel" "v8.disk.id does not match the golden"; continue; }
+    elif [[ -f "$GOLD" ]]; then
+        a=$(stat -f"%z %m" "$GOLD"); b=$(stat -f"%z %m" "$res/v8.disk")
+        if [[ "$a" != "$b" ]]; then
+            bad "$rel" "bundled image is not the current golden (mtime/size; --full to hash)"
+            continue
+        fi
     fi
     note "$rel" "current (image $(cut -c1-12 < "$res/v8.disk.id"))"
 done < <(find "$ROOT/app/build" -maxdepth 5 -name "ipnx.app" -type d 2>/dev/null)

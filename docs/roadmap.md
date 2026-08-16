@@ -5,12 +5,18 @@ research moonshot that lands into the same app shell. C and D are later and decl
 the README's scope has somewhere to point. Update checkboxes and the status line as work
 completes.*
 
-**Current phase: V8 is closed out (2026-08-16). Track A is complete through A5, Track S
-built the disk the app ships, and B0/B0.5/B0.6 are all done — V8 has an Internet
-connection, mounts the host's folders, and comes up as an account named after you.
-What remains before Track B is nothing: the only unexercised item is `mux`/`jim` under
-the Mac's real pointer, which needs a human at a mouse, and the App Store steps need
-the Apple account.** A0
+**Current phase: Track B has started, and B1 is complete (2026-08-16).** V8 is
+closed out — Track A through A5, Track S built the disk the app ships, and
+B0/B0.5/B0.6 are done. **A Tenth Edition toolchain now runs on it**: V10's own
+compiler, assembler and libc turned out to be *in* the tarball as linked VAX
+binaries and to run unmodified on a V8 kernel, so B1 was not the cross-build it
+was written as. `cpp`, `c2` and `ld` were built from V10 source; the assembled
+set compiles and links V10 programs, and rebuilt V10's linker with itself
+([v10-log/2026-08-16.md](v10-log/2026-08-16.md)). Next is **B2**, the userland —
+a build mechanism first, then libc checked against the 1995 archive, then the
+boot path, none of which is prebuilt. Still unexercised from Track A:
+`mux`/`jim` under the Mac's real pointer, which needs a human at a mouse; the
+App Store steps need the Apple account. A0
 proved the machinery on the desktop ([spike-a0-results.md](spike-a0-results.md));
 A1 shipped the text-mode app (open-simh as a library, V8 to `login:` in ~25–30 s,
 save/restore instant-on — [a1-notes.md](a1-notes.md)); A2 shipped the Blit experience
@@ -158,108 +164,209 @@ Runbook: [spike-a0.md](spike-a0.md)
 
 ## Track B — the V10 restoration *(desktop SIMH until it boots; see [v10-restoration.md](v10-restoration.md))*
 
-### B0 — the ingest path *(done 2026-08-09, before any V10 source exists)*
-- [x] Establish how files cross between host and V8 — [media-exchange.md](media-exchange.md).
-      Tape is unusable (V8's `ht` panics SIMH's Massbus adapter); the working path is a
-      raw-only courier disk on `rp1` with the work area on `/usr`, 512-byte transfers,
-      driven by `tools/tapeio.py`. Proven end to end by `work/mediatest.sh`, including a
-      VAX binary compiled inside V8 and carried back to the host
-- [x] Repair the golden image's missing `lost+found` (autoboot `fsck` could not self-heal)
-- [x] Download the TUHS tarballs — `v10src.tar.bz2` (74.9 MB) and `v10blit.tar.bz2`
-      (2.6 MB) in `work/`, both `bzip2 -t` clean
-- [x] Size the expanded tree: **243.3 MB / 23,977 files**, so the whole tree does *not*
-      fit `/usr`'s ~88 MB and selective ingest is mandatory, not merely preferable. The
-      B1 set (sys, lsys, libc, ccom, pcc1, as, c2, libcc) is **14.87 MB / 2,127 files** —
-      two courier loads. Longest stored path is 51 bytes, so V7 tar's 100-byte name
-      field is a non-issue
+**Where this stands (2026-08-16).** The infrastructure is finished and **a Tenth
+Edition toolchain runs on the Eighth Edition machine**. What remains is a
+userland, a kernel, and a boot block — the last of which nobody has ever made.
 
-### B0.5 — infrastructure scope-up *(complete 2026-08-10, N0–N7; [networking-plan.md](networking-plan.md), results in [n-track-notes.md](n-track-notes.md))*
+### The facts every phase below depends on
 
-The courier is too small and too manual to build V10 on: 8.1 MB a load against a
-243 MB tree. Three changes, the last of which the iPad app needs anyway.
+Established 2026-08-16 by auditing the tarball by file type, which nobody had
+done in the nine years it has been public
+([v10-log/2026-08-16.md](v10-log/2026-08-16.md)):
 
-- [x] **N0** RP07 disk (516 MB; `/usr` on partition `f`) + migration + `lost+found` —
-      *done 2026-08-09: `tools/rp07mig.sh` produces `rp07v8.golden`, which boots on its
-      own with `/usr` at **459,905 KB, 408,364 free** (was 141,578/90,035). Root needed
-      no filesystem copy — partition `a` is the same 15,884 sectors at cylinder 0 on
-      both drive types, so a host byte copy suffices. Notes and gotchas:
-      [n-track-notes.md](n-track-notes.md)*
-- [x] **N1** SLiRP NAT plumbing — *reduced 2026-08-09: `attach xu nat:` initialises
-      10.0.2.0/24 (gateway 10.0.2.2, DNS 10.0.2.3) and passes frames. The 4.3BSD half
-      was dropped — no ready-made SIMH image exists at TUHS, and `dev/ill.c` is a
-      better conformance test than a second driver would have been*
-- [x] **N2** `pdp11_il.c` — *done 2026-08-09: the Interlan NI1010 modelled against
-      `sim_ether`, in `libsimh/patches/`. Note the plan named the wrong driver —
-      `conf/files` builds `dev/ill.c`, not `dev/il.c`*
-- [x] **N3** V8 kernel rebuilt with `il0`; the outside world reached — *done
-      2026-08-09: `il0 at uba0 csr 164040 vec 0340 ipl x14`, ARP round-trips to SLiRP,
-      and `dnsq` resolves **www.bell-labs.com → 184.24.254.233** over real DNS. The
-      one-number bug: V8 is classful, so the interface's network is `10.0.0.0`, not
-      SLiRP's `10.0.2.0` — [n-track-notes.md](n-track-notes.md)*
-- [x] **N4** Derive and document the netfs wire format → `docs/netfs-protocol.md` —
-      *done 2026-08-10: measured on the machine with `tools/v8-netfs-probe.exp`
-      rather than read off the struct, because both structures carry
-      hand-written padding.*
-- [x] **N5** Host netfs server over TCP — *done 2026-08-10: `netfs/`, a SwiftPM
-      package whose `NetFS` target is the whole server and depends on nothing an
-      iPhone lacks. `tools/netfs-probe.py` speaks the protocol exactly as
-      `neta.c` does and answers in a second what a cold boot answers in five
-      minutes.*
-- [x] **N6** Guest client + the kernel work it turned out to need — *done
-      2026-08-10: `tools/v8/nmount.c` is fifty lines, but netfs cannot run over
-      a byte stream unmodified. Four bugs in `istread`, all of them Datakit
-      assumptions; `tools/drive-streamfix.sh`. A macOS folder is mounted at
-      `/n/macos` and a 13,200-byte file reads byte-exact against V8's own
-      `sum(1)`. A fifth bug was ours: the N2 device model did not chain a
-      received frame across receive buffers, which capped every reply at one
-      1024-byte block and looked like a netfs limit until it was found.*
-- [x] **N7** Read/write; the server ported into the app — *done 2026-08-10: a
-      65,385-byte file written inside V8 lands byte-identical on APFS, checked
-      by V8's own `sum(1)` against the same algorithm on the host, with mkdir,
-      append, chmod, unlink and timestamps all verified host-side
-      (`tools/drive-netfs-rw.sh`). `netfs/Sources/NetFS` compiles into both app
-      targets, with a folder picker in `app/ipnx/FileShare.swift`. The one
-      thing still missing is a **bundled image** carrying the `il0` kernel and
-      the netfs stream fix — that is C3 below, not netfs work.*
+| | |
+|---|---|
+| Files | **25,682** — `v10src` + `v10blit` + `r70include`, in `work/v10/{src,blit,include}` |
+| Linked VAX executables | **483**, including `ccom`, `as`, `make`, `sh`, `sed`, `ls`, `ps` |
+| Objects / archives | 1,525 `0407` objects, 150 `ar` archives — including a complete 262-member `libc.a` |
+| Do they run on V8? | **Yes.** 9/9, `tools/v10-probe.sh` |
+| Boot media | **None.** That has not changed, and it is the whole of B3 |
 
-### B0.6 — a machine to live in *(complete 2026-08-15, [machine-config.md](machine-config.md))*
+Three consequences that reshape everything after B1:
 
-Turning the shipped image from a demo that boots to `login:` into a machine with
-the user's own account, the host's files, and a network. Stage 1 needs nothing
-new; stages 2 and 3 wait on N3-into-the-image and N4–N7 respectively.
+- **There is no cross-build.** V10's own compiler, assembler and libc run on
+  the V8 kernel unmodified, because 111 of 129 syscall slots hold the same call
+  at the same index. Only `cpp`, `c2` and `ld` had no binary.
+- **The prebuilt binaries are an ORACLE, not a shortcut.** 46 of roughly 283
+  command source units have a linked binary — a scatter of 1995 build
+  leftovers, since these are developers' working directories. And the scatter
+  is telling: `sh`, `sed`, `ls`, `make`, `cpio`, `ps`, `cron` are present;
+  `init`, `getty`, `login`, `mount`, `mkfs`, `fsck`, `cat`, `cp`, `rm`,
+  `echo`, `date` are **not**, because those get *installed* rather than left
+  where they were compiled. So the boot path has to be built regardless — and
+  every command that does have a 1995 binary becomes a check on the one we
+  build.
+- **The machine we already emulate is the right target.** `lsys/io` carries
+  `hp.c` (Massbus RP), `dz.c` (DZ11) and **`ni1010a.c`** — an Interlan driver,
+  for the card N2 modelled for SIMH. The 780 family is `star`
+  (`md/machstar.c`, `consstar.c`, `nexstar.c`, `ubastar.c`, `ml/trapstar.s`),
+  and `astro/alice.m` is a real CSRC VAX-11/780 configuration (`ms780`,
+  `dw780`, `mba`).
 
-- [x] **C1** `work/config.exp` — fold the three fix-*.exp scripts into one
-      idempotent build-time script; add `/etc/skel` and the `/n` mount points
-- [x] **C2** First-boot provisioner in the app: an account named after the host
-      user, a real V8 home at `/usr/<user>` *(not* the host share — 14-byte
-      filenames and case-folding rule that out)*
-- [x] **C3** Golden image rebuilt on the N3 `il0` kernel; `att il0 nat:` in both
-      configs; `/etc/rc` brings the interface up
-- [x] **C4** `/n/macos` and `/n/home` mounted at boot *(and the app's SIMH
-      given a network layer at all — see the 2026-08-15 SLiRP/UDP commit)*
+### B0 — reaching the guest *(complete; B0 · B0.5 · B0.6)*
 
-### B1 — toolchain
-- [ ] Import `v10src` + `v10blit` into the running V8
-- [ ] Build pcc2, as, ld with V8's cc; compile a V10 hello.c and one mid-size command
+Everything needed to get source into a running V8 and a machine worth building
+on. All of it done, all of it recorded elsewhere; this is the index.
 
-### B2 — world
-- [ ] V10 libc builds
-- [ ] Core userland builds (sh, init, getty, login, fs tools, mux/32ld host side)
-- [ ] Patch log of every `/usr/include` (r70) skew reconciliation
+| | | |
+|---|---|---|
+| **B0** | ✅ 2026-08-09 | Host↔guest transfer, `lost+found` repaired, TUHS tarballs fetched — [media-exchange.md](media-exchange.md) |
+| **B0.5** | ✅ 2026-08-10 | The N track, N0–N7: RP07 disk, an Interlan NI1010 modelled for SIMH, V8 on the Internet, and **a macOS folder mounted read/write inside V8** over Weinberger's netfs — [networking-plan.md](networking-plan.md), [n-track-notes.md](n-track-notes.md), [netfs-protocol.md](netfs-protocol.md) |
+| **B0.6** | ✅ 2026-08-15 | A machine to live in, C1–C4: identity, an account named after the host user, network up from `/etc/rc`, host shares at `/n/macos` and `/n/home` — [machine-config.md](machine-config.md) |
 
-### B3 — kernel + first boot
-- [ ] `star` (780) kernel builds and links
-- [ ] Boot block per `lsys/boot/README` (kernel at fs start, ≤ singly indirect)
-- [ ] Filesystem image constructed; **first V10 boot attempt** (fallbacks: `microvax2`, `vax8200`)
-- [ ] Progress announced on TUHS
+**The courier disk is retired.** B0 proved host↔guest transfer through a
+raw-only disk on `rp1` because there was no other way in — tape panics V8's
+Massbus adapter — and then sized the tree at 243 MB against a `/usr` of 88 MB
+and concluded that ingest had to be selective. netfs deleted the problem
+rather than easing it: **the tree is served, not copied**, so nothing lands on
+guest disk, no subset has to be chosen, and B1 mounted all 25,682 files at
+`/n/v10`. `tools/tapeio.py` and [media-exchange.md](media-exchange.md) remain
+for the one case netfs cannot serve — moving a *disk image*.
+
+### B1 — the toolchain *(complete 2026-08-16; [v10-log/2026-08-16.md](v10-log/2026-08-16.md))*
+
+- [x] **Import, with a checkable record** — `tools/v10-import.py`, 25,682 files
+      classified by magic number and 196 case collisions escaped. `v10/MANIFEST`
+      and `v10/CASEMAP` are committed; the tree is not, so the tarballs stay
+      pristine and our changes stay a patch series. `--verify` re-checks every
+      hash in about fifteen seconds. Two collisions are real source rather than
+      build litter — `sys/io/Nttyld.c` beside `nttyld.c`, in the kernel, and
+      `libc/stdio/ostdio/doprnt.S` beside `doprnt.s` — and a plain `tar xjf` on
+      macOS drops one of each silently, with a zero exit status
+- [x] **Do V10 binaries run on V8?** — `tools/v10-probe.sh`, **9/9**. Predicted
+      by the syscall tables but *tested*, because a syscall table is not an ABI:
+      `struct stat` could have grown, `crt0` could want a different stack
+- [x] **`cpp`, `c2` and `ld` built from V10 source** — the three passes with no
+      binary. `cmd/ld.c` is 1,946 lines and complete; the plan said no system
+      linker was in the tree, and it was missed for being a loose file rather
+      than a `cmd/ld/` directory
+- [x] **A V10 toolchain, assembled and used** — `tools/v10-toolchain.sh`,
+      **10/10**. One directory holds all seven passes and `cc -B/usr/v10/lib/
+      -t02palc` drives them, using nothing of V8's but the driver and
+      `/usr/include`. That `-t` seal is **S5's**, built so V8's own build could
+      not reach into the running system, and it turns out to be the lever that
+      points a `cc` at another *edition*
+- [x] **hello.c, and a mid-size command** — the mid-size one is `ld.c` itself.
+      V10's compiler rebuilt V10's linker, and that linker relinked hello: the
+      two binaries' text and data are byte-identical, differing only in a
+      `time_t` inside a `.stabs` record
+
+### B2 — the userland
+
+The toolchain is trusted; now it has to build a system. Ordered by what B3
+cannot start without.
+
+- [ ] **B2.1 A build mechanism.** V10 builds with `mk`, and its `mkfile`s
+      assume a source directory you can write to — which a read-only share is
+      not. B1 dodged this by copying seven files and writing the `cc` lines by
+      hand; a userland cannot. Both `mk` and `make` have prebuilt binaries in
+      the tree, so try those first; failing that, a generated-makefile pass in
+      the shape of Track S's `v8/mk/mkdep.py`
+- [ ] **B2.2 The header question, settled per header and logged.** r70 (1997)
+      against the 1995 source, and the answer will not be uniform: a V10
+      userland compiled against V10 headers still calls a **V8** kernel until
+      B3 replaces it. Measured so far — `ranlib.h`, `pagsiz.h`, `ctype.h`,
+      `setjmp.h` and `struct _iobuf` are identical to V8's; `a.out.h` differs
+      by one bit-field *name* at the same width, so the object formats agree;
+      but V10's `stdio.h` includes a `<tmpnam.h>` V8 has never had and its
+      `sys/types.h` drops `major()`/`minor()`
+- [ ] **B2.3 libc from source, checked against the 1995 archive.** The
+      strongest test available anywhere in this track: `src/libc/libc.a` is 262
+      members with a valid `__.SYMDEF` that already links and runs, so a
+      from-source rebuild can be compared **member by member** rather than
+      merely observed to compile. Track S's `cmpstage.sh` is the precedent
+- [ ] **B2.4 The boot path, none of which is prebuilt.** `init`, `getty`,
+      `login`, `mount`, `umount`, `mkfs`, `fsck`, `icheck`, `sync`, `date`,
+      `stty`, and the `/bin` core (`cat`, `cp`, `mv`, `rm`, `mkdir`, `echo`).
+      B3 is blocked on this list and on nothing else in B2
+- [ ] **B2.5 The rest of the userland, with the 46 as an oracle.** Every
+      command that has a 1995 binary is a check on ours; every command that
+      does not is a build to be trusted on other grounds. Record which is
+      which, the way `provenance.txt` does for V8
+- [ ] **B2.6 The 5620 host side** — `mux`, `32ld` — from `v10blit`. Needed by
+      B4 and independent of everything above, so it can go early if B2.1
+      stalls
+
+### B3 — the kernel, and the first boot
+
+**Nobody has compiled a V10 kernel.** Everything here is genuinely new, and the
+device support is the one part already known to be present.
+
+- [ ] **B3.1 Choose the kernel tree, and say why.** `sys/` and `lsys/` are two
+      snapshots of the same kernel: 522 files in common of which **131 differ**,
+      and different sets of machine configurations (`sys/astro` has 10, `lsys`
+      has 17 including `crab`, `pipe`, `west`). This has to be settled *before*
+      anything is compiled, not discovered halfway through
+- [ ] **B3.2 The machine description.** `star` is the 780 family and
+      `astro/alice.m` is a real 780 config. Ours joins it — `ipnx.m`, declaring
+      the machine we actually emulate — exactly as `usr/sys/ipnx/conf` did for
+      V8 rather than adopting `alice` or `research` wholesale
+- [ ] **B3.3 The kernel compiles and links.** The three drivers we need are
+      present: `hp.c`, `dz.c`, `ni1010a.c`.
+
+      **`ni1010a.c` is the same card as V8's `ill.c`** — compared 2026-08-16:
+      identical three-register layout (`il_csr`/`il_bar`/`il_bcr`) and an
+      identical command set (`ILC_RESET`, `ILC_STAT`, `ILC_ONLINE`, `ILC_RCV`,
+      `ILC_XMIT`, `ILC_LDXMIT`, with `IL_EUA`/`IL_CIE`/`IL_RIE`/`IL_CDONE`).
+      So `libsimh/patches/pdp11_il.c` is modelling the right hardware.
+
+      But V10 **drives** it differently, and our model was written against V8
+      alone. Two things to settle before a V10 kernel is expected to pass a
+      packet:
+      - **V8 polls, V10 sleeps.** V8's `ilcdone()` spins on `IL_CDONE`; V10's
+        `ilincmd()` sets `IL_CIE` on every command and `tsleep`s. Our model
+        raises the command interrupt from the common tail of the dispatch, so
+        this should already hold — but it has never been exercised, because V8
+        never asked for it
+      - **Receive depth.** Our ring is `IL_RXQ` = 8, with a comment asserting
+        `ill.c` keeps one buffer outstanding. V10 caps at `MAXRBUFS` = 16 and
+        queues until `rbytes >= ILRBYTES` (`ETHERMAXTU*2`), which is ~3 buffers
+        at `ILRSIZE` 1024 but more if `allocb` returns smaller blocks. The
+        comment is V8-only and the ring should be 16
+- [ ] **B3.3a A conformance test for the device model.** The above are found by
+      reading; what settles them is a harness that drives `pdp11_il.c` the way
+      *V10* does — command-interrupt completion and a multi-buffer receive
+      burst — rather than the way V8 happens to
+- [ ] **B3.4 The boot block**, per `lsys/boot/README`: 512 bytes, kernel at the
+      start of the filesystem, no more than singly indirect. Read it in full
+      first — it is the constraint that shapes the image layout
+- [ ] **B3.5 The image.** Filesystem, device nodes, `/etc/rc` — Track S's
+      `v8/mk/builddisk.sh` and `proto-dev` are the working precedent
+- [ ] **B3.6 First boot attempt.** `vax780` first, for continuity with
+      everything else here; fallbacks are `microvax2` (`mflow`, KA630) and
+      `vax8200` (`bvax`, KA820), both of which V10 supports and SIMH emulates.
+      **Kernel reaches single-user** is the headline moment
+- [ ] **B3.7 Announce on TUHS** — this answers a question that list asked in
+      2017, and the people who ran these machines still read it
 
 ### B4 — the V10 experience
-- [ ] Multi-user; `mux` against dmd_core
-- [ ] `sam`/`samterm` working
-- [ ] Reproducible `v10.disk` build script
 
-### Merge
-- [ ] "Edition 10" machine in the app (embed the winning SIMH simulator if not `vax780`)
+- [ ] Multi-user: `init`, gettys, `login`
+- [ ] `mux` against dmd_core (firmware 8;7;3 — the protocol is unchanged from V8)
+- [ ] **`sam` and `samterm`** — the reason `v10blit` matters, and something V8
+      never had
+- [ ] A reproducible `v10.disk` build script, in the shape of Track S's stages
+
+### B5 — merge into the app
+
+**Two machines, two goldens, and the user picks.** V10 is built *independently*
+of V8 and ships *beside* it — it does not replace it, and V8's golden is not a
+staging area for V10's. Concretely:
+
+- Two committed images, each with its own identity stamp and its own
+  `Embed … media` build phase, so `tools/app-check.sh` proves both chains
+- Two working copies: `~/Library/Application Support/ipnx/v8` and
+  `…/ipnx/v10`. The app has been shaped for this since 2026-08-16 — the
+  support directory is *app first, edition inside*, for exactly this reason
+  (`Machine.support`)
+- The consequence for Track B is a constraint, not a feature: **nothing in
+  B2–B4 may modify the V8 golden.** V8 is the build host and the shipped
+  Eighth Edition, and those are the same disk. Anything V10 needs on the guest
+  goes in a scratch filesystem or a share, never into `rp07new`
+
+- [ ] "Edition 10" as a second machine beside V8, chosen at launch
+- [ ] A second golden, built and committed on its own terms
+- [ ] Embed the winning SIMH simulator if it is not `vax780`
 
 ## Track S — the world build *(started 2026-08-10, [build-from-source.md](build-from-source.md))*
 

@@ -252,41 +252,34 @@ fitted inside the single record that a truncated write did deliver — and so
 reported success for a transfer that had lost its tail. A truncation check
 that does not test the tail tests nothing.
 
-## Capacity planning for Track B
+## Capacity planning for Track B — superseded
 
-Measured 2026-08-09 from the TUHS tarballs, now in `work/`:
+**This section is history.** It sized the V10 tree against a courier disk and
+concluded that ingest had to be selective. netfs (B0.5, N5-N7) deleted the
+problem rather than easing it: the tree is **served, not copied**, so nothing
+lands on guest disk, no subtree has to be chosen, and B1 mounted all 25,682
+files at `/n/v10` (`tools/v10-probe.sh`, `tools/v10-toolchain.sh`). The
+courier survives for the one thing netfs cannot carry -- a whole disk image.
+
+The measurements were right and are kept because they are what made the
+courier route look as bad as it is:
 
 | Archive | Compressed | Expanded | Files |
 |---|---|---|---|
 | `v10src.tar.bz2` | 74.9 MB | **243.3 MB** | 23,977 in 1,100 dirs |
 | `v10blit.tar.bz2` | 2.6 MB | 8.6 MB | 1,373 in 100 dirs |
 
-The work area is `/usr`, with about **88 MB free**, and one courier load is
+The work area was `/usr`, with about **88 MB free**, and one courier load is
 **8.1 MB** (25 MB using partition `b` as well). V8 has no `bzip2`, `gzip` or
-`compress`, so everything arrives expanded.
+`compress`, so everything arrives expanded. 243 MB against 88 MB does not fit,
+and would not fit a 149 MB RP06 partition either; `cmd/` alone is 125.5 MB
+across 14,642 files. At 8.1 MB a load that is thirty round trips of manual
+staging, which is why B0.5 was scoped up instead.
 
-**The whole tree does not fit** — 243 MB against 88 MB, and it would not fit a
-149 MB RP06 partition either. `cmd/` alone is 125.5 MB across 14,642 files.
-So selective ingest is not a preference, it is a requirement:
-
-| B1 subtree | MB | Files |
-|---|---|---|
-| `sys` (kernel) | 6.38 | 756 |
-| `lsys` (boot, standalone) | 4.91 | 763 |
-| `cmd/ccom` (the C compiler) | 1.66 | 127 |
-| `libc` | 0.93 | 375 |
-| `cmd/pcc1` | 0.51 | 56 |
-| `cmd/as` | 0.40 | 33 |
-| `cmd/c2` | 0.06 | 6 |
-| `libcc` | 0.01 | 11 |
-| **total** | **14.87** | **2,127** |
-
-Two courier loads, and it fits `/usr` with room to build in. That is the whole
-of steps 1–5 of the success ladder, which is where the risk lives anyway.
-
-**One good surprise:** the longest stored path in `v10src` is **51 bytes** and
-in `v10blit` **35** — nothing anywhere near V7 tar's 100-byte name field. The
-truncation risk that `tapeio.py` guards against does not materialise for V10.
+**One good surprise, still true:** the longest stored path in `v10src` is
+**51 bytes** and in `v10blit` **35** -- nothing anywhere near V7 tar's 100-byte
+name field. The truncation risk that `tapeio.py` guards against does not
+materialise for V10.
 
 If the full tree is ever wanted in one place, give the work filesystem its own
 controller: `RQ` is already configured as `uda1` with `ra1`/`ra3`/`ra5`

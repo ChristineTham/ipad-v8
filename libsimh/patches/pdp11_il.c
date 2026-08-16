@@ -8,12 +8,45 @@
    a 3Com one, and nothing else.  Rather than write a 1985-vintage streams
    network driver from scratch, this models the hardware V8 already knows.
 
-   The conformance specification is V8's own driver, which is the thing that
-   has to work:
+   THERE ARE TWO CONFORMANCE SPECIFICATIONS, and both are Bell Labs':
 
-     usr/sys/dev/ill.c    the driver conf/files actually builds for `il'
+     usr/sys/dev/ill.c    V8's driver, the one conf/files builds for `il'
                           (dev/il.c is a second, unconfigured driver)
      usr/sys/h/ill_reg.h  registers, receive header, statistics record
+     V10 lsys/io/ni1010a.c  the Tenth Edition driver for the same board
+
+   The second one arrived late, on 2026-08-16, when the V10 tree turned out to
+   contain a driver nobody here knew about.  It matters more than a second
+   opinion usually would, because this file was written by inference from a
+   single client and there is no other emulation of this board to check
+   against -- so until then, "the model is right" meant no more than "V8 seems
+   happy with it".  Two independent drivers, written eight years apart by
+   people with the real hardware, is a far stronger test.
+
+   They agree completely on the interface: the same three registers, the same
+   command codes, the same status codes (ILDIAG_SUCCESS and ILERR_SUCCESS are
+   both 0), the same frame-status bits (CRC 01, alignment 02, lost 04), the
+   same trick of overwriting the source address so the board inserts its own.
+   V10's command set is a strict subset of V8's -- it never goes OFFLINE.
+
+   Where they differ is in HABITS, and the habits are what this model had
+   quietly encoded as rules:
+
+     - V8 polls.  ilcdone() spins on CDONE up to 200,000 times.  V10 sleeps:
+       ilincmd() sets IL_CIE on every command and tsleep()s for the interrupt,
+       including on ILC_RCV, where V8 asks for IL_RIE only.  The command
+       interrupt is raised from the common tail of the dispatch, so this holds
+       -- but it had never been exercised, because V8 never asks for it.
+     - V8 keeps ILOUTSTANDING == 1 receive buffer in flight.  V10 keeps up to
+       MAXRBUFS == 16.  See IL_RXQ below; this one was a real bug.
+     - V10 states the chaining rule outright where V8 only implies it, in two
+       macros whose own comments read "force length to allow rbuf chaining"
+       and "force to disallow":
+           #define MKCHAIN(l)  ((l)&~07)
+           #define MKTRUNC(l)  (MKCHAIN(l)-2)
+       A byte count that is a multiple of 8 means "chain to the next buffer".
+       That is exactly what il_rxpump() below was written to honour after the
+       N6 truncation bug -- now corroborated rather than inferred.
 
    Behaviour that the driver pins down, and which is easy to get wrong:
 
@@ -123,8 +156,32 @@ extern int32 tmxr_poll;                                 /* calibrated poll inter
 #define IL_CRCLEN       4                               /* CRC the board would have kept */
 #define IL_MAXFRAME     (14 + 1500 + IL_CRCLEN)
 #define IL_STATLEN      66                              /* sizeof (struct il_stats) */
-#define IL_RXQ          8                               /* supplied receive buffers */
 #define IL_TXBUF        (IL_MAXFRAME + 64)
+
+/* How many receive buffers the board will hold at once.
+
+   This was 8, sized against V8's ill.c, which sets ILOUTSTANDING to 1 and
+   never has more than one in flight.  V10's ni1010a.c -- an independent,
+   authentic driver for the same board, found in the Tenth Edition tree on
+   2026-08-16 -- caps itself at MAXRBUFS = 16 and keeps supplying buffers until
+   it has ILRBYTES (ETHERMAXTU*2, about 3000) outstanding, one ILC_RCV at a
+   time, re-driven from its command-done interrupt.
+
+   16 is therefore the real hardware bound, and it has to be honoured because
+   OVERFLOW HERE IS SILENT.  ilrcvbufs() does not look at the status we return:
+   it has already done is->rbufs++, is->rbytes += len, and linked the block
+   onto is->rlast before the command is even issued.  So a rejected ILC_RCV
+   leaves the driver believing in a buffer the controller does not have, and
+   from then on the two disagree about which buffer a frame's next fragment
+   belongs in -- permanently, and with no error anywhere.  Not a dropped
+   packet: a receive path that quietly stops making sense. */
+#define IL_MAXRBUFS     16                              /* ni1010a.c MAXRBUFS */
+#define IL_OUTSTANDING  1                               /* ill.c ILOUTSTANDING */
+#define IL_RXQ          IL_MAXRBUFS                     /* supplied receive buffers */
+
+/* If a third driver ever wants more, this is where to find out. */
+typedef char il_rxq_covers_both_drivers
+    [(IL_RXQ >= IL_MAXRBUFS && IL_RXQ >= IL_OUTSTANDING) ? 1 : -1];
 
 /* Debug flags */
 
@@ -168,6 +225,7 @@ static struct il_ctx {
     struct il_rxbuf     rxq[IL_RXQ];
     int                 rxq_head;
     int                 rxq_count;
+    int                 rxq_warned;                     /* ring-full said once */
     int                 rxburst;                /* fast-poll calls left */
     uint8               rxframe[IL_MAXFRAME + IL_HDRLEN];   /* frame in flight */
     uint32              rxtotal;                            /* bytes to hand over */
@@ -432,9 +490,23 @@ switch (cmd) {
         break;
 
     case ILC_RCV:
-        /* Queue a buffer for the next frame.  ill.c keeps ILOUTSTANDING == 1
-           of these in flight, so overflowing the ring means we have a bug. */
+        /* Queue a buffer for the next frame.  The ring holds IL_RXQ of them,
+           which is ni1010a.c's MAXRBUFS -- see the definition for why V8's
+           ILOUTSTANDING of 1 was the wrong thing to size this against.
+
+           sim_printf, not sim_debug, and deliberately.  A driver that has run
+           off the end of the ring is not going to be told: ni1010a.c ignores
+           the status of ILC_RCV entirely, so the only place this can ever be
+           reported is here, and a message nobody sees unless they already
+           suspected the problem is no use.  Once per attach is enough to find
+           it and few enough to ignore. */
         if (il.rxq_count >= IL_RXQ) {
+            if (!il.rxq_warned) {
+                il.rxq_warned = 1;
+                sim_printf ("il: receive buffer ring full at %d; the driver "
+                            "believes it queued more than the board holds\n",
+                            IL_RXQ);
+                }
             sim_debug (DBG_CMD, &il_dev, "receive buffer queue overflow\n");
             status = ILERR_BUFSIZ;
             break;
@@ -759,7 +831,7 @@ t_stat il_reset (DEVICE *dptr)
 il.csr = il.bar = il.bcr = 0;
 il.cie = il.rie = il.cint = il.rint = 0;
 il.online = il.promisc = il.loopback = il.lost = 0;
-il.rxq_head = il.rxq_count = 0;
+il.rxq_head = il.rxq_count = il.rxq_warned = 0;
 il.txlen = 0;
 CLR_INT (ILC);
 CLR_INT (ILR);

@@ -29,9 +29,10 @@ on hardware you already carry.
 > each one openable, in windows grouped by terminal shape. The Mac app is Developer ID
 > signed and notarised.
 >
-> Track A is complete through A5, Track S built the shipped disk, and B0/B0.5/B0.6 are
-> done. **Next is Track B — the V10 restoration.** Details:
-> [docs/roadmap.md](docs/roadmap.md).
+> Track A is complete through A5 and Track S built the shipped disk. **Track B — the V10
+> restoration — has started, and its toolchain phase is done**: a Tenth Edition compiler,
+> assembler and libc now run on the Eighth Edition machine. Next is the userland, then a
+> kernel nobody has ever compiled. Details: [docs/roadmap.md](docs/roadmap.md).
 >
 > The two numbers belong to two different people: the **edition** is Bell Labs' and is
 > not ours to increment; the **release** counts what this project has made of it, and
@@ -149,11 +150,20 @@ inside the iOS sandbox, because SLiRP aliases the guest's view of the host to lo
 
 ### ipnx-v10 — Tenth Edition (1989) · *the restoration*
 
-Tenth Edition survives as **source only** and **has never been booted by anyone**. The plan
-is to use the running V8 as the cross-build host for V10's toolchain, userland, kernel and
-boot block, then drop `v10.disk` into the same app shell. A world first if it lands:
-[docs/v10-restoration.md](docs/v10-restoration.md). V9 is deliberately skipped — what
-survives of it is a Sun-3 port with no VAX kernel.
+Tenth Edition **has never been booted by anyone** — there is no boot media, and making
+some is the whole of Track B. The plan was to cross-build V10's toolchain on the running
+V8; it turned out not to need one. The surviving tarball is not source-only, as everyone
+including this project believed: it carries **483 linked VAX executables**, among them
+V10's C compiler, its assembler and a complete `libc.a` — and on 2026-08-16 those
+**ran unmodified on the V8 kernel**, 9 checks out of 9. Only `cpp`, `c2` and `ld` had to
+be built from source, and V10's own `ld` was there all along in a file the plan said did
+not exist.
+
+So V8 is now hosting a working Tenth Edition toolchain, and what remains is the userland,
+the kernel and a boot block. A world first if it lands:
+[docs/v10-restoration.md](docs/v10-restoration.md), lab notebook in
+[docs/v10-log/](docs/v10-log/). V9 is deliberately skipped — what survives of it is a
+Sun-3 port with no VAX kernel.
 
 ### ipnx-v11 — the edition that never was · *speculative*
 
@@ -255,7 +265,10 @@ out of reach for reasons that have nothing to do with engineering.
 | **B0** ingest path | ✅ | Host↔guest file transfer proven both ways — [media-exchange.md](docs/media-exchange.md) |
 | **B0.5** the N track | ✅ | N0–N7: RP07 disk, an Interlan NI1010 modelled for SIMH, **V8 on the Internet**, and **a macOS folder mounted read/write inside V8** over Weinberger's netfs — [n-track-notes.md](docs/n-track-notes.md) |
 | **B0.6** a machine to live in | ✅ | Identity, network up at boot, an account named after the host user, host shares at `/n/macos` and `/n/home` — [machine-config.md](docs/machine-config.md) |
-| **B1–B4** V10 | ○ | Toolchain → world → kernel → first boot — **next** |
+| **B1** V10 toolchain | ✅ | V10's own compiler, assembler and libc are **in the tarball as linked binaries** and **run on the V8 kernel**; `cpp`, `c2` and `ld` built from source. 9/9 and 10/10 — [v10-log/2026-08-16.md](docs/v10-log/2026-08-16.md) |
+| **B2** the userland | ○ | libc from source against the 1995 archive, the boot path (none of it prebuilt), the r70 header skew — **next** |
+| **B3** kernel + first boot | ○ | `star` is the 780, `alice.m` a real CSRC config, and `hp`/`dz`/`ni1010a` cover the machine we emulate. Nobody has compiled a V10 kernel |
+| **B4–B5** the experience | ○ | Multi-user, `mux`, **`sam`**, then "Edition 10" in the app |
 | **C** ipnx-ports | ○ | Ports tree; `libcompat` first, then V10's games, then BSD's |
 | **D** ipnx-v11 | ○ | Mostly restoration — V10 already ships a 9P server — [v11-plan.md](docs/v11-plan.md) |
 | — | ○ | App Store submission (needs the Apple account) — [app-store.md](docs/app-store.md) |

@@ -632,8 +632,11 @@ touching the guest's storage.
 
 Extrapolated:
 
-- **B1's 14.87 MB: about 2.5 minutes.**
+- 14.87 MB — what the courier plan called the B1 subset: about 2.5 minutes.
 - The whole 243 MB V10 tree: about 40 minutes.
+
+  *(B1 in the end copied neither: the tree is served at `/n/v10` and read in
+  place. These remain the right numbers for moving bulk over netfs.)*
 
 Both are fine. For comparison the courier moved 8.1 MB per manual
 attach/extract cycle, so this is not merely faster but a different kind of

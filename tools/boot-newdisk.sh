@@ -11,13 +11,22 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$ROOT/work/myv8"
 LIMIT=${1:-900}
 LOG="$WORK/boot-newdisk.log"
+SRC="${IMG:-rp07new}"
 
 cd "$WORK" || exit 1
 export PATH="$ROOT/work/opensimh/BIN:$PATH"
 
 command -v vax780 >/dev/null || { echo "bn: vax780 not on PATH"; exit 1; }
-[[ -e rp07new ]] || { echo "bn: no rp07new -- run stage 8 first"; exit 1; }
+[[ -e "$SRC" ]] || { echo "bn: no $SRC -- run stage 8 first"; exit 1; }
 [[ -e bootV8 ]]  || { echo "bn: no bootV8"; exit 1; }
+
+# Boot a CLONE, not the image itself.  This script's whole job is to say
+# whether a freshly built disk is sound, and mounting it to find out is what
+# changes its hash -- so a "pass" used to leave the artefact it had just
+# blessed no longer matching the one in git.  A clone boots identically.
+source "$ROOT/tools/v8clone.sh"
+BOOTIMG=$(v8_clone "$SRC" bootcheck) || exit 1
+echo "bn: booting $BOOTIMG (clone of $SRC)"
 if pgrep -x vax780 >/dev/null; then
     echo "bn: a vax780 is already running -- wait for it"; exit 1
 fi
@@ -30,7 +39,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 : > "$LOG"
-expect "$ROOT/tools/boot-newdisk.exp" "${IMG:-rp07new}" &
+expect "$ROOT/tools/boot-newdisk.exp" "$BOOTIMG" &
 EXP_PID=$!
 for ((i = 0; i < LIMIT; i++)); do
     kill -0 "$EXP_PID" 2>/dev/null || break
