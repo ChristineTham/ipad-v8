@@ -40,6 +40,16 @@ final class Machine: ObservableObject {
     /// equivalent work for them.
     var onRestored: (() -> Void)?
 
+    /// Do the things only root can do — create the account, tell the guest
+    /// which 5620 screen it has — on a terminal the user is not looking at.
+    ///
+    /// Set by the app to reach SessionStore, which owns the spare lines. It
+    /// lives here because the session that needs it (tty01's auto-login) has a
+    /// Machine and not a store, and because the alternative — doing the work
+    /// on tty01 itself — leaves a root transcript in the one terminal the user
+    /// definitely reads.
+    var rootWork: ((Bool) async -> Void)?
+
     /// Console bytes for the terminal view (wired up by the view layer).
     var onOutput: (([UInt8]) -> Void)?
 
