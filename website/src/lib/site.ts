@@ -54,7 +54,7 @@ export const DOWNLOAD = {
    *  Empty means "not built yet" and the download page omits the block rather
    *  than printing a number nobody can check. */
   size: '21.1 MB',
-  sha256: 'd93a1c756a6610da607dc58998c8cb58c7294038affb32b03f0c2c8ad37c4a25',
+  sha256: 'f7cc84172e491f6c54cdbb002a18616911c02608c6fa2653afd4935fbeb2c6c3',
 } as const;
 
 /** Primary nav. Secondary/legal links live in the footer. */
