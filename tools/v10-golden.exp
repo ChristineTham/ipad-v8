@@ -151,27 +151,15 @@ note "/unix installed" \
 #
 # The ra minors carry bit 6 -- BITFS -- exactly as the kernel's own root
 # device does, because these name the same bitmapped filesystems.
-v8_sh "/etc/mknod $R/dev/console c 0 0" 120
-v8_sh "/etc/mknod $R/dev/mem c 3 0; /etc/mknod $R/dev/kmem c 3 1; /etc/mknod $R/dev/null c 3 2" 120
-v8_sh "/etc/mknod $R/dev/swap b 4 1" 120
-foreach n {0 1 2 3 4 5 6 7} {
-    v8_sh "/etc/mknod $R/dev/tty0$n c 1 $n" 60
-}
-# ra unit 0: root is partition a (64), usr is partition g (64|6 = 70)
-v8_sh "/etc/mknod $R/dev/ra0a b 7 64;  /etc/mknod $R/dev/rra0a c 28 64" 120
-v8_sh "/etc/mknod $R/dev/ra0b b 7 65;  /etc/mknod $R/dev/rra0b c 28 65" 120
-# /usr is partition c -- PART(66) = 66 & 07 = 2 -- because c is the one that
-# fits inside MAXSMALL.  g would have been the roomier choice and is the one
-# V8 cannot read.
-v8_sh "/etc/mknod $R/dev/ra0c b 7 66;  /etc/mknod $R/dev/rra0c c 28 66" 120
-v8_sh "/etc/mknod $R/dev/ra0h b 7 71;  /etc/mknod $R/dev/rra0h c 28 71" 120
-v8_sh "/etc/mknod $R/dev/il0 c 44 0" 120
-v8_sh "chmod 622 $R/dev/console; chmod 666 $R/dev/null" 60
-v8_sh "N=`ls $R/dev | wc -l`" 120
+# 79 nodes from v10/mk/gen/proto-dev -- majors out of seki.c.c's cdevsw[] and
+# bdevsw[], shape from the V8 golden.  The ra minors all carry bit 6, because
+# they name bitmapped filesystems exactly as the kernel's own root device does.
+v8_sh "sh /n/t/mkdev.sh $R > /n/t/mkdev.log 2>&1; echo made" 900
 note "/dev populated" [v8_try "echo DEV\$N\$OK" "DEV" 120]
 
 # ---------------------------------------------------- /etc's config files ---
 v8_sh "cp /n/t/etc/passwd /n/t/etc/group /n/t/etc/ttys /n/t/etc/rc /n/t/etc/motd $R/etc" 300
+v8_sh "cp /n/t/etc/fstab /n/t/etc/mtab /n/t/etc/utmp /n/t/etc/profile $R/etc" 300
 v8_sh "chmod 644 $R/etc/passwd $R/etc/group $R/etc/ttys $R/etc/motd; chmod 755 $R/etc/rc" 60
 note "/etc config in place" [v8_try "cat $R/etc/ttys" "console" 120]
 
@@ -195,6 +183,17 @@ v8_sh "cd $R/lib; ranlib libc.a" 600
 # writes into $U/bin and the header copy into $U/include.
 foreach d {bin lib include adm tmp} { v8_sh "mkdir $U/$d" 60 }
 v8_sh "chmod 777 $U/tmp" 60
+
+# cc, the driver.  Its absence is the difference between a machine with a
+# compiler on it and a machine that can compile -- and the last attempt failed
+# with the log left on a guest that then halted, so the log comes home now
+# whether it succeeds or not.
+# OUR copy: cc.c uses BUFSIZE without including <sys/param.h>.
+v8_sh "rm -rf $OBJ/cc; mkdir $OBJ/cc; cd $OBJ/cc; cp /n/v10ours/cmd/cc.c ." 300
+note "cc builds" \
+    [v8_try "cd $OBJ/cc; if cc -B$L/ -t02palc -I$INC -o $R/bin/cc cc.c > cc.log 2>&1; then echo CC\$OK; fi" \
+            "CC-ok" 900]
+v8_sh "cp $OBJ/cc/cc.log /n/t/cc.log" 300
 
 # ------------------------------------------------ the prebuilt 1995 commands ---
 #

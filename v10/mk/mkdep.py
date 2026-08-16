@@ -211,6 +211,9 @@ PATCHED = {
     # uses ROOTINO and includes nothing that defines it.  Compiles against
     # V8's headers only because V8's sys/types.h includes sys/param.h.
     "mv",
+    # uses BUFSIZE without including <sys/param.h> -- mv.c's defect with a
+    # different constant.
+    "cc",
     # its BITFS device check cannot be satisfied on a V8 host, where the same
     # bit is part of hp's drive number.  Left out of this set once already,
     # and the run then used the TARBALL's copy and died with the tarball's

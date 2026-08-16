@@ -224,6 +224,44 @@ here. `off` becomes a `long` and the seek an ordinary `lseek`.
                ('\t\tfprintf(stderr, "size %ld too large (lseek [%d,%d], read %d)\\n",\n\t\t\tsize, Lsign(off), Ltol(off), j);\n',
                 '\t\tfprintf(stderr, "size %ld too large (lseek %ld, read %d)\\n",\n\t\t\tsize, off, j);\n', 1)],
     ),
+    dict(
+        path="cmd/cc.c",
+        sha="6c0faa5a16675805e6168fc7591f3540a25751aed3bb3032385a023ef7732068",
+        title="cc.c: uses BUFSIZE without including <sys/param.h>",
+        why="""\
+`cc' is the difference between a machine with a compiler on it and a machine
+that can compile, and it would not build:
+
+	"cc.c":42:BUFSIZE undefined
+	"cc.c":42:integer constant expected
+
+Line 42 is `char errbuf[BUFSIZE];` and `BUFSIZE` is `sys/param.h`'s -- not
+`stdio.h`'s `BUFSIZ`, which is a different name for the same 4096. cc.c
+includes `sys/types.h`, `stdio.h`, `ctype.h`, `signal.h` and `dir.h`, and
+none of them reaches `param.h`.
+
+**This is `mv.c` again.** Same defect, same edition, a different constant: a
+1995 source using something from `sys/param.h` without including it. Two of
+the ~283 command units do this, and both are ones with no prebuilt binary --
+consistent with nobody having compiled them in place when the tape was cut.
+
+And it needs the same fix rather than an added include, for the same reason:
+`sys/param.h` ends with `#include "sys/types.h"` and guards a `signal.h` with
+`#ifndef NSIG`, while V10's `types.h` and `signal.h` have no guards of their
+own. A file that includes `param.h` **and** either of those parses their
+typedefs twice --
+
+	"/usr/v10/include/sys/types.h":33:illegal type combination
+
+-- so `param.h` replaces `types.h`, and `signal.h` goes because `param.h`
+already brought it. Two lines out, one in, and everything cc.c used still
+arrives.
+""",
+        edits=[('#include <sys/types.h>\n',
+                '#include <sys/param.h>\n', 1),
+               ('#include <signal.h>\n#include <dir.h>\n',
+                '#include <dir.h>\n', 1)],
+    ),
 ]
 
 
