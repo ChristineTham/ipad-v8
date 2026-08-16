@@ -135,10 +135,6 @@ struct IpnxApp: App {
         machine.onRestored = { [store, share, homeShare] in
             Task { await store.mountShares([share, homeShare]) }
         }
-        // Account creation and the screen marker run on a spare line rather
-        // than on tty01, so the first terminal the user sees carries their
-        // login and nothing else.
-        machine.rootWork = { [store] wide in await store.rootWork(wide: wide) }
         machine.start()
         #if os(macOS)
         appDelegate.machine = machine

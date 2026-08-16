@@ -308,23 +308,8 @@ final class Session: ObservableObject, Identifiable {
         let wide = settings.activeScreen.romColumns > 88
         let needsRoot = machine.provisionedUser == nil
                      || !machine.screenMarkerMatches(wide: wide)
-        // ROOT WORK HAPPENS ON A LINE NOBODY IS LOOKING AT.
-        //
-        // It used to happen here, on tty01, and the transcript stayed in this
-        // terminal's scrollback: `mkdir /usr/christie', `/etc/chown', an
-        // /etc/passwd line, `exit', and then the user's own login underneath
-        // it. Clearing the view hid it from the screen and not from the
-        // scrollback, and two logins on one tty read as something having gone
-        // wrong even when nothing had.
-        //
-        // Rebooting to get a clean machine was tried and cannot work: the app
-        // would have to run simh_main twice in one process, and SIMH does not
-        // reinitialise its globals — the second `reset_all' walks a stale
-        // event queue and `sim_cancel' aborts the process. So instead the work
-        // moves to a terminal the user never sees. tty01 shows exactly one
-        // login, theirs, on a machine that has only ever been theirs.
         if needsRoot {
-            await machine.rootWork?(wide)
+            await rootPass(link, wide: wide)
         }
 
         let user = machine.provisionedUser
@@ -332,9 +317,117 @@ final class Session: ObservableObject, Identifiable {
         link.send(Array("\(user ?? "root")\r".utf8))
     }
 
+    /// The one root login, and only when `autoLogin` has decided it is owed.
+    /// Ends by handing the line back to getty so the caller can log the user
+    /// in on a fresh prompt, and wipes the view so none of it is the user's
+    /// problem. Clearing touches the VIEW only -- nothing is typed at the
+    /// guest, which matters because the far end here is getty reading a name.
+    private func rootPass(_ link: ConsoleLink, wide: Bool) async {
+        link.send(Array("root\r".utf8))
+        if machine.provisionedUser == nil {
+            await provisionIfNeeded(link)              // waits for `#' itself
+        } else if await link.waitFor("#", timeout: 20) == false {
+            note("no root shell — skipping this boot")
+            return
+        }
+        if !machine.screenMarkerMatches(wide: wide) {
+            await syncScreenMarker(link)
+            machine.recordScreenMarker(wide: wide)
+        }
+        link.send(Array("exit\r".utf8))
+        if await link.waitFor("login:", timeout: 30) == false {
+            note("getty did not come back — \(line.device) may still be root")
+        }
+        view?.feed(byteArray: ArraySlice(Array("\u{1b}[3J\u{1b}[2J\u{1b}[H".utf8)))
+    }
 
+    /// Tell the guest which 5620 screen it is talking to, so plain `mux`
+    /// works and nobody has to remember `wmux`.
+    ///
+    /// The guest cannot work this out for itself. There is no TIOCGWINSZ on
+    /// this kernel, and `mux` DOWNLOADS muxterm rather than asking it
+    /// anything — the choice has to be made before the terminal could
+    /// answer. And the wrong choice does not fail: muxterm.w hardcodes its
+    /// framebuffer at 0x800000 and the stock one at 0x700000, so on the wrong
+    /// screen it downloads, runs, draws into the address the resize vacated,
+    /// and presents as a hang with the ROM's text still showing.
+    ///
+    /// So the app writes the answer down and /.profile reads it. Every boot,
+    /// not just the first: the preset is a Setting, and it can change between
+    /// runs while the disk stays the same.
+    private func syncScreenMarker(_ link: ConsoleLink) async {
+        let wide = settings.activeScreen.romColumns > 88
+        link.send(Array((wide ? "> /etc/dmdwide\r" : "rm -f /etc/dmdwide\r").utf8))
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        note(wide ? "5620 is Wide — mux will use muxterm.w"
+                  : "5620 is Original — mux will use the stock muxterm")
+    }
 
+    /// First boot only: create the account that belongs to whoever is running
+    /// this copy. Runs here because this is the one place in the app that has
+    /// a *root shell* — the console is read-only behind a lock and has no
+    /// shell on it at all, which is worth stating because sending these to
+    /// the console instead types them into nothing and silently does nothing.
+    ///
+    /// Everything is proven by an output-anchored marker rather than by a
+    /// prompt: V8's tty echoes typed characters as they arrive and they
+    /// interleave *into* whatever is printing, so a `#` prompt matcher
+    /// matches the echo of the command being sent. The marker is spelled
+    /// through a shell variable so the echo carries `PROV$OK` and only the
+    /// result carries `PROV-ok`.
+    private func provisionIfNeeded(_ link: ConsoleLink) async {
+        guard !machine.isProvisioned else { return }
+        let user = Provisioner.v8Name(from: Provisioner.hostUserName)
+        let gecos = Provisioner.hostFullName
 
+        guard await link.waitFor("#", timeout: 20) else {
+            note("no root shell — account not created; will retry next boot")
+            return
+        }
+        // The marker variable itself, before anything that uses it.
+        link.send(Array("OK=-ok\r".utf8))
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        for cmd in Provisioner.commands(user: user, gecos: gecos) {
+            link.send(Array("\(cmd)\r".utf8))
+            try? await Task.sleep(nanoseconds: 700_000_000)
+        }
+        link.send(Array("echo PROV$OK\r".utf8))
+        if await link.waitFor("PROV-ok", timeout: 15) {
+            await setPassword(link, user: user)
+            machine.markProvisioned(user)
+            note("account `\(user)' created, home /usr/\(user)")
+        } else {
+            // Deliberately NOT marked: a half-made account should be retried,
+            // and every command above is guarded so a second run is safe.
+            note("account creation unconfirmed — will retry next boot")
+        }
+    }
+
+    /// Optionally give the new account a password.
+    ///
+    /// V8's passwd(1) is interactive and there is no `--stdin`: it prompts,
+    /// reads with echo off, and asks again to confirm. Run as root it does
+    /// not ask for the old one, which is the only reason this is possible at
+    /// all without knowing a password we never set.
+    ///
+    /// Empty means none, which is the default. A personal machine emulating a
+    /// personal machine, on a disk its owner already holds, gains nothing
+    /// from a prompt with no recovery path — but some people want their
+    /// machine to feel like a machine, so the option exists.
+    private func setPassword(_ link: ConsoleLink, user: String) async {
+        let pw = settings.accountPassword
+        guard !pw.isEmpty else { return }
+        link.send(Array("passwd \(user)\r".utf8))
+        guard await link.waitFor("assword", timeout: 15) else {
+            note("passwd did not prompt — account left without one")
+            return
+        }
+        link.send(Array("\(pw)\r".utf8))
+        try? await Task.sleep(nanoseconds: 600_000_000)
+        link.send(Array("\(pw)\r".utf8))          // the confirmation
+        try? await Task.sleep(nanoseconds: 600_000_000)
+        note("password set for `\(user)'")
+    }
 
     // MARK: Bytes
 
@@ -622,133 +715,6 @@ final class SessionStore: ObservableObject {
         }
     }
 
-
-    /// Everything on this machine that needs to be root, done where nobody is
-    /// watching.
-    ///
-    /// Borrowed from `onSpareLine`, so it costs no visible terminal and leaves
-    /// no transcript in one. The caller (tty01's auto-login) waits for this
-    /// before logging the user in, which is what makes their first screen show
-    /// one login and nothing else.
-    func rootWork(wide: Bool) async {
-        guard machine.provisionedUser == nil || !machine.screenMarkerMatches(wide: wide) else { return }
-        await onSpareLine { link in
-            await self.rootPass(link, wide: wide)
-        }
-    }
-
-    /// The one root login, and only when `autoLogin` has decided it is owed.
-    /// Ends by handing the line back to getty so the caller can log the user
-    /// in on a fresh prompt, and wipes the view so none of it is the user's
-    /// problem. Clearing touches the VIEW only -- nothing is typed at the
-    /// guest, which matters because the far end here is getty reading a name.
-    private func rootPass(_ link: ConsoleLink, wide: Bool) async {
-        // Called from onSpareLine, which has ALREADY dialled the line, logged
-        // in as root and seen `#' — and which sends `exit' afterwards. So this
-        // does the work and nothing else; logging in or out here would fight
-        // its host for the line.
-        if machine.provisionedUser == nil {
-            await provisionIfNeeded(link)
-        }
-        if !machine.screenMarkerMatches(wide: wide) {
-            await syncScreenMarker(link)
-            machine.recordScreenMarker(wide: wide)
-        }
-    }
-
-    /// Tell the guest which 5620 screen it is talking to, so plain `mux`
-    /// works and nobody has to remember `wmux`.
-    ///
-    /// The guest cannot work this out for itself. There is no TIOCGWINSZ on
-    /// this kernel, and `mux` DOWNLOADS muxterm rather than asking it
-    /// anything — the choice has to be made before the terminal could
-    /// answer. And the wrong choice does not fail: muxterm.w hardcodes its
-    /// framebuffer at 0x800000 and the stock one at 0x700000, so on the wrong
-    /// screen it downloads, runs, draws into the address the resize vacated,
-    /// and presents as a hang with the ROM's text still showing.
-    ///
-    /// So the app writes the answer down and /.profile reads it. Every boot,
-    /// not just the first: the preset is a Setting, and it can change between
-    /// runs while the disk stays the same.
-    private func syncScreenMarker(_ link: ConsoleLink) async {
-        let wide = settings.activeScreen.romColumns > 88
-        link.send(Array((wide ? "> /etc/dmdwide\r" : "rm -f /etc/dmdwide\r").utf8))
-        try? await Task.sleep(nanoseconds: 500_000_000)
-        log(wide ? "5620 is Wide — mux will use muxterm.w"
-                  : "5620 is Original — mux will use the stock muxterm")
-    }
-
-    /// First boot only: create the account that belongs to whoever is running
-    /// this copy. Runs here because this is the one place in the app that has
-    /// a *root shell* — the console is read-only behind a lock and has no
-    /// shell on it at all, which is worth stating because sending these to
-    /// the console instead types them into nothing and silently does nothing.
-    ///
-    /// Everything is proven by an output-anchored marker rather than by a
-    /// prompt: V8's tty echoes typed characters as they arrive and they
-    /// interleave *into* whatever is printing, so a `#` prompt matcher
-    /// matches the echo of the command being sent. The marker is spelled
-    /// through a shell variable so the echo carries `PROV$OK` and only the
-    /// result carries `PROV-ok`.
-    private func provisionIfNeeded(_ link: ConsoleLink) async {
-        guard !machine.isProvisioned else { return }
-        let user = Provisioner.v8Name(from: Provisioner.hostUserName)
-        let gecos = Provisioner.hostFullName
-
-        // NO `waitFor("#")` HERE. onSpareLine has already dialled the line,
-        // sent `root' and consumed the prompt that came back, so waiting for a
-        // second one waits for a shell that has nothing left to say — it timed
-        // out every time and reported "no root shell" about a perfectly good
-        // root shell, leaving the machine unprovisioned and tty01 logging in
-        // as root because no account existed yet.
-        //
-        // Everything below is proven by its own marker anyway, which is the
-        // discipline that makes the prompt unnecessary rather than merely
-        // redundant.
-        // The marker variable itself, before anything that uses it.
-        link.send(Array("OK=-ok\r".utf8))
-        try? await Task.sleep(nanoseconds: 400_000_000)
-        for cmd in Provisioner.commands(user: user, gecos: gecos) {
-            link.send(Array("\(cmd)\r".utf8))
-            try? await Task.sleep(nanoseconds: 700_000_000)
-        }
-        link.send(Array("echo PROV$OK\r".utf8))
-        if await link.waitFor("PROV-ok", timeout: 15) {
-            await setPassword(link, user: user)
-            machine.markProvisioned(user)
-            log("account `\(user)' created, home /usr/\(user)")
-        } else {
-            // Deliberately NOT marked: a half-made account should be retried,
-            // and every command above is guarded so a second run is safe.
-            log("account creation unconfirmed — will retry next boot")
-        }
-    }
-
-    /// Optionally give the new account a password.
-    ///
-    /// V8's passwd(1) is interactive and there is no `--stdin`: it prompts,
-    /// reads with echo off, and asks again to confirm. Run as root it does
-    /// not ask for the old one, which is the only reason this is possible at
-    /// all without knowing a password we never set.
-    ///
-    /// Empty means none, which is the default. A personal machine emulating a
-    /// personal machine, on a disk its owner already holds, gains nothing
-    /// from a prompt with no recovery path — but some people want their
-    /// machine to feel like a machine, so the option exists.
-    private func setPassword(_ link: ConsoleLink, user: String) async {
-        let pw = settings.accountPassword
-        guard !pw.isEmpty else { return }
-        link.send(Array("passwd \(user)\r".utf8))
-        guard await link.waitFor("assword", timeout: 15) else {
-            log("passwd did not prompt — account left without one")
-            return
-        }
-        link.send(Array("\(pw)\r".utf8))
-        try? await Task.sleep(nanoseconds: 600_000_000)
-        link.send(Array("\(pw)\r".utf8))          // the confirmation
-        try? await Task.sleep(nanoseconds: 600_000_000)
-        log("password set for `\(user)'")
-    }
     /// Borrow a terminal the user is not using, become root on it, do something
     /// that needs root, and give it back.
     ///
