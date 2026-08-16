@@ -1,5 +1,8 @@
 import Foundation
 import SimhVAX
+#if os(macOS)
+import AppKit
+#endif
 
 /// One V8 machine: provisions media into Application Support, runs the SIMH
 /// vax780 main loop on its own thread, and speaks to it over two localhost
@@ -39,6 +42,47 @@ final class Machine: ObservableObject {
     /// running again. Cold boots do not fire it: /etc/rc has already done the
     /// equivalent work for them.
     var onRestored: (() -> Void)?
+
+    /// Quit this process and start a new one.
+    ///
+    /// The simulator is a thread inside this app, and SIMH cannot be run twice
+    /// in one process: its globals are never reinitialised, so a second
+    /// `simh_main` walks the first session's event queue and `sim_cancel`
+    /// calls abort(). A genuinely fresh machine therefore means a genuinely
+    /// fresh process, which is what this does.
+    ///
+    /// Used once in the life of a disk, after first-boot provisioning: the
+    /// account is created by a root shell whose transcript would otherwise be
+    /// the first thing a new user ever saw. The guest is halted first, so the
+    /// disk is flushed and consistent before anything restarts.
+    /// Wait for the kernel's own halt marker on the console.
+    ///
+    /// `halting (in tight loop)` is printed by boot() AFTER update() has run
+    /// and the I/O has drained, so it means the disk is safe — which a timer
+    /// never would.
+    func waitForHalt(timeout: TimeInterval) async -> Bool {
+        await console.waitFor("halting", timeout: timeout)
+    }
+
+    func relaunchProcess() {
+        #if os(macOS)
+        let url = Bundle.main.bundleURL
+        let cfg = NSWorkspace.OpenConfiguration()
+        cfg.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: url, configuration: cfg) { _, _ in
+            // Exit only once the replacement has been asked for, so there is
+            // never a moment with no ipnx and never two holding the disk: the
+            // new process provisions nothing (the marker is on disk now) and
+            // cold-boots while this one is already on its way out.
+            DispatchQueue.main.async { exit(0) }
+        }
+        #else
+        // iOS cannot relaunch itself, and an app that exits on its own is a
+        // rejection. The machine is provisioned and consistent; the transcript
+        // is cosmetic, and the next ordinary launch is clean.
+        Machine.note("provisioned — restart the app for a clean first screen")
+        #endif
+    }
 
     /// Console bytes for the terminal view (wired up by the view layer).
     var onOutput: (([UInt8]) -> Void)?

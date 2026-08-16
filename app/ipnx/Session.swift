@@ -323,8 +323,9 @@ final class Session: ObservableObject, Identifiable {
     /// problem. Clearing touches the VIEW only -- nothing is typed at the
     /// guest, which matters because the far end here is getty reading a name.
     private func rootPass(_ link: ConsoleLink, wide: Bool) async {
+        let creatingAccount = machine.provisionedUser == nil
         link.send(Array("root\r".utf8))
-        if machine.provisionedUser == nil {
+        if creatingAccount {
             await provisionIfNeeded(link)              // waits for `#' itself
         } else if await link.waitFor("#", timeout: 20) == false {
             note("no root shell — skipping this boot")
@@ -334,6 +335,34 @@ final class Session: ObservableObject, Identifiable {
             await syncScreenMarker(link)
             machine.recordScreenMarker(wide: wide)
         }
+        // FIRST BOOT ENDS THE PROCESS, IT DOES NOT HAND THE LINE BACK.
+        //
+        // Everything above ran as root, and its transcript stays in this
+        // terminal's scrollback whatever the screen is made to show. Clearing
+        // the view hides it from the screen and not from the scrollback, and a
+        // second login on one tty reads as something having gone wrong.
+        //
+        // So the machine is halted and the app restarts itself. The halt is
+        // the operator's shutdown — boot() flushes, waits for the I/O to drain
+        // and stops — so the new account is on the disk rather than in a
+        // buffer cache. The restart is a whole new PROCESS because SIMH cannot
+        // be run twice in one: its globals are never reinitialised and the
+        // second `simh_main` aborts inside sim_cancel.
+        //
+        // What comes back has never been root, has no provisioning to do, and
+        // shows the user one login: theirs.
+        if creatingAccount, machine.isProvisioned {
+            note("provisioned — halting, then restarting for a clean machine")
+            link.send(Array("cd /; sync; sync\r".utf8))
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            link.send(Array("/etc/halt\r".utf8))
+            // The kernel prints this once the disks are flushed and it is
+            // spinning at IPL 31 — an output-anchored marker, not a timer.
+            _ = await machine.waitForHalt(timeout: 60)
+            machine.relaunchProcess()
+            return
+        }
+
         link.send(Array("exit\r".utf8))
         if await link.waitFor("login:", timeout: 30) == false {
             note("getty did not come back — \(line.device) may still be root")
