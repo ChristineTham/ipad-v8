@@ -1,0 +1,84 @@
+#!/usr/bin/env expect
+# Boot the Tenth Edition golden image.  Phase K7.
+#
+#	expect tools/v10-boot.exp [image] [single|multi]
+#
+# The 780's console command file translated to SIMH, on a 750 -- see
+# tools/v10-uda750.py for why the ROM needs retargeting and which two
+# longwords do it.  SIMH's vax750 implements `boot' as VMB.EXE, DEC's VMS
+# bootstrap, which answers %BOOT-F-Unable to locate BOOT file to V10's boot
+# block; this does the ROM's job instead, exactly as lsys/boot/star/defboo.cmd
+# does on a machine that has no ROM.
+#
+# r5 is the boot flags, and sys/reboot.h gives them:
+#	0  RB_AUTOBOOT   multi-user: init runs /etc/rc, then gettys
+#	2  RB_SINGLE     single-user: init execs /bin/sh directly
+
+set timeout 240
+log_user 1
+set R [file dirname [file dirname [file normalize [info script]]]]
+set img [lindex $argv 0]
+if {$img eq ""} { set img "$R/work/v10gold/ipnx-v10-ra81.img" }
+set mode [lindex $argv 1]
+if {$mode eq ""} { set mode "multi" }
+set r5   [expr {$mode eq "single" ? 2 : 0}]
+
+set hits {}
+proc saw {what} { global hits; lappend hits $what; puts "\n>>> $what" }
+
+cd $R/work/myv8
+spawn $R/work/opensimh/BIN/vax750
+expect "sim>"
+foreach c [list "set cpu 8m" "set rq0 ra81" "attach rq0 $img" \
+                "set dz enable" "set dz lines=8"] {
+    send "$c\r"; expect "sim>"
+}
+send "load -o $R/work/v10boot/uda750 FA00\r"; expect "sim>"
+foreach c [list "dep sp 200" "dep r1 0" "dep r3 0" "dep r5 $r5"] {
+    send "$c\r"; expect "sim>"
+}
+
+puts "\n===== booting V10 ($mode) ====="
+send "run FA02\r"
+
+# MARK PARITY.  getty sends its first banner with bit 7 set -- CLAUDE.md
+# records this for V8 and V10 inherits it -- so the carriage returns arrive
+# as 0x8D and a pattern anchored on plain "login:" can miss the whole line.
+# Match on `ogin' , which survives whether or not the high bit is stripped by
+# the time the prompt itself is echoed.
+set banner 0
+expect {
+    -re {Unix 10e[^\r\n]*}   { if {!$banner} { set banner 1; saw "kernel banner" }; exp_continue }
+    "mem = "                 { saw "memory sized"; exp_continue }
+    "Tenth Edition"          { saw "/etc/rc ran -- motd printed"; exp_continue }
+    -re {ogin}               { saw "LOGIN PROMPT -- multi-user" }
+    -re {# $}                { saw "root shell" }
+    -re {panic[^\r\n]*}      { saw "PANIC" }
+    eof                      { saw "SIMULATOR EXITED"; }
+    timeout                  { saw "timed out" }
+}
+
+# If we reached a login prompt, prove it is a real one.
+if {[lsearch $hits "LOGIN PROMPT -- multi-user"] >= 0} {
+    send "root\r"
+    expect {
+        -re {# $}  { saw "logged in as root" }
+        "assword"  { send "\r"; expect -re {# $} { saw "logged in as root" } }
+        timeout    { saw "login did not complete" }
+    }
+    send "/bin/date\r"
+    expect { -re {19|20} { saw "date runs" } timeout {} }
+    send "/bin/ls /usr\r"
+    expect { -re {include|bin} { saw "/usr is mounted" } timeout {} }
+}
+
+if {[lsearch $hits "SIMULATOR EXITED"] < 0} {
+    send "\005"
+    expect { "sim>" {} timeout {} eof {} }
+    catch { send "quit\r" }
+    catch { expect eof }
+}
+
+puts "\n===== V10 BOOT =====\n"
+foreach h $hits { puts "  $h" }
+puts ""

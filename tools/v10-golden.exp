@@ -201,8 +201,13 @@ v8_sh "chmod 777 $U/tmp" 60
 # v10/mk/gen/prebuilt.txt is the map, and its fourth column says whether the
 # path came from V10's manual, from V8's measured disk, from us, or is a
 # default -- so a guess never reads as a citation.
-v8_sh "sh /n/t/instpre.sh $V $R $U > /n/t/prebuilt.log 2>&1; echo done" 1200
-note "prebuilt commands installed" [v8_try "test -s $R/bin/sh && echo PRE\$OK" "PRE-ok" 120]
+# /n/v10, NOT $V.  prebuilt.txt's source column comes from v10/MANIFEST and
+# already begins with `src/', so passing the tree root as /n/v10/src asked
+# for /n/v10/src/src/cmd/... and every copy failed.
+v8_sh "sh /n/t/instpre.sh /n/v10 $R $U > /n/t/prebuilt.log 2>&1; echo done" 1200
+v8_sh "N=`grep -c 'cannot open' /n/t/prebuilt.log`" 120
+note "prebuilt: no copy failed" [v8_try "echo PRE\$N\$OK" "PRE0-ok" 120]
+note "sh installed" [v8_try "test -s $R/bin/sh && echo SH\$OK" "SH-ok" 120]
 v8_sh "cd /n/v10/include; find . -print | cpio -pd $U/include" 1200
 note "/usr/include populated" [v8_try "test -s $U/include/stdio.h && echo INC\$OK" "INC-ok" 120]
 

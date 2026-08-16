@@ -65,16 +65,25 @@ rm -rf "$GOLD"; mkdir -p "$SCRATCH/etc"
 # /etc/ttys is V7's format, which V10's init still reads (cmd/init.c rline()):
 # character 1 is the on/off flag, character 2 is the getty argument, and the
 # rest is the tty name.
+# The SECOND character is getty's argument, and it picks a row of itab[] in
+# cmd/getty.c.  `0' is the first row -- ANYP+RAW at B300, succeeded by 1, 2,
+# 3 -- so `10console' put the console in RAW mode at 300 baud and cycled.
+# getty printed `login: ' and then never read a character, which reads as a
+# dead machine and is a dead terminal line.
+#
+# `2' is the row the tape provides for this: `/* table '2' -- 9600 */', 9600
+# both ways, and self-succeeding so it does not cycle speeds on a console
+# that has only one.
 cat > "$SCRATCH/etc/ttys" <<'EOF'
-10console
-01tty00
-01tty01
-01tty02
-01tty03
-01tty04
-01tty05
-01tty06
-01tty07
+12console
+02tty00
+02tty01
+02tty02
+02tty03
+02tty04
+02tty05
+02tty06
+02tty07
 EOF
 
 cat > "$SCRATCH/etc/passwd" <<'EOF'
