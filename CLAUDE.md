@@ -813,12 +813,16 @@ deployment targets are iOS 26 / macOS 26. The app was renamed from **Edition** t
 icon is now a stylised licence plate reading `ipnx` over LIVE FREE OR DIE, after the
 plate Armando Stettner handed out at USENIX (`tools/gen-icons.swift`).
 
-**B0.6 — a machine to live in** is planned but not started:
-[docs/machine-config.md](docs/machine-config.md). `fix-identity.exp` becomes
-`work/config.exp` (build time, universal) plus a first-boot provisioner in the app
-(per-installation: an account named after the host user). The host share mounts at
-`/n/macos` and `/n/home` and is deliberately **not** the home directory — V8's 14-byte
-filenames and case sensitivity rule that out.
+**B0.6 — a machine to live in is COMPLETE** (2026-08-15/16,
+[docs/machine-config.md](docs/machine-config.md)). Build-time identity lives in the
+golden; a first-boot provisioner in the app creates an account named after the host
+user (uid 1000, no password — a deliberate decision recorded in `Provisioner.swift`,
+not an omission), and `tty01` logs in as that user rather than as root. The network
+comes up from `/etc/rc`, and the host shares mount at `/n/macos` and `/n/home` —
+deliberately **not** the home directory, since V8's 14-byte filenames and case
+sensitivity rule that out. Networking can be switched off in Settings (**Machine →
+Ethernet card**), which gates the `attach il nat:` pair; `/etc/rc` guards on
+`/dev/il0`, so a card-less machine boots exactly as it did before the N track.
 
 **Track B's ingest path is settled** (2026-08-09, phase B0): host↔guest file
 transfer is proven end to end — [docs/media-exchange.md](docs/media-exchange.md),
@@ -860,9 +864,15 @@ the only check that would have caught either.
 Next: **submit** — the remaining steps need the Apple account and a final name
 decision, all listed in [docs/app-store.md](docs/app-store.md) — and **Track B**,
 whose ingest path and source are both now in place — the TUHS tarballs are in `work/`, and B1 needs only 14.87 MB of the 243 MB tree.
-Not yet exercised: `mux`/`jim` driven by the Mac's real mouse, "Crisp" scaling
-compared visually, and `muxterm`/`jim` widened to match the resized screen (they carry
-their own `display` from V8's libj). Update the checkboxes in
+**Not yet exercised — one thing, and it needs a human at a mouse**: `mux`/`jim`
+driven by the Mac's real pointer, and `jim` looked at inside a *widened* layer.
+Everything around it is proven and the claims that used to sit here were stale:
+"Crisp" scaling was compared on screen on 2026-08-09 and measured at exactly
+2.000× ([docs/a3-notes.md](docs/a3-notes.md)); `muxterm.w` at 1152 lights x=1151
+under `tools/drive-widemux.sh` ([docs/screen-size.md](docs/screen-size.md)); and
+`jim` needs no widening at all — `3nm` shows it exports `Jdisplayp`, a
+`*struct-Bitmap` the layer system fills in at runtime, and no `display` of its
+own, so it follows a resized screen for free. Update the checkboxes in
 [docs/roadmap.md](docs/roadmap.md) as phases complete.
 
 **Driving the Mac app from a script**: `open -n app --stdout LOG` *appends*, so

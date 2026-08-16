@@ -204,7 +204,26 @@ configured reference):
       network: `/etc/rc` writes them only inside `if test -c /dev/il0`, so
       their presence means the node existed and the card was attached.
 
-Not done:
+Resolved since (2026-08-16) — each executed and confirmed, not merely assumed:
 
-- [ ] Resolver configuration for `dnsq`, confirmed against the source
-- [ ] Settings: a switch to turn networking off, and an optional password
+- [x] Resolver configuration for `dnsq`, confirmed against the source.
+      `v8/usr/src/cmd/dnsq.c` defines `RESOLV "/usr/inet/lib/resolv"` and
+      `resolver()` reads one address out of it, falling back to SLiRP's
+      forwarder; `/etc/rc` writes `10.0.2.3` there when `/dev/il0` exists.
+      Proven end to end rather than by reading: `tools/net-selftest.sh`
+      resolves `www.tuhs.org` to 50.116.15.146 on the second query — the
+      first is expected to lose to ARP, which is why the harness asks twice.
+- [x] Settings: a switch to turn networking off — `SettingsView`'s
+      **Machine → Ethernet card (NI1010)** toggle, which gates the
+      `set il enable` / `attach il nat:` pair in both configs. `/etc/rc`
+      guards on `/dev/il0`, so a machine with the card off boots exactly as
+      it did before the N track, rather than hanging on a missing interface.
+
+Deliberately not done:
+
+- **An optional account password.** Not an omission — a decision, recorded in
+  `Provisioner.swift`: this is a personal machine emulating a personal machine,
+  on a disk its owner already has in their hands, so *"a password prompt with
+  no recovery path is a support burden with no security value."* The account is
+  created with an empty password field and `tty01` logs itself in. If it is
+  ever wanted, Settings is where it goes; nothing in the machine blocks it.
