@@ -1,0 +1,70 @@
+#!/usr/bin/env expect
+# Boot the Tenth Edition kernel and look at where it gets stuck.  Phase K4.
+#
+#	expect tools/v10-bootprobe.exp [seconds]
+#
+# The 780's console command file, from lsys/boot/star/defboo.cmd, translated
+# to SIMH.  V10's boot scheme is the VAX-11/750's -- a ROM reads 512 bytes off
+# the device and branches to it -- and on a 780 there is no such ROM, so the
+# console does the ROM's job.  That is what defboo.cmd is:
+#
+#	LOAD/ST:FA00 UDA.ROM
+#	D SP 200 / D R1 01 / D R3 0 / D R5 0
+#	START FA02
+#
+# r1 is `0xuc' -- unibus adapter, then UDA50 index -- and uda.s's table is
+#	udareg: .long 0772150, 0772160
+# so the 01 in the tape's own file means the SECOND controller, which is
+# where that machine's disk was.  SIMH's RQ is the first, so r1 is 0.
+#
+# FA02 rather than FA00 because the image opens with the two bytes `UD'.
+
+set secs [expr {[llength $argv] > 0 ? [lindex $argv 0] : 25}]
+set timeout 120
+log_user 1
+
+set ROOT [file dirname [file dirname [file normalize [info script]]]]
+cd $ROOT/work/myv8
+spawn $ROOT/work/opensimh/BIN/vax780
+expect "sim>"
+
+foreach cmd {
+    "set cpu 8m"
+    "set rq0 ra81"
+    "attach rq0 v10root.img"
+    "set dz enable"
+} { send "$cmd\r"; expect "sim>" }
+
+send "load -o $ROOT/work/v10/src/lsys/boot/star/uda FA00\r"; expect "sim>"
+foreach cmd {"dep sp 200" "dep r1 0" "dep r3 0" "dep r5 0"} {
+    send "$cmd\r"; expect "sim>"
+}
+
+send "run FA02\r"
+sleep $secs
+
+# ^E stops the simulator and returns to sim> -- on a LOCAL tty console, which
+# is what this is (no telnet console configured), so it is the stop character
+# rather than an inert data byte.
+send "\005"
+expect {
+    "sim>" {}
+    timeout { puts "\nBOOTPROBE: never reached sim>"; exit 1 }
+}
+
+puts "\n===== where it stopped ====="
+foreach cmd {
+    "ex pc,psl,sp"
+    "ex r0-r5"
+    "ex r6-r11"
+} { send "$cmd\r"; expect "sim>" }
+
+puts "\n===== did the disk see any traffic? ====="
+send "show rq0\r"; expect "sim>"
+send "show rq\r";  expect "sim>"
+
+puts "\n===== the instructions around the loop ====="
+send "ex -m 70058-70070\r"; expect "sim>"
+
+send "quit\r"
+expect eof
