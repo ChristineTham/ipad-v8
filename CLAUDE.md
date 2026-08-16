@@ -803,6 +803,40 @@ and this artefact is committed. The carry reference must be a *different* file f
 target (`rp07ref`, not `rp07new`), or the precondition checks the file the run is about
 to overwrite.
 
+## Shipping: the website and the Mac release
+
+Full record in [docs/website-and-release.md](docs/website-and-release.md). The
+short form:
+
+```bash
+# archive → notarise app → dmg → notarise dmg → staple → assert Gatekeeper
+tools/release-mac.sh
+```
+
+- **The site is `website/`** (Astro 7 + Tailwind v4), published to
+  <https://christham.net/ipnx/> by a Pages workflow. It is a **project page under
+  the user-site custom domain**, so `site` is `christham.net`, not github.io,
+  which 301s. `base` must equal the repo name.
+- **`build.format: 'file'` is an App Store requirement in disguise** — it makes
+  `/privacy` *and* `/privacy.html` both resolve, and App Store Connect's Privacy
+  Policy and Support URLs get quoted both ways. Astro `redirects` cannot fix this
+  and a `public/privacy.html` shadows the real route into a loop.
+- **Never hard-code the base**; use `href()` in `src/lib/paths.ts`.
+- **`<Crt text={...}>` takes a PROP, not a slot.** Astro normalises whitespace
+  between element children, so a multi-line transcript passed as slot content
+  arrives as one line inside a `<pre>`. Same family of bug as SVG collapsing
+  whitespace in the OG card, which needs `xml:space="preserve"`.
+- **`… | grep -q` under `pipefail` fails on SIGPIPE**, so a check can fail
+  exactly when it should pass — the release script printed "hardened runtime is
+  NOT enabled" under a line saying `flags=0x10000(runtime)`. Capture, then test.
+- **`notarytool submit --wait` exits 0 for a REJECTED submission**; insist on
+  `status: Accepted`.
+- **Both the app and the dmg are notarised and stapled.** The dmg is what gets
+  downloaded, so it is what must carry the ticket.
+- The signature names **Hello Tham Pty. Ltd.** (a Developer ID needs an enrolled
+  team) while the project is personal and non-commercial, per the 2017 covenant.
+  That difference is explained on the download page, not hidden.
+
 ## Status / next step
 
 **Track A is complete** (A1–A3, all 2026-08-09) — see
