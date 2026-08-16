@@ -341,7 +341,8 @@ file type — which nobody had done in the nine years it has been public:
 | Do they run on V8? | **Yes.** 9/9, `tools/v10-probe.sh` |
 | Syscall slots shared | **112 of 128**, `tools/v10-syscalls.py`. Six V10-only; two have a boot-path caller |
 | Build files | Mixed and irrelevant: 205 `mkfile`, 153 `Makefile`, 209 `makefile` — and **no world build, and none at all for the boot path** |
-| Boot media | **None.** That has not changed, and it is the whole of stage 8 |
+| **Prebuilt kernels** | **SIX.** `seki.u`, `dutoit.u`, `atomic.u`, `u0`, `u1`, `t1` — all 0410 NMAGIC, banners `Unix 10e` 1990/1993. Linked Tenth Edition kernels, public for nine years |
+| Boot media | **None** — no bootable *disk*. That is stage 8, and it is a different thing from having no kernel |
 
 Three consequences that shape everything:
 
@@ -362,6 +363,50 @@ Three consequences that shape everything:
   `cc` at a *V10* toolchain: `cc -B/usr/v10/lib/ -t02palc` uses nothing of
   V8's but the driver.
 
+### K — boot a kernel that already exists, before compiling one
+
+**Six linked Tenth Edition kernels are in the tarball** and this plan did not
+know. They are 0410 NMAGIC where userland is 0413, so an audit that
+classified by "is it executable" put them in the same bucket as `ls`;
+`seki.u`'s entry point is `0x80000ad8`, VAX S0 system space, and its banner
+reads `Unix 10e Mar 15 04:03 1990`.
+
+This does not replace stage 7 — `alice.m` is the real VAX-11/780 config and
+has **no** `.u`, so a kernel for the machine we emulate still has to be
+built. What it replaces is stage 7's position as the gate. **A running V10
+kernel turns stages 1–3 from a build with no oracle into a build with a
+system to check against**, which is the same argument that keeps the 46
+prebuilt commands.
+
+`seki` is the target: a VAX-11/750 (`dw750`) with MSCP `ra` disks through a
+`uda50`, a `dz11`, and — at the same CSR our V8 config uses — **`ni1010a`**,
+the Interlan card N2 already modelled for SIMH.
+
+- [ ] **K1 A `vax750` simulator.** open-simh builds one and its device list
+      includes `pdp11_rq.c`, the UDA50/MSCP controller `seki` wants. Desktop
+      first; the app is a later question
+- [ ] **K2 A V10 root filesystem.** V8 cannot write one: `sys/ino.h` and
+      `sys/dir.h` are byte-identical and `struct filsys` matches field for
+      field, but `NICFREE` is 178 against V8's 50, which alone changes the
+      superblock. `BSIZE` is `BITFS(dev) ? 4096 : 1024` where
+      `BITFS(dev) = ((dev) & 64)` — **bit 6 of the device number picks the
+      variant**, which is also why `fsck.c` opens `#define BITFS(x) (1)`.
+      The way through is Track S's: **V10's `mkfs` takes a prototype file**
+      (`mkfs filsys proto/size [m n]`), so one command builds a populated
+      filesystem, run *inside V8* against a raw device where V8's kernel
+      never has to understand the format. `mkfs` is one of the seventeen
+      already built
+- [ ] **K3 `/unix` and a boot block.** `lsys/boot/README`: *"The scheme is
+      stolen from the VAX-11/750 (comet) hardware."* The ROM reads 512 bytes
+      off the device and jumps to it; the boot block then reads `/unix`
+      directly, with no intermediate `/boot`. So `/unix` must be at the front
+      of the filesystem and **no more than singly indirect**, and block 0
+      carries the boot block from `lsys/boot/bb`
+- [ ] **K4 `boot rq0`.** Kernel reaches single-user is the moment
+- [ ] **K5 A userspace that compiles.** The point of the exercise, and the
+      stated goal: `sh`, the toolchain, and enough of `/etc` to log in. Then
+      stages 1–9 run *on V10*, which is what they were always supposed to do
+
 ### Stage 7 in detail — the kernel
 
 - [ ] **Choose the kernel tree, and say why.** `sys/` and `lsys/` are two
@@ -371,9 +416,10 @@ Three consequences that shape everything:
       compiling, not halfway through. One constraint already removed:
       `lsys/os/sysent.c` and `sys/os/sysent.c` are **byte-identical**, so the
       choice does not change the system-call interface
-- [ ] **`config(8)`, pulled forward from stage 6.** Source only —
-      `config.h`, `config.l`, `config.y`, `main.c` — so it needs yacc and lex,
-      which `v10/mk/mkdep.py`'s preamble already carries macros for
+- [ ] **`mkconf`, not `config`.** V10's kernel configurator is `mkconf`
+      and it is **prebuilt** — `lsys/lib/mkconf` and `lsys/mkconf/mkconf`,
+      37,932 bytes. (`cmd/config/` exists as source only and is *not* what
+      builds a V10 kernel; naming it as the stage-7 blocker was wrong.)
 - [ ] **The machine description.** Ours joins `astro/alice.m` — declaring the
       machine we actually emulate — exactly as `usr/sys/ipnx/conf` did for V8
       rather than adopting `alice` or `research` wholesale
