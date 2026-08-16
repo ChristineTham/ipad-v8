@@ -5,16 +5,21 @@ research moonshot that lands into the same app shell. C and D are later and decl
 the README's scope has somewhere to point. Update checkboxes and the status line as work
 completes.*
 
-**Current phase: Track B has started, and B1 is complete (2026-08-16).** V8 is
-closed out — Track A through A5, Track S built the disk the app ships, and
-B0/B0.5/B0.6 are done. **A Tenth Edition toolchain now runs on it**: V10's own
-compiler, assembler and libc turned out to be *in* the tarball as linked VAX
-binaries and to run unmodified on a V8 kernel, so B1 was not the cross-build it
-was written as. `cpp`, `c2` and `ld` were built from V10 source; the assembled
-set compiles and links V10 programs, and rebuilt V10's linker with itself
-([v10-log/2026-08-16.md](v10-log/2026-08-16.md)). Next is **B2**, the userland —
-a build mechanism first, then libc checked against the 1995 archive, then the
-boot path, none of which is prebuilt. Still unexercised from Track A:
+**Current phase: Track B, running the V8 bootstrap again for the Tenth
+Edition.** V8 is closed out — Track A through A5, Track S built the disk the
+app ships, and B0/B0.5/B0.6 are done.
+
+**The goal is a V10 kernel with the V10 toolchain running on it.** Not a
+complete userland: a machine that can compile itself. Everything else follows
+from that, and nothing can be trusted before it — a V10 command built on a V8
+host is validated against the wrong kernel, and `tools/v10-syscalls.py`
+already shows two boot-path programs that provably cannot run there.
+
+So Track B is V8's nine stages in V8's order, with **6 and 7 swapped**: the
+kernel before the bulk of the commands. Stage 1 is further from done than B1
+made it look — four of the seven passes were *taken* prebuilt off the tarball
+rather than built — and stages 2 and 3, libc and the toolchain fixpoint, have
+not been started at all. Still unexercised from Track A:
 `mux`/`jim` under the Mac's real pointer, which needs a human at a mouse; the
 App Store steps need the Apple account. A0
 proved the machinery on the desktop ([spike-a0-results.md](spike-a0-results.md));
@@ -227,157 +232,195 @@ guest disk, no subset has to be chosen, and B1 mounted all 25,682 files at
 `/n/v10`. `tools/tapeio.py` and [media-exchange.md](media-exchange.md) remain
 for the one case netfs cannot serve — moving a *disk image*.
 
-### B1 — the toolchain *(complete 2026-08-16; [v10-log/2026-08-16.md](v10-log/2026-08-16.md))*
+### The stages, and why they are V8's
 
-- [x] **Import, with a checkable record** — `tools/v10-import.py`, 25,682 files
-      classified by magic number and 196 case collisions escaped. `v10/MANIFEST`
-      and `v10/CASEMAP` are committed; the tree is not, so the tarballs stay
-      pristine and our changes stay a patch series. `--verify` re-checks every
-      hash in about fifteen seconds. Two collisions are real source rather than
-      build litter — `sys/io/Nttyld.c` beside `nttyld.c`, in the kernel, and
-      `libc/stdio/ostdio/doprnt.S` beside `doprnt.s` — and a plain `tar xjf` on
-      macOS drops one of each silently, with a zero exit status
-- [x] **Do V10 binaries run on V8?** — `tools/v10-probe.sh`, **9/9**. Predicted
-      by the syscall tables but *tested*, because a syscall table is not an ABI:
-      `struct stat` could have grown, `crt0` could want a different stack
-- [x] **`cpp`, `c2` and `ld` built from V10 source** — the three passes with no
-      binary. `cmd/ld.c` is 1,946 lines and complete; the plan said no system
-      linker was in the tree, and it was missed for being a loose file rather
-      than a `cmd/ld/` directory
-- [x] **A V10 toolchain, assembled and used** — `tools/v10-toolchain.sh`,
-      **10/10**. One directory holds all seven passes and `cc -B/usr/v10/lib/
-      -t02palc` drives them, using nothing of V8's but the driver and
-      `/usr/include`. That `-t` seal is **S5's**, built so V8's own build could
-      not reach into the running system, and it turns out to be the lever that
-      points a `cc` at another *edition*
-- [x] **hello.c, and a mid-size command** — the mid-size one is `ld.c` itself.
-      V10's compiler rebuilt V10's linker, and that linker relinked hello: the
-      two binaries' text and data are byte-identical, differing only in a
-      `time_t` inside a `.stabs` record
+**Track B is the V8 bootstrap run again for a different edition.** Track S
+spent months getting that sequence right and the reasons it is in that order
+are properties of building a Unix, not of building V8:
 
-### B2 — the userland
+| stage | builds | with | into | V10 |
+|---|---|---|---|---|
+| **0** | — | V8's `/bin/cc`, `/bin/make`, `/lib/libc.a` | — | the running golden |
+| **1** | the toolchain: yacc-order, then cpp, ccom, c2, as, ld, ar, ranlib, nm, size, strip, cc | stage 0 | `TOOLDIR` | ◐ partial |
+| **2** | **libc** | stage 1 | `TOOLDIR/lib` | ☐ |
+| **3** | the whole toolchain **again** | stage 1 + stage 2 libc | `TOOLDIR3` | ☐ |
+| **4** | the headers | — | `DESTDIR/usr/include` | ☐ |
+| **5** | the libraries | stage 3 | `DESTDIR/usr/lib` | ☐ |
+| **7** | **the kernel, via `config`** | stage 3 | `DESTDIR/unix` | ☐ |
+| **6** | the commands | stage 3 | `DESTDIR/{bin,usr/bin,etc}` | ☐ 17 built |
+| **8** | a bootable disk | `mkfs` + `DESTDIR` + boot block + `proto-dev` | a new image | ☐ |
+| **9** | the whole system again, from inside itself | `chroot DESTDIR` | the completeness proof | ☐ |
 
-The toolchain is trusted; now it has to build a system. Ordered by what B3
-cannot start without.
+**libc before the second toolchain** is the rule Track S learned the hard way
+and it transfers unchanged: every stage-1 binary links against whatever libc
+existed when stage 1 ran, so rebuilding the toolchain before libc produces a
+set that has to be built a third time anyway.
 
-- [x] **B2.0 Probe the boot path before building anything** *(2026-08-16,
-      `tools/v10-bootpath.sh`, 35/46)*. Run first, against the roadmap's own
-      ordering, because B1 was won by putting the decisive experiment ahead of
-      the machinery and the same risk sat here. **Fifteen of the seventeen
-      boot-path commands already compile** against r70 headers, and all five
-      that are safe to execute on the machine that built them then ran. The
-      two that do not are each one line: `fsck` wants a bare `<stat.h>` that
-      exists only as `sys/stat.h`, and `mv` wants `ROOTINO`, which reaches it
-      through V8's `sys/types.h` including `sys/param.h` where r70's does not
-- [x] **B2.0a Compiling is not running** *(`tools/v10-syscalls.py`)*. **112 of
-      128 syscall slots hold the same call at the same index** — six are
-      filled in V10 and `nosys` in V8, and exactly two of those have a caller
-      in the boot path: `mount` uses `fmount` (slot 26) and `umount` uses
-      `funmount` (slot 50). Both build, link, and cannot run until a V10
-      kernel is under them — which costs nothing, since they are the two
-      programs that only ever need to work on that kernel
-- [x] **B2.1 A build mechanism — settled: reuse `v8/mk/mkdep.py`.** The
-      premise this item carried was wrong twice over. **V10 does not build
-      with `mk`**: the tree is mixed (205 `mkfile`, 153 `Makefile`, 209
-      `makefile`, 78 `*.mk`) and `cmd/make/make` is a prebuilt 0413 binary, so
-      `make` is at least as native to it. And **V10 has no world build** — the
-      one candidate, `src/makefile`, builds a Datakit daemon called `fshare`.
-      What decides it is that the **boot path has no build file of any kind**:
-      seventeen loose `.c` files under a `cmd/` with no makefile, which is the
-      same shape as V8's `cmd/` (120 dirs + 168 loose `.c` + no makefile;
-      V10's is 171 + 207 + none). `mkdep.py` was written for exactly that, and
-      its V8-specific weight — the fifteen-entry `STAGE1` table — is the
-      toolchain bootstrap V10 does not need
-- [ ] **B2.2 The header question, settled per header and logged.** Smaller
-      than feared: the answer is r70 first with V8 filling the gaps, plus a
-      short list of reconciliations. Measured — `ranlib.h`, `pagsiz.h`,
-      `ctype.h`, `setjmp.h`, `sys/dir.h`, `utmp.h`, `sys/ino.h` and `struct
-      _iobuf` are identical to V8's; `a.out.h` differs by one bit-field *name*
-      at the same width, so the object formats agree; V8 has **no**
-      `sys/ttyio.h`, `sys/nttyio.h`, `sys/filio.h`, `utsname.h` or `libc.h` at
-      all. The tty divergence is the one that looked fatal and is not: every
-      `TIOC*` V10 shares with V8 has the same `(('t'<<8)|N)` number, V10 adds
-      only `TIOCGDEV`/`TIOCSDEV` into slots 23 and 24 which V8 leaves free,
-      and `struct sgttyb` is unchanged in layout — V10 moved line speed out
-      into a `ttydevb` reached by those two ioctls, and that is the whole of
-      it. Two reconciliations open: r70's `sys/types.h` should include
-      `sys/param.h` (the 1995 source says so and the 1997 reconstruction
-      dropped it), and `fsck` needs `sys` on its include path
-- [ ] **B2.3 libc from source, checked against the 1995 archive.** The
-      strongest test available anywhere in this track: `src/libc/libc.a` is 262
+**6 and 7 are deliberately swapped for V10, and that is the one departure.**
+In V8 the commands come first because they and the kernel are the same
+edition — a command built in stage 6 runs on the stage-0 kernel, so stage 6 is
+testable the moment it finishes. **That is not true here.** A V10 command
+built on a V8 host runs on a *V8* kernel until stage 7 replaces it, and
+`tools/v10-syscalls.py` already shows this is not hypothetical: 112 of 128
+syscall slots agree, six are V10-only, and `mount` and `umount` call two of
+them (`fmount` at 26, `funmount` at 50, both `nosys` in V8). Those two are
+merely the ones a static scan can see. Building ~283 commands and validating
+them against the wrong kernel would be measuring the wrong thing, so the
+kernel comes first and the commands are checked against the system they are
+actually for.
+
+`config(8)` is the exception that gets pulled forward: stage 7 runs it, it
+runs on the *host*, and V10 ships it as `cmd/config/{config.h,config.l,config.y,main.c}`
+with **no prebuilt binary**. It is a stage-6 item that stage 7 cannot start
+without.
+
+### Where each stage actually stands
+
+- [ ] **Stage 1 — the toolchain.** B1 (2026-08-16) assembled a working set and
+      that is *not* the same as having done stage 1. Four passes were **taken
+      prebuilt off the tarball** — `ccom`, `as`, `libc.a`, `crt0.o` — and only
+      `cpp`, `c2` and `ld` were built from source. V8's stage 1 builds every
+      pass from source with stage 0, and that is what this has to become.
+      **The prebuilt binaries are the ORACLE, exactly as the 46 prebuilt
+      commands are** — B1 proved they run (`tools/v10-probe.sh`, 9/9), which
+      makes them the ideal thing to check a from-source build against, and a
+      poor thing to substitute for one. Evidence and harness:
+      [v10-log/2026-08-16.md](v10-log/2026-08-16.md), `tools/v10-toolchain.sh`
+- [ ] **Stage 2 — libc from source.** Not started; everything so far links the
+      1995 `libc.a`. This is the strongest check available anywhere in Track B
+      and the reason to want it is not ceremony: `src/libc/libc.a` is 262
       members with a valid `__.SYMDEF` that already links and runs, so a
       from-source rebuild can be compared **member by member** rather than
       merely observed to compile. Track S's `cmpstage.sh` is the precedent
-- [ ] **B2.4 The boot path, none of which is prebuilt.** `init`, `getty`,
-      `login`, `mount`, `umount`, `mkfs`, `fsck`, `icheck`, `sync`, `date`,
-      `stty`, and the `/bin` core (`cat`, `cp`, `mv`, `rm`, `mkdir`, `echo`).
-      B3 is blocked on this list and on nothing else in B2.
-      **B2.0 has already built fifteen of the seventeen**, so what is left
-      here is the two header reconciliations, an install layout, and the same
-      question `provenance.txt` answers for V8: which of these is on the disk,
-      and where it came from
-- [ ] **B2.5 The rest of the userland, with the 46 as an oracle.** Every
-      command that has a 1995 binary is a check on ours; every command that
-      does not is a build to be trusted on other grounds. Record which is
-      which, the way `provenance.txt` does for V8
-- [ ] **B2.6 The 5620 host side** — `mux`, `32ld` — from `v10blit`. Needed by
-      B4 and independent of everything above, so it can go early if B2.1
-      stalls
+- [ ] **Stage 3 — the toolchain again, against our libc.** Not started. B1's
+      "V10's compiler rebuilt V10's linker byte-identically" is one component
+      of this and reads like the whole of it; it is not. The stage is the
+      fixpoint — the first set in which every pass came from our source and
+      links our libc — and until it passes, nothing later can be blamed on
+      the source rather than on the toolchain
+- [ ] **Stage 4 — the headers.** Currently a `cpio -pd` of the r70 tree onto
+      the guest, done inside the harnesses. That is a staging hack, not the
+      stage: V8's is 224 per-file rules so that touching a header reinstalls
+      it and rebuilds everything that includes it. Two reconciliations are
+      already known and both are defects in the 1995 source rather than in
+      the 1997 headers — see the B2.0 notes below
+- [ ] **Stage 5 — the libraries**
+- [ ] **Stage 7 — the kernel.** The headline moment, and nobody has ever
+      compiled one. Detail below
+- [ ] **Stage 6 — the commands.** 17 built and installed
+      (`tools/v10-make.sh`, 30/30) — the boot path, as a proof of the
+      mechanism rather than as the stage. ~266 to go, and they get checked
+      against a V10 kernel
+- [ ] **Stage 8 — a bootable disk**
+- [ ] **Stage 9 — the system rebuilds itself under its own kernel.** For V8
+      this re-proved a known-good system; for V10 it is the first time a V10
+      kernel would ever host its own build
 
-### B3 — the kernel, and the first boot
+### What is already done, and what it cost to learn
 
-**Nobody has compiled a V10 kernel.** Everything here is genuinely new, and the
-device support is the one part already known to be present.
+The infrastructure below is finished and edition-independent. It is *not* a
+stage — it is what the stages run on.
 
-- [ ] **B3.1 Choose the kernel tree, and say why.** `sys/` and `lsys/` are two
-      snapshots of the same kernel: 522 files in common of which **131 differ**,
-      and different sets of machine configurations (`sys/astro` has 10, `lsys`
-      has 17 including `crab`, `pipe`, `west`). This has to be settled *before*
-      anything is compiled, not discovered halfway through.
-      One constraint removed early: `lsys/os/sysent.c` and `sys/os/sysent.c`
-      are **byte-identical**, so the choice does not change the system-call
-      interface and can be made on other grounds
-- [ ] **B3.2 The machine description.** `star` is the 780 family and
-      `astro/alice.m` is a real 780 config. Ours joins it — `ipnx.m`, declaring
-      the machine we actually emulate — exactly as `usr/sys/ipnx/conf` did for
-      V8 rather than adopting `alice` or `research` wholesale
-- [ ] **B3.3 The kernel compiles and links.** The three drivers we need are
-      present: `hp.c`, `dz.c`, `ni1010a.c`.
+| | | |
+|---|---|---|
+| **B0** | ✅ 2026-08-09 | Host↔guest transfer, `lost+found` repaired, TUHS tarballs fetched — [media-exchange.md](media-exchange.md) |
+| **B0.5** | ✅ 2026-08-10 | The N track, N0–N7: RP07 disk, an Interlan NI1010 modelled for SIMH, V8 on the Internet, and **a macOS folder mounted read/write inside V8** over Weinberger's netfs — [networking-plan.md](networking-plan.md), [n-track-notes.md](n-track-notes.md), [netfs-protocol.md](netfs-protocol.md) |
+| **B0.6** | ✅ 2026-08-15 | A machine to live in: identity, an account named after the host user, network up from `/etc/rc`, host shares at `/n/macos` and `/n/home` — [machine-config.md](machine-config.md) |
+| **import** | ✅ 2026-08-16 | `tools/v10-import.py` — 25,682 files, classified by magic number, 196 case collisions escaped, `--verify` in ~15 s. `v10/MANIFEST` and `v10/CASEMAP` committed; the tree is not |
+| **serve** | ✅ 2026-08-16 | The whole 243 MB tree at `/n/v10`, read in place. The courier disk and the subset it forced are both out of the picture |
+| **build metadata** | ✅ 2026-08-16 | `mk/mkgen.py` is the generator engine, shared with V8 and proved byte-identical by `v8/mk/mkdep.py --check`; `v10/mk/mkdep.py`, `tools/v10-where.py`, `tools/v10-overlay.py` |
 
-      **`ni1010a.c` is the same card as V8's `ill.c`** — compared 2026-08-16:
-      identical three-register layout (`il_csr`/`il_bar`/`il_bcr`) and an
-      identical command set (`ILC_RESET`, `ILC_STAT`, `ILC_ONLINE`, `ILC_RCV`,
-      `ILC_XMIT`, `ILC_LDXMIT`, with `IL_EUA`/`IL_CIE`/`IL_RIE`/`IL_CDONE`).
-      So `libsimh/patches/pdp11_il.c` is modelling the right hardware.
+**The facts every stage rests on**, established by auditing the tarball by
+file type — which nobody had done in the nine years it has been public:
 
-      But V10 **drives** it differently, and our model was written against V8
-      alone. Two things to settle before a V10 kernel is expected to pass a
-      packet:
-      - **V8 polls, V10 sleeps.** V8's `ilcdone()` spins on `IL_CDONE`; V10's
-        `ilincmd()` sets `IL_CIE` on every command and `tsleep`s. Our model
-        raises the command interrupt from the common tail of the dispatch, so
-        this should already hold — but it has never been exercised, because V8
-        never asked for it
-      - **Receive depth.** Our ring is `IL_RXQ` = 8, with a comment asserting
-        `ill.c` keeps one buffer outstanding. V10 caps at `MAXRBUFS` = 16 and
-        queues until `rbytes >= ILRBYTES` (`ETHERMAXTU*2`), which is ~3 buffers
-        at `ILRSIZE` 1024 but more if `allocb` returns smaller blocks. The
-        comment is V8-only and the ring should be 16
-- [ ] **B3.3a A conformance test for the device model.** The above are found by
-      reading; what settles them is a harness that drives `pdp11_il.c` the way
-      *V10* does — command-interrupt completion and a multi-buffer receive
-      burst — rather than the way V8 happens to
-- [ ] **B3.4 The boot block**, per `lsys/boot/README`: 512 bytes, kernel at the
+| | |
+|---|---|
+| Files | **25,682** — `v10src` + `v10blit` + `r70include` |
+| Linked VAX executables | **483**, including `ccom`, `as`, `make`, `sh`, `sed`, `ls`, `ps` |
+| Objects / archives | 1,525 `0407` objects, 150 `ar` archives — including a 262-member `libc.a` |
+| Do they run on V8? | **Yes.** 9/9, `tools/v10-probe.sh` |
+| Syscall slots shared | **112 of 128**, `tools/v10-syscalls.py`. Six V10-only; two have a boot-path caller |
+| Build files | Mixed and irrelevant: 205 `mkfile`, 153 `Makefile`, 209 `makefile` — and **no world build, and none at all for the boot path** |
+| Boot media | **None.** That has not changed, and it is the whole of stage 8 |
+
+Three consequences that shape everything:
+
+- **The prebuilt binaries are an ORACLE, not a shortcut** — and this applies
+  to the *toolchain* as much as to the 46 prebuilt commands. 46 of roughly
+  283 command source units have a 1995 binary, and the split is telling:
+  `sh`, `sed`, `ls`, `make`, `cpio`, `ps`, `cron` are present; `init`,
+  `getty`, `login`, `mount`, `mkfs`, `fsck`, `cat`, `cp`, `rm`, `echo`,
+  `date` are **not**, because those get *installed* rather than left where
+  they were compiled.
+- **The machine we already emulate is the right target.** `lsys/io` carries
+  `hp.c` (Massbus RP), `dz.c` (DZ11) and **`ni1010a.c`** — an Interlan
+  driver, for the card N2 modelled for SIMH. The 780 family is `star`
+  (`md/machstar.c`, `consstar.c`, `nexstar.c`, `ubastar.c`,
+  `ml/trapstar.s`), and `astro/alice.m` is a real CSRC VAX-11/780 config.
+- **`-B` crosses the edition boundary.** S5's extended `-t02palc`, built so
+  V8's own build could not reach into the running system, is what points a
+  `cc` at a *V10* toolchain: `cc -B/usr/v10/lib/ -t02palc` uses nothing of
+  V8's but the driver.
+
+### Stage 7 in detail — the kernel
+
+- [ ] **Choose the kernel tree, and say why.** `sys/` and `lsys/` are two
+      snapshots of the same kernel: 522 files in common of which **131
+      differ**, and different machine-configuration sets (`sys/astro` has 10,
+      `lsys` has 17 including `crab`, `pipe`, `west`). Settle it *before*
+      compiling, not halfway through. One constraint already removed:
+      `lsys/os/sysent.c` and `sys/os/sysent.c` are **byte-identical**, so the
+      choice does not change the system-call interface
+- [ ] **`config(8)`, pulled forward from stage 6.** Source only —
+      `config.h`, `config.l`, `config.y`, `main.c` — so it needs yacc and lex,
+      which `v10/mk/mkdep.py`'s preamble already carries macros for
+- [ ] **The machine description.** Ours joins `astro/alice.m` — declaring the
+      machine we actually emulate — exactly as `usr/sys/ipnx/conf` did for V8
+      rather than adopting `alice` or `research` wholesale
+- [ ] **The kernel compiles and links.** The three drivers are present:
+      `hp.c`, `dz.c`, `ni1010a.c`. **`ni1010a.c` is the same card as V8's
+      `ill.c`** — compared 2026-08-16: identical three-register layout
+      (`il_csr`/`il_bar`/`il_bcr`) and an identical command set. But V10
+      *drives* it differently and our SIMH model was written against V8
+      alone: V8's `ilcdone()` spins on `IL_CDONE` where V10's `ilincmd()`
+      sets `IL_CIE` and sleeps, and V10 queues up to `MAXRBUFS` = 16 receive
+      buffers where our ring was 8. Both hardened 2026-08-16
+      (`libsimh/patches/pdp11_il.c`); neither has been exercised by a V10
+      kernel, because there has never been one
+- [ ] **A conformance test for the device model** — a harness that drives
+      `pdp11_il.c` the way *V10* does rather than the way V8 happens to
+- [ ] **The boot block**, per `lsys/boot/README`: 512 bytes, kernel at the
       start of the filesystem, no more than singly indirect. Read it in full
       first — it is the constraint that shapes the image layout
-- [ ] **B3.5 The image.** Filesystem, device nodes, `/etc/rc` — Track S's
-      `v8/mk/builddisk.sh` and `proto-dev` are the working precedent
-- [ ] **B3.6 First boot attempt.** `vax780` first, for continuity with
-      everything else here; fallbacks are `microvax2` (`mflow`, KA630) and
-      `vax8200` (`bvax`, KA820), both of which V10 supports and SIMH emulates.
-      **Kernel reaches single-user** is the headline moment
-- [ ] **B3.7 Announce on TUHS** — this answers a question that list asked in
-      2017, and the people who ran these machines still read it
+- [ ] **First boot attempt.** `vax780` first, for continuity; fallbacks are
+      `microvax2` (`mflow`, KA630) and `vax8200` (`bvax`, KA820), both of
+      which V10 supports and SIMH emulates. **Kernel reaches single-user** is
+      the headline
+- [ ] **Announce on TUHS** — this answers a question that list asked in 2017,
+      and the people who ran these machines still read it
+
+### What B2.0 measured, and the two source defects it found
+
+`tools/v10-bootpath.sh` (35/46) built the seventeen boot-path programs twice,
+against V8's headers and against r70's: **15 built against r70**, 10 against
+V8's, and all five safe to execute then ran. That is why stage 4 points `-I`
+at V10's own tree. The two failures are one line each, and **both are defects
+in the 1995 source rather than in the 1997 headers**:
+
+- `fsck.c` is a file caught mid-port — `<ansi.h>`, `<posix.h>` and
+  `<sys/stat.h>` are all commented out, it includes a `<stat.h>` that exists
+  nowhere, it carries ANSI prototypes the 1985 compiler rejects, and it calls
+  POSIX `S_ISBLK()` macros V10's `sys/stat.h` does not define. Three separate
+  consequences of one abandoned port, each hidden behind the one before
+- `mv.c` uses `ROOTINO` and includes nothing that defines it
+
+r70 was suspected first and cleared: the tarball ships 1995 copies of these
+headers in `sys/` and `lsys/`, and `src/sys/sys/types.h` is **byte-identical**
+to r70's. **"Skew or source?" is a `cmp`, not a judgement** — ask it before
+writing down an inference. Our corrections live in `v10/src`, generated by
+`tools/v10-overlay.py` from hashed upstream files so the tarball stays
+pristine and `v10/MANIFEST` still proves it; `v10/src/PATCHES.md` carries the
+diffs and the reasoning.
 
 ### B4 — the V10 experience
 

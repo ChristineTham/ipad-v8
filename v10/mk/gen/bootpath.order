@@ -1,0 +1,17 @@
+init	cmd	etc/init
+getty	cmd	etc/getty
+login	cmd	etc/login
+mount	cmd	etc/mount
+umount	cmd	etc/umount
+mkfs	cmd	etc/mkfs
+fsck	cmd	etc/fsck
+icheck	cmd	etc/icheck
+sync	cmd	bin/sync
+date	cmd	bin/date
+stty	cmd	bin/stty
+cat	cmd	bin/cat
+cp	cmd/cp	bin/cp
+mv	cmd	bin/mv
+rm	cmd	bin/rm
+mkdir	cmd	bin/mkdir
+echo	cmd	bin/echo

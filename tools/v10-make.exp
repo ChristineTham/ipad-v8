@@ -1,0 +1,174 @@
+#!/usr/bin/env expect
+# Do the generated makefiles actually build the boot path?  Phase B2.1.
+#
+#	expect tools/v10-make.exp <image> <tree> <ours> <mk> <scratch>
+#
+# Normally run through tools/v10-make.sh.
+#
+# B2.0 proved the SOURCES compile, by writing the cc lines by hand.  This
+# proves the MECHANISM compiles them: V8's make(1), reading a makefile
+# v10/mk/mkdep.py generated, driving V10's compiler through
+# `cc -B/usr/v10/lib/ -t02palc'.  Those are different claims and only the
+# second one scales past seventeen programs.
+#
+# WHAT COULD GO WRONG THAT B2.0 WOULD NOT HAVE CAUGHT, all of it make's
+# business rather than the compiler's:
+#
+#   - a prerequisite naming a path that does not exist on the guest, which
+#     V8's make reports as `Don't know how to make ...' and which is the
+#     single most common failure of a generated makefile
+#   - $(CC) carrying flags while being used as a prerequisite, the mistake
+#     that hit all fourteen of Track S's stage-1 components at once
+#   - the install rule's mkdir chain, which fails AFTER a good compile and
+#     reads like a build error
+#   - $(OURS) vs $(SRC): the two patched components must read our copies and
+#     the other fifteen must not
+
+set timeout 900
+log_user 1
+source [file dirname [info script]]/v8drive.exp
+source [file dirname [info script]]/v10tc.exp
+
+if {[llength $argv] < 5} {
+    puts "usage: v10-make.exp <image> <tree> <ours> <mk> <scratch>"
+    exit 2
+}
+set img    [lindex $argv 0]
+set tport  [lindex $argv 1]
+set oport  [lindex $argv 2]
+set mport  [lindex $argv 3]
+set sport  [lindex $argv 4]
+
+set L /usr/v10/lib
+set V /n/v10/src
+set INC /usr/v10/include
+set OBJ /usr/v10obj
+set DEST /usr/v10root
+
+set results {}
+proc note {name ok} {
+    global results
+    lappend results [list $name $ok]
+}
+
+set BOOTPATH {init getty login mount umount mkfs fsck icheck sync date stty
+              cat cp mv rm mkdir echo}
+# The two that read our overlay rather than the tarball.
+set PATCHED {fsck mv}
+
+v8_boot $img {"set il enable" "attach il nat:"}
+v8_login root
+
+puts "\n===== V10 MAKE (B2.1) ====="
+v8_sh "PATH=/bin:/etc:/usr/bin; export PATH"
+v8_sh "OK=-ok"
+
+# ------------------------------------------------------------------ mounts ---
+v8_sh "mkdir /n/v10 /n/v10ours /n/v10mk /n/t" 60
+v8_sh "/etc/nmount 10.0.2.2 $tport 70 /n/v10" 120
+v8_sh "/etc/nmount 10.0.2.2 $oport 71 /n/v10ours" 120
+v8_sh "/etc/nmount 10.0.2.2 $mport 72 /n/v10mk" 120
+v8_sh "/etc/nmount 10.0.2.2 $sport 73 /n/t" 120
+note "tree mounted"    [v8_try "cat $V/cmd/adb/vax/hello.c" "hello, world" 120]
+note "overlay mounted" [v8_try "grep sys/stat /n/v10ours/cmd/fsck.c" "sys/stat.h" 120]
+note "makefiles mounted" [v8_try "grep OURS /n/v10mk/fsck.mk" "n/v10ours" 120]
+
+# --------------------------------------------------------------- toolchain ---
+foreach r [v10_tc_build $L $V] { note "tc: [lindex $r 0]" [lindex $r 1] }
+note "tc: toolchain smoke test" [v10_tc_smoke $L]
+
+# ----------------------------------------------------------------- headers ---
+v8_sh "rm -rf $INC; mkdir $INC" 120
+v8_sh "cd /n/v10/include; find . -print | cpio -pd $INC" 900
+note "r70 headers staged" [v8_try "test -s $INC/sys/ttyio.h && echo HDR\$OK" "HDR-ok" 120]
+
+v8_sh "rm -rf $OBJ $DEST; mkdir $OBJ $DEST" 120
+
+# ------------------------------------------------------- make, per component ---
+#
+# Each in its own object directory, exactly as the makefile's header says to
+# run it: the generator writes objects into the current directory on purpose,
+# so two components sharing one would race on names like `main.o'.
+#
+# `install' rather than `all', because the install rule is half of what is
+# being tested -- a component that compiles and then cannot place its binary
+# has not been built in any sense that matters to B3.
+# ASSERT ON make's EXIT STATUS, NOT ON A FILE EXISTING.
+#
+# This read `test -s $c && echo MK$OK' and it reported a PASS for a component
+# that had not linked:
+#
+#	Undefined: _S_ISBLK _S_ISCHR _S_ISREG
+#	*** Error code 1
+#	Stop.
+#
+# ld writes a partial a.out before it discovers an undefined symbol, so the
+# file is there and it is non-empty and it is not a program.  fsck was
+# reported built, was absent from $DESTDIR/etc, and the run still scored
+# 29/29 -- the exact shape of the stage-6 failure Track S already has on
+# record, where `bcd' was built, reported, and not on the disk.
+#
+# make's own exit status is the honest signal: the -mkdir lines carry a
+# leading `-' so their failures are ignored, and anything else stops the
+# build and exits non-zero.
+foreach c $BOOTPATH {
+    v8_sh "mkdir $OBJ/$c" 60
+    note "make $c" \
+        [v8_try "cd $OBJ/$c; if make -f /n/v10mk/$c.mk DESTDIR=$DEST install > m.log 2>&1; then echo MK\$OK; fi" \
+                "MK-ok" 900]
+    v8_sh "echo '##### $c' >> $OBJ/all.log" 60
+    v8_sh "cat $OBJ/$c/m.log >> $OBJ/all.log" 120
+}
+
+# ------------------------------------------------------------ what landed ---
+#
+# The manual said /etc for the six section-8 programs and V8's measured paths
+# said /bin for the rest; this is where that claim becomes an artefact rather
+# than a table.
+v8_sh "ls -l $DEST/etc $DEST/bin" 120
+note "init installed to /etc"  [v8_try "test -s $DEST/etc/init && echo I\$OK" "I-ok" 120]
+note "echo installed to /bin"  [v8_try "test -s $DEST/bin/echo && echo E\$OK" "E-ok" 120]
+
+# COUNT WHAT LANDED, not what was attempted.  Seventeen per-component passes
+# and sixteen files on the disk is the failure that hid here once already;
+# a total is the cheapest thing that cannot make that mistake.
+#
+# `ls bin etc' prints `bin:' and `etc:' headers and a blank line between, so
+# the grep matches bare lowercase names and nothing else.  grep -c pads
+# nothing, which is why the count goes through it rather than through wc.
+v8_sh "N=`cd $DEST; ls bin etc | grep -c '^\[a-z\]\[a-z\]*\$'`" 120
+note "all 17 installed" [v8_try "echo INST\$N\$OK" "INST17-ok" 120]
+
+# Re-running make must do NOTHING.  A generated makefile whose dependencies
+# are wrong in the other direction -- naming a file that is always newer --
+# rebuilds every time and nobody notices until a full build takes hours.
+#
+# The count goes through a variable, not a pattern.  v8_try matches by GLOB,
+# where `^' is an ordinary character, so an earlier "^0" here could never
+# match anything and reported a failure that was entirely the test's.
+v8_sh "cd $OBJ/echo; N=`make -f /n/v10mk/echo.mk DESTDIR=$DEST 2>&1 | grep -c .`" 300
+note "make is idempotent" [v8_try "echo IDEM\$N\$OK" "IDEM0-ok" 120]
+
+v8_sh "cp $OBJ/all.log /n/t/make.log" 600
+
+# REPORT BEFORE HALTING.  v8_halt can bail -- it did on 2026-08-16, when
+# /etc/halt printed `syncing disks... ' and never reached the tight loop --
+# and v8_bail exits, so every measurement this run made was thrown away and
+# had to be recovered by grepping the transcript for markers.  The halt is
+# the last thing that happens for good reasons; that is no reason for the
+# results to depend on it.
+proc report {results} {
+    puts "\n===== V10 MAKE RESULTS ====="
+    set failed 0
+    foreach r $results {
+        puts [format "  %-32s %s" [lindex $r 0] [expr {[lindex $r 1] ? "ok" : "NO"}]]
+        if {![lindex $r 1]} { incr failed }
+    }
+    puts "===== [expr {[llength $results] - $failed}]/[llength $results] =====\n"
+    return $failed
+}
+set failed [report $results]
+
+v8_sh "cd /; /etc/nmount -u 70; /etc/nmount -u 71; /etc/nmount -u 72; /etc/nmount -u 73" 120
+v8_halt
+exit [expr {$failed ? 1 : 0}]

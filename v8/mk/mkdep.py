@@ -54,7 +54,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 V8 = os.path.dirname(HERE)
 GEN = os.path.join(HERE, "gen")
 
-INCLUDE = re.compile(rb'^\s*#\s*include\s*([<"])([^">]+)[">]', re.M)
+# The generator machinery is shared with V10 (B2.1): the two source trees turn
+# out to have the same shape -- loose .c files under a cmd/ with no makefile in
+# it -- so what differs between editions is the component tables and the
+# preamble, not how a makefile is put together.  See mk/mkgen.py.
+sys.path.insert(0, os.path.join(os.path.dirname(V8), "mk"))
+import mkgen                                                  # noqa: E402
+from mkgen import (INCLUDE, has_main, mkdirs_for,             # noqa: E402,F401
+                   rel, scan_includes)
 
 # --------------------------------------------------------------- components
 #
@@ -208,60 +215,12 @@ STAGE1 = [
 # ------------------------------------------------------------------ scanning
 
 
-def scan_includes(path, incdirs, seen=None):
-    """Transitive #include closure, as filenames make can compare mtimes on.
-
-    Angle-bracket includes are followed too, but only into the tree -- a
-    <stdio.h> resolved against v8/usr/include is a real dependency, because
-    stage 4 installs our headers and we want that to rebuild the world.
-    Unresolvable includes are dropped rather than guessed at.
-    """
-    if seen is None:
-        seen = set()
-    if path in seen or not os.path.exists(path):
-        return seen
-    seen.add(path)
-    try:
-        data = open(path, "rb").read()
-    except OSError:
-        return seen
-    base = os.path.dirname(path)
-    for kind, name in INCLUDE.findall(data):
-        name = name.decode("ascii", "replace")
-        cands = [os.path.join(base, name)] if kind == b'"' else []
-        cands += [os.path.join(d, name) for d in incdirs]
-        for c in cands:
-            c = os.path.normpath(c)
-            if os.path.exists(c):
-                scan_includes(c, incdirs, seen)
-                break
-    return seen
 
 
-def rel(path, start):
-    return os.path.relpath(path, start).replace(os.sep, "/")
 
 
 # ----------------------------------------------------------------- emission
 
-def mkdirs_for(dest, path):
-    """`-mkdir' lines for every ancestor of PATH, outermost first.
-
-    V8's mkdir makes ONE level.  `mkdir /b/root/usr/inet/bin' fails with
-    "cannot access /b/root/usr/inet/." unless the parent already exists -- and
-    it fails AFTER the compile and the link have both succeeded, so the
-    component reports INSTALL FAILED with a perfectly good binary sitting in
-    the object directory.  That reads as a build problem and is not one.
-
-    emit_destdirs() has known this rule all along -- its ordering comment says
-    so.  The per-component install rules did not: they made the immediate
-    parent only, which is correct exactly as long as every component installs
-    somewhere that already exists.  dnsq was the first that did not
-    (/usr/inet/bin), and a full stage 6 would have failed on it identically.
-    """
-    parts = [p for p in os.path.dirname(path).split("/") if p]
-    return ["\t-mkdir %s/%s\n" % (dest, "/".join(parts[:i + 1]))
-            for i in range(len(parts))]
 
 
 PREAMBLE = """\
@@ -325,236 +284,21 @@ TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
 """
 
 
-def emit_shell(c):
-    """A command that is a shell script: install is the whole build.
-
-    Four of them (bundle, cflow, false, where). They still get a makefile
-    rather than a line in the driver, because stage 9 has to be able to
-    rebuild the system the same way stage 6 built it, and "the same way"
-    means the same rules. A script whose install lives in a driver instead
-    would be the one thing chroot could not reproduce.
-
-    The copy is deliberate rather than installing straight off the share: the
-    product has to exist in the object directory for `make' to have anything
-    to compare mtimes against, exactly like a binary.
-    """
-    srcdir = "$(SRC)/" + c["dir"]
-    src = "%s/%s" % (srcdir, c["script"])
-    dest = "$(%s)" % c.get("dest", "DESTDIR")
-    out = [PREAMBLE % dict(name=c["name"], cflags="", incs="")]
-    # `all' first, like every other generated makefile: the driver runs
-    # `make -f x.mk' with no goal, so the first target is the default one.
-    out.append("\nall: %s\n" % c["product"])
-    out.append("\n%s: %s\n\tcp %s %s\n\tchmod +x %s\n"
-               % (c["product"], src, src, c["product"], c["product"]))
-    out.append("\ninstall: %s\n" % c["product"])
-    out.extend(mkdirs_for(dest, c["install"]))
-    out.append("\tcp %s %s/%s\n" % (c["product"], dest, c["install"]))
-    out.append("\nclean:\n\t-rm -f %s\n" % c["product"])
-    return "".join(out)
+# The V8 edition profile.  mk/mkgen.py holds the machinery; this says which
+# tree it is pointed at and what preamble its makefiles carry.
+V8ED = mkgen.Edition(name="v8", root=V8,
+                     incdir=os.path.join(V8, "usr/include"),
+                     here=HERE, gen=GEN, preamble=PREAMBLE)
 
 
 def emit(c):
-    d = os.path.join(V8, c["dir"])
-    if c.get("script"):
-        return emit_shell(c)
-    incs = c.get("incs", ["."])
-    incdirs = [os.path.normpath(os.path.join(d, i)) for i in incs]
-    incdirs.append(os.path.join(V8, "usr/include"))
+    return mkgen.emit(V8ED, c)
 
-    # resolve the object -> source map
-    objs = c["objs"]
-    if objs == "*.c":
-        srcs = sorted(f for f in os.listdir(d) if f.endswith(".c"))
-        objmap = {f[:-2] + ".o": f for f in srcs}
-    elif isinstance(objs, list):
-        objmap = {os.path.basename(f)[:-2] + ".o": f for f in objs}
-    else:
-        objmap = dict(objs)
 
-    gen = c.get("gen", {})
-    # Files produced as a SIDE EFFECT of another generated file's rule,
-    # mapped to the target that produces them.  cpp's :yyfix splits the
-    # parser tables out of y.tab.c into rodata.c while making cpy.c, so
-    # rodata.c exists only in the object directory and has no rule and no
-    # file on the share.  Without this it is looked for at
-    # $(SRC)/usr/src/cmd/cpp/rodata.c and make stops.
-    sidegen = c.get("sidegen", {})
-    # a generated .c has no file on disk yet; its deps come from the grammar
-    for g in gen:
-        objmap.setdefault(g[:-2] + ".o", g)
+def load_where():
+    return mkgen.load_where(V8ED)
 
-    incdir = os.path.join(V8, "usr/include")
 
-    srcdir = "$(SRC)/" + c["dir"]
-
-    def dep(path):
-        """Name a dependency the way make will see it at build time.
-
-        System headers become $(INCDIR)/x.h rather than a relative path, so the
-        same makefile is correct in stage 1 (reading the running system's
-        /usr/include) and in stage 5 (reading $(DESTDIR)/usr/include) with only
-        the macro changed.
-        """
-        path = os.path.normpath(path)
-        if path.startswith(incdir + os.sep):
-            return "$(INCDIR)/" + rel(path, incdir)
-        return srcdir + "/" + rel(path, d)
-
-    # A component that GENERATES A HEADER needs -I. as well, and it is the
-    # mirror image of libI77's problem.  cpp searches dirs[0] -- the directory
-    # of the file being compiled -- and never the current directory unless the
-    # source happens to be in it.  y.tab.h is written by `yacc -d' into the
-    # OBJECT directory, while config's main.c is read off the share, so
-    #
-    #	main.c:14: Can't find include file y.tab.h
-    #
-    # even though y.tab.h was made correctly a moment earlier.  lex.yy.c
-    # compiles fine in the same directory precisely because IT lives there
-    # too.  An in-tree build never sees this: source and object are one
-    # directory, so dirs[0] covers both.
-    incflags = ["-I$(SRC)/" + os.path.normpath(os.path.join(c["dir"], i))
-                for i in incs]
-    if gen or sidegen:
-        incflags.insert(0, "-I.")
-    out = [PREAMBLE % dict(name=c["name"], cflags=c.get("cflags", ""),
-                           incs=" ".join(incflags))]
-    out.append("OBJS = " + " ".join(sorted(objmap)) + "\n")
-    out.append("\nall: %s\n" % c["product"])
-
-    # link
-    # $(LIBC) is NAMED on the link line, not merely depended on.  cc appends an
-    # implicit -lc, which ld resolves from /lib/libc.a -- so a stage that has
-    # built its own libc would silently keep linking against the tape's unless
-    # the archive is on the command line ahead of it.  ld takes the first
-    # definition it finds, so ours wins and the implicit -lc adds nothing.
-    # In stage 1 this is /lib/libc.a either way and costs nothing.
-    #
-    # `libs` names extra archives BY PATH, never with -l.  V8's ld has no -L:
-    # getfile() rewrites one template string to try /lib, /usr/lib and
-    # /usr/local/lib, so -ll would resolve out of the RUNNING system's
-    # /usr/lib in preference to the libl.a stage 5 just built -- silently, and
-    # the build would succeed.  config(8) is the first component that needs
-    # this and it will not be the last.
-    libdeps = "".join(" $(DESTDIR)/" + x for x in c.get("libs", []))
-    out.append("\n%s: $(OBJS) $(LD) $(LIBC)%s\n\t$(CC) $(CFLAGS) %s-o %s $(OBJS)%s $(LIBC)\n"
-               % (c["product"], libdeps,
-                  (c["ldflags"] + " ") if c.get("ldflags") else "",
-                  c["product"], libdeps))
-
-    # generated sources
-    for target, (tool, src, extra) in sorted(gen.items()):
-        # `tool` may carry flags -- "yacc -d", which config(8) needs because
-        # its grammar and mkconf.c share y.tab.h and nothing else generates
-        # it.  First word picks the macro pair, the rest rides on the command.
-        toolname = tool.split()[0]
-        toolflags = " ".join(tool.split()[1:])
-        # command vs binary again: the recipe runs $(YACC), the
-        # prerequisite must name the file whose mtime says it changed.
-        # `natural` is the filename the tool writes if you do not tell it
-        # otherwise, so a target that differs from it needs the mv -- and
-        # lex's is not yacc's, which the old "!= y.tab.c" test got wrong the
-        # moment a lex-generated source appeared.
-        if toolname == "yacc":
-            toolmac, toolpath, natural = "$(YACC)", "$(YACCPATH)", "y.tab.c"
-        else:
-            toolmac, toolpath, natural = "$(LEX)", "$(LEXPATH)", "lex.yy.c"
-        deps = sorted(dep(p) for p in scan_includes(os.path.join(d, src), incdirs))
-        # compare against the full path: deps hold "$(SRC)/dir/gram.y" while
-        # src is the bare "gram.y", so a bare comparison never matched and the
-        # input was listed twice.
-        self = "%s/%s" % (srcdir, src)
-        out.append("\n%s: %s %s %s\n" % (target, self, toolpath,
-                                         " ".join(x for x in deps if x != self)))
-        out.append("\t%s%s %s/%s\n"
-                   % (toolmac, (" " + toolflags) if toolflags else "",
-                      srcdir, src))
-        if extra:
-            out.append("\t%s\n" % extra)
-        elif target != natural:
-            out.append("\tmv %s %s\n" % (natural, target))
-
-    # Side-effect files: "build that, and this will be there."
-    #
-    # The @echo is not decoration.  A command-less target takes doname.c's
-    #     else if(keepgoing) printf("Don't know how to make %s\n", ...)
-    # branch whenever it is reached while the file still does not exist --
-    # and `exists()` returns 0 for a missing name, with ptime sampled on
-    # ENTRY, before the producer runs.  rodata.c has got away with it only
-    # because cpy.o sorts before rodata.o, so cpy.c (and therefore rodata.c)
-    # was always already made by the time make looked.  y.tab.h has no such
-    # luck: main.o and mkconf.o both sort before y.tab.o.  Rather than rely
-    # on alphabetical order, give every side-effect target a command.
-    for target, producer in sorted(sidegen.items()):
-        out.append("\n# written by the %s rule above\n%s: %s\n\t@echo %s\n"
-                   % (producer, target, producer, target))
-
-    # objects, each with its transitive header closure
-    oflags = c.get("oflags", {})
-    special = c.get("special", {})
-    # A generated HEADER cannot be found by scanning, because it does not
-    # exist on the share -- scan_includes silently drops "y.tab.h" and make
-    # is then free to compile mkconf.o before yacc has run.  `objdeps` names
-    # them, and they go on every object in the component.
-    objdeps = c.get("objdeps", [])
-    for obj in sorted(objmap):
-        src = objmap[obj]
-        if src in gen or src in sidegen:     # generated: deps handled above
-            deps = [src]
-        else:
-            deps = [srcdir + "/" + src] + [
-                x for x in sorted(dep(y) for y in
-                                  scan_includes(os.path.join(d, src), incdirs))
-                if x != srcdir + "/" + src]
-        deps = deps + [x for x in objdeps if x != src]
-        extra = (oflags[obj] + " ") if obj in oflags else ""
-        # A generated or side-effect source is compiled from the object
-        # directory, not from the share.  Getting this right in the
-        # prerequisite but not in the recipe just moves the error from
-        # make ("Don't know how to make") to cc ("No source file").
-        srcref = src if (src in gen or src in sidegen) else srcdir + "/" + src
-        # `special` replaces the recipe for one object.  Several commands need
-        # it for the same reason libc needs it for errlst.o: the object is
-        # compiled to ASSEMBLY, edited, and then assembled, because something
-        # has to move out of .data and into shared text.  sh's ctype.o is the
-        # next one (usr/src/cmd/sh/:fix, which is :errfix under another name).
-        # %s in a recipe line is the source path, so the entry does not have
-        # to repeat it.
-        if obj in special:
-            out.append("\n%s: %s $(TOOLS)\n" % (obj, " ".join(deps)))
-            for line in special[obj]:
-                out.append("\t%s\n" % (line.replace("%s", srcref)))
-        else:
-            out.append("\n%s: %s $(TOOLS)\n\t$(COMPILE) %s%s\n"
-                       % (obj, " ".join(deps), extra, srcref))
-
-    # pre-commands (ccom needs y.debug in place before cgram.o)
-    if c.get("pre"):
-        out.append("\nprepare:\n")
-        for cmd in c["pre"]:
-            out.append("\t%s\n" % cmd)
-
-    # install -- into TOOLDIR or DESTDIR.  Never /bin, never /lib.
-    #
-    # Stage 1's tools go to TOOLDIR because they are build machinery: the
-    # system being assembled must not contain them just because it needed
-    # them.  Stage 6's commands go to DESTDIR because they ARE the system.
-    dest = "$(%s)" % c.get("dest", "TOOLDIR")
-    out.append("\ninstall: %s\n" % c["product"])
-    inst = c["install"]
-    out.extend(mkdirs_for(dest, inst))
-    out.append("\tcp %s %s/%s\n" % (c["product"], dest, inst))
-    # a second home for the same binary -- see `also` in the component table
-    for dst in c.get("also", []):
-        out.extend(mkdirs_for(dest, dst))
-        out.append("\tcp %s %s/%s\n" % (c["product"], dest, dst))
-    for src, dst in c.get("data", []):
-        out.extend(mkdirs_for(dest, dst))
-        out.append("\tcp %s/%s %s/%s\n" % (srcdir, src, dest, dst))
-
-    out.append("\nclean:\n\t-rm -f $(OBJS) %s %s\n"
-               % (c["product"], " ".join(sorted(gen))))
-    return "".join(out)
 
 
 LIBC_PREAMBLE = """\
@@ -1905,23 +1649,6 @@ STAGE6 = [
 # and a handful the image simply never installed.
 
 
-def load_where():
-    """name -> [directories it was found in] on the shipped image.
-
-    Written by tools/harvest-paths.sh. Absent is not an error: the file is a
-    measurement of a machine, so a checkout that has never booted one still
-    generates -- it just generates the hand-written entries only, and says so.
-    """
-    path = os.path.join(HERE, "where.txt")
-    if not os.path.exists(path):
-        return {}
-    w = {}
-    for line in open(path):
-        if line.startswith("#") or not line.strip():
-            continue
-        name, d = line.rstrip("\n").split("\t")
-        w.setdefault(name, []).append(d)
-    return w
 
 
 WHERE = load_where()
@@ -2081,34 +1808,6 @@ REFUSE = {
 }
 
 
-def has_main(path):
-    """Does this source define main() UNCONDITIONALLY?
-
-    The `#ifdef' part is the whole point. ps/getfs.c and ps/getuname.c both
-    open a main() inside `#ifdef TEST' -- a standalone test harness for a file
-    that is otherwise linked into ps -- and ps/makefile lists getfs.o and
-    getuname.o in OBJ alongside ps.o. A plain search for main() therefore
-    counts three programs in a directory that builds one, and refuses ps for
-    a conflict that cannot happen: TEST is never defined.
-
-    Counting only at conditional depth 0 is conservative in the safe
-    direction. A main() genuinely hidden behind an #ifdef the build does
-    define would be missed here and would fail at the link, where it is
-    obvious; the opposite mistake refuses a command that builds.
-    """
-    depth = 0
-    for line in open(path, "rb").read().splitlines():
-        s = line.lstrip()
-        if s.startswith(b"#"):
-            d = s[1:].lstrip()
-            if d.startswith((b"if", b"ifdef", b"ifndef")):
-                depth += 1
-            elif d.startswith(b"endif"):
-                depth = max(0, depth - 1)
-            continue
-        if depth == 0 and re.match(rb'\s*(?:int\s+)?main\s*\(', line):
-            return True
-    return False
 
 
 def derive_dirs(taken):

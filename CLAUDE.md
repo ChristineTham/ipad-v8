@@ -98,6 +98,18 @@ bash tools/v10-bootpath.sh rp07new      # ~25 min, 46 assertions
 tools/v10-syscalls.py --callers
 ```
 
+```bash
+# Regenerate the V10 build metadata (all three have --check; all are host-side)
+tools/v10-where.py        # install paths, from V10's manual + V8's measurements
+tools/v10-overlay.py      # v10/src/ -- our corrections, derived from the tarball
+v10/mk/mkdep.py           # v10/mk/gen/*.mk -- the makefiles V10 never had
+```
+
+```bash
+# Do those makefiles actually build the boot path, under V8's make?
+bash tools/v10-make.sh rp07new          # ~30 min, 29 assertions
+```
+
 **Run every guest harness against a CLONE, never the golden.** Booting a disk
 mounts it, and mounting rewrites the superblock — so a clean, successful,
 properly halted run still leaves the image with a different hash than the one
@@ -437,14 +449,18 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   all. **But the r70 tree is the right default for V10 source** — B2.0 built 15 of 17
   boot-path commands against it and 10 against V8's. Reserve V8's headers for programs
   linking V8's libc.
-- **The r70 reconstruction has defects, and the 1995 source is what finds them.**
-  V10's `mv.c` uses `ROOTINO` and includes no `sys/param.h`; it compiles against V8's
-  headers because **V8's `sys/types.h` includes `sys/param.h`** and r70's does not. A
-  1995 program that only builds against a header carrying that include is evidence about
-  the *1997 header*, not about the program. Read the skew in that direction — the source
-  is primary, the reconstructed header is not. (Second one found the same way: `fsck.c`
-  includes a bare `<stat.h>` that exists nowhere in either tree; it was built with `sys`
-  on the include path.)
+- **Before blaming r70 skew, `cmp` — the tarball ships its own control.** `sys/` and
+  `lsys/` carry **1995** copies of the very headers `r70include.tar` reconstructs in
+  1997, so "is this reconstruction skew or is this the source?" is a one-command
+  question, never a judgement. It was got backwards once, on 2026-08-16: V10's `mv.c`
+  uses `ROOTINO` and includes nothing that defines it, compiling only against V8's
+  headers because **V8's `sys/types.h` includes `sys/param.h`** — which read as r70
+  having dropped a line, and is not. `src/sys/sys/types.h` is **byte-identical** to
+  r70's `include/sys/types.h`: the reconstruction is faithful and **`mv.c` is the
+  defect**. (Same for `fsck.c`, which includes a bare `<stat.h>` where every other
+  command says `<sys/stat.h>`.) Both are one-line patches to V10 source — and both are
+  commands with no prebuilt binary, which is consistent: nobody had compiled them in
+  place when the tape was cut.
 - **The V10 tty interface is a header repackaging, not a new kernel interface.** V8 uses
   `sgtty.h`, V10 `sys/ttyio.h`, which looks like a wall and is not: every `TIOC*` V10
   shares with V8 has the same `(('t'<<8)|N)` number, `struct sgttyb` is unchanged in
