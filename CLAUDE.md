@@ -398,6 +398,47 @@ at the old flat `v8/` is moved on first launch, never abandoned.
 - The 5620 mouse registers (0x400000 y, 0x400002 x) are free-running counters; muxterm
   integrates sample deltas with **y counting up the screen** from a (0,0) cursor. Feed
   deltas, not absolute positions (see the bridge's mouse model).
+- **V10's kernel does NOT sync on halt, and V8's does.** This changes what stopping
+  a machine safely means, so do not carry V8's habits across. `lsys/md/machdep.c`,
+  entire: `boot(howto) { if (howto&RB_HALT) death(); reboot(1); }` and
+  `death() { splx(0x1f); printf("death\n"); for (;;) ; }`. V8's `boot()` calls
+  `update()`, prints `syncing disks... ` and sleeps five `lbolt` ticks for the I/O;
+  V10 deleted all of it, and **`RB_NOSYNC` is defined in `lsys/sys/reboot.h` and
+  referenced nowhere in the kernel**. So the userland `sync` is the whole flush --
+  and it does not wait either, since `sync(2)` → `update()` → `bflush(NODEV)` sets
+  `B_ASYNC` and returns before the disk has the block (`lsys/io/bio.c:692`). Hence
+  `v10_halt` syncs, sleeps and syncs again. Consequence worth knowing: on V10
+  `sync; sleep; ^E; quit` leaves the same disk as `/etc/halt` (whose only extra
+  contribution is the `death` marker) — **on V8 that substitution would skip a real
+  flush and be wrong**.
+- **V10's `cc` has three `-t` letters, not six. `-t02palc` is OURS.** V10's
+  `cmd/cc.c` handles `0` (ccom), `2` (c2) and `p` (cpp) and nothing else; `a`, `l`
+  and `c` — as, ld, crt0.o+libc.a — were added to *V8's* `cc.c` in S5. So on V10
+  `as` and `ld` cannot be redirected by a `-B` prefix, and an unknown letter is
+  silently ignored rather than rejected. A hermetic stage 3 must either port that
+  extension into our overlay or install stage 1 over the system first — decide on
+  evidence, and never assume the seal is there because V8 has it.
+- **There is no netfs on V10, for two independent reasons.** `lsys/astro/seki.m`
+  configures `netafs 0` and `netbfs 0` — the network filesystem types are compiled
+  in with **zero instances** — and SIMH's `vax750` has no Interlan at all (`show
+  devices` lists only a disabled XU). seki's config *does* carry the card
+  (`ni1010a 0 ub 0 reg 0164000 vec 0340`), so the simulator half is ours to fix;
+  note the driver is `ni1010a` where V8's is `ill`, so grepping the generated
+  config for `il` finds nothing and reads as "no card". Source therefore reaches
+  V10 on a **disk** (`tools/v10-srcdisk.sh`), not a share.
+- **The V10 golden has no `ar`, `cmp`, `tail`, `grep` or `wc`** — measured against
+  `v10/mk/gen/prebuilt.txt` plus the boot path, not discovered one at a time. Two
+  are load-bearing for the bootstrap: stage 2 *is* an archive (`AR = /bin/ar` names
+  a file that is not there) and stage 3 *is* a byte comparison. They are built in
+  stage 1 as `BUILDTOOLS`. `/n` was missing too, and cost a whole run: `mkdir`
+  makes one level, so `mkdir /n/v10` failed, the source disk had no mount point,
+  and 26 assertions failed with nothing naming the cause.
+- **`echo MAKE$OK` in a makefile prints `MAKEK`.** make's `$` takes a *single*
+  character unparenthesised, so `$OK` is `$(O)` then `K`, and `$(O)` is empty —
+  make working exactly as specified, reported by a test as make being broken. Pass
+  the marker as a command-line macro (`make -f m.mk V=MACRO$OK`) so the **shell**
+  expands it before make sees a dollar; the marker discipline still holds, because
+  the tty echoes the literal `MACRO$OK`.
 - **V10 is not source-only, and its own toolchain runs on V8.** The tarball carries
   **483 linked VAX executables** — `cmd/ccom/vax/comp` (the C compiler), `cmd/as/as`,
   a complete 262-member `libc.a` — plus 1,525 objects. `tools/v10-probe.sh` proved 9/9
@@ -755,6 +796,14 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   characters** and fails with a bare `cp: cannot create` (14-byte names apply to *your*
   filenames too), and V8's `grep` is 1985's, so `\|` is a literal and a pattern using
   it matches nothing while looking like it asked a question — use `egrep`.
+- **Fourteen bytes, and it has now cost four separate debugging sessions.**
+  `streamio.c.orig` (15) failed with `cp: cannot create`; `install-prebuilt.sh` (19)
+  with `sh: cannot open`; `toolchain.order` (15) was **truncated silently to
+  `toolchain.orde` with a successful exit status**, which is the worst of the three
+  because nothing failed at all. Each was fixed and none of them stopped the next,
+  so the rule is now a guard rather than a habit: `v10/mk/mkdep.py`'s `put()`
+  refuses to emit any generated name over 14 characters, and the file is `tc.order`.
+  Anything that generates a filename destined for a guest disk needs the same check.
 - The golden image shipped **no `lost+found` on either filesystem**, so an autoboot
   `fsck` needing to reconnect an orphaned inode aborted to a single-user shell instead
   of `login:` ("Automatic reboot failed... help!") — reachable in the app whenever a
@@ -1124,7 +1173,22 @@ daemon), and the **boot path has no build file at all** — seventeen loose `.c`
 files under a `cmd/` with no makefile, which is the same shape as V8's and
 settles B2.1 as "reuse `v8/mk/mkdep.py`".
 
-Next: **B2.1–B2.5** — the mechanism, then libc, then the rest of the userland.
+**V10 SELF-HOSTS, AND STAGE 1 IS DONE** (2026-08-16). The golden reaches
+multi-user on a VAX-11/750 and compiles its own C; `tools/v10-stage1.sh` then
+rebuilt **the whole toolchain on V10** — `yacc cpp ccom as c2 ld cc`, plus
+`halt`, `sleep`, `ar` and `cmp`, none of which the golden had — **42/43**.
+That matters for one specific reason: the golden's `cpp`, `c2` and `ld` had
+been compiled by *V8's* cc (`tools/v10tc.exp`, the only compiler that existed
+before there was a V10 to run one on), and those three are now V10's own. No
+binary on that machine was built by the Eighth Edition any more. The one
+failure, `tail`, is a finding rather than a defect — it is the only file in
+the entire `src/` tree that includes the ANSI-prototyped `<libc/libc.h>`,
+which pcc2 cannot parse. Source reaches the machine on a second RA81
+(`tools/v10-srcdisk.sh`), because there is no netfs on V10.
+
+Next: **stage 2** (libc from source, so `ar` finally has a job) and **stage 3**
+(the fixpoint — and the place where V10's missing `-t a/l/c` letters have to be
+faced). Then stage 7, the 780 kernel from `alice.m` via the prebuilt `mkconf`.
 Also **submit** — the remaining steps need the Apple account and a
 final name decision, all listed in [docs/app-store.md](docs/app-store.md).
 **Not yet exercised — one thing, and it needs a human at a mouse**: `mux`/`jim`

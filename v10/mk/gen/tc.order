@@ -1,0 +1,7 @@
+yacc	cmd/yacc	usr/bin/yacc
+cpp	cmd/cpp	lib/cpp
+ccom	cmd/ccom/vax	lib/ccom
+as	cmd/as	bin/as
+c2	cmd/c2	lib/c2
+ld	cmd	bin/ld
+cc	cmd	bin/cc

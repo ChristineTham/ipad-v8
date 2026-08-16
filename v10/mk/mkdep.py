@@ -196,6 +196,173 @@ BOOTPATH = ["init", "getty", "login", "mount", "umount", "mkfs", "fsck",
 FSTOOL_SRC = ["mkbitfs", "mknod", "dd", "cpio"]
 FSTOOLS = ["v10" + n for n in FSTOOL_SRC]
 
+# A machine you can STOP.  Deliberately not folded into BOOTPATH, whose
+# comment is about what a boot needs and would stop being true.
+#
+# The first golden shipped without either and that was a real defect, because
+# V10's shutdown is not V8's.  lsys/md/machdep.c, entire:
+#
+#	boot(howto)  { if (howto&RB_HALT) death(); reboot(1); }
+#	death()      { splx(0x1f); printf("death\n"); for (;;) ; }
+#
+# V8's boot() calls update(), prints `syncing disks... ', and sleeps five
+# lbolt ticks for the I/O to drain.  V10 deleted all of it -- RB_NOSYNC is
+# defined in lsys/sys/reboot.h and referenced NOWHERE -- so on a Tenth Edition
+# machine the userland sync is the only flush there is, and `sleep' is not a
+# convenience but the wait that V8 does inside the kernel and V10 does not do
+# at all.  sync(2) -> update() -> bflush(NODEV) issues B_ASYNC writes and
+# returns (lsys/io/bio.c:692), so without the wait the disk is stopped with
+# blocks still in core.
+SHUTDOWN = ["halt", "sleep"]
+
+# The tools the BOOTSTRAP ITSELF needs, none of which the first golden has.
+#
+# Measured, not guessed: the golden carries 57 prebuilt 1995 binaries plus
+# what BOOTPATH builds, and `ar', `cmp', `tail', `grep' and `wc' are in
+# neither set.  Two of those are not conveniences --
+#
+#	ar    stage 2 IS an archive.  libc.a cannot be built without it, and
+#	      the preamble's `AR = /bin/ar' names a file that does not exist.
+#	cmp   stage 3 IS a comparison.  The fixpoint is "stage 1 and stage 3
+#	      produced the same bytes", so with no cmp there is no stage 3 --
+#	      only an assertion that both runs exited zero, which is the kind
+#	      of check this project has already been caught by.
+#
+# `tail' is a convenience and is here anyway, because without it a failed
+# build in a guest harness can only be shown with `cat' of a whole log, and
+# the alternative to showing it is halting the machine that holds the only
+# copy.
+BUILDTOOLS = ["ar", "cmp", "tail"]
+
+# The compiler, from source.  THIS IS WHAT STAGE 1 IS.
+#
+# The golden's toolchain today is a MIXTURE: ccom, as and libc.a are the
+# tape's 1995 binaries, and cpp, c2 and ld were compiled by V8's cc under
+# tools/v10tc.exp.  That was the right way to reach a running machine and it
+# is the wrong thing to keep -- a V10 whose compiler passes were built by the
+# previous edition is not a V10 that built itself.  Stage 1 rebuilds every
+# pass from V10 source with V10's own compiler, on V10.
+#
+# Each entry's link list is the tape's own, quoted in `note'.  Two of them
+# differ from V8's list for the same programs, which is exactly why they were
+# read rather than assumed:
+#
+#   ccom  V10's OFILES has genmore.o and does NOT have local2.o, memcpy.o or
+#         t2print.o -- V8's has the latter three and no genmore.  Same program,
+#         eight years apart.  reader.o and printx.o resolve to the vax/ copies,
+#         not common/'s: the makefile writes `$(CC_CMD) reader.c' with no $M,
+#         and both directories contain a file of each name.
+#   c2    no ldflags.  V8's links with -z; V10's Makefile leaves LDFLAGS empty.
+#
+# yacc is FIRST and is not optional: cpp and ccom are both yacc grammars, and
+# the tape ships yacc as source only -- there is no prebuilt binary for it
+# anywhere in the tree.  It also reads /usr/lib/yaccpar at RUNTIME
+# (cmd/yacc/files: `# define PARSER "/usr/lib/yaccpar"'), so the data file has
+# to be installed too or every later grammar fails at a stage that looks like
+# a grammar problem.
+TOOLCHAIN = [
+    dict(name="yacc", dir="cmd/yacc",
+         objs=["y1.c", "y2.c", "y3.c", "y4.c"],
+         cflags="-DWORD32",
+         product="yacc", install="usr/bin/yacc",
+         data=[("yaccpar", "usr/lib/yaccpar")],
+         note="cmd/yacc/Makefile: yacc: y1.o y2.o y3.o y4.o; CFLAGS=-O -DWORD32; "
+              "install mv yacc $(DESTDIR)/usr/bin, cp yaccpar $(DESTDIR)/usr/lib"),
+
+    # cpp.  The mkfile builds four objects -- cpp.o cpy.o rodata.o yylex.o --
+    # where rodata.c is what `sh :yyfix >rodata.c' lifts out of yacc's output
+    # so the parser tables can be linked read-only.  WE SKIP :yyfix, exactly
+    # as B1 did, and the deviation is safe for a reason worth stating: :yyfix
+    # MOVES the tables, it does not create them, so a cpy.c that never had
+    # them removed is still complete.  The cost is a few KB of data segment.
+    #
+    # V10's :yyfix is not V8's.  V8's takes the array names as arguments;
+    # V10's takes none and writes to stdout (`sh :yyfix >rodata.c').  Anyone
+    # reinstating it must read the tape's own copy, not port ours across.
+    dict(name="cpp", dir="cmd/cpp",
+         objs={"cpp.o": "cpp.c", "cpy.o": "cpy.c", "yylex.o": "yylex.c"},
+         gen={"cpy.c": ("yacc -d", "cpy.y", "mv y.tab.c cpy.c")},
+         # yacc -d writes y.tab.h beside cpy.c, in the OBJECT directory, and
+         # yylex.c includes it.  Nothing can find it by scanning the share.
+         sidegen={"y.tab.h": "cpy.c"},
+         objdeps=["y.tab.h"],
+         cflags="-DPRAGMA -DFLEXNAMES -DPD_MACH=D_vax -DPD_SYS=D_unix",
+         product="cpp", install="lib/cpp",
+         note="cmd/cpp/mkfile: OBJECTS=cpp.o cpy.o rodata.o yylex.o "
+              "(rodata skipped, see above); install cp cpp /lib"),
+
+    dict(name="ccom", dir="cmd/ccom/vax",
+         objs={
+             "cgram.o":   "cgram.c",
+             "xdefs.o":   "../common/xdefs.c",
+             "scan.o":    "../common/scan.c",
+             "pftn.o":    "../common/pftn.c",
+             "trees.o":   "../common/trees.c",
+             "optim.o":   "../common/optim.c",
+             "local.o":   "local.c",
+             "reader.o":  "reader.c",
+             "debug.o":   "debug.c",
+             "common1.o": "../common/common1.c",
+             "pjw.o":     "../common/pjw.c",
+             "gencode.o": "gencode.c",
+             "genaux.o":  "genaux.c",
+             "genmore.o": "genmore.c",
+             "printx.o":  "printx.c",
+             "lookup.o":  "../common/lookup.c",
+             "lcatch2.o": "lcatch2.c",
+             "catch2.o":  "../common/catch2.c",
+         },
+         # yacc's #line directives are commented out because the C compiler
+         # being fed them chokes on them in a generated file -- the tape's own
+         # sed, kept verbatim.
+         gen={"cgram.c": ("yacc", "../common/cgram.y",
+                          "sed 's_^# line .*_/* & */_' y.tab.c >cgram.c; "
+                          "rm -f y.tab.c")},
+         incs=[".", "../common"], cflags="-DVAX -DYYDEBUG",
+         # The tape puts -DYYMAXDEPTH=300 on cgram.o alone.  Kept per-object
+         # rather than global: it is a parser stack size and means nothing to
+         # the other seventeen.
+         oflags={"cgram.o": "-DYYMAXDEPTH=300"},
+         # cgram.o wants y.debug present and the tape ships y.debug.sv for it.
+         # Named by full path: a bare `cp y.debug.sv y.debug' looks in the
+         # object directory, where an out-of-tree build has no such file.
+         pre=["cp $(SRC)/cmd/ccom/vax/y.debug.sv y.debug"],
+         product="comp", install="lib/ccom",
+         note="cmd/ccom/vax/makefile: OFILES (18); INCLIST=-I. -I../common; "
+              "TARGET=-DVAX; install cp comp /lib/ccom"),
+
+    # as.  aspseudo.c #includes `instrs', a 200 KB data file in the source
+    # directory, which is why incs must keep "." -- it is found by -I, not by
+    # being beside the object.
+    #
+    # The tape compiles aspseudo.o to assembly, runs :rofix on it, and
+    # assembles that, to move the reserved-word tables into shared text.  Same
+    # class of optimisation as cpp's :yyfix and skipped for the same reason:
+    # it relocates data that is correct either way.
+    dict(name="as", dir="cmd/as",
+         objs=["asscan.c", "asparse.c", "asexpr.c", "asmain.c", "assyms.c",
+               "asjxxx.c", "ascode.c", "aspseudo.c", "asio.c"],
+         cflags="-DUNIX -DUNIXDEVEL -DFLEXNAMES",
+         product="as", install="bin/as",
+         note="cmd/as/Makefile: OBJS (9); CFLAGS=-O -DUNIX -DUNIXDEVEL "
+              "-DFLEXNAMES; install mv as ${DESTDIR}/bin"),
+
+    dict(name="c2", dir="cmd/c2", objs=["c20.c", "c21.c", "c22.c"],
+         cflags="-DCOPYCODE",
+         # `$(CC) $(CFLAGS) -cR c22.c' -- the peephole tables go read-only.
+         oflags={"c22.o": "-R"},
+         product="c2", install="lib/c2",
+         note="cmd/c2/Makefile: FILES=c20.o c21.o c22.o, c22 with -cR, "
+              "LDFLAGS empty (V8's links -z; V10's does not); "
+              "install cp c2 $(DESTDIR)/lib"),
+]
+
+# The two passes that are ONE loose cmd/*.c, so component() builds them from
+# where.txt like any other command.  cc is read from our overlay -- it uses
+# BUFSIZE without including <sys/param.h>, mv.c's defect with a different
+# constant -- which PATCHED below already arranges.
+TOOLCHAIN_SIMPLE = ["ld", "cc"]
+
 # Components read from OUR overlay rather than from the pristine tarball.
 #
 # tools/v10-overlay.py derives v10/src/ from named upstream files with stated
@@ -283,6 +450,23 @@ def main():
     stale, written, entries, skipped = [], set(), [], []
 
     def put(name, text):
+        # FOURTEEN BYTES.  Every file generated here is copied onto a guest
+        # filesystem, and a Research Unix directory entry is 14 characters --
+        # a longer name is TRUNCATED, silently, with a successful exit status.
+        #
+        # `toolchain.order' is 15 and arrived on the source disk as
+        # `toolchain.orde', which read as a copy that had not happened.  This
+        # is the project's fourth time: `streamio.c.orig' (15) failed with a
+        # bare "cp: cannot create", and `install-prebuilt.sh' (19) with
+        # "sh: cannot open".  Each was fixed and none of them stopped the
+        # next one, so the rule goes in the generator rather than in a
+        # comment.
+        if len(name) > 14:
+            raise SystemExit(
+                "mkdep: '%s' is %d characters -- a Research Unix directory "
+                "entry is 14, so this name is silently truncated to '%s' the "
+                "moment it reaches a guest.  Shorten it."
+                % (name, len(name), name[:14]))
         if name in written:
             raise SystemExit("mkdep: two components both generate %s" % name)
         written.add(name)
@@ -294,7 +478,7 @@ def main():
         elif old != text:
             open(path, "w").write(text)
 
-    for name in BOOTPATH + FSTOOLS:
+    for name in BOOTPATH + FSTOOLS + SHUTDOWN + BUILDTOOLS + TOOLCHAIN_SIMPLE:
         c, why = component(name)
         if c is None:
             skipped.append((name, why))
@@ -302,19 +486,42 @@ def main():
         put(name + ".mk", mkgen.emit(V10ED, c))
         entries.append((name, c["dir"], c["install"]))
 
+    # The multi-file toolchain components carry their own dicts: each is a
+    # DIRECTORY of sources with no <name>.c, so component()'s heuristic --
+    # which finds every ordinary command -- finds none of the compiler.
+    tcnames = []
+    for c in TOOLCHAIN:
+        put(c["name"] + ".mk", mkgen.emit(V10ED, c))
+        entries.append((c["name"], c["dir"], c["install"]))
+        tcnames.append(c["name"])
+
     put("bootpath.order",
         "".join("%s\t%s\t%s\n" % e
                 for e in entries if e[0] in BOOTPATH))
     put("fstools.order",
         "".join("%s\t%s\t%s\n" % e
                 for e in entries if e[0] in FSTOOLS))
+    put("shutdown.order",
+        "".join("%s\t%s\t%s\n" % e
+                for e in entries if e[0] in SHUTDOWN))
+    put("buildtools.ord",
+        "".join("%s\t%s\t%s\n" % e
+                for e in entries if e[0] in BUILDTOOLS))
+    # ORDER IS THE POINT HERE, unlike the lists above.  yacc must exist before
+    # cpp or ccom can be built from a grammar, and every later pass is built
+    # by the passes before it, so this file is a sequence and not a set.
+    tcorder = tcnames + [n for n in TOOLCHAIN_SIMPLE if n in dict(
+        (e[0], e) for e in entries)]
+    put("tc.order",
+        "".join("%s\t%s\t%s\n" % dict((e[0], e) for e in entries)[n]
+                for n in tcorder))
 
     # What was NOT covered, and why -- generated rather than commented, so it
     # cannot drift from the code that produced it.  A build that silently
     # covers less than it appears to is worse than one that covers less and
     # says so; V8's stage 6 shipped `bcd' built, reported, and absent because
     # of exactly this gap.
-    put("bootpath-skipped.txt",
+    put("bootskip.txt",
         "# Boot-path commands v10/mk/mkdep.py did not emit a makefile for.\n"
         "# Regenerated by v10/mk/mkdep.py.\n#\n"
         + "".join("%-10s %s\n" % s for s in skipped))
@@ -333,11 +540,22 @@ def main():
             if not m:
                 continue
             dest = m.group(1).split()[-1]
-            if not dest.startswith("$("):
+            # A BARE FILENAME IS THE OBJECT DIRECTORY, and that is where a
+            # build is supposed to write.  ccom's `cp $(SRC)/.../y.debug.sv
+            # y.debug' is the case: the tape needs y.debug beside the object,
+            # and naming it through a macro would put it somewhere else.
+            #
+            # What must go through a macro is anything that NAMES a location
+            # -- an absolute path, or a relative one that walks out of here.
+            # That is the whole of the risk: this build runs on a live Eighth
+            # Edition host, so `cp c2 /lib' would replace V8's peephole
+            # optimiser with V10's and the damage would surface later,
+            # somewhere else, in something that had been working.
+            if "/" in dest and not dest.startswith("$("):
                 raise SystemExit(
-                    "mkdep: %s writes to a literal path (%s) -- every "
-                    "destination must go through $(DESTDIR) or $(TOOLDIR)"
-                    % (name, dest))
+                    "mkdep: %s writes to a literal path (%s) -- a destination "
+                    "naming a directory must go through $(DESTDIR) or "
+                    "$(TOOLDIR)" % (name, dest))
     for macro in ("DESTDIR", "TOOLDIR"):
         if ("\n%-8s= /" % macro).replace("%-8s", macro.ljust(8)) not in PREAMBLE:
             raise SystemExit("mkdep: PREAMBLE has no absolute %s default; an "
@@ -350,8 +568,10 @@ def main():
         print("makefiles are up to date with the source tree")
         return 0
 
-    print("generated %d of %d commands in %s"
-          % (len(entries), len(BOOTPATH) + len(FSTOOLS),
+    print("generated %d of %d components in %s"
+          % (len(entries),
+             len(BOOTPATH) + len(FSTOOLS) + len(SHUTDOWN)
+             + len(BUILDTOOLS) + len(TOOLCHAIN_SIMPLE) + len(TOOLCHAIN),
              mkgen.rel(GEN, os.getcwd())))
     if skipped:
         for name, why in skipped:

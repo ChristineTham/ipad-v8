@@ -1,0 +1,329 @@
+# tools/v10drive.exp -- the one way this project drives V10 over a console.
+#
+# The sibling of tools/v8drive.exp, and it exists for the same reason: three
+# V8 harnesses each grew a private "log in and run a command", each settled on
+# matching a PROMPT, and all three hung.  That rule is not edition-specific,
+# so V10 gets the library BEFORE it gets the second harness rather than after.
+#
+# Read v8drive.exp's header for why markers beat prompts -- the argument is
+# unchanged.  What follows is only what differs on a Tenth Edition machine,
+# and the two entries under HALT are the ones that can cost you a filesystem.
+#
+# ---------------------------------------------------------------------------
+# THE MACHINE.  A VAX-11/750 with an MSCP disk, not V8's 780 with a Massbus:
+#
+#	simulator   work/opensimh/BIN/vax750
+#	disk        RQ (UDA50), `set rq0 ra81'
+#	kernel      seki -- `Unix 10e Mar 15 04:03 1990', off the 1995 tape
+#	console     spawned through expect's pty, so ^E reaches scp
+#
+# THERE IS NO `boot' COMMAND.  SIMH's vax750 implements `boot' as VMB.EXE,
+# DEC's VMS bootstrap, which answers %BOOT-F-Unable to locate BOOT file when
+# pointed at V10's boot block.  work/v10boot/uda750 is the 780 boot ROM off
+# lsys/boot/star/uda with its two device longwords retargeted for the 750 --
+# see tools/v10-uda750.py -- and loading it at FA00 and entering at FA02 does
+# the ROM's job, exactly as lsys/boot/star/defboo.cmd does on a real machine.
+#
+# r5 is the boot flags, from sys/reboot.h:  0 = multi-user, 2 = single-user.
+# ---------------------------------------------------------------------------
+
+# LINE BUFFERING, so a long run can be watched.
+#
+# Tcl block-buffers stdout when it is not a tty, and every harness here is run
+# as `expect ... | tee log' from a script.  So a stage that takes forty
+# minutes writes nothing to the log for the first several thousand lines, and
+# a run that is merely slow is indistinguishable from one that has wedged --
+# which is exactly the question you want to answer without interrupting it.
+# stdbuf cannot help: the buffering is Tcl's, not stdio's.
+fconfigure stdout -buffering line
+
+set timeout 600
+set V10_SEQ 0
+set V10_RUNNING 0       ;# is there a guest that must not simply be killed?
+
+# Absolute, resolved from THIS file's location -- never relative to whatever
+# directory a caller happened to be in.  v8drive.exp records what a path bug
+# looks like when it is not: spawn reports EOF rather than a missing file, so
+# it arrives disguised as a simulator that started and died.
+# work/v10gold, not work/myv8: the V10 images live beside the golden this
+# project builds, and a bare name handed to v10_boot resolves here.  An
+# absolute path (which is what v10_clone returns) works either way.
+set V10_MEDIA [file normalize [file join [file dirname [info script]] .. work v10gold]]
+set V10_SIMH  [file normalize [file join [file dirname [info script]] .. work opensimh BIN vax750]]
+set V10_ROM   [file normalize [file join [file dirname [info script]] .. work v10boot uda750]]
+
+# ---------------------------------------------------------------- failure ---
+
+proc v10_bail {msg} {
+    global V10_RUNNING
+    puts "\nV10-BAIL: $msg"
+    if {$V10_RUNNING} {
+        send "\005"
+        expect { "sim>" {} timeout {} }
+        send "quit\r"
+        expect { eof {} timeout {} }
+        set V10_RUNNING 0
+        puts "V10-BAIL: guest stopped at sim> and quit -- NOT cleanly halted,"
+        puts "V10-BAIL: so treat this image as damaged until a hash says otherwise."
+    }
+    exit 1
+}
+
+proc v10_must {pat {t 0}} {
+    global timeout
+    set use [expr {$t > 0 ? $t : $timeout}]
+    expect -timeout $use -- "$pat" {
+    } timeout {
+        v10_bail "never saw '$pat' after ${use}s"
+    } eof {
+        v10_bail "simulator exited while waiting for '$pat'"
+    }
+}
+
+# ------------------------------------------------------------------- boot ---
+
+# Spawn the 750, apply `extra' config lines, and boot through the ROM.
+#
+# `extra' is where a caller attaches its own units -- the source disk is
+#	{"set rq1 ra81" "attach rq1 /path/to/src.img"}
+# and nothing else in this file needs to know it exists.
+proc v10_boot {img {extra {}} {r5 0}} {
+    # `global spawn_id' IS LOAD-BEARING -- spawn sets spawn_id in the CURRENT
+    # scope, so a spawn inside a proc leaves the global one alone and every
+    # other proc here then talks to stdin, reads EOF at once, and reports
+    # "simulator exited".  A scoping bug arrives dressed as a dead simulator.
+    global spawn_id V10_RUNNING V10_MEDIA V10_SIMH V10_ROM
+
+    # Say what is missing while it is still a filename.
+    if {![file executable $V10_SIMH]} { puts "\nV10-BAIL: no simulator at $V10_SIMH"; exit 2 }
+    if {![file readable $V10_ROM]}    { puts "\nV10-BAIL: no boot ROM at $V10_ROM -- run tools/v10-uda750.py"; exit 2 }
+    cd $V10_MEDIA
+    if {![file readable $img]}        { puts "\nV10-BAIL: no image '$img' in $V10_MEDIA"; exit 2 }
+
+    spawn $V10_SIMH
+    set V10_RUNNING 1
+    v10_must "sim>" 60
+
+    # `set noasynch' first, on the same rule as V8: this simulator is built
+    # from the same open-simh tree, which compiles SIM_ASYNCH_IO in, and a
+    # hand-written config that omits it walks into simh #425.  That fault was
+    # documented on the Massbus and this disk is MSCP, so it may well never
+    # bite here -- which is exactly the argument that let it bite there.
+    foreach c [concat {
+        "set noasynch"
+        "set cpu 8m"
+        "set dz enable"
+        "set dz lines=8"
+        "set tto 7b"
+    } [list "set rq0 ra81" "attach rq0 $img"] $extra] {
+        send "$c\r"
+        v10_must "sim>" 60
+    }
+
+    send "load -o $V10_ROM FA00\r"; v10_must "sim>" 60
+    foreach c [list "dep sp 200" "dep r1 0" "dep r3 0" "dep r5 $r5"] {
+        send "$c\r"; v10_must "sim>" 60
+    }
+    send "run FA02\r"
+
+    if {$r5 == 2} {
+        # single-user: init execs /bin/sh straight onto the console, so there
+        # is no getty and no banner.  A marker is the only honest handshake.
+        v10_sh ":" 480
+        return
+    }
+    # MARK PARITY.  getty sends its first banner with bit 7 set, so the plain
+    # string "login:" can miss the whole line.  `ogin' survives either way.
+    v10_must "ogin" 480
+}
+
+# Log in and take control, without ever matching a prompt.
+#
+# The handshake is /etc/motd, which login's showmotd() prints before any
+# shell starts -- and which this driver never types, so no echo can spell it.
+#
+# /etc/rc ALSO cats the motd, one screen earlier.  That is harmless and it is
+# harmless BY ORDERING, not by luck: v10_boot has already matched `ogin',
+# which consumed everything before it including rc's copy, so the next motd
+# to arrive can only be login's.  Anything that stops matching `ogin' first
+# breaks this, so do not reorder them.
+proc v10_login {{user root} {pass ""}} {
+    send "$user\r"
+    if {$pass != ""} {
+        v10_must "assword:" 60
+        send "$pass\r"
+    }
+    v10_must "Restored by ipnx" 180
+    v10_sh ":" 120      ;# and prove a shell, not just a banner, is listening
+}
+
+# ------------------------------------------------------------------ shell ---
+
+proc v10_sh {cmd {t 0}} {
+    global V10_SEQ
+    incr V10_SEQ
+    send "M=+ok$V10_SEQ\r"
+    send "$cmd\r"
+    send "echo \$M+\r"
+    v10_must "+ok$V10_SEQ+" $t
+}
+
+# Run a command, require something of its OUTPUT, then wait for it to finish.
+# The marker is matched LAST because it is what proves the command is over --
+# matched first, it would have consumed the buffer the pattern lives in.
+proc v10_shmust {cmd pat {t 0}} {
+    global V10_SEQ
+    incr V10_SEQ
+    send "M=+ok$V10_SEQ\r"
+    send "$cmd\r"
+    send "echo \$M+\r"
+    v10_must "$pat" $t
+    v10_must "+ok$V10_SEQ+" $t
+}
+
+# Report whether `pat' appeared WITHOUT bailing when it does not -- for
+# probes, where absence is a result.  Returns 1 or 0.
+proc v10_try {cmd pat {t 120}} {
+    global V10_SEQ
+    # AN EMPTY PATTERN IS AN INFINITE LOOP, not a trivially-true assertion,
+    # and it hangs with no output at all.  "" matches at every position and
+    # consumes nothing, so the `exp_continue' below re-enters expect, matches
+    # "" again immediately, and spins at 100% CPU forever -- with the guest
+    # still running beside it, which is the expensive part.
+    #
+    # It reached v10_halt as `v10_try "/bin/sleep 5" ""' -- written as "run
+    # this, I do not care what it prints" -- and wedged a stage-1 run that had
+    # already finished its work.  If you do not care what it prints, that is
+    # what v10_sh is for.
+    if {$pat eq ""} {
+        v10_bail "v10_try called with an empty pattern: $cmd\n         Use v10_sh if the output does not matter."
+    }
+    incr V10_SEQ
+    send "M=+ok$V10_SEQ\r"
+    send "$cmd\r"
+    send "echo \$M+\r"
+    set hit 0
+    expect {
+        -timeout $t -- "$pat"          { set hit 1; exp_continue }
+        -timeout $t -- "+ok$V10_SEQ+"  {}
+        timeout { v10_bail "command never finished: $cmd" }
+        eof     { v10_bail "simulator exited during: $cmd" }
+    }
+    return $hit
+}
+
+# A command that TAKES THE TTY and ends on its own.  v10_sh cannot be used --
+# it sends all three lines at once, so `echo $M+' is read by the program
+# rather than the shell and the driver waits forever for a marker nobody will
+# print.
+proc v10_run {cmd endpat {t 120}} {
+    send "$cmd\r"
+    v10_must "$endpat" $t
+    v10_sh ":" 60
+}
+
+# ------------------------------------------------------------------- halt ---
+
+# THE CLEAN SHUTDOWN, AND IT IS NOT V8's.  This is the one procedure in this
+# file that had to be derived rather than translated, so the evidence is here.
+#
+# V8's boot() (sys/machdep.c) calls update(), prints `syncing disks... ',
+# sleeps five lbolt ticks for the I/O to drain, prints `done', and only then
+# halts.  The userland sync is belt and braces there.
+#
+# V10 DELETED ALL OF THAT.  lsys/md/machdep.c, in full:
+#
+#	boot(howto)  { if (howto&RB_HALT) death(); reboot(1); }
+#	death()      { splx(0x1f); printf("death\n"); for (;;) ; }
+#
+# No update(), no wait, no `syncing disks'.  RB_NOSYNC is defined in
+# lsys/sys/reboot.h and referenced NOWHERE in the kernel, and cmd/halt.c is
+# Berkeley's, which only calls reboot(RB_HALT).  So on a Tenth Edition machine
+# the userland `sync' is the ONLY flush there is.
+#
+# And sync alone is not enough, because it does not wait either: sync(2) ->
+# update() -> bflush(NODEV) (lsys/io/bio.c:692) sets `bp->b_flags |= B_ASYNC'
+# and calls bwrite(), which returns before the disk has the block.  V8 covered
+# that gap inside the kernel; here the gap is ours to cover, which is what the
+# sleep below is for.  Without it the sequence looks identical, exits 0, and
+# leaves blocks in core that death() then spins on top of forever.
+#
+# `death' is the output-anchored marker -- the kernel's own last word -- and
+# SIMH then reports the IPL-31 `for (;;)' as `Infinite loop', because the
+# compiler emits it as a branch to itself.
+proc v10_halt {} {
+    global V10_RUNNING
+    v10_sh "cd /; sync" 180
+    v10_sh "sync" 180
+    # /bin/sleep may not be installed yet on an image early in the bootstrap.
+    # v10_sh, not v10_try: a missing sleep prints `not found' and the marker
+    # still comes back, so this cannot fail either way and there is no output
+    # worth matching.  A third sync follows regardless, so the wait is never
+    # the only defence.
+    v10_sh "/bin/sleep 5" 180
+    v10_sh "sync" 180
+
+    # THERE MAY BE NO /etc/halt, and that must not hang the harness.
+    #
+    # The bootstrap has a genuine chicken and egg here: cmd/halt.c is on the
+    # tape but the first golden did not install it, so the very run that
+    # BUILDS halt is a run that starts without one.  The first stage-1 attempt
+    # died exactly there -- the build failed, so there was no halt, so the
+    # driver waited 300 s for a `death' nothing could print.
+    #
+    # THE FALLBACK IS NOT A COMPROMISE ON V10, and this is the one place that
+    # is worth stating plainly, because on V8 it would be.  V8's /etc/halt is
+    # load-bearing: its boot() calls update() and sleeps for the I/O, so
+    # skipping it skips a real flush.  V10's does NOT -- boot() goes straight
+    # to death(), which only raises IPL and spins.  So the syncs above are the
+    # entire flush either way, and stopping the CPU at sim> after them leaves
+    # exactly the disk /etc/halt would have left.  What is lost is the
+    # output-anchored marker, not any data.
+    send "/etc/halt\r"
+    set halted 0
+    expect {
+        -timeout 120 "death"       { set halted 1 }
+        -timeout 120 "not found"   {}
+        -timeout 120 "cannot"      {}
+        timeout {}
+        eof     { set halted 1 }
+    }
+    if {!$halted} {
+        puts "\nV10-HALT: no usable /etc/halt -- stopping at sim> instead."
+        puts "V10-HALT: safe here, because V10's boot() does not sync (it calls"
+        puts "V10-HALT: death() directly), so the syncs above were the whole flush."
+        send "\005"
+        expect { "sim>" {} timeout {} eof {} }
+        set V10_RUNNING 0
+        send "quit\r"
+        expect { eof {} timeout {} }
+        return
+    }
+    set V10_RUNNING 0       ;# stopped cleanly: quitting now is safe
+    # NO ^E.  By the time `Infinite loop' is readable SIMH has already stopped
+    # the CPU and returned to sim>, so there is nothing to interrupt -- and a
+    # stray 0x05 lands at the head of scp's command line, turning the next
+    # line into `\005quit', which scp rejects.  v8drive.exp spent four minutes
+    # per run on exactly that, after the work had already passed.
+    #
+    # EVERY TIMEOUT FROM HERE IS EXPLICIT AND SHORT.  The guest is already
+    # halted -- the CPU stopped at IPL 31 and the disk is synced -- so there
+    # is nothing left worth waiting for, and these `expect's inherit the
+    # HARNESS's global timeout when they do not say otherwise.  v10-stage1.exp
+    # sets it to 3600, so a run that had finished all its work sat here for an
+    # hour with nothing to show for it.  v8drive.exp records the same bug
+    # costing four minutes a run; the fix is the same and the cause is the
+    # habit of writing `timeout {}' and thinking it means "briefly".
+    expect {
+        -timeout 60 "Infinite loop" {}
+        -timeout 60 "sim>"          {}
+        timeout { puts "\nV10-WARN: halted at death but never reached sim>" }
+    }
+    # `sim>' may already have been consumed with the line above, in which case
+    # there is nothing more coming and waiting for it is waiting for ever.
+    expect { -timeout 15 "sim>" {} timeout {} }
+    send "quit\r"
+    expect { -timeout 60 eof {} timeout {
+        puts "V10-WARN: sent quit but the simulator did not exit"
+    } }
+}

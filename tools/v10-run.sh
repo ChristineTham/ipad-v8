@@ -40,7 +40,7 @@ CONF=$(mktemp /tmp/v10run.XXXXXX.conf)
 
 [[ -f "$IMG" ]] || { echo "v10-run: no $IMG -- run tools/v10-golden.sh"; exit 1; }
 [[ -f "$ROOT/work/v10boot/uda750" ]] || { echo "v10-run: no uda750 -- run tools/v10-uda750.py"; exit 1; }
-pgrep -f "vax750" >/dev/null && { echo "v10-run: a vax750 is already running"; exit 1; }
+pgrep -f "BIN/vax750" >/dev/null && { echo "v10-run: a vax750 is already running"; exit 1; }
 
 cat > "$CONF" <<EOF
 set cpu 8m

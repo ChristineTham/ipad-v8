@@ -73,6 +73,24 @@ set USRBLK  30752
 set BOOTPATH {init getty login mount umount mkfs fsck icheck sync date stty
               cat cp mv rm mkdir echo}
 
+# A MACHINE YOU CAN STOP.  The first golden shipped without either of these
+# and it was a real defect, not a tidiness one, because V10's shutdown is not
+# V8's.  lsys/md/machdep.c, in full:
+#
+#	boot(howto)  { if (howto&RB_HALT) death(); reboot(1); }
+#	death()      { splx(0x1f); printf("death\n"); for (;;) ; }
+#
+# V8's boot() calls update(), prints `syncing disks... ' and sleeps five lbolt
+# ticks for the I/O to drain.  V10 deleted all of it, and RB_NOSYNC is defined
+# in lsys/sys/reboot.h and referenced nowhere in the kernel -- so the userland
+# sync is the ONLY flush, and `sleep' is not a convenience but the wait the V8
+# kernel does and this one does not.  sync(2) -> update() -> bflush(NODEV)
+# issues B_ASYNC writes and returns (lsys/io/bio.c:692).
+#
+# Kept as a separate list from BOOTPATH, whose comment is about what a boot
+# needs and would stop being true.  Mirrors SHUTDOWN in v10/mk/mkdep.py.
+set SHUTDOWN {halt sleep}
+
 set results {}
 proc note {name ok} { global results; lappend results [list $name $ok] }
 proc report {} {
@@ -135,7 +153,12 @@ foreach r [v10_tc_build $L $V] { note "tc: [lindex $r 0]" [lindex $r 1] }
 note "tc: smoke test" [v10_tc_smoke $L]
 
 # ------------------------------------------------------------ the root tree ---
-foreach d {bin etc lib dev tmp usr} { v8_sh "mkdir $R/$d" 60 }
+# `/n' is where mounts that are not filesystems live -- netfs shares on V8,
+# and here the source disk the bootstrap compiles from.  The first golden left
+# it out, so tools/v10-stage1.sh's first run could not create /n/v10 (mkdir
+# makes one level) and lost all 26 of its remaining assertions to one missing
+# directory.
+foreach d {bin etc lib dev tmp usr n} { v8_sh "mkdir $R/$d" 60 }
 v8_sh "chmod 777 $R/tmp" 60
 
 # /unix first, so it lands at the front of the filesystem: lsys/boot/README
@@ -164,7 +187,7 @@ v8_sh "chmod 644 $R/etc/passwd $R/etc/group $R/etc/ttys $R/etc/motd; chmod 755 $
 note "/etc config in place" [v8_try "cat $R/etc/ttys" "console" 120]
 
 # ------------------------------------------- what has to be built, into root ---
-foreach c $BOOTPATH {
+foreach c [concat $BOOTPATH $SHUTDOWN] {
     note "build $c" \
         [v8_try "rm -rf $OBJ/$c; mkdir $OBJ/$c; cd $OBJ/$c; if make -f /n/v10mk/$c.mk DESTDIR=$R install > m.log 2>&1; then echo MK\$OK; fi" \
                 "MK-ok" 900]

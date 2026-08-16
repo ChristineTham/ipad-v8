@@ -1,0 +1,279 @@
+#!/usr/bin/env expect
+# Stage 1: rebuild the Tenth Edition toolchain ON the Tenth Edition.
+#
+#	expect tools/v10-stage1.exp <v10-image> <src-image>
+#
+# Normally run through tools/v10-stage1.sh.
+#
+# WHAT STAGE 1 IS FOR, precisely.  The golden's toolchain is a MIXTURE:
+#
+#	ccom    cmd/ccom/vax/comp   Bell Labs' 1995 VAX binary, off the tape
+#	as      cmd/as/as           Bell Labs' 1995 VAX binary
+#	libc.a  libc/libc.a         Bell Labs' 1995 archive
+#	crt0.o                      assembled here, by V10's own as
+#	cpp     BUILT BY V8's cc    <-- these three
+#	c2      BUILT BY V8's cc    <-- are the
+#	ld      BUILT BY V8's cc    <-- problem
+#
+# tools/v10tc.exp compiled cpp, c2 and ld with the EIGHTH Edition's compiler,
+# because that was the only compiler that existed before there was a V10 to
+# run one on.  It got us a machine; it is not a machine that built itself.
+# Stage 1 rebuilds every pass from V10 source with V10's own compiler, on
+# V10, and those three are the ones whose provenance actually changes.
+#
+# WHY yacc IS FIRST.  cpp and ccom are both yacc grammars and the tape ships
+# yacc as SOURCE ONLY -- there is no prebuilt yacc anywhere in the tree.  It
+# also reads /usr/lib/yaccpar at runtime (cmd/yacc/files), so the data file
+# matters as much as the binary.
+#
+# WHY THERE IS NO -B SEAL HERE.  V10's cc.c handles exactly three -t letters:
+#
+#	case '0': ccom = strspl(npassname, "ccom");
+#	case '2': c2   = strspl(npassname, "c2");
+#	case 'p': cpp  = strspl(npassname, "cpp");
+#
+# `a', `l' and `c' -- as, ld, crt0.o+libc.a -- are OURS, added to V8's cc.c in
+# S5 so V8's own build could not reach into the running system.  Bell Labs
+# never wrote them, so on V10 as and ld cannot be redirected and stage 1 is
+# built by the installed compiler with no prefix at all.  That is correct for
+# stage 1 and is a real constraint on stage 3; do not paper over it here.
+#
+# EXIT STATUS, NOT `test -s'.  ld writes a partial a.out and THEN discovers an
+# undefined symbol, so the file exists after a failed link.  A v10-make run
+# scored 29/29 on that mistake while fsck had not linked at all.  Every
+# assertion below is on make's own exit status, and the install count is
+# checked separately against what actually landed.
+
+set timeout 3600
+log_user 1
+source [file dirname [info script]]/v10drive.exp
+
+if {[llength $argv] < 2} {
+    puts "usage: v10-stage1.exp <v10-image> <src-image>"
+    exit 2
+}
+set img [lindex $argv 0]
+set src [lindex $argv 1]
+
+set N   /n/v10            ;# the source disk, mounted
+set S   /n/v10/src
+set K   /n/v10/mk
+set T   /usr/s1           ;# where stage 1 installs
+set OBJ /usr/obj
+
+# In dependency order, and the order is the point -- yacc must exist before
+# any grammar can be compiled, and each later pass is built by the ones before
+# it.  This is v10/mk/gen/tc.order.
+set TOOLCHAIN {yacc cpp ccom as c2 ld cc}
+
+# Built first, and before anything that can fail: V10's kernel does not sync
+# on halt (lsys/md/machdep.c -- boot() calls death() directly), so a machine
+# with no /etc/halt and no /bin/sleep cannot be stopped without risking the
+# filesystem.  The golden shipped without either.
+set SHUTDOWN {halt sleep}
+
+# The tools the bootstrap itself needs and the golden does not have.  Built
+# here, in stage 1, because stage 2 cannot make an archive without `ar' and
+# stage 3's entire result is a byte comparison it cannot make without `cmp'.
+# `tail' is so a failed build can be shown without cat'ing a whole log.
+set BUILDTOOLS {ar cmp tail}
+
+set results {}
+proc note {name ok} { global results; lappend results [list $name $ok] }
+proc report {} {
+    global results
+    puts "\n===== V10 STAGE 1 RESULTS ====="
+    set failed 0
+    foreach r $results {
+        puts [format "  %-44s %s" [lindex $r 0] [expr {[lindex $r 1] ? "ok" : "NO"}]]
+        if {![lindex $r 1]} { incr failed }
+    }
+    puts "===== [expr {[llength $results] - $failed}]/[llength $results] =====\n"
+    return $failed
+}
+
+# Build one component, in its own object directory, checking make's status at
+# each of the three steps the tape's makefiles need.
+proc build {c} {
+    global OBJ K
+    v10_sh "rm -rf $OBJ/$c; mkdir $OBJ/$c" 300
+    # `prepare' exists only where the tape stages a file before the first
+    # compile -- ccom wants y.debug for cgram.o.  Everywhere else make says
+    # "don't know how to make prepare" and that is not an error.
+    v10_sh "cd $OBJ/$c; make -f $K/$c.mk \$A \$B \$C prepare > p.log 2>&1" 600
+    set built [v10_try \
+        "cd $OBJ/$c; if make -f $K/$c.mk \$A \$B \$C > b.log 2>&1; then echo BLD\$OK; fi" \
+        "BLD-ok" 2400]
+    note "build $c" $built
+    if {!$built} {
+        # Say WHY, here, while the machine still has the log.  A run that
+        # reports "build ccom NO" and halts has thrown away the only copy.
+        v10_sh "cat $OBJ/$c/b.log" 300
+        return 0
+    }
+    set inst [v10_try \
+        "cd $OBJ/$c; if make -f $K/$c.mk \$A \$B \$C install > i.log 2>&1; then echo INS\$OK; fi" \
+        "INS-ok" 900]
+    note "install $c" $inst
+    if {!$inst} { v10_sh "cat $OBJ/$c/i.log" 300 }
+    return $inst
+}
+
+# ---------------------------------------------------------------------------
+v10_boot $img [list "set rq1 ra81" "attach rq1 $src"]
+v10_login root
+
+puts "\n===== V10 STAGE 1 (the toolchain, on V10) ====="
+v10_sh "PATH=/bin:/etc:/usr/bin; export PATH" 120
+v10_sh "OK=-ok" 120
+
+# ------------------------------------------------------------ the source ---
+#
+# `/n' DOES NOT EXIST ON THE V10 GOLDEN.  V8's root has one because netfs
+# mounts live there; V10's has exactly bin, etc, lib, dev, tmp and usr, so
+# `mkdir /n/v10' answers `/n/v10: No such file or directory' -- mkdir makes
+# one level -- and then the mount fails for want of a mount point, and every
+# assertion after it fails for want of the source.  One missing directory,
+# twenty-six failures, and nothing in the output naming the cause.
+v10_sh "mkdir /n" 120
+v10_sh "mkdir $N" 120
+note "source disk mounts" \
+    [v10_try "/etc/mount /dev/ra1c $N && echo MT\$OK" "MT-ok" 600]
+note "source visible" \
+    [v10_try "test -s $S/cmd/ccom/common/cgram.y && echo SV\$OK" "SV-ok" 300]
+note "libc source visible" \
+    [v10_try "test -s $S/libc/csu/crt0.s && echo LC\$OK" "LC-ok" 300]
+note "makefiles visible" \
+    [v10_try "test -s $K/ccom.mk && echo MK\$OK" "MK-ok" 300]
+
+# ------------------------------------------------- can this machine build? ---
+#
+# Asserted rather than assumed, and asserted BEFORE the first component, so a
+# broken make or a wrong clock is reported as itself instead of as nine
+# components that all failed to compile.
+#
+# A REAL makefile, not `make -v'.  An assertion whose pattern is "" matches
+# whatever the tty happened to echo and is not an assertion at all.  This one
+# passes only if make read a file, resolved a target, ran its recipe AND took
+# a macro from the command line -- which every build below depends on and
+# nothing else here would notice.
+#
+# THE MARKER GOES IN THE MACRO, NOT IN THE RECIPE, and the first attempt got
+# that wrong in a way worth keeping.  A recipe reading `echo MAKE$OK' printed
+#
+#	MAKEK
+#
+# because in a makefile `$O' IS A MACRO REFERENCE -- make's `$' takes a single
+# character when it is not parenthesised, so $OK is $(O) followed by K, and
+# $(O) is empty.  That is make working exactly as specified, reported as make
+# being broken.  Passing V=MACRO$OK on the command line has the SHELL expand
+# it before make ever sees a dollar sign, and the marker discipline still
+# holds: the tty echoes the literal `MACRO$OK' and only the result can spell
+# `MACRO-ok'.
+v10_sh "rm -rf /tmp/mt; mkdir /tmp/mt" 120
+v10_sh "cd /tmp/mt; echo 'all:' > m.mk; echo '	echo \$(V)' >> m.mk" 120
+note "make runs and takes macros" \
+    [v10_try "cd /tmp/mt; make -f m.mk V=MACRO\$OK" "MACRO-ok" 300]
+note "cc runs"   [v10_try "cd /tmp; echo 'main(){return 0;}' > t.c; if cc -o t t.c; then echo CC\$OK; fi" "CC-ok" 900]
+# make compares mtimes, so a guest that thinks it is 1976 while the share
+# carries 2026 dates rebuilds nothing or everything.  V8 hit this; check it.
+v10_sh "date" 120
+
+# --------------------------------------------------------------- the macros ---
+#
+# Set as shell variables, not typed into each make line: CANBSIZ is 256 and
+# the tty DISCARDS a longer line silently.  The expansion happens in the
+# shell, so what make finally receives can be as long as it likes.
+#
+# BOTH DESTDIR AND TOOLDIR, SET TO THE SAME PLACE, and that is deliberate.
+#
+# The generator splits the two on purpose: a component that came through
+# component() installs to $(DESTDIR) -- it is part of the system -- while the
+# five multi-file toolchain dicts default to $(TOOLDIR), because on V8 the
+# compiler was machinery and not product.  Stage 1 builds nine components
+# across both categories (cc, ld, halt and sleep are DESTDIR; yacc, cpp,
+# ccom, as and c2 are TOOLDIR), so setting only one macro would send four of
+# them to the PREAMBLE's default $(DESTDIR) -- /b/v10root -- which does not
+# exist on this machine.
+#
+# For a staging run they are the same directory by definition.  The
+# distinction stays meaningful later: stage 8 points DESTDIR at the image
+# root while TOOLDIR stays behind.
+#
+# Every other macro names the STAGE 0 tool, which is what stage 1 is built by.
+v10_sh "A='SRC=$S OURS=$N/ours INCDIR=/usr/include TOOLDIR=$T DESTDIR=$T'" 120
+v10_sh "B='CC=cc CCPATH=/bin/cc CPP=/lib/cpp CCOM=/lib/ccom C2=/lib/c2'" 120
+v10_sh "C='AS=/bin/as LD=/bin/ld LIBC=/lib/libc.a'" 120
+v10_sh "rm -rf $T $OBJ; mkdir $T $OBJ" 300
+
+# ----------------------------------------------- a machine that can stop ---
+foreach c $SHUTDOWN { build $c }
+# Into the running system, explicitly, rather than by handing a makefile `/'.
+#
+# NO chmod, AND THAT IS NOT AN OVERSIGHT.  `chmod' is not on this machine
+# either -- /bin holds as cat cc cp date diff echo ld ls make mkdir mv pr ps
+# rm sed sh stty sync test, and that is all of it.  It is not needed: V10's
+# cp.c takes `mode = stbuf1.st_mode' and passes it to `creat(to, mode)'
+# (cmd/cp/cp.c:57, :88), so a copy carries the source's permissions, and the
+# source is a freshly linked binary.  The assertions below prove it by
+# RUNNING each one rather than by trusting that reasoning.
+v10_sh "cp $T/etc/halt /etc/halt" 300
+v10_sh "cp $T/usr/bin/sleep /bin/sleep" 300
+note "/etc/halt installed" [v10_try "test -s /etc/halt && echo HL\$OK" "HL-ok" 120]
+note "/bin/sleep runs"     [v10_try "if /bin/sleep 1; then echo SL\$OK; fi" "SL-ok" 300]
+
+# ------------------------------------- the tools the bootstrap itself needs ---
+#
+# Installed into the running system, not just staged: stage 2 will invoke
+# $(AR) as /bin/ar from inside a makefile, and stage 3's comparison is a
+# /bin/cmp.  A staged copy under /usr/s1 would satisfy neither.
+foreach c $BUILDTOOLS { build $c }
+v10_sh "cp $T/bin/ar /bin/ar; cp $T/bin/cmp /bin/cmp" 300
+v10_sh "cp $T/usr/bin/tail /usr/bin/tail" 300
+# no chmod on this machine; cp carries the mode (see above)
+# Proven by USE, not by `test -s': ar and cmp are what stages 2 and 3 rest on,
+# and a partial a.out that ld wrote before finding an undefined symbol passes
+# any existence check.
+note "ar works" \
+    [v10_try "cd /tmp; rm -f a.a; if ar cr a.a t.c && ar t a.a; then echo AR\$OK; fi" "AR-ok" 300]
+note "cmp works" \
+    [v10_try "cd /tmp; if cmp t.c t.c; then echo CM\$OK; fi" "CM-ok" 300]
+
+# ------------------------------------------------------------ the toolchain ---
+foreach c $TOOLCHAIN {
+    # yaccpar is installed by yacc's own makefile, but the yacc BINARY reads
+    # it from /usr/lib at runtime, not from TOOLDIR -- the path is compiled
+    # in.  So the staged copy has to reach the real /usr/lib before any
+    # grammar is compiled, or cpp and ccom both fail inside yacc.
+    if {$c eq "cpp"} {
+        v10_sh "cp $T/usr/lib/yaccpar /usr/lib/yaccpar" 300
+        v10_sh "cp $T/usr/bin/yacc /usr/bin/yacc" 300
+        note "yacc installed and runs" \
+            [v10_try "cd /tmp; echo '%%' > e.y; echo 's: ;' >> e.y; if yacc e.y; then echo YC\$OK; fi" \
+                     "YC-ok" 600]
+    }
+    build $c
+}
+
+# --------------------------------------------------------- what landed ---
+v10_sh "ls -l $T/lib $T/bin $T/usr/bin $T/etc" 600
+foreach p {lib/cpp lib/ccom lib/c2 bin/as bin/ld bin/cc usr/bin/yacc} {
+    note "staged $p" [v10_try "test -s $T/$p && echo ST\$OK" "ST-ok" 120]
+}
+
+# ------------------------------------------------------------ the smoke test ---
+#
+# -B/-t reaches ccom, c2 and cpp and NOTHING ELSE, for the reason in the
+# header: V10's cc has no `a'/`l'/`c' letters.  So this proves the three
+# passes that V8's compiler used to own, which is exactly the set stage 1
+# exists to replace.  as and ld are proven by phase C.
+v10_sh "cd /tmp; rm -f h.c h" 120
+v10_sh "cd /tmp; echo '#include <stdio.h>' > h.c" 120
+v10_sh "cd /tmp; echo 'main(){printf(\"STAGE1 %d\\n\", 1); return 0;}' >> h.c" 120
+note "stage-1 cpp/ccom/c2 compile" \
+    [v10_try "cd /tmp; if cc -B$T/lib/ -t02p -o h h.c; then echo SM\$OK; fi" "SM-ok" 900]
+note "and the program runs" [v10_try "cd /tmp; ./h" "STAGE1 1" 300]
+
+report
+v10_halt
+exit 0

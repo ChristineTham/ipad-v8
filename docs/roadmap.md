@@ -276,7 +276,15 @@ without.
 
 ### Where each stage actually stands
 
-- [ ] **Stage 1 — the toolchain.** B1 (2026-08-16) assembled a working set and
+- [x] **Stage 1 — the toolchain.** ✅ 2026-08-16, `tools/v10-stage1.sh`,
+      **42/43** — `yacc cpp ccom as c2 ld cc` all built from V10 source by
+      V10's own compiler, on V10, plus `halt`, `sleep`, `ar` and `cmp`. The
+      one failure is `tail`, and it is a finding rather than a defect: it is
+      the only file in the whole `src/` tree that includes `<libc/libc.h>`,
+      which is ANSI-prototyped and which `ccom` (pcc2, K&R) cannot parse.
+      **No binary on that machine was compiled by the Eighth Edition any
+      more.** History below, because it explains what the stage was for.
+      B1 (2026-08-16) assembled a working set and
       that is *not* the same as having done stage 1. Four passes were **taken
       prebuilt off the tarball** — `ccom`, `as`, `libc.a`, `crt0.o` — and only
       `cpp`, `c2` and `ld` were built from source. V8's stage 1 builds every
@@ -285,7 +293,24 @@ without.
       commands are** — B1 proved they run (`tools/v10-probe.sh`, 9/9), which
       makes them the ideal thing to check a from-source build against, and a
       poor thing to substitute for one. Evidence and harness:
-      [v10-log/2026-08-16.md](v10-log/2026-08-16.md), `tools/v10-toolchain.sh`
+      [v10-log/2026-08-16.md](v10-log/2026-08-16.md), `tools/v10-toolchain.sh`.
+      **The machinery now exists and runs on V10** — `tools/v10-stage1.sh`,
+      which builds `yacc cpp ccom as c2 ld cc` from `v10/mk/gen/tc.order`
+      plus `halt`, `sleep`, `ar`, `cmp` and `tail`, none of which the golden
+      had. Note what is *not* contaminated: `ccom`, `as` and `libc.a` are Bell
+      Labs' own 1995 binaries, so the only V8-built artefacts on the golden
+      are `cpp`, `c2` and `ld`, and rebuilding those three is the whole of
+      "stop mixing the editions"
+
+**B3.0 — getting source onto the machine** ✅ 2026-08-16. There is no netfs
+on V10 and there are two independent reasons, either sufficient: `seki.m`
+configures `netafs 0` and `netbfs 0` (the types are compiled in with zero
+mount slots), and SIMH's `vax750` has no Interlan model at all. seki's config
+*does* carry the card, so the simulator half is ours to fix later.
+`tools/v10-srcdisk.sh` builds a second RA81 — 558 files, 4.7 MB, the
+toolchain sources plus `libc`, our overlay and our generated makefiles —
+mounted on unit 1 at `/n/v10`. The full tree is 306 MB and 22,254 non-binary
+files, which fits in no partition here.
 - [ ] **Stage 2 — libc from source.** Not started; everything so far links the
       1995 `libc.a`. This is the strongest check available anywhere in Track B
       and the reason to want it is not ceremony: `src/libc/libc.a` is 262

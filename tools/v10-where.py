@@ -13,6 +13,13 @@ has to be answered from documents rather than from a disk.
 
 THE ORACLE, IN ORDER OF AUTHORITY.
 
+  mk     the tape's own makefile install rule -- `cp comp /lib/ccom',
+         `mv as ${DESTDIR}/bin'.  The build stating what it does with its own
+         product, which is precisely the rule we are reimplementing, so it
+         outranks a description of the finished system.  Where the manual
+         also has an answer the two are ASSERTED equal, not silently
+         preferred: a disagreement would be a real finding about the tape.
+
   man    V10's own manual.  A section-8 SYNOPSIS opens with the full path --
          `/etc/init', `/etc/mkfs', `/etc/fsck' -- because that is how the
          Research manual documented programs you would not have on PATH.
@@ -109,6 +116,31 @@ def v8_paths():
     return {k: next(iter(v)) for k, v in out.items() if len(v) == 1}
 
 
+# Paths the tape's OWN makefiles state, with the line that states them.
+#
+# This is the strongest evidence there is -- stronger than the manual, which
+# describes where a command sits on a finished system, where these describe
+# what the build itself does with its product.  We are reimplementing exactly
+# those install rules, so where they disagree with an inference, they win.
+#
+# It is also the only evidence available for these five.  None of them is
+# found by commands() below, because a toolchain component is a DIRECTORY of
+# sources with no <name>.c in it -- cmd/as holds asmain.c, cmd/yacc holds
+# y1.c, cmd/ccom holds vax/ and common/ -- so the heuristic that finds every
+# ordinary command finds none of the compiler.
+#
+# cpp is here as a CONTROL rather than because it was missing: the manual
+# already puts it in /lib, and cmd/cpp/mkfile says `cp cpp /lib'.  Two
+# independent sources agreeing is worth more than one more row.
+MK = {
+    "ccom": ("/lib",     "cmd/ccom/vax/makefile: cp comp /lib/ccom"),
+    "c2":   ("/lib",     "cmd/c2/Makefile: cp c2 $(DESTDIR)/lib"),
+    "as":   ("/bin",     "cmd/as/Makefile: mv as ${DESTDIR}/bin"),
+    "yacc": ("/usr/bin", "cmd/yacc/Makefile: mv yacc $(DESTDIR)/usr/bin"),
+    "cpp":  ("/lib",     "cmd/cpp/mkfile: cp cpp /lib"),
+}
+
+
 def commands():
     """Every command V10 has source for: loose cmd/*.c plus cmd/*/ dirs."""
     cmd = os.path.join(V10SRC, "cmd")
@@ -125,9 +157,21 @@ def commands():
 def build():
     man = man_paths()
     v8 = v8_paths()
-    rows, counts = [], {"man": 0, "v8": 0, "--": 0}
-    for name in commands():
-        if name in man:
+    rows, counts = [], {"mk": 0, "man": 0, "v8": 0, "--": 0}
+    # MK's keys are unioned in: the toolchain components are directories with
+    # no <name>.c, so commands() cannot see them.
+    for name in sorted(set(commands()) | set(MK)):
+        if name in MK:
+            # Assert rather than prefer, where both exist.  If the manual and
+            # the makefile ever disagreed about a path that would be a real
+            # finding about the tape, and silently taking one would bury it.
+            if name in man and man[name] != MK[name][0]:
+                sys.exit("v10-where: %s -- manual says %s, %s\n"
+                         "  Resolve this deliberately; do not let one win by ordering."
+                         % (name, man[name], MK[name][1]))
+            rows.append((name, MK[name][0], "mk"))
+            counts["mk"] += 1
+        elif name in man:
             rows.append((name, man[name], "man"))
             counts["man"] += 1
         elif name in v8:
@@ -145,6 +189,9 @@ def build():
         "# from documents.  The third column says which, and they are not of\n"
         "# equal authority:\n"
         "#\n"
+        "#   mk    the tape's OWN makefile install rule, quoted in\n"
+        "#         tools/v10-where.py.  The build stating what it does with\n"
+        "#         its own product, which is the rule we reimplement.\n"
         "#   man   V10's own manual, section 8 SYNOPSIS.  Bell Labs stating it.\n"
         "#   v8    v8/mk/where.txt, measured on a real V8 disk.  Inference from\n"
         "#         the previous edition of the same system on the same machine.\n"
@@ -154,8 +201,9 @@ def build():
         "#\n"
         "# fields: name<TAB>directory<TAB>source\n"
         "#\n"
-        "# %d from the manual, %d inferred from V8, %d unresolved\n"
-        "#\n" % (counts["man"], counts["v8"], counts["--"]))
+        "# %d from the tape's makefiles, %d from the manual, %d inferred from V8,\n"
+        "# %d unresolved\n"
+        "#\n" % (counts["mk"], counts["man"], counts["v8"], counts["--"]))
     body = "".join("%s\t%s\t%s\n" % r for r in rows)
     return head + body, counts
 
@@ -180,8 +228,9 @@ def main():
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     if old != text:
         open(OUT, "w").write(text)
-    print("v10/mk/where.txt: %d from the manual, %d inferred from V8, "
-          "%d unresolved" % (counts["man"], counts["v8"], counts["--"]))
+    print("v10/mk/where.txt: %d from the tape's makefiles, %d from the manual, "
+          "%d inferred from V8, %d unresolved"
+          % (counts["mk"], counts["man"], counts["v8"], counts["--"]))
     return 0
 
 

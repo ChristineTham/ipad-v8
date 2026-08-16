@@ -1,0 +1,3 @@
+ar	cmd	bin/ar
+cmp	cmd	bin/cmp
+tail	cmd	usr/bin/tail

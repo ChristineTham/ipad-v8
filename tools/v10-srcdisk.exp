@@ -1,0 +1,161 @@
+#!/usr/bin/env expect
+# Fill the Tenth Edition source disk.  Normally run through v10-srcdisk.sh.
+#
+#	expect tools/v10-srcdisk.exp <v8-image> <tree> <ours> <mk> <blocks>
+#
+# Runs on the EIGHTH Edition machine, because V8 is the only machine that can
+# reach both the host (netfs) and a V10 filesystem (the ported v10mkbitfs).
+# It writes one file and reads no golden: the partition file is attached as
+# rp1 and assembled into an image afterwards, on the host.
+
+set timeout 1200
+log_user 1
+source [file dirname [info script]]/v8drive.exp
+
+if {[llength $argv] < 5} {
+    puts "usage: v10-srcdisk.exp <v8-image> <tree> <ours> <mk> <blocks>"
+    exit 2
+}
+set img    [lindex $argv 0]
+set tport  [lindex $argv 1]
+set oport  [lindex $argv 2]
+set mport  [lindex $argv 3]
+set blocks [lindex $argv 4]
+
+set V   /n/v10/src        ;# the pristine tree, over netfs
+set M   /mnt              ;# the source filesystem being written
+set BIN /usr/v10/bin
+set INC /usr/v10/include
+set OBJ /usr/v10obj
+
+# What the bootstrap compiles.  Directories first, then the loose files.
+#
+# `ccom' is the big one at 1.9 MB, and most of that is the 1995 binaries and
+# objects sitting in cmd/ccom/vax -- comp, comp.sv, a.out.  They are copied
+# rather than filtered out, because a filter is a rule that can be wrong and
+# 1.9 MB is not worth the risk of excluding something the build reads.  The
+# tape has already shown twice that a build reads files nobody would list:
+# :yyfix beside the source, y.debug.sv copied by relative name.
+set SRCDIRS {yacc ccom as cpp c2}
+#
+# ar, cmp and tail are here because the golden HAS NONE OF THEM, which was
+# measured rather than assumed: its 57 prebuilt 1995 binaries plus what
+# BOOTPATH builds do not include ar, cmp, tail, grep or wc.  Two of the three
+# are load-bearing -- stage 2 builds an archive and cannot without `ar', and
+# stage 3's whole result is a byte comparison it cannot make without `cmp'.
+set SRCFILES {cc.c ld.c halt.c sleep.c ar.c cmp.c tail.c}
+
+set results {}
+proc note {name ok} { global results; lappend results [list $name $ok] }
+proc report {} {
+    global results
+    puts "\n===== V10 SOURCE DISK RESULTS ====="
+    set failed 0
+    foreach r $results {
+        puts [format "  %-40s %s" [lindex $r 0] [expr {[lindex $r 1] ? "ok" : "NO"}]]
+        if {![lindex $r 1]} { incr failed }
+    }
+    puts "===== [expr {[llength $results] - $failed}]/[llength $results] =====\n"
+    return $failed
+}
+
+v8_boot $img {"set il enable" "attach il nat:"
+              "set rp1 rp07" "attach rp1 v10src.part"}
+v8_login root
+
+puts "\n===== V10 SOURCE DISK (B3.0) ====="
+v8_sh "PATH=/bin:/etc:/usr/bin; export PATH"
+v8_sh "OK=-ok"
+
+v8_sh "mkdir /n/v10 /n/v10ours /n/v10mk" 60
+v8_sh "/etc/nmount 10.0.2.2 $tport 86 /n/v10" 120
+v8_sh "/etc/nmount 10.0.2.2 $oport 87 /n/v10ours" 120
+v8_sh "/etc/nmount 10.0.2.2 $mport 88 /n/v10mk" 120
+note "tree mounted" [v8_try "cat $V/cmd/adb/vax/hello.c" "hello, world" 120]
+
+# ------------------------------------------------ the V10 fs tool, ported ---
+#
+# Rebuilt here rather than assumed present: this harness must work on a fresh
+# clone, and /usr/v10 is not part of the V8 golden.
+v8_sh "rm -rf /usr/v10 $INC $BIN; mkdir /usr/v10 $INC $BIN" 120
+v8_sh "cd /n/v10/include; find . -print | cpio -pd $INC" 900
+v8_sh "rm -rf $OBJ; mkdir $OBJ $OBJ/mkbitfs" 120
+v8_sh "cd $OBJ/mkbitfs; cp /n/v10ours/cmd/mkbitfs.c ." 300
+note "v10mkbitfs builds" \
+    [v8_try "cd $OBJ/mkbitfs; if cc -O -I$INC -o $BIN/v10mkbitfs mkbitfs.c > c.log 2>&1; then echo CC\$OK; fi" \
+            "CC-ok" 900]
+
+# ---------------------------------------------------------- the filesystem ---
+#
+# minor 74 = BITFS(64) | unit 1 (<<3) | partition c (2).  dkunit() masks bit 6
+# out before the shift, which is what lets one number mean "bitmapped" to V10
+# and "unit 1" to V8 at the same time.
+#
+# mknod does NOT replace an existing node -- it prints `File exists' and
+# leaves the old one -- so a stale node would outlive this and the run would
+# fail identically with a correct script.
+v8_sh "rm -f /dev/rp1c" 60
+v8_sh "/etc/mknod /dev/rp1c b 0 74" 120
+note "source filesystem made" \
+    [v8_try "$BIN/v10mkbitfs /dev/rp1c $blocks && echo MK\$OK" "MK-ok" 1200]
+v8_sh "rm -rf $M; mkdir $M" 60
+note "source filesystem mounts" \
+    [v8_try "/etc/mount /dev/rp1c $M && echo MT\$OK" "MT-ok" 300]
+
+# ------------------------------------------------------------ the contents ---
+foreach d {src src/cmd ours ours/cmd mk} { v8_sh "mkdir $M/$d" 60 }
+
+# EVERY cpio DESTINATION HAS TO EXIST FIRST.  `-d' makes the directories that
+# appear inside the archive; it does NOT make the one you are copying into,
+# and the failure is a bare
+#
+#	cannot write in </mnt/src/cmd/yacc>
+#
+# on stderr with a zero exit status, so a run that copied nothing looks like a
+# run that worked.  V8's mkdir also makes ONE level at a time, which is why
+# this is a loop and not a single command.
+v8_sh "mkdir $M/src/libc" 60
+foreach d $SRCDIRS { v8_sh "mkdir $M/src/cmd/$d" 60 }
+
+foreach d $SRCDIRS {
+    note "src: cmd/$d" \
+        [v8_try "cd $V/cmd/$d; find . -print | cpio -pd $M/src/cmd/$d && echo CP\$OK" \
+                "CP-ok" 1800]
+}
+# One cpio for the loose files: four round trips instead of four processes.
+v8_sh "cd $V/cmd; for f in [join $SRCFILES { }]; do cp \$f $M/src/cmd/\$f; done" 600
+note "src: the loose .c files" [v8_try "test -s $M/src/cmd/ld.c && echo LD\$OK" "LD-ok" 120]
+
+note "src: libc" \
+    [v8_try "cd $V/libc; find . -print | cpio -pd $M/src/libc && echo CP\$OK" "CP-ok" 1800]
+
+# Our overlay and our makefiles.  Both are small and both are what makes the
+# build ours rather than a re-run of 1995.
+note "ours: the overlay" \
+    [v8_try "cd /n/v10ours/cmd; find . -print | cpio -pd $M/ours/cmd && echo CP\$OK" "CP-ok" 600]
+note "mk: the makefiles" \
+    [v8_try "cd /n/v10mk; find . -print | cpio -pd $M/mk && echo CP\$OK" "CP-ok" 600]
+
+# --------------------------------------------------------------- assertions ---
+#
+# Content, not exit status: a cpio that copied nothing exits 0.
+note "yacc source present"  [v8_try "test -s $M/src/cmd/yacc/y1.c && echo Y\$OK" "Y-ok" 120]
+note "ccom common present"  [v8_try "test -s $M/src/cmd/ccom/common/cgram.y && echo G\$OK" "G-ok" 120]
+note "ccom vax present"     [v8_try "test -s $M/src/cmd/ccom/vax/local.c && echo L\$OK" "L-ok" 120]
+note "as instrs present"    [v8_try "test -s $M/src/cmd/as/instrs && echo I\$OK" "I-ok" 120]
+note "cpp cpy.y present"    [v8_try "test -s $M/src/cmd/cpp/cpy.y && echo C\$OK" "C-ok" 120]
+note "libc crt0.s present"  [v8_try "test -s $M/src/libc/csu/crt0.s && echo S\$OK" "S-ok" 120]
+note "our cc.c present"     [v8_try "test -s $M/ours/cmd/cc.c && echo O\$OK" "O-ok" 120]
+note "tc.order"            [v8_try "test -s $M/mk/tc.order && echo T\$OK" "T-ok" 120]
+note "ccom.mk present"      [v8_try "test -s $M/mk/ccom.mk && echo K\$OK" "K-ok" 120]
+note "halt.mk present"      [v8_try "test -s $M/mk/halt.mk && echo H\$OK" "H-ok" 120]
+
+v8_sh "ls -l $M $M/src/cmd $M/mk" 600
+v8_sh "df" 120
+
+set failed [report]
+v8_sh "cd /; sync; sync" 120
+v8_sh "/etc/umount /dev/rp1c" 600
+v8_sh "/etc/nmount -u 86; /etc/nmount -u 87; /etc/nmount -u 88" 120
+v8_halt
+exit [expr {$failed ? 1 : 0}]

@@ -5,6 +5,9 @@
 # from documents.  The third column says which, and they are not of
 # equal authority:
 #
+#   mk    the tape's OWN makefile install rule, quoted in
+#         tools/v10-where.py.  The build stating what it does with
+#         its own product, which is the rule we reimplement.
 #   man   V10's own manual, section 8 SYNOPSIS.  Bell Labs stating it.
 #   v8    v8/mk/where.txt, measured on a real V8 disk.  Inference from
 #         the previous edition of the same system on the same machine.
@@ -14,7 +17,8 @@
 #
 # fields: name<TAB>directory<TAB>source
 #
-# 23 from the manual, 144 inferred from V8, 95 unresolved
+# 5 from the tape's makefiles, 22 from the manual, 144 inferred from V8,
+# 95 unresolved
 #
 2621		--
 300		--
@@ -29,6 +33,7 @@ apply	/usr/bin	v8
 ar	/bin	v8
 arcv		--
 arff	/bin	v8
+as	/bin	mk
 asa	/usr/bin	v8
 ascii	/usr/bin	v8
 at	/usr/bin	v8
@@ -39,12 +44,14 @@ bcp		--
 bigcore		--
 books		--
 byteyears	/usr/bin	v8
+c2	/lib	mk
 cal	/usr/bin	v8
 calendar2	/usr/lib	v8
 call		--
 cat	/bin	v8
 cb	/usr/bin	v8
 cc	/bin	v8
+ccom	/lib	mk
 charge		--
 chdate		--
 checkeq	/usr/bin	v8
@@ -60,7 +67,7 @@ compress	/usr/bin	v8
 coreid	/usr/bin	v8
 cp	/bin	v8
 cpio	/usr/bin	v8
-cpp	/lib	man
+cpp	/lib	mk
 cron	/etc	man
 ct	/usr/bin	v8
 ctags	/usr/bin	v8
@@ -276,5 +283,6 @@ write	/bin	v8
 wwv		--
 xargs		--
 xd		--
+yacc	/usr/bin	mk
 yes		--
 zero		--
