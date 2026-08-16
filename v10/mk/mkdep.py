@@ -71,7 +71,20 @@ PREAMBLE = """\
 # written into the current directory, which the driver makes a per-component
 # directory on a writable filesystem.
 SRC     = /n/v10/src
+
+# TWO destinations, and neither is `/'.
+#
+# DESTDIR is the V10 system being assembled -- the tree that becomes the
+# image.  TOOLDIR is where tools that RUN ON THE HOST are installed, beside
+# the V10 toolchain and off V8's PATH.
+#
+# A DEFAULT IS LOAD-BEARING HERE.  An unset $(TOOLDIR) expands to nothing, so
+# `cp v10mkbitfs $(TOOLDIR)/bin/v10mkbitfs' would write into the HOST's /bin.
+# That is not hypothetical -- this file shipped without a TOOLDIR line, and
+# the only thing between it and V8's /bin was that nothing had run the
+# install target yet.
 DESTDIR = /b/v10root
+TOOLDIR = /usr/v10
 
 # Our corrections, served beside the pristine tree rather than patched into
 # it -- v10/MANIFEST is the record that our copy of the tarball is unaltered,
@@ -138,6 +151,51 @@ BOOTPATH = ["init", "getty", "login", "mount", "umount", "mkfs", "fsck",
             "icheck", "sync", "date", "stty", "cat", "cp", "mv", "rm",
             "mkdir", "echo"]
 
+# The subset that MAKES a Tenth Edition filesystem, ported to run on the
+# Eighth Edition host.  Built from V10 source and nothing else: V8 has files
+# of the same names -- mkbitfs.c, mkfs.c -- and they are eight years apart,
+# so using V8's would be assuming the on-disk format never changed rather
+# than reading V10's own answer to it.
+#
+# `mkbitfs' is the one that matters.  seki's root is `ra 0100', and
+# BITFS(dev) = ((dev) & 64), so its root filesystem is the BITMAPPED variant:
+# 4096-byte blocks, and free space held in S_bfree[BITMAP] rather than in the
+# S_free[] list.  mkfs writes only the free-list form -- it is a Berkeley 4.2
+# file that uses BSIZE(0) throughout -- so mkfs alone cannot make a
+# filesystem seki can mount.  mkbitfs can: it opens with
+#
+#	#define ISBIT 0100    /* this is a bitmapped filesystem -- fake out macros */
+#	#define ICOUNT INOPB(ISBIT)
+#	#define BCOUNT BSIZE(ISBIT)
+#
+# and sets s_valid = 1.  It checks BITFS(st_rdev) on its target, so the raw
+# device node it is pointed at must carry bit 6 in its minor number.
+# NAMED v10<tool>, AND THAT IS A SAFETY PROPERTY, NOT A CONVENTION.
+#
+# These run on the EIGHTH Edition host, beside V8's own mkfs, mknod, dd and
+# cpio.  A V10 tool that answered to `mkfs' on that machine would be one
+# PATH accident away from being the one a build reached for, and the failure
+# would be silent: V10's mkfs writes a superblock V8's kernel reads
+# differently, so the damage would appear later, somewhere else, as a
+# corrupt filesystem.
+#
+# The tape shows how bad this gets left to convention.  V10's own
+# cmd/ccom/vax/makefile carries
+#
+#	install:
+#		cp /lib/ccom comp.sv
+#		cp comp /lib/ccom
+#
+# -- it overwrites the compiler you are compiling with, in `/', on the host.
+# Nothing generated here can do that (every destination goes through
+# $(DESTDIR) or $(TOOLDIR), asserted below), but the names make the
+# separation visible rather than merely true.
+#
+# Files that go INTO the V10 image keep their real names: `init' has to be
+# /etc/init there.  The prefix is only for tools executed on the host.
+FSTOOL_SRC = ["mkbitfs", "mknod", "dd", "cpio"]
+FSTOOLS = ["v10" + n for n in FSTOOL_SRC]
+
 # Components read from OUR overlay rather than from the pristine tarball.
 #
 # tools/v10-overlay.py derives v10/src/ from named upstream files with stated
@@ -153,6 +211,12 @@ PATCHED = {
     # uses ROOTINO and includes nothing that defines it.  Compiles against
     # V8's headers only because V8's sys/types.h includes sys/param.h.
     "mv",
+    # its BITFS device check cannot be satisfied on a V8 host, where the same
+    # bit is part of hp's drive number.  Left out of this set once already,
+    # and the run then used the TARBALL's copy and died with the tarball's
+    # message -- "can't have a 4k filesystem" -- which reads like the port
+    # not working rather than the port not being used.
+    "mkbitfs",
 }
 
 
@@ -169,15 +233,26 @@ def source_for(name, root):
 
 def component(name):
     """One entry for mkgen.emit(), or None with a reason."""
-    patched = name in PATCHED
+    # A host tool is `v10<something>'; its SOURCE is the unprefixed name.
+    host = name.startswith("v10")
+    srcname = name[3:] if host else name
+    patched = srcname in PATCHED
     root = OURS if patched else SRC
-    d, src = source_for(name, root)
+    d, src = source_for(srcname, root)
     if d is None:
         if patched:
             return None, ("listed as patched but not in v10/src -- "
                           "run tools/v10-overlay.py")
         return None, "no source in cmd/"
-    where = WHERE.get(name)
+    if host:
+        # Host tools land beside the V10 toolchain, never on V8's PATH, and
+        # under TOOLDIR rather than the image's DESTDIR.
+        c = dict(name=name, dir=d, objs=[src], product=name,
+                 install="bin/" + name, dest="TOOLDIR")
+        if patched:
+            c["root"], c["srcmacro"] = OURS, "OURS"
+        return c, None
+    where = WHERE.get(srcname)
     if not where:
         return None, "no install path (tools/v10-where.py says unresolved)"
     c = dict(name=name, dir=d, objs=[src], product=name,
@@ -216,7 +291,7 @@ def main():
         elif old != text:
             open(path, "w").write(text)
 
-    for name in BOOTPATH:
+    for name in BOOTPATH + FSTOOLS:
         c, why = component(name)
         if c is None:
             skipped.append((name, why))
@@ -225,7 +300,11 @@ def main():
         entries.append((name, c["dir"], c["install"]))
 
     put("bootpath.order",
-        "".join("%s\t%s\t%s\n" % e for e in entries))
+        "".join("%s\t%s\t%s\n" % e
+                for e in entries if e[0] in BOOTPATH))
+    put("fstools.order",
+        "".join("%s\t%s\t%s\n" % e
+                for e in entries if e[0] in FSTOOLS))
 
     # What was NOT covered, and why -- generated rather than commented, so it
     # cannot drift from the code that produced it.  A build that silently
@@ -237,6 +316,30 @@ def main():
         "# Regenerated by v10/mk/mkdep.py.\n#\n"
         + "".join("%-10s %s\n" % s for s in skipped))
 
+    # NOTHING MAY WRITE OUTSIDE A MACRO, and nothing may write to `/'.
+    # These makefiles run on a live Eighth Edition host with its own mkfs,
+    # mknod, dd and cpio; a rule that reached /bin or /lib would replace a
+    # V8 tool with a V10 one and the damage would surface much later.
+    import re as _re
+    for name in sorted(written):
+        if not name.endswith(".mk"):
+            continue
+        text = open(os.path.join(GEN, name)).read()
+        for line in text.splitlines():
+            m = _re.match(r"\t(?:-mkdir|cp|mv)\s+(.*)", line)
+            if not m:
+                continue
+            dest = m.group(1).split()[-1]
+            if not dest.startswith("$("):
+                raise SystemExit(
+                    "mkdep: %s writes to a literal path (%s) -- every "
+                    "destination must go through $(DESTDIR) or $(TOOLDIR)"
+                    % (name, dest))
+    for macro in ("DESTDIR", "TOOLDIR"):
+        if ("\n%-8s= /" % macro).replace("%-8s", macro.ljust(8)) not in PREAMBLE:
+            raise SystemExit("mkdep: PREAMBLE has no absolute %s default; an "
+                             "empty one would write into the host's /" % macro)
+
     if args.check:
         if stale:
             print("stale, re-run v10/mk/mkdep.py: " + " ".join(stale))
@@ -244,8 +347,9 @@ def main():
         print("makefiles are up to date with the source tree")
         return 0
 
-    print("generated %d of %d boot-path commands in %s"
-          % (len(entries), len(BOOTPATH), mkgen.rel(GEN, os.getcwd())))
+    print("generated %d of %d commands in %s"
+          % (len(entries), len(BOOTPATH) + len(FSTOOLS),
+             mkgen.rel(GEN, os.getcwd())))
     if skipped:
         for name, why in skipped:
             print("  skipped %-10s %s" % (name, why))

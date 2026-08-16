@@ -12,7 +12,20 @@
 # written into the current directory, which the driver makes a per-component
 # directory on a writable filesystem.
 SRC     = /n/v10/src
+
+# TWO destinations, and neither is `/'.
+#
+# DESTDIR is the V10 system being assembled -- the tree that becomes the
+# image.  TOOLDIR is where tools that RUN ON THE HOST are installed, beside
+# the V10 toolchain and off V8's PATH.
+#
+# A DEFAULT IS LOAD-BEARING HERE.  An unset $(TOOLDIR) expands to nothing, so
+# `cp v10mkbitfs $(TOOLDIR)/bin/v10mkbitfs' would write into the HOST's /bin.
+# That is not hypothetical -- this file shipped without a TOOLDIR line, and
+# the only thing between it and V8's /bin was that nothing had run the
+# install target yet.
 DESTDIR = /b/v10root
+TOOLDIR = /usr/v10
 
 # Our corrections, served beside the pristine tree rather than patched into
 # it -- v10/MANIFEST is the record that our copy of the tarball is unaltered,

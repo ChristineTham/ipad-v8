@@ -130,3 +130,90 @@ and everything mv.c used still arrives.
  #define	DOT	"."
 ```
 
+## mkbitfs.c: the BITFS check asks about the wrong machine
+
+`cmd/mkbitfs.c`, sha256 `6eb1221fba36f695`
+
+`mkbitfs` makes the bitmapped 4096-byte filesystem `seki` boots from -- the
+one `mkfs` cannot make, because `mkfs` is a Berkeley 4.2 file that writes only
+the `S_free[]` list while BITFS keeps free space in `S_bfree[BITMAP]`.
+
+It refuses to run unless its target has bit 6 set in the minor number. That is
+right on a V10 machine, where `BITFS(dev) = ((dev) & 64)` is how a device
+declares which variant it holds -- `seki`'s root is `ra 0100`, and 0100 octal
+is 64.
+
+**It cannot be satisfied on the Eighth Edition host.** V8's `hp` driver reads
+the same bit as part of the drive number (`unit = minor(dev) >> 3`,
+`sys/dev/hp.c:562`), so a minor with bit 6 set names drive 8 -- and SIMH's RP
+has units 0 to 7. There is no node that both passes the check and reaches a
+real disk.
+
+The check asks about the machine doing the writing, when what decides the
+format is the machine that will read it. The author's own `/* doubtful */`
+sits on that line. So it becomes a warning: the diagnostic still prints, and
+the caller stays responsible for pointing this at an image the *target* kernel
+will see as BITFS.
+
+V10 added 64-bit file offsets and `mkbitfs` uses them:
+
+	off = Llmul(ltoL(size-1), BCOUNT);
+	llseek(fd, off, 0);
+
+V8's libc has none of that, so the link fails:
+
+	Undefined:
+	_ltoL
+	_Llmul
+	_llseek
+
+**Linking V10's libc.a instead would be much worse than a build failure.**
+`llseek` is system call slot **11**, and on a V8 kernel slot 11 is `exec` --
+the one V7 vestige V10 reused. A V10 binary calling llseek on V8 does not
+fail; it execs.
+
+The filesystem this makes is 25,000 blocks of 4096 = 102 MB, and the largest
+this tool can address in 32 bits is 2 GB, so the wide arithmetic buys nothing
+here. `off` becomes a `long` and the seek an ordinary `lseek`.
+
+```diff
+--- tarball/cmd/mkbitfs.c
++++ ours/cmd/mkbitfs.c
+@@ -39,7 +39,6 @@
+ 	int fd;
+ 	register struct dinode *ip;
+-	llong_t off;
++	long off;			/* ipnx: 32-bit, see PATCHES.md */
+ 	long atol();
+-	extern llong_t Llmul(), ltoL();
+ 
+ 	if(argc < 3) {
+@@ -60,8 +59,10 @@
+ 		exit(1);
+ 	}
++	/* ipnx: warn, do not exit.  The build host numbers its devices
++	   differently from the machine that will mount this; see
++	   v10/src/PATCHES.md. */
+ 	if(!BITFS(statbuf.st_rdev)) {	/* doubtful */
+-		fprintf(stderr, "%s device %d, 0%o can't have a 4k filesystem\n",
++		fprintf(stderr, "%s device %d, 0%o is not BITFS on this host\n",
+ 			argv[1], major(statbuf.st_rdev), minor(statbuf.st_rdev));
+-		exit(1);
+ 	}
+ 	size = atol(argv[2]);
+@@ -70,9 +71,9 @@
+ 		exit(1);
+ 	}
+-	off = Llmul(ltoL(size-1), BCOUNT);
+-	llseek(fd, off, 0);
++	off = (long)(size-1) * BCOUNT;
++	lseek(fd, off, 0);
+ 	if((j = read(fd, buf.bb, BCOUNT)) != BCOUNT) {
+-		fprintf(stderr, "size %ld too large (lseek [%d,%d], read %d)\n",
+-			size, Lsign(off), Ltol(off), j);
++		fprintf(stderr, "size %ld too large (lseek %ld, read %d)\n",
++			size, off, j);
+ 		exit(1);
+ 	}
+```
+

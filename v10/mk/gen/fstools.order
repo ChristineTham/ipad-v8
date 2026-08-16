@@ -1,0 +1,4 @@
+v10mkbitfs	cmd	bin/v10mkbitfs
+v10mknod	cmd	bin/v10mknod
+v10dd	cmd	bin/v10dd
+v10cpio	cmd	bin/v10cpio

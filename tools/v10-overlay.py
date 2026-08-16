@@ -167,6 +167,63 @@ and everything mv.c used still arrives.
                ("#include <sys/dir.h>\n#include <signal.h>",
                 "#include <sys/dir.h>", 1)],
     ),
+    dict(
+        path="cmd/mkbitfs.c",
+        sha="",
+        title="mkbitfs.c: the BITFS check asks about the wrong machine",
+        why="""\
+`mkbitfs` makes the bitmapped 4096-byte filesystem `seki` boots from -- the
+one `mkfs` cannot make, because `mkfs` is a Berkeley 4.2 file that writes only
+the `S_free[]` list while BITFS keeps free space in `S_bfree[BITMAP]`.
+
+It refuses to run unless its target has bit 6 set in the minor number. That is
+right on a V10 machine, where `BITFS(dev) = ((dev) & 64)` is how a device
+declares which variant it holds -- `seki`'s root is `ra 0100`, and 0100 octal
+is 64.
+
+**It cannot be satisfied on the Eighth Edition host.** V8's `hp` driver reads
+the same bit as part of the drive number (`unit = minor(dev) >> 3`,
+`sys/dev/hp.c:562`), so a minor with bit 6 set names drive 8 -- and SIMH's RP
+has units 0 to 7. There is no node that both passes the check and reaches a
+real disk.
+
+The check asks about the machine doing the writing, when what decides the
+format is the machine that will read it. The author's own `/* doubtful */`
+sits on that line. So it becomes a warning: the diagnostic still prints, and
+the caller stays responsible for pointing this at an image the *target* kernel
+will see as BITFS.
+
+\
+V10 added 64-bit file offsets and `mkbitfs` uses them:
+
+	off = Llmul(ltoL(size-1), BCOUNT);
+	llseek(fd, off, 0);
+
+V8's libc has none of that, so the link fails:
+
+	Undefined:
+	_ltoL
+	_Llmul
+	_llseek
+
+**Linking V10's libc.a instead would be much worse than a build failure.**
+`llseek` is system call slot **11**, and on a V8 kernel slot 11 is `exec` --
+the one V7 vestige V10 reused. A V10 binary calling llseek on V8 does not
+fail; it execs.
+
+The filesystem this makes is 25,000 blocks of 4096 = 102 MB, and the largest
+this tool can address in 32 bits is 2 GB, so the wide arithmetic buys nothing
+here. `off` becomes a `long` and the seek an ordinary `lseek`.
+""",
+        edits=[('\tif(!BITFS(statbuf.st_rdev)) {\t/* doubtful */\n\t\tfprintf(stderr, "%s device %d, 0%o can\'t have a 4k filesystem\\n",\n\t\t\targv[1], major(statbuf.st_rdev), minor(statbuf.st_rdev));\n\t\texit(1);\n\t}\n',
+                '\t/* ipnx: warn, do not exit.  The build host numbers its devices\n\t   differently from the machine that will mount this; see\n\t   v10/src/PATCHES.md. */\n\tif(!BITFS(statbuf.st_rdev)) {\t/* doubtful */\n\t\tfprintf(stderr, "%s device %d, 0%o is not BITFS on this host\\n",\n\t\t\targv[1], major(statbuf.st_rdev), minor(statbuf.st_rdev));\n\t}\n', 1),
+               ('\tllong_t off;\n\tlong atol();\n\textern llong_t Llmul(), ltoL();\n',
+                '\tlong off;\t\t\t/* ipnx: 32-bit, see PATCHES.md */\n\tlong atol();\n', 1),
+               ('\toff = Llmul(ltoL(size-1), BCOUNT);\n\tllseek(fd, off, 0);\n',
+                '\toff = (long)(size-1) * BCOUNT;\n\tlseek(fd, off, 0);\n', 1),
+               ('\t\tfprintf(stderr, "size %ld too large (lseek [%d,%d], read %d)\\n",\n\t\t\tsize, Lsign(off), Ltol(off), j);\n',
+                '\t\tfprintf(stderr, "size %ld too large (lseek %ld, read %d)\\n",\n\t\t\tsize, off, j);\n', 1)],
+    ),
 ]
 
 

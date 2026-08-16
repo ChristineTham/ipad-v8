@@ -1,0 +1,194 @@
+#!/usr/bin/env expect
+# Backport the Tenth Edition filesystem tools onto Eighth Edition, and use
+# them to make a V10 root filesystem.  Phase K2.
+#
+#	expect tools/v10-mkimage.exp <image> <tree-port> <ours-port> <scratch-port>
+#
+# Normally run through tools/v10-mkimage.sh.
+#
+# WHAT THIS IS, AND WHAT IT DELIBERATELY IS NOT.
+#
+# It is a BACKPORT: a few V10 commands compiled by V8's own 1985 cc, so that
+# an Eighth Edition machine can create and fill a Tenth Edition filesystem.
+# That is all it takes, and the V10 toolchain is not involved.
+#
+# The earlier version of this file assembled the whole V10 toolchain first --
+# ccom, as, libc.a, crt0.o, cpp, c2, ld -- and compiled these four tools with
+# it.  That was six wasted minutes per run and six ways to fail, for no gain:
+# nothing about a filesystem's on-disk layout depends on which compiler wrote
+# the program that laid it out.
+#
+# WHAT DOES COME FROM V10 IS THE HEADERS.  `sys/param.h', `sys/filsys.h',
+# `sys/ino.h' and `sys/dir.h' are where the format actually lives -- NICFREE,
+# BITMAP, `struct filsys', and BITFS(dev)/BSIZE(dev) -- so `-I' points at
+# V10's include tree while the link stays against V8's libc.  V8's and V10's
+# `struct _iobuf' are byte-identical, which is what makes that mixture safe.
+#
+# WHY mkbitfs RATHER THAN mkfs.  seki's root is `ra 0100', and
+# BITFS(dev) = ((dev) & 64), so 0100 octal = 64 says its root is the BITMAPPED
+# variant: 4096-byte blocks, free space in S_bfree[BITMAP] instead of the
+# S_free[] list.  `mkfs' cannot make that -- it is a Berkeley 4.2 file using
+# BSIZE(0) throughout, which writes only the free list.
+#
+# WHY THE HOST IS SAFE.  Writes go through a RAW device, so V8's kernel never
+# mounts what is being written -- the courier pattern from B0.  And the tools
+# are installed as `v10mkbitfs' and so on, never under a V8 name, so nothing
+# on this machine can reach for one by accident.
+
+set timeout 900
+log_user 1
+source [file dirname [info script]]/v8drive.exp
+
+if {[llength $argv] < 4} {
+    puts "usage: v10-mkimage.exp <image> <tree-port> <ours-port> <scratch-port>"
+    exit 2
+}
+set img   [lindex $argv 0]
+set tport [lindex $argv 1]
+set oport [lindex $argv 2]
+set sport [lindex $argv 3]
+
+set V   /n/v10/src
+set INC /usr/v10/include
+set BIN /usr/v10/bin
+set OBJ /usr/v10obj
+
+# name          source          where it comes from
+#   v10mkbitfs  cmd/mkbitfs.c   OURS -- the device check is ported
+#   v10mknod    cmd/mknod.c     the tarball
+#   v10dd       cmd/dd.c        the tarball
+set TOOLS {
+    {v10mkbitfs mkbitfs.c ours}
+    {v10mknod   mknod.c   tape}
+    {v10dd      dd.c      tape}
+}
+
+set results {}
+proc note {name ok} {
+    global results
+    lappend results [list $name $ok]
+}
+proc report {} {
+    global results
+    puts "\n===== V10 MKIMAGE RESULTS ====="
+    set failed 0
+    foreach r $results {
+        puts [format "  %-34s %s" [lindex $r 0] [expr {[lindex $r 1] ? "ok" : "NO"}]]
+        if {![lindex $r 1]} { incr failed }
+    }
+    puts "===== [expr {[llength $results] - $failed}]/[llength $results] =====\n"
+    return $failed
+}
+
+v8_boot $img {"set il enable" "attach il nat:" "set rp1 rp07" "attach rp1 v10root.img"}
+v8_login root
+
+puts "\n===== V10 MKIMAGE (K2) ====="
+v8_sh "PATH=/bin:/etc:/usr/bin; export PATH"
+v8_sh "OK=-ok"
+
+v8_sh "mkdir /n/v10 /n/v10ours /n/t" 60
+v8_sh "/etc/nmount 10.0.2.2 $tport 74 /n/v10" 120
+v8_sh "/etc/nmount 10.0.2.2 $oport 75 /n/v10ours" 120
+v8_sh "/etc/nmount 10.0.2.2 $sport 77 /n/t" 120
+note "tree mounted" [v8_try "cat $V/cmd/adb/vax/hello.c" "hello, world" 120]
+
+# ------------------------------------------------------- V10's headers ---
+#
+# Staged to local disk rather than read off the share: netfs costs a round
+# trip per path component and a header is opened once per compile.  One
+# `cpio -pd' is one process for the whole set.
+v8_sh "rm -rf /usr/v10; mkdir /usr/v10 $INC $BIN" 120
+v8_sh "cd /n/v10/include; find . -print | cpio -pd $INC" 900
+note "V10 headers staged" [v8_try "test -s $INC/sys/filsys.h && echo HDR\$OK" "HDR-ok" 120]
+
+# --------------------------------------- the backport: V8's cc, V10's headers ---
+v8_sh "rm -rf $OBJ; mkdir $OBJ" 120
+foreach t $TOOLS {
+    set name [lindex $t 0]
+    set src  [lindex $t 1]
+    set from [lindex $t 2]
+    set dir  [expr {$from eq "ours" ? "/n/v10ours/cmd" : "$V/cmd"}]
+    v8_sh "mkdir $OBJ/$name" 60
+    v8_sh "cd $OBJ/$name; cp $dir/$src ." 300
+    # cc's EXIT STATUS.  `test -s' passed for a link that had failed --
+    # ld writes a partial a.out before it discovers an undefined symbol, so
+    # the file exists, is non-empty, and answers "cannot execute".  Third
+    # time that shape of false pass has appeared in this session.
+    note "cc $name" \
+        [v8_try "cd $OBJ/$name; if cc -O -I$INC -o $BIN/$name $src > c.log 2>&1; then echo CC\$OK; fi" \
+                "CC-ok" 900]
+    v8_sh "echo '##### $name' >> $OBJ/all.log; cat $OBJ/$name/c.log >> $OBJ/all.log" 120
+}
+v8_sh "ls -l $BIN" 120
+
+# ------------------------------------- a BLOCK device, and why that is enough ---
+#
+# The filesystem has to be MOUNTED to be filled, so the device must satisfy
+# two things at once: V8 has to reach the right drive through it, and
+# BITFS(dev) has to be true so both kernels agree on 4096-byte blocks.
+#
+# It turns out V8 already does this, on the block path only:
+#
+#	param.h:139  #define dkunit(bp) (minor((bp)->b_dev & 077) >> 3)
+#
+# -- masked to six bits BEFORE the shift, so bit 6 is not part of the unit.
+# That is the same arrangement as V10's ra.c (`UNIT(dev) = ((dev)>>3) & 07'),
+# and it is what makes bit 6 free to mean "bitmapped" in both editions.
+#
+# The four places hp.c decodes a unit UNmasked -- hpread, hpwrite, hpioctl,
+# hpdump -- are all raw or control paths, and there is no hpopen at all.  So
+# nothing needs patching in the kernel as long as everything goes through the
+# block device, which mount and cp do anyway.
+#
+#	minor 74 = 0112 = 64 | (1<<3) | 2
+#	   BITFS(74) = 74 & 64      -> true, 4096-byte blocks
+#	   dkunit    = (74&077)>>3  -> unit 1
+#	   partition = 74 & 07      -> 2, `c', the whole volume
+#
+# mknod does NOT replace an existing node -- it prints "File exists" and
+# leaves the old one -- and it takes the minor in DECIMAL, which cost a run
+# when `012' was read as twelve.
+v8_sh "rm -f /dev/rp1c" 60
+v8_sh "/etc/mknod /dev/rp1c b 0 74" 120
+note "block node, BITFS bit set" [v8_try "ls -l /dev/rp1c" "rp1c" 120]
+
+# ------------------------------------------- make the V10 root filesystem ---
+#
+# 25000 * 4096 = 102 MB, inside both the RP07 the host sees and the RA81 the
+# target will.
+note "v10mkbitfs writes a filesystem" \
+    [v8_try "$BIN/v10mkbitfs /dev/rp1c 25000 && echo MKB\$OK" "MKB-ok" 900]
+
+# ------------------------------- mount it, and put a Tenth Edition kernel in ---
+#
+# This is the whole point: an Eighth Edition machine mounting a Tenth Edition
+# filesystem, so ordinary cp can fill it.
+v8_sh "rm -rf /mnt; mkdir /mnt" 60
+note "V8 mounts the V10 filesystem" \
+    [v8_try "/etc/mount /dev/rp1c /mnt && echo MNT\$OK" "MNT-ok" 300]
+note "it is empty and writable" \
+    [v8_try "cp /etc/motd /mnt/probe && ls /mnt && echo CPY\$OK" "CPY-ok" 300]
+
+# seki.u is the kernel: `Unix 10e Mar 15 04:03 1990', 0410 NMAGIC, entry
+# 0x80000ad8.  lsys/boot/README requires /unix at the front of the filesystem
+# and no more than singly indirect, so it goes in first, before anything else
+# has a chance to fragment the free list.
+v8_sh "rm -f /mnt/probe" 60
+note "seki.u copied in as /unix" \
+    [v8_try "cp $V/lsys/astro/seki.u /mnt/unix && ls -l /mnt/unix && echo UNX\$OK" "UNX-ok" 900]
+
+v8_sh "/etc/umount /dev/rp1c" 300
+
+# Carry the first 8 blocks home so the superblock can be decoded on the host.
+# "mkbitfs exited 0" and "mkbitfs wrote a bitmapped superblock" are different
+# claims and only the second one matters.
+v8_sh "$BIN/v10dd if=/dev/rp1c bs=512 count=8 of=/n/t/superblock.bin" 300
+v8_sh "cp $OBJ/all.log /n/t/compile.log" 300
+v8_sh "ls -l /n/t" 120
+
+report
+v8_sh "cd /; sync; sync" 120
+v8_sh "/etc/nmount -u 74; /etc/nmount -u 75; /etc/nmount -u 77" 120
+v8_halt
+exit 0
