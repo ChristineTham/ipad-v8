@@ -779,6 +779,30 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   for Track B lab-notebook entries. Hooks (`.claude/settings.json` + `tools/*.sh`) enforce
   the no-binaries rule and check markdown links on edit.
 
+## The version, and where it lives
+
+The system is **`ipnx Edition 8 Release 1.0`** (2026-08-16). Two numbers owned by
+two different parties: the **edition** is Bell Labs' and is not ours to increment;
+the **release** counts what this project has made of it, and started at 1.0 when the
+disk began being built from source rather than patched out of the tape.
+
+`v8/RELEASE` is the single source of truth and `tools/ipnx-release.py` generates both
+consumers from it — `v8/usr/include/ipnx.h` (userland) and `v8/usr/sys/conf/newvers.sh`
+(the kernel banner); `--check` fails if either drifts. Two presentation rules live in
+the generator so no call site has to remember them: **`PATCH` is omitted when zero**
+(`Release 1.0`, not `1.0.0`) and **the branch suffix appears only off a tag** (never
+`Release 1.0-RELEASE`). Print `IPNX_RELSTR`, which arrives composed — `uname` and
+`ipnxfetch` each glued `IPNX_RELEASE` to `IPNX_BRANCH` themselves and both printed the
+stutter.
+
+**Changing the version means rebuilding the guest**, because three artefacts carry it:
+`uname` and `ipnxfetch` (stage 6) and `/unix` (stage 7, via `newvers.sh`). The route is
+`tools/drive-stages48.sh "" "" 4 8 rp07ref rp07` — about twenty minutes — and the target
+image must be recreated from `/dev/zero` first, since `mkfs` does not clear data blocks
+and this artefact is committed. The carry reference must be a *different* file from the
+target (`rp07ref`, not `rp07new`), or the precondition checks the file the run is about
+to overwrite.
+
 ## Status / next step
 
 **Track A is complete** (A1–A3, all 2026-08-09) — see

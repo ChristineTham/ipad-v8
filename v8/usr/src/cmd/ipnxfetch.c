@@ -143,8 +143,7 @@ char **argv;
 	printf("------------------------------\n");
 
 	label("OS:");
-	printf("ipnx %s Release %s-%s\n",
-	       IPNX_SYSNAME, IPNX_RELEASE, IPNX_BRANCH);
+	printf("ipnx %s Release %s\n", IPNX_SYSNAME, IPNX_RELSTR);
 
 	label("Host:");
 	printf("VAX-11/780 (emulated)\n");

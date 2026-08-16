@@ -18,7 +18,7 @@ The goal is not a shell prompt that looks old. It is to reproduce the original R
 environments *faithfully* — the real kernel, the real terminal, the real wire between them —
 on hardware you already carry.
 
-> **Status (2026-08-16): V8 is finished.** The app is real, it works, and the disk it
+> **Status (2026-08-16): `ipnx Edition 8 Release 1.0`.** The app is real, it works, and the disk it
 > ships is **built from this repository's own source** rather than inherited. V8 boots to
 > `login:` with save/restore instant-on; `mux` and `jim` run on the 5620 on both iPad and
 > Mac; the machine knows its own name, brings its network up at boot, mounts your Mac
@@ -32,6 +32,11 @@ on hardware you already carry.
 > Track A is complete through A5, Track S built the shipped disk, and B0/B0.5/B0.6 are
 > done. **Next is Track B — the V10 restoration.** Details:
 > [docs/roadmap.md](docs/roadmap.md).
+>
+> The two numbers belong to two different people: the **edition** is Bell Labs' and is
+> not ours to increment; the **release** counts what this project has made of it, and
+> starts at 1.0 because the disk is now built from source rather than patched out of the
+> tape ([docs/releases.md](docs/releases.md), [v8/CHANGELOG.md](v8/CHANGELOG.md)).
 
 ## The name
 

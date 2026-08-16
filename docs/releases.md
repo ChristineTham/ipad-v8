@@ -54,8 +54,11 @@ visibly not a place to put features:
 | **patch** | fixes only. No new functionality, no new files, no interface changes |
 
 Between releases the tree is **`-CURRENT`**; a tagged release is **`-RELEASE`**.
-Both appear in the boot banner, so a machine always tells you whether it is
-running something reproducible or something in flight.
+Only `-CURRENT` is *shown*: a tagged system reads `Release 1.0`, an untagged one
+reads `Release 1.0-CURRENT`. The information is the same — a machine still tells
+you whether it is running something reproducible or something in flight — but
+the marker is the exception rather than decoration on every banner, and
+`Release 1.0-RELEASE` says the word twice.
 
 ### `IPNX_VERSION`, and why it is one number
 
@@ -120,14 +123,20 @@ are in the repo, and they are **not** built from source. So:
 - **1.0.0** — the first image built end to end from `v8/`, which is Track S's
   finish line and is what makes the number mean something.
 
-**Where that now stands (2026-08-16).** The paragraph above describes a state this
-project has left. Track S completed on 2026-08-15 and the image the app ships,
-`work/myv8/rp07new`, is its output: stages 4–7 build the headers, libraries,
-commands and kernel from `v8/`, stage 8 lays down a filesystem from that
-`DESTDIR`, and stage 9 has the result rebuild itself under `chroot`. Nothing is
-patched into a running machine any more.
+## Release 1.0 — cut 2026-08-16
 
-The one honest qualification is `v8/mk/gen/carry.txt` — 1,442 paths the tape
+**The system is `ipnx Edition 8 Release 1.0`.** Two numbers, belonging to
+different people: the **edition** is Bell Labs' and is not ours to increment,
+the **release** counts what this project has made of it. That is why the
+release restarts at 1.0 rather than continuing some numbering of the tape's.
+
+It is 1.0 because the criterion above is met. Track S completed on 2026-08-15
+and the image the app ships is its output: stages 4–7 build the headers,
+libraries, commands and kernel from `v8/`, stage 8 lays down a filesystem from
+that `DESTDIR`, and stage 9 has the result rebuild itself under `chroot`.
+Nothing is patched into a running machine any more.
+
+The one honest qualification is `v8/mk/gen/carry.txt` — 1,406 paths the tape
 shipped as **machine code with no source**, so no build could ever produce them:
 the jerq/5620 binaries (`mux`, `muxterm`, `jim`), the games, and the manual.
 They are carried from the previous image rather than compiled, which is why
@@ -135,10 +144,25 @@ They are carried from the previous image rather than compiled, which is why
 *input* to the next build, and with it committed the build's only external input
 is the tapes, which `v8/MANIFEST` already accounts for.
 
-So the 1.0.0 criterion is met in substance. The version string still reads
-`0.3.0-CURRENT`, because cutting the tag is a decision about *when to promise
-stability*, not a fact about the build — and it should be taken deliberately
-rather than inherited from this note.
+### What was wrong with `0.3.0-CURRENT`
+
+Both halves. A leading **0** is semantic versioning's way of saying "not stable
+yet", which is a strange thing to say about a system finished in 1985 that has
+not moved since; the instability it was hedging about was ours, and that is what
+1.0 records the end of. And **`-CURRENT`** is a branch marker borrowed from
+projects with a moving trunk — on a legacy base there is no trunk for it to
+distinguish, so it means nothing.
+
+Two presentation rules follow, both in `tools/ipnx-release.py` so no call site
+has to remember them:
+
+- **`PATCH` is omitted when zero**, so this reads `Release 1.0` and a fix
+  release would read `Release 1.0.1`. A trailing `.0` looks like a number
+  nobody chose.
+- **The branch suffix appears only when the branch is not `RELEASE`**, so a
+  tagged system never says `Release 1.0-RELEASE`. `IPNX_RELSTR` is the composed
+  string; `uname` and `ipnxfetch` each used to glue `IPNX_RELEASE` and
+  `IPNX_BRANCH` together themselves, and both printed the stutter.
 
 ## Ports are not part of this
 

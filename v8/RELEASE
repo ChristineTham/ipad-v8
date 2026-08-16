@@ -8,14 +8,28 @@
 # Policy -- what each number means, and what counts as a release at all:
 # docs/releases.md
 #
-# EDITION is Bell Labs' and is not ours to increment.  MAJOR breaks
-# compatibility for anything built against the base; MINOR adds functionality
-# without breaking it; PATCH is fixes only.  BRANCH is CURRENT between releases
-# and RELEASE at a tag.
+# EDITION is Bell Labs' and is not ours to increment.  The release number
+# beside it is OURS: it counts what this project has made of that edition, and
+# the two are deliberately separate -- "Eighth Edition Release 1.0" says
+# whose system it is and whose build it is, in that order.
+#
+# IT STARTS AT 1.0, as of 2026-08-16.  It was 0.3.0-CURRENT, and both halves
+# of that were wrong once the disk began being built from source.  A leading
+# 0 says "not stable yet" about a system finished in 1985 that has not moved
+# since, and -CURRENT is a branch marker borrowed from projects with a moving
+# trunk; on a legacy base it means nothing at all.  1.0 is the first image
+# built end to end from v8/ rather than patched out of the tape, which is the
+# thing worth numbering.
+#
+# MINOR adds functionality or breaks compatibility; PATCH is fixes only, and
+# is OMITTED FROM THE BANNER WHEN ZERO -- so this reads "Release 1.0", and a
+# fix release would read "Release 1.0.1".  BRANCH is CURRENT between releases
+# and RELEASE at a tag, and the suffix likewise shows only when it is not
+# RELEASE, so a tagged system never says "Release 1.0-RELEASE".
 
 EDITION=8
-MAJOR=0
-MINOR=3
+MAJOR=1
+MINOR=0
 PATCH=0
-BRANCH=CURRENT
-DATE=2026-08-10
+BRANCH=RELEASE
+DATE=2026-08-16

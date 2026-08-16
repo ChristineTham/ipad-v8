@@ -8,6 +8,63 @@ at that, and unlike a hand-maintained list it cannot be wrong.
 
 ---
 
+## 1.0 — 2026-08-16
+
+**The first release, and the first the number means anything about.**
+
+Nothing in the system changed here except what it calls itself. The reason it
+is worth a release is everything that already had: since 0.3.0 the disk stopped
+being patched out of the tape and started being *built* — stages 4–7 produce
+the headers, libraries, commands and kernel from this tree, stage 8 lays down a
+filesystem from that `DESTDIR`, and stage 9 has the result rebuild itself under
+`chroot`. That was the stated criterion for 1.0 in
+[docs/releases.md](../docs/releases.md), and it has been met since 2026-08-15.
+
+The system is now **`ipnx Edition 8 Release 1.0`**. Two numbers belonging to
+two different people: the edition is Bell Labs' and is not ours to increment,
+the release counts what this project has made of it.
+
+### Changed
+
+- **`RELEASE`: `0.3.0-CURRENT` → `1.0-RELEASE`.** Both halves of the old string
+  were wrong. A leading `0` is semantic versioning's way of saying "not stable
+  yet", which is an odd claim about a system finished in 1985 and unmoved
+  since — the instability was ours, and 1.0 records the end of it. `-CURRENT`
+  is a branch marker borrowed from projects with a moving trunk; on a legacy
+  base there is no trunk for it to distinguish.
+- **`PATCH` is omitted from the displayed version when it is zero**, so this
+  reads `Release 1.0` rather than `Release 1.0.0`; a fix release would read
+  `Release 1.0.1`.
+- **The branch suffix shows only when the branch is not `RELEASE`**, so a
+  tagged system never says `Release 1.0-RELEASE`.
+- **`/etc/whoami` is unchanged** (`ipnx-v8`) — the machine's name and the
+  system's version are different questions and V8 keeps them in different
+  places.
+
+### Added
+
+- **`IPNX_RELSTR`** in `<ipnx.h>` — the composed release string, suffix and
+  all. `uname` and `ipnxfetch` each glued `IPNX_RELEASE` and `IPNX_BRANCH`
+  together at their own call site, and both therefore printed `1.0-RELEASE`.
+  A formatting rule that two places implement is a rule that two places can get
+  wrong; it now lives in `tools/ipnx-release.py` and arrives pre-composed.
+
+### Verified
+
+Built by `tools/drive-stages48.sh "" "" 4 8 rp07ref rp07` onto an image
+recreated from `/dev/zero` (`mkfs` does not clear data blocks, and this one is
+committed). Stages 4–8 all green, clean halt. On the booted disk:
+
+    OS:      ipnx Edition 8 Release 1.0
+    Kernel:  ipnx Edition 8 Release 1.0 (2026-08-16)
+    uname:   ipnx ipnx-v8 1.0 ipnx Edition 8 Release 1.0 (2026-08-16) vax
+
+`config-audit` OK (7,955 files compared, 467 installed paths); `boot-newdisk`
+10/10 with a clean halt; no occurrence of `0.3.0-CURRENT` remains anywhere on
+the image.
+
+---
+
 ## 0.3.0 — 2026-08-10
 
 **libc builds from this tree, and the system reproduces itself.**

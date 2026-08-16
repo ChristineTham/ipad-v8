@@ -13,9 +13,10 @@
 # compiled matters; for a tagged -RELEASE the release date in RELEASE is the
 # one that means anything.
 
-REL="0.3.0"
-BRANCH="CURRENT"
-EDITION="Eighth"
-RELDATE="2026-08-10"
+REL="1.0"
+BRANCH="RELEASE"
+EDITION="Edition 8"
+RELDATE="2026-08-16"
+SUFFIX=""
 
-echo "char version[] = \"Unix $EDITION Edition -- ipnx Release $REL-$BRANCH ($RELDATE)\\nbuilt `date`\\n\";" > vers.c
+echo "char version[] = \"Unix -- ipnx $EDITION Release $REL$SUFFIX ($RELDATE)\\nbuilt `date`\\n\";" > vers.c

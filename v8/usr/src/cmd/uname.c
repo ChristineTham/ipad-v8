@@ -65,11 +65,14 @@ char **argv;
 	i = 0;
 	if (sysname) { printf("%s", "ipnx");            i++; }
 	if (node)    { printf(i++ ? " %s" : "%s", nodename()); }
-	/* Two arguments, not IPNX_RELEASE "-" IPNX_BRANCH: adjacent string
-	   literals are concatenated by ANSI C and by nothing older, and
-	   /bin/cc is 1985's -- it stops at `saw STRING'. */
-	if (release) { printf(i++ ? " %s-%s" : "%s-%s",
-			      IPNX_RELEASE, IPNX_BRANCH); }
+	/* IPNX_RELSTR, not IPNX_RELEASE and IPNX_BRANCH glued here.  Two
+	   commands each did their own gluing and both printed `1.0-RELEASE',
+	   which says the word twice; the rule that the suffix appears only
+	   off a tag belongs in one place, and ipnx-release.py composes it.
+	   (That also retires the old note about adjacent string literals:
+	   ANSI concatenation is exactly what 1985's /bin/cc will not do, so
+	   there is now one macro rather than two operands.) */
+	if (release) { printf(i++ ? " %s" : "%s", IPNX_RELSTR); }
 	if (version) { printf(i++ ? " %s" : "%s", IPNX_BANNER); }
 	if (machine) { printf(i++ ? " %s" : "%s", "vax"); }
 	printf("\n");

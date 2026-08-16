@@ -53,8 +53,32 @@ def version_int(v):
     return v["EDITION"] * 1000000 + v["MAJOR"] * 10000 + v["MINOR"] * 100 + v["PATCH"]
 
 
+def branch_suffix(v):
+    """`-CURRENT' between releases, and NOTHING at a tag.
+
+    "Eighth Edition Release 8.0.0-RELEASE" stutters, and a banner is read far
+    more often than it is written. FreeBSD gets away with "13.2-RELEASE"
+    because it never says the word Release twice; we do, so the suffix goes.
+    """
+    return "" if v["BRANCH"] == "RELEASE" else "-" + v["BRANCH"]
+
+
+def rel_string(v):
+    """The release as people say it: `1.0', not `1.0.0'.
+
+    PATCH is dropped when zero, so the first release of an edition reads
+    "Release 1.0" and a fix release reads "Release 1.0.1". Three components
+    with a trailing zero look like a version number nobody chose.
+    """
+    if v["PATCH"] == 0:
+        return "%d.%d" % (v["MAJOR"], v["MINOR"])
+    return "%d.%d.%d" % (v["MAJOR"], v["MINOR"], v["PATCH"])
+
+
 def render_header(v):
-    rel = "%d.%d.%d" % (v["MAJOR"], v["MINOR"], v["PATCH"])
+    rel  = rel_string(v)
+    full = rel + branch_suffix(v)
+    ed   = "Edition %d" % v["EDITION"]
     return """\
 /*
  * ipnx.h -- which system this is, for anything that needs to care.
@@ -62,7 +86,16 @@ def render_header(v):
  * Generated from v8/RELEASE by tools/ipnx-release.py.  Do not edit; edit
  * RELEASE and regenerate, or --check will catch you.
  *
- * IPNX_VERSION is the one number to test.  It is
+ * THE NAME OF THIS SYSTEM IS `ipnx Edition 8 Release 1.0'.  Two numbers, and
+ * they belong to different people: the EDITION is Bell Labs' and is not ours
+ * to increment, the RELEASE counts what this project has made of it.
+ *
+ * IPNX_RELSTR is the composed string -- release plus branch suffix, with the
+ * suffix present only when the branch is not RELEASE.  Use it rather than
+ * gluing IPNX_RELEASE and IPNX_BRANCH together at each call site: two
+ * commands did that and both printed `1.0-RELEASE'.
+ *
+ * IPNX_VERSION is the one number to TEST.  It is
  *
  *      edition * 1000000 + major * 10000 + minor * 100 + patch
  *
@@ -89,17 +122,17 @@ def render_header(v):
 #define IPNX_BRANCH     "%s"
 #define IPNX_RELDATE    "%s"
 #define IPNX_RELEASE    "%s"
-#define IPNX_SYSNAME    "%s Edition"
-#define IPNX_BANNER     "%s Edition Release %s-%s (%s)"
+#define IPNX_RELSTR     "%s"
+#define IPNX_SYSNAME    "%s"
+#define IPNX_BANNER     "ipnx %s Release %s (%s)"
 """ % (version_int(v), v["EDITION"], v["MAJOR"], v["MINOR"], v["PATCH"],
-       version_int(v), v["BRANCH"], v["DATE"], rel,
-       ORDINAL.get(v["EDITION"], str(v["EDITION"])),
-       ORDINAL.get(v["EDITION"], str(v["EDITION"])), rel, v["BRANCH"], v["DATE"])
+       version_int(v), v["BRANCH"], v["DATE"], rel, full, ed,
+       ed, full, v["DATE"])
 
 
 def render_newvers(v):
-    rel = "%d.%d.%d" % (v["MAJOR"], v["MINOR"], v["PATCH"])
-    ed = ORDINAL.get(v["EDITION"], str(v["EDITION"]))
+    rel = rel_string(v)
+    ed = "Edition %d" % v["EDITION"]
     return """\
 #!/bin/sh
 # Stamp the kernel's boot banner.
@@ -120,9 +153,10 @@ REL="%s"
 BRANCH="%s"
 EDITION="%s"
 RELDATE="%s"
+SUFFIX="%s"
 
-echo "char version[] = \\"Unix $EDITION Edition -- ipnx Release $REL-$BRANCH ($RELDATE)\\\\nbuilt `date`\\\\n\\";" > vers.c
-""" % (rel, v["BRANCH"], ed, v["DATE"])
+echo "char version[] = \\"Unix -- ipnx $EDITION Release $REL$SUFFIX ($RELDATE)\\\\nbuilt `date`\\\\n\\";" > vers.c
+""" % (rel, v["BRANCH"], ed, v["DATE"], branch_suffix(v))
 
 
 def main():
@@ -146,8 +180,7 @@ def main():
         for k in ("MAJOR", "MINOR", "PATCH"):
             text = re.sub(r"(?m)^%s=.*$" % k, "%s=%d" % (k, v[k]), text)
         open(RELEASE, "w").write(text)
-        print("v8/RELEASE -> %d.%d.%d  (remember the CHANGELOG entry)"
-              % (v["MAJOR"], v["MINOR"], v["PATCH"]))
+        print("v8/RELEASE -> %s  (remember the CHANGELOG entry)" % rel_string(v))
 
     outputs = [(HDR, render_header(v)), (NEWVERS, render_newvers(v))]
     stale = []
@@ -165,13 +198,13 @@ def main():
         if stale:
             print("stale, re-run tools/ipnx-release.py: " + " ".join(stale))
             return 1
-        print("Edition %d Release %d.%d.%d-%s (%s), IPNX_VERSION %d -- files in step"
-              % (v["EDITION"], v["MAJOR"], v["MINOR"], v["PATCH"], v["BRANCH"],
+        print("ipnx Edition %d Release %s (%s), IPNX_VERSION %d -- files in step"
+              % (v["EDITION"], rel_string(v) + branch_suffix(v),
                  v["DATE"], version_int(v)))
         return 0
 
-    print("Edition %d Release %d.%d.%d-%s (%s)\nIPNX_VERSION %d"
-          % (v["EDITION"], v["MAJOR"], v["MINOR"], v["PATCH"], v["BRANCH"],
+    print("ipnx Edition %d Release %s (%s)\nIPNX_VERSION %d"
+          % (v["EDITION"], rel_string(v) + branch_suffix(v),
              v["DATE"], version_int(v)))
     return 0
 
