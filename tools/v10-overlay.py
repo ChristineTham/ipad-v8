@@ -412,6 +412,22 @@ _ANSI93 = [
      [("fputs(const char *s, FILE *iop)\n{\n",
        "fputs(s, iop)\t\t\t/* ipnx: K&R, see PATCHES.md */\n"
        "\tchar *s;\n\tFILE *iop;\n{\n", 1)]),
+    # qsort.c: three definitions and one include, and no forward prototypes at
+    # all -- `swapfunc' and `med3' are both DEFINED above their first use, which
+    # is what makes an 88-line file with a macro-heavy body mechanical to
+    # convert.  The macros (SWAPINIT, swapcode, swap, vecswap) are untouched.
+    ("libc/gen/qsort.c",
+     "88290e37a65970ee72f61d83fcd60acbf7cedaf2b88cbcd1e44aaf1aaaeac337",
+     [("#include <stddef.h>\nstatic void swapfunc(char *a, char *b, size_t n, int swaptype)\n",
+       "/* ipnx: r70 has no <stddef.h>; K&R below -- see PATCHES.md */\n"
+       "static void swapfunc(a, b, n, swaptype)\n"
+       "\tchar *a; char *b; unsigned int n; int swaptype;\n", 1),
+      ("static char *med3(char *a, char *b, char *c, int (*cmp)())\n",
+       "static char *med3(a, b, c, cmp)\n"
+       "\tchar *a; char *b; char *c; int (*cmp)();\n", 1),
+      ("void qsort(char *a, size_t n, size_t es, int (*cmp)())\n",
+       "void qsort(a, n, es, cmp)\t/* ipnx: K&R, see PATCHES.md */\n"
+       "\tchar *a; unsigned int n; unsigned int es; int (*cmp)();\n", 1)]),
     ("libc/gen/memmove.c",
      "8de6bd16b4d961d41eb7330816e04068b4ba391cedd55fdf95b05ab81a2280db",
      [("#include <stddef.h>\n\nextern void *memcpy(void*, void*, size_t);\n\n"

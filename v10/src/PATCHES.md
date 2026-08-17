@@ -665,6 +665,56 @@ the spelling moves back eight years.
  	unsigned char *e, *t;
 ```
 
+## qsort.c: a 1993 ANSI member, converted to K&R (B2.2d)
+
+`libc/gen/qsort.c`, sha256 `88290e37a65970ee`
+
+One of the eleven members that only `lcc` could build, and `lcc` cannot be
+trusted to: the prebuilt driver hits the `bowell.c` defect
+(`0: unknown flag -undef`) and emits **empty objects while exiting 0**, so
+routing a member to it buys a silent hole in `libc.a` rather than a member.
+
+These carry `/* Copyright AT&T Bell Laboratories, 1993 */` and are addressed to
+a header set that is not installed: r70's `/usr/include` has no `stddef.h`, no
+`stdlib.h`, and defines `size_t` nowhere. That is the same two-generations split
+as the stdio family, one layer down -- not a prototype to strip but a different
+C to translate out of.
+
+`void *` becomes `char *` and `size_t` becomes `unsigned int`. Both pairs are
+the same width on a VAX, `char *` is K&R's generic pointer, and it is how V8's
+own libc declares these functions -- so the generated code is unchanged and only
+the spelling moves back eight years.
+```diff
+--- tarball/libc/gen/qsort.c
++++ ours/libc/gen/qsort.c
+@@ -12,6 +12,7 @@
+     } while ((n -= sizeof(TYPE)) > 0);     \
+ }
+-#include <stddef.h>
+-static void swapfunc(char *a, char *b, size_t n, int swaptype)
++/* ipnx: r70 has no <stddef.h>; K&R below -- see PATCHES.md */
++static void swapfunc(a, b, n, swaptype)
++	char *a; char *b; unsigned int n; int swaptype;
+ {   if (swaptype <= 1) swapcode(long, a, b, n)
+     else swapcode(char, a, b, n)
+@@ -33,5 +34,6 @@
+ #define min(x, y) ((x)<=(y) ? (x) : (y))
+ 
+-static char *med3(char *a, char *b, char *c, int (*cmp)())
++static char *med3(a, b, c, cmp)
++	char *a; char *b; char *c; int (*cmp)();
+ {	return cmp(a, b) < 0 ?
+ 		  (cmp(b, c) < 0 ? b : cmp(a, c) < 0 ? c : a)
+@@ -39,5 +41,6 @@
+ }
+ 
+-void qsort(char *a, size_t n, size_t es, int (*cmp)())
++void qsort(a, n, es, cmp)	/* ipnx: K&R, see PATCHES.md */
++	char *a; unsigned int n; unsigned int es; int (*cmp)();
+ {
+ 	char *pa, *pb, *pc, *pd, *pl, *pm, *pn, *pv;
+```
+
 ## memmove.c: a 1993 ANSI member, converted to K&R (B2.2d)
 
 `libc/gen/memmove.c`, sha256 `8de6bd16b4d961d4`

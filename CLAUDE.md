@@ -354,11 +354,11 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
 	lcc alone                        202 of 261
 	cc + lcc, with the repairs       260 of 261
 	cc alone, after B2.2b/c          249 of 261
-	cc ALONE, after B2.2d's first 3  252 of 261    <- current stage 2
+	cc ALONE, after B2.2d's first 4  253 of 261    <- current stage 2
 
   `LIBC_LCC` is now **empty**, so there is no per-member compiler choice left to
-  get wrong. Nine remain: eight genuinely ANSI (`_dtoa` `_fconv` `malloc`
-  `qsort` `rdwr` `strtod` `vfprintf` `vfscanf`) and `setupshares`. **Do not
+  get wrong. Eight remain: seven genuinely ANSI (`_dtoa` `_fconv` `malloc`
+  `rdwr` `strtod` `vfprintf` `vfscanf`) and `setupshares`. **Do not
   reinstate lcc to close them** — it still hits the `bowell.c` defect
   (`0: unknown flag -undef`), so those members become **empty objects that exit
   0**. Eight loud failures beat eight silent holes.
@@ -1519,7 +1519,7 @@ configuration was run, not inferred:
 	cc + lcc, the tape's mixture      246        150
 	cc + lcc, with the 14 repairs     260        150
 	cc alone, after B2.2b/c           249        148
-	cc ALONE, after B2.2d's first 3   252        147
+	cc ALONE, after B2.2d's first 4   253        147
 
 Fifteen members could be built by nothing, and they had **three** causes, not
 the two recorded here for a week:
@@ -1538,11 +1538,11 @@ the two recorded here for a week:
   find it than `cc` could. *A failure under compiler X is not evidence that
   compiler Y would succeed.*
 
-Nine remain, and they are named rather than counted: `_dtoa` `_fconv` `malloc`
-`qsort` `rdwr` `strtod` `vfprintf` `vfscanf` — genuinely ANSI, and the hard
-ones, since `vfprintf.c` is printf's whole engine — plus `setupshares`, which
-stays unbuilt on evidence grounds. B2.2d's first three (`fgets`, `fputs`,
-`memmove`) are done and measured.
+Eight remain, and they are named rather than counted: `_dtoa` `_fconv`
+`malloc` `rdwr` `strtod` `vfprintf` `vfscanf` — genuinely ANSI, and the hard
+ones, since `vfprintf.c` is printf's whole engine and `malloc.c` is 401 lines
+of prototypes — plus `setupshares`, which stays unbuilt on evidence grounds.
+B2.2d's first four (`fgets`, `fputs`, `memmove`, `qsort`) are done and measured.
 
 **A byte-identical count going DOWN is not necessarily a regression.** 150 → 148
 → 147 across these rounds, while the number that *build* went 246 → 249 → 252.

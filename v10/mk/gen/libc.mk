@@ -637,8 +637,8 @@ putshares.o: $(SRC)/libc/gen/putshares.c $(INCDIR)/libc.h $(TOOLS)
 putw.o: $(SRC)/libc/stdio/putw.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(TOOLS)
 	$(COMPILE) $(SRC)/libc/stdio/putw.c
 
-qsort.o: $(SRC)/libc/gen/qsort.c $(TOOLS)
-	$(COMPILE) $(SRC)/libc/gen/qsort.c
+qsort.o: $(OURS)/libc/gen/qsort.c $(TOOLS)
+	$(COMPILE) -I$(SRC)/libc/gen $(OURS)/libc/gen/qsort.c
 
 rand.o: $(SRC)/libc/gen/rand.c $(TOOLS)
 	$(COMPILE) $(SRC)/libc/gen/rand.c
