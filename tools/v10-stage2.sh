@@ -88,11 +88,25 @@ if grep -q 'source disk mounts  *NO' "$LOG" 2>/dev/null; then
     exit 1
 fi
 echo "== stage 2 against the tape's libc.a =="
-# Counted from clean lines only.  The guest prints these under v10_run, so no
-# marker echo is spliced through them -- see the note in v10-stage2.exp.
+# NOT ANCHORED AT `^', AND THAT COST A ROUND.  The claim that stood here --
+# "the guest prints these under v10_run, so no marker echo is spliced through
+# them" -- is false for the FIRST line of every dump, and structurally so.
+# v10_run sends the command and then reads; the tty echoes the tail of what was
+# typed INTO the program's first line of output, so the log carried
+#
+#	MMISS atof.o
+#
+# and `^MISS' dropped it.  Stage 2 then reported one missing member when there
+# were two, CLAUDE.md recorded "the only member that does not build is
+# setupshares", and the first thing to notice was STAGE 3 failing to link ccom
+# and as with `Undefined: _atof'.
+#
+# So match the token wherever it sits in the line.  Safe because no command
+# this stage sends contains the literal `MISS <name>.o' or `DIFF <name>.o' --
+# the loops that generate them say `echo MISS \$f', which does not match.
 # `sort -u' because a name must count once however often it appears.
-miss=$(tr -d '\r' < "$LOG" | grep -oE '^MISS [A-Za-z_0-9]+\.o$' | sort -u | grep -c . || true)
-diff=$(tr -d '\r' < "$LOG" | grep -oE '^DIFF [A-Za-z_0-9]+\.o$' | sort -u | grep -c . || true)
+miss=$(tr -d '\r' < "$LOG" | grep -oE 'MISS [A-Za-z_0-9]+\.o' | sort -u | grep -c . || true)
+diff=$(tr -d '\r' < "$LOG" | grep -oE 'DIFF [A-Za-z_0-9]+\.o' | sort -u | grep -c . || true)
 total=$(grep -c . "$ROOT/v10/mk/gen/libc.ord")
 : "${miss:=0}" "${diff:=0}"
 # THE TWO SETS OVERLAP, and the first version of this subtracted both and
@@ -100,10 +114,29 @@ total=$(grep -c . "$ROOT/v10/mk/gen/libc.ord")
 # `cmp' against the tape's copy fails for it too -- every MISS is also a DIFF.
 # So identical = total - diff, and `miss' is a breakdown of diff, not a
 # separate column to subtract.
-lccm=$(tr -d '\r' < "$LOG" | grep -oE '^LCCMATCH [A-Za-z_0-9]+\.o$' | sort -u | grep -c . || true)
-noom=$(tr -d '\r' < "$LOG" | grep -oE '^NOOMATCH [A-Za-z_0-9]+\.o$' | sort -u | grep -c . || true)
-tcm=$(tr -d '\r' < "$LOG" | grep -oE '^TAPECCMATCH [A-Za-z_0-9]+\.o$' | sort -u | grep -c . || true)
+lccm=$(tr -d '\r' < "$LOG" | grep -oE 'LCCMATCH [A-Za-z_0-9]+\.o' | sort -u | grep -c . || true)
+noom=$(tr -d '\r' < "$LOG" | grep -oE 'NOOMATCH [A-Za-z_0-9]+\.o' | sort -u | grep -c . || true)
+tcm=$(tr -d '\r' < "$LOG" | grep -oE 'TAPECCMATCH [A-Za-z_0-9]+\.o' | sort -u | grep -c . || true)
 : "${lccm:=0}" "${noom:=0}" "${tcm:=0}"
+
+# THE GUEST'S OWN ASSERTION IS AN INDEPENDENT WITNESS, so make the two agree or
+# say nothing.  The guest counts the object files it produced and asserts "all
+# 261 members compiled"; the host counts MISS lines out of a tty transcript.
+# When the anchored grep above dropped a member those two disagreed -- assertion
+# NO, host count 0 -- and nothing in the run noticed, because each number was
+# printed by a different piece of code and neither read the other.
+#
+# This is the same guard as the empty-member-list one below it, generalised: a
+# count is only trustworthy when something else in the run agrees with it.
+if grep -q 'all 261 members compiled  *NO' "$LOG" 2>/dev/null && (( miss == 0 )); then
+    echo "== NO MEASUREMENT: the guest says a member is missing and the host found none =="
+    echo "   The guest asserted 'all 261 members compiled: NO' while this script"
+    echo "   counted 0 MISS lines, so the parse below is wrong and every number"
+    echo "   derived from it would be too.  Look for a spliced line in $LOG:"
+    tr -d '\r' < "$LOG" | grep -n 'MISS' | head -8
+    echo "== v10-stage2 exit $rc =="
+    exit 1
+fi
 echo "   members expected                 $total"
 echo "   byte-identical, our cc           $(( total - diff ))"
 echo "   byte-identical, lcc instead      $lccm"

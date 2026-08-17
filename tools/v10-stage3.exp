@@ -141,6 +141,19 @@ v10_login root
 puts "\n===== V10 STAGE 3 (the fixpoint) ====="
 v10_sh "PATH=/bin:/etc:/usr/bin; export PATH" 120
 v10_sh "OK=-ok" 120
+# THE THREE COMPARISON VERDICTS GO THROUGH VARIABLES TOO, for the reason
+# CLAUDE.md already gives about markers: the tty echoes what is typed, so a
+# command containing the literal `echo SAME yacc' puts that string in the log
+# whatever the answer turns out to be -- and the host then counts the question
+# as an answer.  With `echo $S $name' the echo carries `echo $S yacc' and only
+# the RESULT carries `SAME yacc', so the host can match the token unanchored.
+#
+# Unanchored matters independently: v10_run's first line of output shares a tty
+# line with the tail of the command being echoed, so `MMISS atof.o' is what a
+# spliced verdict looks like -- that one hid a missing libc member for a whole
+# round (see tools/v10-stage2.sh).  One fix makes the token absent from the
+# question; the other makes it findable in the answer.  Both are needed.
+v10_sh "S=SAME; D=DIFF; Z=NOS1" 120
 
 v10_sh "mkdir /n; mkdir $N" 120
 note "source disk mounts" \
@@ -199,15 +212,27 @@ foreach c $TC {
         "cd $OBJ/s3-$name; if make -f $K/$name.mk SRC=$S OURS=$N/ours INCDIR=$INC TOOLDIR=$T3 DESTDIR=$T3 $P3 $CCM3 install > b.log 2>&1; then echo B3\$OK; fi" \
         "B3-ok" 3600]
     note "stage 3 built $name" $ok
+    # The filter deletes COMPILE lines only, so a link or yacc diagnostic
+    # survives it -- which is how `Undefined: _atof' was read out of ccom's and
+    # as's b.log.  200 lines, not 60: the cap is there to keep a runaway log off
+    # the tty, and 60 was low enough to cut a real diagnostic in half.
     if {!$ok} {
-        v10_run "cd $OBJ/s3-$name; sed -e '/^cc /d' -e '/^as /d' b.log | sed -n '1,60p'; echo E3END" "E3END" 900
-        # UNFILTERED, because the filtered dump came back EMPTY for ccom and as
-        # -- the same signature vfprintf had, where the diagnostic shares a line
-        # with its command and deleting command lines deletes the evidence.  This
-        # re-runs make with its output going straight to the tty.  A DIAGNOSTIC
-        # ONLY: it cannot change what builds, so it is safe to add without a
-        # second thought about correctness.
-        v10_run "echo RAW3START; cd $OBJ/s3-$name; make -f $K/$name.mk SRC=$S OURS=$N/ours INCDIR=$INC TOOLDIR=$T3 DESTDIR=$T3 $P3 $CCM3 install; echo RAW3RC=\$?; echo RAW3END" "RAW3END" 1800
+        v10_run "cd $OBJ/s3-$name; sed -e '/^cc /d' -e '/^as /d' b.log | sed -n '1,200p'; echo E3END" "E3END" 900
+        # THERE WAS AN UNFILTERED `make' RE-RUN HERE AND IT REPORTED SUCCESS FOR
+        # A FAILED BUILD.  It re-ran the same target with output going to the
+        # tty, and printed
+        #	cp comp /usr/s3/lib/ccom
+        #	RAW3RC=0
+        # because V10's `ld' WRITES ITS OUTPUT FILE even when symbols are
+        # undefined (it reports them and clears the execute bits), so `comp' was
+        # already there and newer than its prerequisites.  make skipped the link
+        # entirely and ran only the install step, whose status is the one that
+        # got printed.
+        #
+        # A re-run of an incremental make is not a probe of the build; it is a
+        # probe of what make thinks is already done.  Reading RAW3RC alone would
+        # have closed this bug as nonexistent.  Nothing replaces it, because the
+        # filtered dump above already answers the question.
     }
 }
 
@@ -257,7 +282,7 @@ foreach c $TC {
     v10_sh "cd $OBJ/cmp3; if test -s /usr/s1/$inst; then $T3/bin/ld -x -r /usr/s1/$inst && mv a.out $name.1; fi" 900
     # v10_run, not v10_try: this one is EXPECTED to differ, so its output is the
     # measurement and must not be read through a marker that only says yes/no.
-    v10_run "cd $OBJ/cmp3; if test -s $name.1; then if cmp $name.1 $name.3; then echo SAME $name; else echo DIFF $name; fi; else echo NOS1 $name; fi; echo S1END" "S1END" 900
+    v10_run "cd $OBJ/cmp3; if test -s $name.1; then if cmp $name.1 $name.3; then echo \$S $name; else echo \$D $name; fi; else echo \$Z $name; fi; echo S1END" "S1END" 900
 }
 
 report

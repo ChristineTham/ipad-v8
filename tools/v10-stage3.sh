@@ -62,9 +62,31 @@ fi
 
 echo
 echo "== stage 1 vs stage 3 (a measurement, not a test) =="
-printf '   byte-identical to stage 1           %s\n' "$(grep -c '^SAME ' "$LOG" 2>/dev/null || echo 0)"
-printf '   differ                              %s\n' "$(grep -c '^DIFF ' "$LOG" 2>/dev/null || echo 0)"
-printf '   no stage-1 binary to compare        %s\n' "$(grep -c '^NOS1 ' "$LOG" 2>/dev/null || echo 0)"
+# UNANCHORED, and counted by NAME rather than by line.  Two bugs lived in the
+# three anchored `grep -c' lines that stood here:
+#
+#   ^SAME dropped a spliced verdict.  v10_run's first line of output shares a
+#   tty line with the tail of the echoed command, so a real result can arrive as
+#   `MSAME yacc'.  The same anchor in v10-stage2.sh hid `MISS atof.o' for a
+#   whole round, and stage 3 was what finally reported it -- as ccom and as
+#   failing to link with `Undefined: _atof'.
+#
+#   `grep -c' PRINTS 0 AND EXITS 1 when it matches nothing, so `|| echo 0'
+#   appended a second zero and the report read
+#	byte-identical to stage 1           0
+#	0
+#   Harmless, and exactly the kind of thing that trains a reader to skim past
+#   the numbers.  `|| true' is what that idiom wanted.
+#
+# Unanchored is only safe because the verdicts now go through guest variables
+# (`echo $S $name'), so no command echo carries the literal token -- see the
+# note beside `S=SAME' in v10-stage3.exp.
+s3count() {
+    tr -d '\r' < "$LOG" | grep -oE "$1 [A-Za-z_0-9]+" | sort -u | grep -c . || true
+}
+printf '   byte-identical to stage 1           %s\n' "$(s3count SAME)"
+printf '   differ                              %s\n' "$(s3count DIFF)"
+printf '   no stage-1 binary to compare        %s\n' "$(s3count NOS1)"
 echo "   Differences are EXPECTED: stage 1 linked the tape's libc.a and stage 3"
 echo "   links ours, and only 148 of the tape's 261 members are byte-identical."
 

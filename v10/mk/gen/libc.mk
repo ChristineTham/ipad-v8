@@ -178,8 +178,8 @@ atan.o: $(SRC)/libc/math/atan.c $(TOOLS)
 atexit.o: $(SRC)/libc/gen/atexit.c $(INCDIR)/libc.h $(TOOLS)
 	$(COMPILE) $(SRC)/libc/gen/atexit.c
 
-atof.o: $(SRC)/libc/gen/atof.c $(TOOLS)
-	$(COMPILE) $(SRC)/libc/gen/atof.c
+atof.o: $(OURS)/libc/gen/atof.c $(TOOLS)
+	$(COMPILE) -I$(SRC)/libc/gen $(OURS)/libc/gen/atof.c
 
 atoi.o: $(SRC)/libc/gen/atoi.c $(TOOLS)
 	$(COMPILE) $(SRC)/libc/gen/atoi.c

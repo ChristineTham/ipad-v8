@@ -678,6 +678,47 @@ the spelling moves back eight years.
  	unsigned char *e, *t;
 ```
 
+## atof.c: a 1993 ANSI member, converted to K&R (B2.2d)
+
+`libc/gen/atof.c`, sha256 `a898f51d98af41e8`
+
+Seven lines, one prototype, and it went missing for a whole round. `atof.o` was
+never in our `libc.a`, and the first thing to report it was **stage 3** -- `ccom`
+and `as` both failed to link with
+
+	Undefined:
+	_atof
+
+which is what an absent libc member looks like two stages downstream. Stage 2
+had said so at the time; the host-side counter dropped the line, because the tty
+echo spliced an `M` onto the front of `MISS atof.o` and the grep was anchored at
+`^`. The same one compile error also accounts for stage 2's `install` failure
+(`make install` retries the missing object) and for its member list not matching
+the tape's.
+
+`const char *s` is the only thing pcc2 cannot parse here, so the parameter list
+is all that moves. **The `#include <stdlib.h>` stays, and that is the whole
+subtlety**: K&R C defaults an undeclared function to `int`, so dropping the
+include would truncate `strtod`'s `double` to a word and give a silently wrong
+`atof` -- much worse than a compile error. r70's `include/libc.h` line 15 is
+
+	extern double atof(), strtod();
+
+which is exactly the K&R declaration this needs, and `/usr/include/stdlib.h`
+(installed from `include/CC/stdlib.h`) is six lines onto it.
+```diff
+--- tarball/libc/gen/atof.c
++++ ours/libc/gen/atof.c
+@@ -2,5 +2,6 @@
+ 
+ double
+-atof(const char *s)
++atof(s)				/* ipnx: K&R, see PATCHES.md */
++	char *s;
+ {
+ 	return(strtod(s, (char **)0));
+```
+
 ## qsort.c: a 1993 ANSI member, converted to K&R (B2.2d)
 
 `libc/gen/qsort.c`, sha256 `88290e37a65970ee`

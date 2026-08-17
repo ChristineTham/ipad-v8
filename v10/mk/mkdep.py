@@ -494,6 +494,13 @@ LIBC_OURS = [
     # eight (_dtoa _fconv malloc qsort rdwr strtod vfprintf vfscanf) are real
     # work and stay named in the MISS list until they are done properly.
     "fgets.o", "fputs.o", "memmove.o", "qsort.o", "rdwr.o", "malloc.o", "_dtoa.o", "_fconv.o", "strtod.o", "vfprintf.o", "vfscanf.o",
+    # atof.o -- found by STAGE 3, not by stage 2's own report.  ccom and as both
+    # failed to link with `Undefined: _atof', because atof.o was never in
+    # libc.a: `atof(const char *s)' is one prototype pcc2 cannot parse.  Stage
+    # 2 DID say so and the host-side counter dropped the line (the tty echo
+    # spliced an `M' onto `MISS atof.o'), which is why a link three stages later
+    # was the first thing to notice.
+    "atof.o",
 ]
 
 # EMPTY, AND THAT IS THE POINT: V10's libc is built by ONE compiler.

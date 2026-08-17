@@ -412,6 +412,53 @@ _ANSI93 = [
      [("fputs(const char *s, FILE *iop)\n{\n",
        "fputs(s, iop)\t\t\t/* ipnx: K&R, see PATCHES.md */\n"
        "\tchar *s;\n\tFILE *iop;\n{\n", 1)]),
+    # atof.c: SEVEN LINES, and it went unnoticed for a whole round because the
+    # host-side MISS counter never saw it -- the tty echo spliced an `M' onto
+    # the front of `MISS atof.o' and the anchored grep in v10-stage2.sh dropped
+    # it.  So "the only member that does not build is setupshares" was wrong,
+    # and it was STAGE 3 that said so: `ccom' and `as' both failed to link with
+    #	Undefined:
+    #	_atof
+    # which is what a missing libc member looks like two stages downstream.
+    #
+    # THE `#include <stdlib.h>' STAYS, and that is the whole subtlety.  K&R C
+    # defaults an undeclared function to `int', so dropping the include would
+    # truncate strtod's double to a word and give a silently wrong atof -- far
+    # worse than a compile error.  r70's include/libc.h line 15 is
+    #	extern double atof(), strtod();
+    # which is exactly the K&R declaration this needs, and /usr/include/stdlib.h
+    # (from include/CC/stdlib.h) is six lines onto it.  So only the parameter
+    # list changes.
+    ("libc/gen/atof.c",
+     "a898f51d98af41e84a632e5eec0ebcb334636a9b1ba33a0c4ef67183b2e5e2f5",
+     [("atof(const char *s)\n{\n",
+       "atof(s)\t\t\t\t/* ipnx: K&R, see PATCHES.md */\n"
+       "\tchar *s;\n{\n", 1)],
+     """\
+Seven lines, one prototype, and it went missing for a whole round. `atof.o` was
+never in our `libc.a`, and the first thing to report it was **stage 3** -- `ccom`
+and `as` both failed to link with
+
+	Undefined:
+	_atof
+
+which is what an absent libc member looks like two stages downstream. Stage 2
+had said so at the time; the host-side counter dropped the line, because the tty
+echo spliced an `M` onto the front of `MISS atof.o` and the grep was anchored at
+`^`. The same one compile error also accounts for stage 2's `install` failure
+(`make install` retries the missing object) and for its member list not matching
+the tape's.
+
+`const char *s` is the only thing pcc2 cannot parse here, so the parameter list
+is all that moves. **The `#include <stdlib.h>` stays, and that is the whole
+subtlety**: K&R C defaults an undeclared function to `int`, so dropping the
+include would truncate `strtod`'s `double` to a word and give a silently wrong
+`atof` -- much worse than a compile error. r70's `include/libc.h` line 15 is
+
+	extern double atof(), strtod();
+
+which is exactly the K&R declaration this needs, and `/usr/include/stdlib.h`
+(installed from `include/CC/stdlib.h`) is six lines onto it."""),
     # qsort.c: three definitions and one include, and no forward prototypes at
     # all -- `swapfunc' and `med3' are both DEFINED above their first use, which
     # is what makes an 88-line file with a macro-heavy body mechanical to
@@ -774,13 +821,12 @@ _ANSI93 = [
        "\tchar *to;\n\tchar *from;\n\tregister unsigned int n;\n{\n", 1)]),
 ]
 
-for _p, _sha, _edits in _ANSI93:
-    _name = os.path.basename(_p)
-    EDITS.append(dict(
-        path=_p,
-        sha=_sha,
-        title="%s: a 1993 ANSI member, converted to K&R (B2.2d)" % _name,
-        why="""\
+# The shared prose for the batch.  A member whose conversion does NOT fit it
+# carries its own as a fourth element -- see atof.c, which has no `void *' and
+# no `size_t' in it, and would otherwise be documented by two sentences that
+# are simply untrue of it.  PATCHES.md is the record of what we changed and why;
+# boilerplate that overstates a patch is a defect in the record.
+_ANSI93_WHY = """\
 One of the eleven members that only `lcc` could build, and `lcc` cannot be
 trusted to: the prebuilt driver hits the `bowell.c` defect
 (`0: unknown flag -undef`) and emits **empty objects while exiting 0**, so
@@ -795,7 +841,16 @@ C to translate out of.
 `void *` becomes `char *` and `size_t` becomes `unsigned int`. Both pairs are
 the same width on a VAX, `char *` is K&R's generic pointer, and it is how V8's
 own libc declares these functions -- so the generated code is unchanged and only
-the spelling moves back eight years.""",
+the spelling moves back eight years."""
+
+for _e in _ANSI93:
+    _p, _sha, _edits = _e[0], _e[1], _e[2]
+    _name = os.path.basename(_p)
+    EDITS.append(dict(
+        path=_p,
+        sha=_sha,
+        title="%s: a 1993 ANSI member, converted to K&R (B2.2d)" % _name,
+        why=_e[3] if len(_e) > 3 else _ANSI93_WHY,
         edits=_edits,
     ))
 
