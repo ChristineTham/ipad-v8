@@ -100,6 +100,30 @@ note "courier disk mounts" \
 # six assertions read as a library problem instead of a missing directory.
 note "/usr/lib exists for the installs" \
     [v10_try "test -d /usr/lib && echo UL\$OK" "UL-ok" 300]
+# THE 5620 INCLUDE TREE MUST GO WHERE THE SOURCE SAYS, WHICH IS AN ABSOLUTE
+# PATH.  Four libraries -- libblit, lib5620, libtermlib and libj -- write
+#
+#	#include "/usr/jerq/include/jioctl.h"		(three of them)
+#	#include "/usr/blit/include/jioctl.h"		(libblit)
+#
+# and an absolute include is reached by NO -I, which is the finding libc's
+# jterm.o produced and K10.1's dict/dis/mc repeated.  The answer is not a flag:
+# it is to put the tree at the path V10's own layout had it at, which the
+# courier disk carries at /n/v10/jerq.  Installing it there RESTORES the layout
+# rather than patching the source.
+#
+# TWO paths, because the tape uses both spellings for the same tree -- a grep
+# for one finds three of the four callers and misses libblit entirely.
+v10_sh "mkdir /usr/jerq; mkdir /usr/blit" 120
+note "the 5620 include tree installs at /usr/jerq/include" \
+    [v10_try "cd $N/jerq; find . -print | cpio -pd /usr/jerq/include && echo JQ\$OK" \
+             "JQ-ok" 900]
+note "and at /usr/blit/include, which libblit names" \
+    [v10_try "cd $N/jerq; find . -print | cpio -pd /usr/blit/include && echo JB\$OK" \
+             "JB-ok" 900]
+note "jioctl.h is reachable by its absolute path" \
+    [v10_try "test -s /usr/jerq/include/jioctl.h -a -s /usr/blit/include/jioctl.h && echo JI\$OK" \
+             "JI-ok" 300]
 note "the libraries are on it" \
     [v10_try "test -s $N/src/libF77/pow_dd.c && echo LS\$OK" "LS-ok" 300]
 # THE SOURCE BUNDLES MUST BE THERE TOO, and they are easy to lose: they are

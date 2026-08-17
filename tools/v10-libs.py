@@ -1083,12 +1083,36 @@ def libs_cpio(libs, _dem):
     for u in libs:
         if u["done"]:
             continue
+        # EVERYTHING BUT THE OBJECTS.  A suffix allowlist (.c/.s/.h/.a) looked
+        # careful and dropped `libcurses/curses.ext' -- a generated declarations
+        # file that 29 of its 35 members include -- so 29 members failed on
+        # `Can't find include file curses.ext' and read as a language problem.
+        # The tape's directories also hold `:ctfix', `llib-lcurses', `cr_ex.h'
+        # and other things no allowlist would have guessed.  Excluding objects
+        # is a rule about what we do NOT need; listing what we do need is a
+        # guess about a 1995 tree.  Costs 0.6 MB.
         for f in sorted(os.listdir(u["dir"])):
-            p = os.path.join(u["dir"], f)
-            if not os.path.isfile(p):
+            p2 = os.path.join(u["dir"], f)
+            if not os.path.isfile(p2):
                 continue
-            if f.endswith((".c", ".s", ".h", ".a")) or f in BUILD_NAMES:
-                out.append(os.path.join(u["rel"], f))
+            if f.endswith((".o", ".O")):
+                continue
+            out.append(os.path.join(u["rel"], f))
+        # AND THE SIBLING INCLUDE DIRECTORIES THIS LIBRARY NAMES.  libipc and
+        # libin both compile with `-I../h', and `ipc/h' is not a library
+        # directory -- so it was in no manifest, the -I pointed at nothing, and
+        # 8 members failed on `Can't find include file defs.h'.  A -I is a
+        # statement that those files are needed; the manifest has to honour it.
+        for rel in u.get("cflags", "").split():
+            if not rel.startswith("-I") or rel[2:] in (".", ""):
+                continue
+            d2 = os.path.normpath(os.path.join(u["dir"], rel[2:]))
+            if not os.path.isdir(d2):
+                continue
+            for f in sorted(os.listdir(d2)):
+                p2 = os.path.join(d2, f)
+                if os.path.isfile(p2) and not f.endswith((".o", ".O")):
+                    out.append(os.path.relpath(p2, SRC))
     return "\n".join(sorted(out)) + "\n"
 
 
