@@ -139,6 +139,38 @@ note "ed edits from a script" \
 note "ranlib works" \
     [v10_try "cd /tmp; if ranlib b.a && ar t b.a; then echo RL\$OK; fi" "RL-ok" 300]
 
+# ------------------------------------------------------------------- lcc ---
+#
+# THE DECISIVE EXPERIMENT, BEFORE THE MACHINERY.  B1 was won by putting the
+# question first: does V10's own toolchain run at all?  Same shape here --
+# 24 members need an ANSI compiler, the tape's answer is lcc, and lcc is on
+# the tape as three prebuilt 1995 binaries.  Prove one file compiles before
+# teaching the makefile to depend on it.
+#
+# The paths are the driver's own, compiled in (cmd/lcc/etc/lcc from bowell.c):
+# /usr/lib/gcc-cpp, /usr/lib/rcc, /bin/as, /bin/ld, /lib/crt0.o.  ph/cpp
+# stands in for gcc-cpp because the tree has no gcc-cpp at all.
+v10_sh "cp $N/lcc/lcc /usr/bin/lcc" 300
+v10_sh "cp $N/lcc/rcc /usr/lib/rcc" 300
+v10_sh "cp $N/lcc/cpp /usr/lib/gcc-cpp" 300
+foreach p {usr/bin/lcc usr/lib/rcc usr/lib/gcc-cpp} {
+    note "lcc installed: /$p" [v10_try "test -s /$p && echo LI\$OK" "LI-ok" 120]
+}
+# The ANSI headers r70 installed, which LCCARGS names.
+note "/usr/include/lcc/stdarg.h present" \
+    [v10_try "test -s /usr/include/lcc/stdarg.h && echo LH\$OK" "LH-ok" 120]
+# fputs.c is the smallest of the 24: `fputs(const char *s, FILE *iop)', four
+# lines in, and pcc2 answers ":4:syntax error".  If lcc compiles it, the other
+# 23 are the same question.
+v10_sh "rm -rf /tmp/lt; mkdir /tmp/lt" 120
+set lccworks [v10_try \
+    "cd /tmp/lt; if lcc -c -N -I$S/libc/stdio -I/usr/include/lcc -I/usr/include/libc -I/usr/include -DV10 $S/libc/stdio/fputs.c > l.log 2>&1; then echo LX\$OK; fi" \
+    "LX-ok" 900]
+note "lcc compiles an ANSI libc member" $lccworks
+if {!$lccworks} { v10_run "cd /tmp/lt; cat l.log; echo LOGEND" "LOGEND" 300 }
+note "and it produced an object" \
+    [v10_try "cd /tmp/lt; test -s fputs.o && echo LO\$OK" "LO-ok" 120]
+
 # ---------------------------------------------------------------- the macros ---
 #
 # Shell variables, because CANBSIZ is 256 and the tty discards a longer line
@@ -236,6 +268,42 @@ v10_sh "cd $OBJ/libc; for f in `cat $K/libc.ord`; do cmp -s \$f ../tape/\$f || e
 # v10_run, for the reason given above the MISS dump: a two-hundred-line `cat'
 # under v10_sh comes back with the marker's echo spliced through it.
 v10_run "cd $OBJ/libc; cat d.lst; echo DIFFEND" "DIFFEND" 1800
+
+# THREE: WHICH COMPILER DID BELL LABS USE FOR EACH ONE?
+#
+# A member whose bytes differ from the tape's is not necessarily wrong -- it
+# may simply have been compiled by the OTHER compiler.  V10 was never built
+# from scratch, so its per-file compiler choice is undocumented, and the tape's
+# own mkfile is demonstrably wrong about it (it routes ten to lcc; twenty-five
+# need it).  But the archive itself is evidence: recompile a differing member
+# with lcc, strip it the way the tape does, and compare again.  A match NAMES
+# the compiler Bell Labs used.
+#
+# That is what turns "the toolchain requirement is mixed and undocumented"
+# from a warning into a map -- and it is the only way to know whether the 90
+# compiled-but-different members are our defect or simply cc's output where
+# the tape holds lcc's.
+#
+# `ld -x -r' matters here as much as the compile: every member of the tape's
+# archive went through it, so an unstripped object cannot match no matter
+# which compiler produced it.
+v10_sh "rm -rf $OBJ/lcc; mkdir $OBJ/lcc" 300
+puts "\n--- WHICH-COMPILER-START ---"
+v10_sh "L='-N -I$S/libc/stdio -I/usr/include/lcc -I/usr/include/libc -I/usr/include -DV10'" 120
+v10_sh "cd $OBJ/libc; sed -n 's/^DIFF //p' d.lst > d.names" 300
+v10_run "cd $OBJ/lcc; for o in `cat ../libc/d.names`; do s=`sed -n \"s/^\$o //p\" $K/libc.src`; lcc \$L -c $S/libc/\$s > /dev/null 2>&1; $T1/bin/ld -x -r \$o > /dev/null 2>&1 && mv a.out \$o; if cmp -s \$o ../tape/\$o; then echo LCCMATCH \$o; fi; done; echo WHICHEND" \
+        "WHICHEND" 7200
+# DID THE LOOP ACTUALLY COMPILE ANYTHING?  It sends lcc's diagnostics to
+# /dev/null, so "no matches" and "lcc produced nothing" look identical from
+# the outside -- and the first is a result about Bell Labs while the second is
+# a bug in this harness.  Distinguish them, here, rather than reporting a zero
+# that could mean either.
+note "the lcc rebuild produced objects" \
+    [v10_try "cd $OBJ/lcc; test -s abort.o && echo LB\$OK" "LB-ok" 300]
+# And one member compiled OUT LOUD, so a failure names itself.
+v10_sh "rm -rf /tmp/l1; mkdir /tmp/l1" 120
+v10_run "cd /tmp/l1; lcc \$L -c $S/libc/gen/abort.c; echo ONEEND" "ONEEND" 600
+puts "--- WHICH-COMPILER-END ---"
 puts "--- LIBC-CMP-END ---"
 
 # ---------------------------------------------------------------- install ---

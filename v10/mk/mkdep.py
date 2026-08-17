@@ -454,6 +454,42 @@ PATCHED = {
 # anywhere -- only cmd/gcc/gcc.c, source.
 LIBC_DIR = "libc"
 
+# The members pcc2 CANNOT compile, so the makefile hands them to lcc instead.
+#
+# MEASURED, NOT TAKEN FROM THE MKFILE, and the difference is the whole point.
+# The mkfile overrides only ten recipes with `lcc'; twenty-five members
+# actually need it.  V10 was never built from scratch -- it accreted -- so the
+# tape's own makefile is not a reliable statement of which compiler a file
+# needs, and treating it as one leaves fifteen members failing on
+# `syntax error' with the makefile insisting they are cc's.
+#
+# This list is what tools/v10-stage2.sh reported after a `make -k' over all
+# 261 with pcc2 alone.  Every failure is an ANSI construct:
+#
+#	int fprintf(FILE *f, const char *fmt, ...)      prototypes, varargs
+#	extern void *memcpy(void*, void*, size_t)       void *, size_t
+#	static void swapfunc(char *, char *, size_t, int)
+#	#include <stdarg.h>                             va_list
+#
+# The ten the mkfile names are marked; the other fifteen are ours to have
+# found.  If a future run finds a twenty-sixth, add it here with the same
+# evidence -- the alternative is a build that quietly drops a member.
+LIBC_LCC = [
+    # the ten the tape's mkfile already hands to lcc
+    "fgets.o", "fputs.o", "malloc.o", "memmove.o", "qsort.o",
+    "scanf.o", "sprintf.o", "vfprintf.o", "vfscanf.o", "rdwr.o",
+    # rdwr.o was left on cc for one run, on the strength of a measurement
+    # that said pcc2 compiled it.  It does not: the next run reported it as
+    # the ONE remaining failure.  The tape's mkfile routes it to lcc and the
+    # tape was right -- when the measurement and the mkfile disagree, re-run
+    # the measurement before believing it.
+    # fifteen more, measured
+    "_dtoa.o", "_fconv.o", "fprintf.o", "fscanf.o", "getshares.o",
+    "getshput.o", "jterm.o", "openshares.o", "printf.o", "putshares.o",
+    "setlimits.o", "setupshares.o", "snprintf.o", "sscanf.o", "strtod.o",
+    "vprintf.o",
+]
+
 
 def libc_from_tape():
     """The build plan for libc, read off the tape rather than typed.
@@ -521,7 +557,13 @@ def libc_from_tape():
 
 
 def emit_libc():
-    order, objmap, lcc = libc_from_tape()
+    order, objmap, _mkfile_lcc = libc_from_tape()
+    lcc = LIBC_LCC
+    lccset = set(lcc)
+    unknown = lccset - set(order)
+    if unknown:
+        sys.exit("mkdep: LIBC_LCC names %s, which is not a libc member"
+                 % " ".join(sorted(unknown)))
     d = os.path.join(SRC, LIBC_DIR)
     srcdir = "$(SRC)/" + LIBC_DIR
 
@@ -538,9 +580,24 @@ def emit_libc():
 # as many passes as it takes, without one it makes exactly one and warns.
 RANLIB = /usr/bin/ranlib
 
+# THE SECOND COMPILER, AND IT IS NOT A CONCESSION.  V10 was never built from
+# scratch, so its per-file compiler requirement is mixed: 25 of these 261
+# members are ANSI and pcc2 cannot parse them.  lcc is Bell Labs' own 1995
+# binary off the same tape -- the same provenance as ccom and as -- and its
+# driver's paths are compiled in, so it must be installed as /usr/bin/lcc
+# with /usr/lib/rcc and /usr/lib/gcc-cpp beside it.
+#
+# LCCARGS is the tape's own, from libc/mkfile, less the -c it adds per rule.
+LCC     = lcc
+LCCPATH = /usr/bin/lcc
+LCCARGS = -N -I$(SRC)/libc/stdio -I$(INCDIR)/lcc -I$(INCDIR)/libc -I$(INCDIR) -DV10
+
 """)
-    out.append("# The ten the tape built with lcc, not cc -- see mkdep.py:\n")
-    out.append("#   " + " ".join(lcc) + "\n\n")
+    out.append("# The %d members compiled by $(LCC), because pcc2 cannot parse them.\n"
+               % len(lcc))
+    out.append("# Measured by tools/v10-stage2.sh, NOT read from the mkfile -- which\n"
+               "# names only ten and is wrong about fifteen.  See mkdep.py.\n")
+    out.append("#   " + " ".join(sorted(lcc)) + "\n\n")
     out.append("OBJS = " + " ".join(order) + "\n")
     out.append("""
 all: libc.a crt0.o mcrt0.o
@@ -600,8 +657,15 @@ errlst.o: %(src)s/gen/errlst.c $(TOOLS)
         deps = [srcdir + "/" + src] + [
             x for x in sorted(dep(y) for y in mkgen.scan_includes(path, [INC]))
             if x != srcdir + "/" + src]
-        out.append("\n%s: %s $(TOOLS)\n\t$(COMPILE) %s/%s\n"
-                   % (obj, " ".join(deps), srcdir, src))
+        if obj in lccset:
+            # $(LCCPATH), not $(TOOLS): this object does not go through ccom,
+            # c2 or cpp at all, so naming them as prerequisites would rebuild
+            # it whenever a pass it never runs changes.
+            out.append("\n%s: %s $(LCCPATH)\n\t$(LCC) $(LCCARGS) -c %s/%s\n"
+                       % (obj, " ".join(deps), srcdir, src))
+        else:
+            out.append("\n%s: %s $(TOOLS)\n\t$(COMPILE) %s/%s\n"
+                       % (obj, " ".join(deps), srcdir, src))
 
     # Into $(TOOLDIR)/lib, never over the libc being compiled against.  The
     # tape's own install target opens `cp $(DESTDIR)/lib/libc.a liboc.a; cp
@@ -734,6 +798,16 @@ def main():
     # and V10 has no wc and no grep -- what it does have is a for loop, and
     # this is the file it reads.
     put("libc.ord", "".join(o + "\n" for o in libc_from_tape()[0]))
+    # object -> source, as DATA, so the guest can compile one member by name
+    # without a makefile.  `sed -n "s/^$o //p" libc.src' is the whole lookup.
+    #
+    # This is what lets stage 2 ask the question that matters about a member
+    # whose bytes differ from the tape's: WHICH COMPILER did Bell Labs use?
+    # Recompile it with lcc, strip it the way the tape does, and compare
+    # again -- a match names the compiler, and a set of such matches turns
+    # "V10 was never built from scratch" from a warning into a map.
+    _order, _objmap, _ = libc_from_tape()
+    put("libc.src", "".join("%s %s\n" % (o, _objmap[o]) for o in _order))
 
     put("bootpath.order",
         "".join("%s\t%s\t%s\n" % e

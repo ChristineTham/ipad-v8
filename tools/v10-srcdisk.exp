@@ -139,6 +139,41 @@ note "src: the loose .c files" [v8_try "test -s $M/src/cmd/ld.c && echo LD\$OK" 
 note "src: libc" \
     [v8_try "cd $V/libc; find . -print | cpio -pd $M/src/libc && echo CP\$OK" "CP-ok" 1800]
 
+# ------------------------------------------------------------------- lcc ---
+#
+# THREE PREBUILT BINARIES, FLAT, BECAUSE STAGE 2 CANNOT FINISH WITHOUT THEM.
+#
+# 24 of libc's 261 members will not compile with pcc2 -- measured, not
+# guessed: `int fprintf(FILE *f, const char *fmt, ...)', `extern void
+# *memcpy(void*, void*, size_t)', `#include <stdarg.h>'.  Nine of the ten the
+# tape's mkfile hands to `lcc' are in that set, so the tape's own answer is
+# lcc, and lcc is on the tape as Bell Labs' own 1995 VAX executables -- the
+# same provenance stage 1 already accepts for ccom and as.
+#
+# Copied as three files rather than as cmd/lcc, which is a large source tree
+# we have no use for.  The names are the ones the prebuilt driver EXECS, and
+# they are not negotiable -- cmd/lcc/etc/lcc is compiled from bowell.c and its
+# strings are /usr/lib/gcc-cpp, /usr/lib/rcc, /bin/as, /bin/ld, /lib/crt0.o.
+#
+#	etc/lcc            -> /usr/bin/lcc      the driver
+#	gen2/vax-v9/rcc    -> /usr/lib/rcc      the VAX back end (vax/sel.c)
+#	ph/cpp             -> /usr/lib/gcc-cpp  lcc's own cpp, standing in
+#
+# There is NO gcc-cpp anywhere in the tree -- only cmd/gcc/gcc.c, source -- so
+# the substitution is forced.  ph/cpp takes -I and -D (`Too many -I
+# directives', `Illegal -D or -U argument'), which is what the driver passes.
+#
+# The ANSI headers need no copying: r70's include/lcc is already installed at
+# /usr/include/lcc on the golden, and it is exactly what the mkfile's
+# LCCARGS names (-I/usr/include/lcc -I/usr/include/libc).
+v8_sh "mkdir $M/lcc" 60
+v8_sh "cp $V/cmd/lcc/etc/lcc $M/lcc/lcc" 300
+v8_sh "cp $V/cmd/lcc/gen2/vax-v9/rcc $M/lcc/rcc" 300
+v8_sh "cp $V/cmd/lcc/ph/cpp $M/lcc/cpp" 300
+foreach f {lcc rcc cpp} {
+    note "lcc: $f" [v8_try "test -s $M/lcc/$f && echo LC\$OK" "LC-ok" 120]
+}
+
 # Our overlay and our makefiles.  Both are small and both are what makes the
 # build ours rather than a re-run of 1995.
 note "ours: the overlay" \

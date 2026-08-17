@@ -71,11 +71,24 @@ total=$(grep -c . "$ROOT/v10/mk/gen/libc.ord")
 # `cmp' against the tape's copy fails for it too -- every MISS is also a DIFF.
 # So identical = total - diff, and `miss' is a breakdown of diff, not a
 # separate column to subtract.
+lccm=$(tr -d '\r' < "$LOG" | grep -oE '^LCCMATCH [A-Za-z_0-9]+\.o$' | sort -u | grep -c . || true)
+: "${lccm:=0}"
 echo "   members expected                 $total"
-echo "   byte-identical to the tape's     $(( total - diff ))"
-echo "   differ from the tape's           $diff"
+echo "   byte-identical, our cc           $(( total - diff ))"
+echo "   byte-identical, lcc instead      $lccm"
+echo "   ACCOUNTED FOR                    $(( total - diff + lccm ))"
+echo "   still unexplained                $(( diff - lccm ))"
 echo "     of which: did not compile      $miss"
 echo "     of which: compiled, differ     $(( diff - miss ))"
+if (( lccm )); then
+    echo
+    echo "   members whose bytes are LCC's, not cc's:"
+    tr -d '\r' < "$LOG" | grep -hoE '^LCCMATCH [A-Za-z_0-9]+\.o$' | sed 's/^LCCMATCH /     /' \
+        | sort -u | tr '\n' ' '
+    echo
+    echo "   -> these belong in LIBC_LCC in v10/mk/mkdep.py: the tape's own"
+    echo "      archive says Bell Labs compiled them with lcc."
+fi
 if (( diff )); then
     echo
     echo "   differing members:"

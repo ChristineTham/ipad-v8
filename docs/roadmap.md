@@ -771,9 +771,42 @@ The Eleventh Edition that never existed. Scope framing and evidence:
 [v11-plan.md](v11-plan.md). Nothing is committed and nothing starts before B4.
 
 The admission rule is one question — **does this change the system's model of itself?**
-Sockets, vnodes and a wholesale ANSI libc do, and are refused; programs do not. Track D
-is the *editorial* track (what belongs in the edition); Track C is the *mechanism*
-(how anything gets built). The games are chosen here and built there.
+Sockets and vnodes do, and are refused; programs do not. Track D is the *editorial*
+track (what belongs in the edition); Track C is the *mechanism* (how anything gets
+built). The games are chosen here and built there.
+
+**DECISION CHANGED 2026-08-17: the language is ANSI C and the compiler is Plan 9's.**
+This line used to refuse "a wholesale ANSI libc" alongside sockets and vnodes. It is
+reversed on Christine's direction, and B2's measurements are why the reversal is the
+easier reading rather than a concession:
+
+- V10 **was never built from scratch**. It accreted, and the tape shows it: the
+  `libc/mkfile` that produced the shipped `libc.a` names `cc` for members that only
+  `lcc` can compile, and 25 of the 261 are ANSI (`int fprintf(FILE *f, const char
+  *fmt, ...)`, `void *`, `size_t`, `<stdarg.h>`). The tree carries **two generations
+  of stdio at once** — the K&R `doprnt.c`/`doscan.c` set that `omakefile` builds, and
+  the ANSI `_dtoa`/`vfprintf`/`snprintf` set the archive actually contains.
+- So V10's per-file compiler requirement is **mixed and undocumented**, and no
+  makefile on the tape is a reliable guide to which file needs which. Restoring V10
+  means living with that; V11 is where it stops.
+
+V11 therefore converts the tree to ANSI C throughout and compiles it with the Plan 9
+compiler, so there is **one** language and **one** compiler and the question never has
+to be asked per file again.
+
+- [ ] **D-A1** Settle the target. Plan 9's compilers are per-architecture (`8c`, `vc`,
+      `kc`, `5c`, …) and **none of them targets the VAX** — Plan 9 never had a VAX back
+      end. So either V11 retargets off the VAX (which is the [v12 wish](#ipnx-v12--a-wish-and-deliberately-not-a-track)
+      arriving early) or a VAX back end is written. Decide this before any conversion:
+      it changes what "the Plan 9 compiler" means. Note that `lcc`'s `gen2/vax-v9/rcc`
+      *is* a working ANSI VAX compiler already on the tape, which makes it the obvious
+      bridge while the target is undecided — but it is not the Plan 9 compiler and must
+      not be mistaken for it.
+- [ ] **D-A2** Inventory what conversion actually costs: how many of V10's ~283 command
+      units and 261 libc members are K&R, and how many already are not. `tools/`
+      already has the scanner shape for this (`v10-syscalls.py`, `v10-proto.py`).
+- [ ] **D-A3** Convert libc first, for the same reason stage 2 comes before stage 3:
+      everything links against it.
 
 Reconnaissance (2026-08-10) found that much of this is **restoration, not importation**:
 V10's own tree carries `cmd/u9fs/` (an original-9P file server — `Tclone`, `Tclwalk`,

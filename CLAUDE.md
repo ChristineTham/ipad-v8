@@ -218,6 +218,49 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
 - Full-system emulation, native code. **Not** WASM, **not** iSH-style user-mode.
 - End goal is V10, staged through V8. **V9 is skipped** (surviving V9 = Sun-3 port, no VAX
   kernel code).
+- **V10 WAS NEVER BUILT FROM SCRATCH, and that is the single most useful thing to know
+  about Track B.** It accreted over years of patching, so there is no coherent "the V10
+  toolchain" — the requirement is **per file, mixed, and undocumented**. Measured, not
+  inferred: the `libc/mkfile` that produced the shipped `libc.a` names `cc` for members
+  only `lcc` can compile, 25 of its 261 members are ANSI, and the tree carries **two
+  generations of stdio at the same time** (K&R `doprnt.c`/`doscan.c`, which `omakefile`
+  builds, and ANSI `_dtoa`/`vfprintf`/`snprintf`, which the archive contains).
+  **Consequence: no makefile on the tape is a reliable guide to which compiler a file
+  needs.** Expect this again and expect it to look like a defect in our build — `cfront`
+  is the next likely one. When a source fails on `syntax error` at a prototype, the
+  answer is usually "this file was an lcc file", not "our compiler is wrong". Both
+  compilers are Bell Labs' own 1995 binaries on the tape, so using either is faithful:
+  `lcc` = `cmd/lcc/etc/lcc` + `gen2/vax-v9/rcc` + `ph/cpp` (installed as
+  `/usr/bin/lcc`, `/usr/lib/rcc`, `/usr/lib/gcc-cpp` — the driver's compiled-in paths;
+  there is no `gcc-cpp` in the tree, so lcc's own cpp stands in). Proven running on
+  our machine by `tools/v10-stage2.sh`.
+- **THE PREBUILT lcc SILENTLY PRODUCES EMPTY OBJECTS, and it exits 0 doing it.**
+  `cmd/lcc/etc/lcc` is compiled from `bowell.c`, whose cpp line is
+  `{"/usr/lib/gcc-cpp", "-undef", "-Dvax", "-DV9", …}`. There is no `gcc-cpp` in
+  the tree, so lcc's own `ph/cpp` has to stand in — and it **rejects `-undef`**:
+
+	/usr/lib/gcc-cpp: illegal option -- u
+	0: warning: empty input file
+
+  cpp writes nothing, `rcc` compiles the empty file, `as` assembles it into a
+  valid empty `.o`, and **lcc exits 0**. So a probe asserting "lcc compiled it"
+  and "an object appeared" passes on nothing — both of mine did, and stage 2
+  reported all 261 members built while 26 of them were empty. *An object file
+  is not evidence that a compiler ran; `test -s` cannot tell an empty a.out
+  from a real one.* Compare against the tape, or check the text size.
+  **The fix is `etc/realvax.c`**, whose cpp line is `{"…/cpp", "-N",
+  "-D__STDC__=1", "-Dvax", …}` with no `-undef` — exactly what `ph/cpp`
+  accepts. Both `lcc.c` (563 lines) and `realvax.c` are pure K&R — no
+  prototypes, no `void *`, no `stdarg` — so **pcc2 can build the driver from
+  source**, which is the honest fix rather than patching a binary's string
+  table.
+- **V11 is ANSI C throughout, compiled by the Plan 9 compiler** (decision 2026-08-17,
+  reversing the earlier "a wholesale ANSI libc is refused" — see Track D in
+  [docs/roadmap.md](docs/roadmap.md)). The point is to end the per-file compiler
+  question above: one language, one compiler. The open item is the target, because
+  **Plan 9 never had a VAX back end**, so V11 either leaves the VAX or grows one;
+  `lcc`'s `gen2/vax-v9/rcc` is the bridge in the meantime and is not the Plan 9
+  compiler.
 - Free app, self-contained, no ads/IAP — required by the 2017 non-commercial covenant;
   **"UNIX" must not appear in the app name** (Open Group trademark) — the app is
   **ipnx** ("iPad is not Unix"; the name itself carries no mark). Binding rules:
