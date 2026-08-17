@@ -354,7 +354,7 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
 	lcc alone                        202 of 261
 	cc + lcc, with the repairs       260 of 261
 	cc alone, after B2.2b/c          249 of 261
-	cc ALONE, after B2.2d's first 5  254 of 261    <- current stage 2
+	cc ALONE, + the three headers    254 of 261    <- current stage 2
 
   `LIBC_LCC` is now **empty**, so there is no per-member compiler choice left to
   get wrong. Seven remain: six ANSI (`_dtoa` `_fconv` `malloc` `strtod`
@@ -1519,7 +1519,7 @@ configuration was run, not inferred:
 	cc + lcc, the tape's mixture      246        150
 	cc + lcc, with the 14 repairs     260        150
 	cc alone, after B2.2b/c           249        148
-	cc ALONE, after B2.2d's first 5   254        147
+	cc ALONE, + the three headers     254        148
 
 Fifteen members could be built by nothing, and they had **three** causes, not
 the two recorded here for a week:
@@ -1559,8 +1559,28 @@ decision of the same kind as installing `shares.h`. Measured so far:
 `lcc/float.h` and `CC/float.h` have **no prototypes at all** (pure `#define`s,
 so either will parse), `lcc/stdarg.h` is already known K&R-compatible, and
 `CC/stdlib.h` is a **three-line shim** — `#include <libc.h>` — onto a header r70
-*does* have at top level. That is the thread to pull next, and it may close five
-of the six at once.
+*does* have at top level.
+
+**PULLED, AND IT WORKED — the headers are installed and the failures have
+changed shape.** `stdlib.h` ← `CC/stdlib.h`, `float.h` ← `lcc/float.h`,
+`stdarg.h` ← `lcc/stdarg.h`, all three copied to `/usr/include` by
+`tools/v10-stage2.exp` on the same argument as `shares.h`: the tape holds four
+variants of each and the job is to pick the one pcc2 can parse, not to write
+one. `CC/stdlib.h` is six lines onto `include/libc.h`, which is **36 lines of
+`extern char *sbrk();` and zero prototypes**. Not put on `-I`, because
+`include/CC` also holds cfront's `stdio.h` and `math.h` and would shadow the
+system's for all 261 members.
+
+It did **not** close the six on its own — the same seven still fail — but they
+now fail on their own prototypes instead of on a missing file, which is the
+ordinary conversion work the printf family already went through:
+
+	malloc.c:70  extern void *sbrk(int);            saw TYPE
+	malloc.c:82  static union store *stdmalloc(size_t);
+	malloc.c:86  extern void ialloc(void *, size_t);
+	atof.c:4     (its own prototype, newly reached)
+
+And it gained a member's worth of fidelity: byte-identical 147 → 148.
 
 `fconv.h` also carries `#define CONST const` and twelve prototypes, and its
 `#if defined(A) + defined(B) != 1` needs a cpp that understands `defined()` —

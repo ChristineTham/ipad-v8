@@ -179,6 +179,46 @@ note "sys/lnode.h installed" \
 # sizeof(Share), so if the reconstruction is right this is the one that must
 # build.  Compiled here, in isolation, BEFORE the 261 -- so a bad header is one
 # named line instead of six MISSes among many.
+# ------------------------- stdlib.h, float.h, stdarg.h: WHICH VARIANT BELONGS ---
+#
+# r70's /usr/include HAS NO stdlib.h, float.h OR stdarg.h at top level, and six
+# libc members ask for them:
+#
+#	malloc.c: 8:     Can't find include file stdlib.h
+#	fconv.h: 29/33:  stdlib.h / float.h      (_dtoa, _fconv, strtod)
+#	vfprintf.c: 6/8: stdarg.h / stdlib.h
+#	vfscanf.c: 6/8:  the same two
+#
+# The tape has all three -- FOUR TIMES OVER, under include/lcc, include/CC,
+# include/olcc and include/oCC, and never at top level.  So this is not a
+# conversion, it is a SYSTEM-LAYOUT question of the same kind as installing the
+# reconstructed shares.h, and the tape answers it: pick the variant pcc2 can
+# parse.  Measured host-side, not guessed:
+#
+#	lcc/float.h    37 lines, ZERO prototypes -- pure #defines
+#	lcc/stdarg.h   K&R-compatible; already what our converted members use
+#	CC/stdlib.h    SIX LINES: a guard and `#include <libc.h>'
+#	include/libc.h 36 lines, ZERO prototypes -- `extern char *sbrk();'
+#	               and 30 more in exactly that 1970s form
+#
+# against lcc/stdlib.h (22 prototypes) and olcc/stdlib.h (16), which pcc2
+# cannot read.  cfront's shim onto the K&R libc.h is the one that fits, and it
+# is the tape's own file rather than ours.
+#
+# NOT ON THE INCLUDE PATH, INSTALLED.  `-I$(INCDIR)/CC' would work for stdlib.h
+# and would also put cfront's stdio.h, string.h and math.h ahead of the
+# system's for all 261 members -- which is the trap the printf family's
+# <lcc/stdarg.h> line exists to avoid.  Three files copied to where the sources
+# already look shadows nothing.
+foreach h {stdlib float stdarg} { v10_sh "test -f $INC/$h.h && echo have-$h" 120 }
+v10_sh "cp $INC/CC/stdlib.h $INC/stdlib.h" 300
+v10_sh "cp $INC/lcc/float.h $INC/float.h" 300
+v10_sh "cp $INC/lcc/stdarg.h $INC/stdarg.h" 300
+foreach h {stdlib float stdarg} {
+    note "$h.h installed at $INC" \
+        [v10_try "test -s $INC/$h.h && echo H\$OK" "H-ok" 300]
+}
+
 v10_sh "rm -rf /tmp/sh; mkdir /tmp/sh" 120
 note "the reconstructed headers compile putshares.c" \
     [v10_try "cd /tmp/sh; if cc -B$T1/lib/ -t02p -I$INC -c $S/libc/gen/putshares.c; then echo PS\$OK; fi" \
