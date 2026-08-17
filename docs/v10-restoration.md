@@ -323,7 +323,27 @@ correct for exactly that reason: V10 keeps the 1989 language, V11 changes it.
 
 ### The work, in dependency order
 
-- [ ] **B2.2a — fix `stdio/iolib.h`.** It has branches for *V10 without stdarg*, *pANS
+- [x] **B2.2a is HALF a header fix, and the other half is per-file.** Measured
+      2026-08-17: `include/lcc/stdarg.h` is itself **K&R-compatible** —
+
+	typedef char *va_list;
+	#define va_start(list, start) ((void)(list = ...))
+	#define va_arg(list, mode) __va_arg(list, mode, 3U)
+
+      no prototypes, no `void *`, just casts and `sizeof`. So **`cc` can have
+      `va_list` and the two-argument ANSI `va_start`** simply by reaching that
+      header, which `iolib.h`'s V10 branch declines to include except `#ifdef sgi`.
+      That is the enabling fact for B2.2c: the printf family can be converted to
+      K&R *without* losing varargs and without falling back to `varargs.h`'s
+      incompatible `va_alist`/`va_dcl` form.
+
+      **But the header alone is not enough**, and it is worth being exact about
+      why: the sources also carry ANSI *definitions* —
+      `int printf(const char *fmt, ...){` — which pcc2 cannot parse whatever the
+      header says. So each of the nine needs its parameter list rewritten
+      old-style with the `...` dropped, keeping `va_start(args, fmt)` working off
+      the last named parameter. Nine small, reviewable, per-file patches.
+- [ ] **B2.2a-2 — fix `stdio/iolib.h`.** It has branches for *V10 without stdarg*, *pANS
       with stdarg* and *SGI*, and none for a V10 VAX, so nine members fail under both
       compilers. r70 ships `varargs.h`, which is the K&R spelling; the V10 branch needs
       it. One named patch in `v10/src/`, `mv.c`/`fsck.c` model. **Unblocks 9.**
