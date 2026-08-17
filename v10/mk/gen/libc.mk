@@ -89,10 +89,10 @@ LCC     = lcc
 LCCPATH = /usr/bin/lcc
 LCCARGS = -N -I$(SRC)/libc/stdio -I$(INCDIR)/lcc -I$(INCDIR)/libc -I$(INCDIR) -DV10
 
-# The 26 members compiled by $(LCC), because pcc2 cannot parse them.
+# The 25 members compiled by $(LCC), because pcc2 cannot parse them.
 # Measured by tools/v10-stage2.sh, NOT read from the mkfile -- which
 # names only ten and is wrong about fifteen.  See mkdep.py.
-#   _dtoa.o _fconv.o fgets.o fprintf.o fputs.o fscanf.o getshares.o getshput.o jterm.o malloc.o memmove.o openshares.o printf.o putshares.o qsort.o rdwr.o scanf.o setlimits.o setupshares.o snprintf.o sprintf.o sscanf.o strtod.o vfprintf.o vfscanf.o vprintf.o
+#   _dtoa.o _fconv.o fgets.o fprintf.o fputs.o fscanf.o getshares.o getshput.o jterm.o malloc.o memmove.o openshares.o putshares.o qsort.o rdwr.o scanf.o setlimits.o setupshares.o snprintf.o sprintf.o sscanf.o strtod.o vfprintf.o vfscanf.o vprintf.o
 
 OBJS = _assert.o _cleanup.o _exit.o _printnum.o abort.o abs.o access.o acct.o alarm.o asin.o atan.o atexit.o atof.o atoi.o atol.o biasclock.o calloc.o cerror.o chdir.o chmod.o chown.o chroot.o chrtab.o close.o closedir.o clrerr.o creat.o crypt.o ctime.o cttyname.o ctype.o data.o dialout.o dirread.o doprint.o dup.o ecvt.o erf.o errlst.o execl.o execle.o execv.o execve.o execvp.o exit.o exp.o fabs.o fchmod.o fchown.o fdopen.o fgetc.o fgets.o filbuf.o fioclose.o fioflush.o fiogetc.o fioinit.o fiofillbuf.o fioputc.o fiordline.o fioread.o fioseek.o fioundo.o fioprint.o fiowrite.o fiotie.o floor.o fmount.o funmount.o flsbuf.o fmod.o fopen.o fork.o fprintf.o fputc.o fputs.o freopen.o frexp.o fseek.o fstab.o fstat.o ftell.o ftw.o galloc.o gamma.o gcd.o gcvt.o getchar.o getenv.o getgid.o getgrent.o getgrgid.o getfields.o getflags.o getgroups.o getgrnam.o getlog.o getlogin.o getopt.o getpass.o getpid.o getpwent.o getpwnam.o getpwuid.o getshares.o getshput.o getuid.o getw.o getwd.o huff.o hypot.o ioctl.o iread.o isatty.o jterm.o besj0.o besj1.o besjn.o kill.o l3tol.o lcm.o ldexp.o linedis.o link.o label.o limits.o log.o lseek.o lstat.o ltol3.o malloc.o max.o mcount.o memccpy.o memchr.o memcmp.o memcpy.o memmove.o memset.o min.o mkdir.o mknod.o mktemp.o modf.o mon.o nametty.o nap.o nice.o nlist.o onexit.o open.o opendir.o openshares.o pdirread.o perror.o pipe.o popen.o pow.o pow10.o print.o printf.o prof.o putchar.o puts.o putshares.o putw.o qsort.o rand.o rdwr.o read.o readdir.o readlink.o reboot.o regcomp.o regerror.o regexec.o regsub.o rew.o rmdir.o sbrk.o scanf.o seekdir.o select.o setbuf.o setgid.o setgroups.o setjmp.o setlimits.o setpgrp.o setruid.o setuid.o setupgroups.o setupshares.o sgn.o signal.o sin.o sinh.o sleep.o sprintf.o sqrt.o stat.o stime.o strcat.o strchr.o strcmp.o strcpy.o strcspn.o strdup.o strlen.o strncat.o strncmp.o strncpy.o strout.o strpbrk.o strrchr.o strspn.o strtok.o stuff.o swab.o swapon.o symlink.o sync.o syscall.o system.o tan.o tanh.o telldir.o time.o timec.o times.o timezone.o tmpnam.o tolower.o toupper.o ttyname.o udiv.o umask.o uname.o ungetc.o unlink.o urem.o utime.o vadvise.o vlimit.o vtimes.o wait.o wait3.o write.o strtol.o strtoul.o llseek.o LL.o _dtoa.o _fconv.o snprintf.o strtod.o fscanf.o vfprintf.o vfscanf.o vprintf.o sscanf.o
 
@@ -619,8 +619,8 @@ pow10.o: $(SRC)/libc/math/pow10.c $(TOOLS)
 print.o: $(SRC)/libc/gen/print.c $(TOOLS)
 	$(COMPILE) $(SRC)/libc/gen/print.c
 
-printf.o: $(SRC)/libc/stdio/printf.c $(INCDIR)/fcntl.h $(INCDIR)/stdio.h $(INCDIR)/sys/types.h $(INCDIR)/tmpnam.h $(SRC)/libc/stdio/iolib.h $(LCCPATH)
-	$(LCC) $(LCCARGS) -c $(SRC)/libc/stdio/printf.c
+printf.o: $(OURS)/libc/stdio/printf.c $(TOOLS)
+	$(COMPILE) $(OURS)/libc/stdio/printf.c
 
 prof.o: $(SRC)/libc/sys/prof.s $(TOOLS)
 	$(COMPILE) $(SRC)/libc/sys/prof.s

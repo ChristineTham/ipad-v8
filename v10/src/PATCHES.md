@@ -7,6 +7,48 @@ here is derived from a named upstream file with a stated sha256 and
 one stated substitution. A changed base fails the tool rather than
 being silently re-patched.
 
+## printf.c: an ANSI definition pcc2 cannot parse (B2.2c)
+
+`libc/stdio/printf.c`, sha256 `0e79acc3ba7378d3`
+
+One of nine `printf`/`scanf` members that compile under **neither** of the
+tree's two compilers, which is the clearest single symptom of V10's unfinished
+V9-to-V10 port.
+
+	printf.c:5: syntax error; found `args' expecting `;'        (lcc)
+	"printf.c":5:syntax error                                   (pcc2)
+
+pcc2 cannot parse `int printf(const char *fmt, ...)`, and lcc cannot find
+`va_list` because `stdio/iolib.h` includes `<stdarg.h>` only `#ifdef sgi` --
+its branches cover *V10 without stdarg*, *pANS with stdarg* and *SGI*, and not
+*V10 with stdarg on a VAX*.
+
+**The conversion direction is ANSI to K&R, and that is deliberate.** V10 keeps
+the 1989 language; V11 is where the tree becomes ANSI (roadmap D-A4). And it is
+possible without touching the body because `include/lcc/stdarg.h` is itself
+K&R-compatible -- `typedef char *va_list;` plus macros built from casts and
+`sizeof` -- so `cc` can use the two-argument ANSI `va_start(args, fmt)` as it
+stands. The alternative, `varargs.h`, would have forced `va_alist`/`va_dcl` and
+a rewritten body.
+
+So two changes: include the header the file actually needs, and give the
+definition an old-style parameter list. `...` is dropped because K&R varargs is
+implicit -- the macros walk the stack from the last named parameter either way.
+```diff
+--- tarball/libc/stdio/printf.c
++++ ours/libc/stdio/printf.c
+@@ -3,5 +3,8 @@
+  */
+ #include "iolib.h"
+-int printf(const char *fmt, ...){
++#include <stdarg.h>	/* ipnx: iolib.h has it only #ifdef sgi */
++printf(fmt)		/* ipnx: K&R, see PATCHES.md */
++	char *fmt;
++{
+ 	int n;
+ 	va_list args;
+```
+
 ## fsck.c: `#include <stat.h>` names a header the archive has not
 
 `cmd/fsck.c`, sha256 `49fafbce4812db95`

@@ -42,6 +42,41 @@ DOC = os.path.join(OUT, "PATCHES.md")
 # site fails rather than making two changes.
 EDITS = [
     dict(
+        path="libc/stdio/printf.c",
+        sha="0e79acc3ba7378d31b6ded487907194cc9c6a498bd9b47e06da03d7fb2fac86f",
+        title="printf.c: an ANSI definition pcc2 cannot parse (B2.2c)",
+        why="""\
+One of nine `printf`/`scanf` members that compile under **neither** of the
+tree's two compilers, which is the clearest single symptom of V10's unfinished
+V9-to-V10 port.
+
+	printf.c:5: syntax error; found `args' expecting `;'        (lcc)
+	"printf.c":5:syntax error                                   (pcc2)
+
+pcc2 cannot parse `int printf(const char *fmt, ...)`, and lcc cannot find
+`va_list` because `stdio/iolib.h` includes `<stdarg.h>` only `#ifdef sgi` --
+its branches cover *V10 without stdarg*, *pANS with stdarg* and *SGI*, and not
+*V10 with stdarg on a VAX*.
+
+**The conversion direction is ANSI to K&R, and that is deliberate.** V10 keeps
+the 1989 language; V11 is where the tree becomes ANSI (roadmap D-A4). And it is
+possible without touching the body because `include/lcc/stdarg.h` is itself
+K&R-compatible -- `typedef char *va_list;` plus macros built from casts and
+`sizeof` -- so `cc` can use the two-argument ANSI `va_start(args, fmt)` as it
+stands. The alternative, `varargs.h`, would have forced `va_alist`/`va_dcl` and
+a rewritten body.
+
+So two changes: include the header the file actually needs, and give the
+definition an old-style parameter list. `...` is dropped because K&R varargs is
+implicit -- the macros walk the stack from the last named parameter either way.""",
+        edits=[
+            ('#include "iolib.h"\nint printf(const char *fmt, ...){\n',
+             '#include "iolib.h"\n#include <stdarg.h>\t/* ipnx: iolib.h has it only #ifdef sgi */\n'
+             'printf(fmt)\t\t/* ipnx: K&R, see PATCHES.md */\n'
+             '\tchar *fmt;\n{\n', 1),
+        ],
+    ),
+    dict(
         path="cmd/fsck.c",
         sha="49fafbce4812db9512234ba83727d44c9f47676957345ead28e0830b5fde5ff8",
         title="fsck.c: `#include <stat.h>` names a header the archive has not",

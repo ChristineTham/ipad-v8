@@ -474,6 +474,16 @@ LIBC_DIR = "libc"
 # The ten the mkfile names are marked; the other fifteen are ours to have
 # found.  If a future run finds a twenty-sixth, add it here with the same
 # evidence -- the alternative is a build that quietly drops a member.
+# Members whose source is OUR overlay rather than the pristine tree, converted
+# from ANSI to K&R so that `cc' -- the single compiler V10 standardises on --
+# can build them.  B2.2c; each one is a named patch in v10/src/PATCHES.md.
+#
+# An object here must NOT also be in LIBC_LCC: the point of converting it is
+# that it no longer needs the second compiler, and the generator checks.
+LIBC_OURS = [
+    "printf.o",
+]
+
 LIBC_LCC = [
     # the ten the tape's mkfile already hands to lcc
     "fgets.o", "fputs.o", "malloc.o", "memmove.o", "qsort.o",
@@ -485,7 +495,7 @@ LIBC_LCC = [
     # the measurement before believing it.
     # fifteen more, measured
     "_dtoa.o", "_fconv.o", "fprintf.o", "fscanf.o", "getshares.o",
-    "getshput.o", "jterm.o", "openshares.o", "printf.o", "putshares.o",
+    "getshput.o", "jterm.o", "openshares.o", "putshares.o",
     "setlimits.o", "setupshares.o", "snprintf.o", "sscanf.o", "strtod.o",
     "vprintf.o",
 ]
@@ -559,7 +569,12 @@ def libc_from_tape():
 def emit_libc():
     order, objmap, _mkfile_lcc = libc_from_tape()
     lcc = LIBC_LCC
-    lccset = set(lcc)
+    lccset = set(lcc) - set(LIBC_OURS)
+    oursset = set(LIBC_OURS)
+    both = set(LIBC_OURS) & set(lcc)
+    if both:
+        sys.exit("mkdep: %s is in both LIBC_OURS and LIBC_LCC -- a member "
+                 "converted to K&R does not need lcc" % " ".join(sorted(both)))
     unknown = lccset - set(order)
     if unknown:
         sys.exit("mkdep: LIBC_LCC names %s, which is not a libc member"
@@ -653,10 +668,20 @@ errlst.o: %(src)s/gen/errlst.c $(TOOLS)
         if obj == "errlst.o":
             continue
         src = objmap.get(obj, "csu/" + obj[:-2] + ".s")
-        path = os.path.join(d, src)
-        deps = [srcdir + "/" + src] + [
+        # OUR copy, where there is one -- and the rule SAYS so, which is the
+        # whole reason provenance lives in the makefile rather than a comment.
+        if obj in oursset:
+            path = os.path.join(OURS, LIBC_DIR, src)
+            here = "$(OURS)/" + LIBC_DIR
+        else:
+            path = os.path.join(d, src)
+            here = srcdir
+        deps = [here + "/" + src] + [
             x for x in sorted(dep(y) for y in mkgen.scan_includes(path, [INC]))
-            if x != srcdir + "/" + src]
+            # `dep()' resolves against the pristine tree, so an overlay source
+            # comes back as a relative walk out of $(SRC).  Filter the file
+            # itself by NAME, not by the one spelling we happened to expect.
+            if not x.endswith("/" + src)]
         if obj in lccset:
             # $(LCCPATH), not $(TOOLS): this object does not go through ccom,
             # c2 or cpp at all, so naming them as prerequisites would rebuild
@@ -665,7 +690,7 @@ errlst.o: %(src)s/gen/errlst.c $(TOOLS)
                        % (obj, " ".join(deps), srcdir, src))
         else:
             out.append("\n%s: %s $(TOOLS)\n\t$(COMPILE) %s/%s\n"
-                       % (obj, " ".join(deps), srcdir, src))
+                       % (obj, " ".join(deps), here, src))
 
     # Into $(TOOLDIR)/lib, never over the libc being compiled against.  The
     # tape's own install target opens `cp $(DESTDIR)/lib/libc.a liboc.a; cp
