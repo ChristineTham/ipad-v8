@@ -1,0 +1,608 @@
+#!/usr/bin/env python3
+"""K10: survey the Tenth Edition's WORLD before trying to build it.
+
+    tools/v10-world.py                  the summary
+    tools/v10-world.py --units          every unit, one per line
+    tools/v10-world.py --headers        which headers are missing, and to whom
+    tools/v10-world.py --unit NAME      everything known about one unit
+    tools/v10-world.py --write          write v10/mk/gen/world.txt
+    tools/v10-world.py --check          ... or fail if it is out of date
+
+WHY A HOST-SIDE SURVEY COMES FIRST.  B1 and B2.0 were both won by putting the
+decisive measurement ahead of the machinery, and the same argument applies with
+more force here: K10 is ~283 commands, so a guest run that compiles the world
+costs hours, while the question "which of these can even find their headers"
+is a one-second question on the host.  tools/v10-syscalls.py is the model --
+it answered "which syscalls does a V10 program get wrong on a V8 kernel" from
+two tables and saved a boot per answer.
+
+WHAT THIS CAN AND CANNOT TELL YOU.  It resolves #include directives against
+the header set we actually install, so a unit reported MISSING will certainly
+fail, and for a stated reason.  A unit reported OK has only cleared that one
+hurdle -- it may still fail to parse.  That asymmetry is deliberate: this tool
+exists to shrink the guest run, not to predict its result.
+
+THE ANSI COLUMN IS A HEURISTIC AND IS LABELLED AS ONE.  CLAUDE.md's rule --
+"a failure under compiler X is not evidence that compiler Y would succeed" --
+has a corollary: a REGEX is not evidence that either compiler fails.  jterm.o
+spent two runs listed as an lcc member on exactly this kind of inference.  So
+the ANSI count is printed as a hint about where the conversion work will land
+and is never used to exclude a unit from the build.
+
+THE INCLUDE SCAN USES THE LOOSE REGEX, WHICH IS NOT OPTIONAL.  V10's cpp.c
+opens with `# include <libc.h>' -- a space after the hash, ordinary 1970s
+style and common in this tree.  A scan matching a bare "#include" misses those
+and then reports every header present, which cost a whole boot once.
+"""
+
+import os
+import re
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SRC = os.path.join(ROOT, "work", "v10", "src")
+CMD = os.path.join(SRC, "cmd")
+R70 = os.path.join(ROOT, "work", "v10", "include")
+OURS = os.path.join(ROOT, "v10", "src")
+GEN = os.path.join(ROOT, "v10", "mk", "gen")
+
+# The space after the hash is the whole point -- see the module docstring.
+#
+# THE ANCHORING BUG THIS TOOL SHIPPED WITH, and why re.M is no longer what
+# protects against it.  The first version scanned each file with finditer() and
+# no re.M, so `^' anchored to offset 0 of the whole file and an include was
+# found only in a file whose very FIRST character began one.  Every other file
+# reported zero includes, hence zero missing headers, hence "clean" -- it
+# announced 348 of 351 commands able to resolve every header when the figure
+# was 327 and most files had not been read at all.  Same failure family as the
+# ^-anchored grep that dropped `MMISS atof.o' and the spliced tty that inflated
+# the byte-identical count: the error ran in the FLATTERING direction, which is
+# why it read as a result instead of a bug.
+#
+# includes_of() now walks line by line, and .match() anchors at the start of
+# the string it is given, so the flag is inert here -- kept only so the pattern
+# reads correctly if it is ever used against whole text again.  What actually
+# prevents a recurrence is sanity(), which refuses to PRINT a measurement taken
+# through a scan that read implausibly little.  A guard beats a comment.
+INCLUDE = re.compile(r'^[ \t]*#[ \t]*include[ \t]*([<"])([^>"]+)[>"]', re.M)
+
+# The same loose-hash rule, applied to the conditionals, because an include
+# inside a block that is never compiled is not a missing header.
+#
+# cmd/sh/service.c:555 includes "acctdef.h", which exists NOWHERE on the tape
+# -- and it sits inside `#ifdef ACCT', process accounting, off in any ordinary
+# build.  Counting it as missing made the shell look unbuildable when the tape
+# ships a working prebuilt binary of it.  So every include is recorded with the
+# conditional depth it was found at, and only depth-0 includes can block a
+# unit.  This error ran PESSIMISTIC, the opposite way from the re.M bug, which
+# is safer and still wrong.
+COND_IF = re.compile(r'^[ \t]*#[ \t]*(if|ifdef|ifndef)\b[ \t]*(.*)$')
+COND_END = re.compile(r'^[ \t]*#[ \t]*endif\b')
+
+# A command is a unit with a main().  K&R style, so the definition may be
+# `main(argc, argv)' or `main()' at the start of a line, optionally preceded
+# by a return type on the same line.
+MAIN = re.compile(r'^(?:int[ \t]+|void[ \t]+)?main[ \t]*\(', re.M)
+
+# Constructs V10's pcc2 cannot parse.  A HINT, never a verdict.
+ANSI_HINTS = [
+    (re.compile(r',[ \t]*\.\.\.[ \t]*\)'), "varargs prototype"),
+    (re.compile(r'\bvoid[ \t]*\*'),        "void *"),
+    (re.compile(r'\bconst\b'),             "const"),
+    (re.compile(r'\bsize_t\b'),            "size_t"),
+    (re.compile(r'\bvolatile\b'),          "volatile"),
+    (re.compile(r'^[ \t]*#[ \t]*include[ \t]*<stdarg\.h>', re.M), "<stdarg.h>"),
+]
+
+# Headers stage 2 installs into /usr/include from r70's variant directories,
+# on the argument recorded in CLAUDE.md: the tape ships four copies of each and
+# the job is to pick the one pcc2 parses, not to write one.  Listed here so the
+# survey resolves exactly what the machine will have, not what r70 contains.
+INSTALLED_EXTRA = {
+    "stdlib.h": "CC/stdlib.h",
+    "float.h": "lcc/float.h",
+    "stdarg.h": "lcc/stdarg.h",
+    "shares.h": "<ours: v10/src/include/shares.h>",
+}
+
+# r70 keeps several headers ONLY inside a compiler's variant directory --
+# include/lcc/, include/CC/, include/olcc/, include/oCC/, include/libc/ -- and
+# never at top level.  A unit wanting one of those is not blocked by a missing
+# file: it is asking a SYSTEM-LAYOUT question, exactly the one stdlib.h asked
+# and INSTALLED_EXTRA answered.  Reporting those separately from genuinely
+# absent headers is the difference between "convert this source" and "decide
+# which of the tape's four copies belongs at /usr/include", which are entirely
+# different pieces of work.
+VARIANT_DIRS = ["lcc", "CC", "olcc", "oCC", "libc"]
+
+# Directories under cmd/ that are plainly not a single command.  Kept as data
+# with a reason each, because "it has no main()" already classifies most of
+# them and these are the ones where that test alone would mislead.
+NOT_A_COMMAND = {
+    "lost+found": "an fsck artefact that came out on the tape",
+    "hdr": "shared headers for the commands, not a program",
+    "Admin": "release paperwork",
+    "dist": "the Datakit distribution system, its own subtree",
+    "odist": "the previous generation of the same",
+}
+
+
+def read(path):
+    """Text of a file, tolerating the tape's stray 8-bit bytes."""
+    try:
+        with open(path, "rb") as fh:
+            return fh.read().decode("latin-1")
+    except (IOError, OSError):
+        return ""
+
+
+def sources(d):
+    """The .c/.h/.s/.y/.l files of one directory, not recursing."""
+    out = []
+    try:
+        for n in sorted(os.listdir(d)):
+            if n.endswith((".c", ".h", ".s", ".y", ".l")):
+                p = os.path.join(d, n)
+                if os.path.isfile(p):
+                    out.append(p)
+    except OSError:
+        pass
+    return out
+
+
+def machine_dirs(d):
+    """VAX-specific subdirectories, which is where several units keep code.
+
+    cmd/ccom/vax/ and cmd/adb/vax/ are the pattern; `vax-v9' appears under
+    lcc.  Anything else (mips, sun, 3b) is another machine's and not ours.
+    """
+    out = []
+    for n in ("vax", "vax-v9"):
+        p = os.path.join(d, n)
+        if os.path.isdir(p):
+            out.append(p)
+    return out
+
+
+class Unit(object):
+    """One buildable thing under cmd/ -- a loose file or a directory."""
+
+    def __init__(self, name, kind, paths, root=None):
+        self.name = name
+        self.kind = kind              # "file" or "dir"
+        self.root = root              # unit directory, for sibling includes
+        self.paths = paths            # the source files we scanned
+        self.includes = []            # (bracket, header) as written
+        self.missing = []             # UNCONDITIONALLY absent -- blocks the unit
+        self.conditional = []         # (header, guard) absent but behind an #if
+        self.variant = []             # only under r70's lcc/CC/... -- a decision
+        self.hints = []               # ANSI constructs found, by label
+        self.has_main = False
+        self.overlay = False          # do we already carry a patched copy?
+
+    @property
+    def ok(self):
+        return not self.missing
+
+
+def resolve(header, bracket, unit_dirs, unit_root=None):
+    """Where would the guest find this header?  None if nowhere.
+
+    The search order is cc's: for "..." the including file's own directory
+    first, then the system path; for <...> the system path only.  The system
+    path is r70's /usr/include plus the headers stage 2 installs there.
+
+    SIBLING DIRECTORIES ARE PART OF THE CONVENTION, NOT AN EXCEPTION, and
+    leaving them out made this tool report ccom as unbuildable -- a component
+    stage 3 proves is a FIXPOINT.  cmd/ccom/vax/makefile says
+    `INCLIST=-I. -I../common' in its own words, and adb (comm/), lint
+    (../pcc1/mip) and several others do the same.  So a unit's search path is
+    its own directory plus its siblings, and the return value names which one,
+    because that string IS the -I the makefile needs.
+    """
+    if header.startswith("/"):
+        # /usr/include/... is the SYSTEM path spelled the long way, and it
+        # resolves on a real guest -- cmd/strings.c writes
+        # "/usr/include/a.out.h" where every other unit writes <a.out.h>.
+        # Missing this made a buildable command look blocked.
+        if header.startswith("/usr/include/"):
+            rest = header[len("/usr/include/"):]
+            if os.path.exists(os.path.join(R70, rest)):
+                return "r70 (absolute /usr/include)"
+            return None
+        # Any other absolute path is into another tree -- jterm.c's
+        # "/usr/jerq/include/jioctl.h" is the known case, and it is in the
+        # v10blit tarball rather than v10src, so no include path can help.
+        rel = header.lstrip("/")
+        for base in (SRC, os.path.join(ROOT, "work", "v10")):
+            if os.path.exists(os.path.join(base, rel)):
+                return "absolute: " + header
+        return None
+    if bracket == '"':
+        for d in unit_dirs:
+            if os.path.exists(os.path.join(d, header)):
+                return "local"
+        # Siblings, in a bounded walk of the unit's own directory only.
+        if unit_root and os.path.isdir(unit_root):
+            for base, _dirs, files in os.walk(unit_root):
+                if header in files:
+                    return "-I" + os.path.relpath(base, unit_root)
+        # Across units: lint includes pcc1/mip's `manifest' and `mfile1'.
+        # Bounded to one level under cmd/ so this stays a fast, explainable
+        # search rather than a hunt for any file of that name anywhere.
+        for n in sorted(os.listdir(CMD)):
+            p = os.path.join(CMD, n)
+            if not os.path.isdir(p):
+                continue
+            for base, _dirs, files in os.walk(p):
+                if header in files:
+                    return "-I../" + os.path.relpath(base, CMD)
+    if header in INSTALLED_EXTRA:
+        return "installed: " + INSTALLED_EXTRA[header]
+    if os.path.exists(os.path.join(R70, header)):
+        return "r70"
+    # Our own overlay ships include/ too (shares.h today).
+    if os.path.exists(os.path.join(OURS, "include", header)):
+        return "ours"
+    # Only inside a compiler's variant directory: a layout decision, not an
+    # absent file.  See VARIANT_DIRS.
+    for v in VARIANT_DIRS:
+        if os.path.exists(os.path.join(R70, v, header)):
+            return "VARIANT: r70 include/%s/%s" % (v, header)
+    # The kernel trees carry 1995 copies of several headers.  Reaching them
+    # needs a -I, so this is reported distinctly rather than as a plain hit.
+    for k in ("lsys", "sys"):
+        if os.path.exists(os.path.join(SRC, k, header)):
+            return "kernel-tree (needs -I)"
+    return None
+
+
+def includes_of(text):
+    """Every include in one file, as (bracket, header, guard).
+
+    guard is None for an include the compiler always sees, or the text of the
+    innermost #if/#ifdef controlling it.  No attempt is made to EVALUATE the
+    condition -- we do not know what the makefile defines -- so this separates
+    "always needed" from "maybe needed" and no more than that.
+    """
+    out = []
+    stack = []
+    for line in text.splitlines():
+        m = COND_IF.match(line)
+        if m:
+            stack.append(m.group(2).strip()[:40] or m.group(1))
+            continue
+        if COND_END.match(line):
+            if stack:
+                stack.pop()
+            continue
+        m = INCLUDE.match(line)
+        if m:
+            out.append((m.group(1), m.group(2), stack[-1] if stack else None))
+    return out
+
+
+def scan(unit):
+    """Fill in a unit's includes, missing headers, hints and main()."""
+    dirs = sorted(set(os.path.dirname(p) for p in unit.paths))
+    seen = set()
+    for p in unit.paths:
+        text = read(p)
+        if MAIN.search(text):
+            unit.has_main = True
+        for pat, label in ANSI_HINTS:
+            if pat.search(text) and label not in unit.hints:
+                unit.hints.append(label)
+        for bracket, header, guard in includes_of(text):
+            key = (bracket, header)
+            if key in seen:
+                continue
+            seen.add(key)
+            unit.includes.append(key)
+            where = resolve(header, bracket, dirs, unit.root)
+            if where is None:
+                if guard is None:
+                    if header not in unit.missing:
+                        unit.missing.append(header)
+                elif header not in unit.conditional:
+                    unit.conditional.append((header, guard))
+            elif where.startswith("VARIANT") and header not in unit.variant:
+                unit.variant.append(header)
+    unit.missing.sort()
+    unit.variant.sort()
+
+
+def overlay_paths():
+    """Files we already carry a corrected copy of, relative to src/."""
+    out = set()
+    for base, _dirs, files in os.walk(OURS):
+        for f in files:
+            rel = os.path.relpath(os.path.join(base, f), OURS)
+            out.add(rel)
+    return out
+
+
+def inventory():
+    """Every command unit under cmd/, classified."""
+    if not os.path.isdir(CMD):
+        sys.exit("v10-world: no %s -- run tools/v10-import.py" % CMD)
+    over = overlay_paths()
+    units = []
+    # TWO GENERATIONS OF THE SAME COMMAND LIVE SIDE BY SIDE, and naming them
+    # both `ed' made one silently shadow the other in every count.
+    #
+    # cmd/ed.c and cmd/ed/ are both on the tape, and mkdep.py already recorded
+    # which is which: the loose file "has no prototype in it, so pcc2 can
+    # compile it, while the cmd/ed/ version is the POSIX rewrite".  Same for
+    # sort.  This is the libc two-generations-of-stdio pattern appearing in the
+    # command tree, so it is a finding to report rather than an ambiguity to
+    # resolve by picking one.  A directory whose name collides with a loose .c
+    # is therefore named `ed/', and collisions() prints them.
+    loose = set(n[:-2] for n in os.listdir(CMD)
+                if n.endswith(".c") and os.path.isfile(os.path.join(CMD, n)))
+    for n in sorted(os.listdir(CMD)):
+        p = os.path.join(CMD, n)
+        if os.path.isfile(p) and n.endswith(".c"):
+            u = Unit(n[:-2], "file", [p])
+            u.overlay = os.path.join("cmd", n) in over
+            units.append(u)
+        elif os.path.isdir(p) and n not in NOT_A_COMMAND:
+            paths = sources(p)
+            for md in machine_dirs(p):
+                paths += sources(md)
+            if not paths:
+                continue
+            u = Unit(n + "/" if n in loose else n, "dir", paths, root=p)
+            u.overlay = any(x.startswith(os.path.join("cmd", n) + os.sep)
+                            for x in over)
+            units.append(u)
+    for u in units:
+        scan(u)
+    return units
+
+
+def sanity(units):
+    """Refuse to report a measurement taken through a broken scan.
+
+    tools/v10-syscalls.py refuses to run on a short parse for exactly this
+    reason: a scan that understands less than it thinks reports a clean result,
+    and a clean result is indistinguishable from a real one.  This tool has
+    already made that mistake once -- a missing re.M turned "almost no file was
+    read" into "348 of 351 commands are fine".
+
+    Two independent checks, because either alone can be satisfied by accident:
+    a C program essentially always includes something, and this tree's units
+    average many includes each.  Both thresholds are far below any plausible
+    real value, so they catch a broken scan without being sensitive to which
+    units exist.
+    """
+    total = sum(len(u.includes) for u in units)
+    silent = [u for u in units if not u.includes]
+    problems = []
+    if total < 2 * len(units):
+        problems.append("only %d includes across %d units (under 2 each) -- the "
+                        "scan is not reading the sources" % (total, len(units)))
+    if len(silent) > len(units) // 4:
+        problems.append("%d of %d units report NO includes at all"
+                        % (len(silent), len(units)))
+    if problems:
+        sys.stderr.write("v10-world: NO MEASUREMENT --\n")
+        for p in problems:
+            sys.stderr.write("  %s\n" % p)
+        sys.stderr.write("  A survey that reads nothing reports everything as "
+                         "clean.  Fix the scan, not the threshold.\n")
+        sys.exit(2)
+    return total, silent
+
+
+def prebuilt():
+    """Basenames with a prebuilt 1995 binary -- the oracle, from the generator."""
+    out = set()
+    p = os.path.join(GEN, "prebuilt.txt")
+    for line in read(p).splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            out.add(line.split()[0])
+    return out
+
+
+def report(units, pre):
+    total, silent = sanity(units)
+    cmds = [u for u in units if u.has_main]
+    libs = [u for u in units if not u.has_main]
+    ok = [u for u in cmds if u.ok]
+    bad = [u for u in cmds if not u.ok]
+
+    print("=== the Tenth Edition's world, as it stands on the tape ===")
+    print("  units under cmd/            %4d  (%d loose .c, %d directories)"
+          % (len(units),
+             len([u for u in units if u.kind == "file"]),
+             len([u for u in units if u.kind == "dir"])))
+    print("  of those, with a main()     %4d  <- commands" % len(cmds))
+    print("  without one                 %4d  (libraries, subsystems, data)"
+          % len(libs))
+    print("  carrying a prebuilt binary  %4d  <- the oracle, never a shortcut"
+          % len([u for u in cmds if u.name in pre]))
+    print("  we already patch             %4d" % len([u for u in units if u.overlay]))
+    print("  #include lines read        %6d  (%d units include nothing)"
+          % (total, len(silent)))
+    dup = sorted(u.name for u in units if u.name.endswith("/"))
+    if dup:
+        print("  the tape ships TWICE        %4d  %s"
+              % (len(dup), " ".join(d[:-1] for d in dup)))
+        print("      -- a loose .c AND a directory of the same name.  mkdep.py "
+              "builds the")
+        print("         loose one for ed: K&R, which pcc2 parses; the directory "
+              "is the POSIX")
+        print("         rewrite.  Two generations in one tree, as with stdio in "
+              "libc.")
+    print()
+    var = [u for u in cmds if u.variant]
+    print("=== can each command find its headers? ===")
+    print("  every #include resolves     %4d  of %d" % (len(ok), len(cmds)))
+    print("  at least one does not       %4d" % len(bad))
+    print("  needs a VARIANT header      %4d  <- a layout decision, not a "
+          "missing file" % len(var))
+    print("  absent only behind an #if   %4d  <- not blocked; e.g. sh's "
+          "#ifdef ACCT" % len([u for u in cmds if u.conditional]))
+    print()
+    if var:
+        print("=== headers r70 keeps only under lcc/ CC/ olcc/ oCC/ libc/ ===")
+        vh = {}
+        for u in var:
+            for h in u.variant:
+                vh.setdefault(h, []).append(u.name)
+        for h, who in sorted(vh.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+            print("  %-22s %3d  %s" % (h, len(who), " ".join(sorted(who)[:8])))
+        print("  Same question stdlib.h asked and INSTALLED_EXTRA answered.")
+        print()
+
+    # The histogram is the actionable half: one missing header usually blocks
+    # many units, exactly as stdlib.h blocked six libc members.
+    hist = {}
+    for u in bad:
+        for h in u.missing:
+            hist.setdefault(h, []).append(u.name)
+    print("=== the missing headers, worst first ===")
+    for h, who in sorted(hist.items(), key=lambda kv: (-len(kv[1]), kv[0]))[:15]:
+        names = " ".join(sorted(who)[:6])
+        more = "" if len(who) <= 6 else " +%d more" % (len(who) - 6)
+        print("  %-22s %3d  %s%s" % (h, len(who), names, more))
+    print()
+
+    hh = {}
+    for u in cmds:
+        for label in u.hints:
+            hh[label] = hh.get(label, 0) + 1
+    print("=== ANSI constructs, a HINT and not a verdict ===")
+    for label, n in sorted(hh.items(), key=lambda kv: -kv[1]):
+        print("  %-22s %3d commands" % (label, n))
+    print()
+    clean = [u for u in cmds if u.ok and not u.hints]
+    print("  commands with resolvable headers AND no ANSI hint  %4d" % len(clean))
+    print("  -- the set most likely to compile untouched, and where K10 starts")
+
+
+def status(u):
+    """One word for where a unit stands, plus the reason."""
+    if u.missing:
+        return "blocked", "missing:" + ",".join(u.missing)
+    if u.variant:
+        return "variant", "variant:" + ",".join(u.variant)
+    return "ready", "-"
+
+
+def world_txt(units, pre):
+    """The survey as a generated file: reviewable in a diff, greppable in a run.
+
+    Same convention as v10/mk/gen/prebuilt.txt and libc.ord -- a generator
+    plus --check, so the repo's copy cannot silently drift from the tree it
+    describes.  Kept to one kind of thing per file, after the destdirs.txt
+    lesson: a name, three columns, no second meaning smuggled in by a tab.
+    """
+    out = [
+        "# The Tenth Edition's world: every command unit under cmd/.",
+        "#",
+        "# Generated by tools/v10-world.py; check with --check.  Columns are",
+        "# name, kind, whether a prebuilt 1995 binary exists as an ORACLE, and",
+        "# status -- ready / variant / blocked, with the reason.",
+        "#",
+        "# `variant' is not a defect: r70 keeps the header only inside a",
+        "# compiler's directory (include/lcc/, include/CC/, ...), so it is the",
+        "# system-layout question stdlib.h asked and stage 2 answered.",
+        "# A name ending in `/' is a DIRECTORY unit whose name also exists as a",
+        "# loose .c -- the tape ships two generations, and they are not the",
+        "# same program.",
+        "#",
+    ]
+    for u in sorted(units, key=lambda x: x.name):
+        st, why = status(u)
+        out.append("%-18s %-5s %-4s %-8s %s"
+                   % (u.name, u.kind, "yes" if u.name in pre else "no", st, why))
+    return "\n".join(out) + "\n"
+
+
+def main():
+    args = sys.argv[1:]
+    units = inventory()
+    pre = prebuilt()
+
+    if "--check" in args or "--write" in args:
+        sanity(units)
+        path = os.path.join(GEN, "world.txt")
+        want = world_txt(units, pre)
+        have = read(path)
+        if "--check" in args:
+            if have != want:
+                sys.stderr.write(
+                    "v10-world: %s is out of date -- run tools/v10-world.py "
+                    "--write\n" % os.path.relpath(path, ROOT))
+                return 1
+            print("v10-world: %s is current (%d units)"
+                  % (os.path.relpath(path, ROOT), len(units)))
+            return 0
+        with open(path, "w") as fh:
+            fh.write(want)
+        print("v10-world: wrote %s (%d units)"
+              % (os.path.relpath(path, ROOT), len(units)))
+        return 0
+
+    if "--unit" in args:
+        want = args[args.index("--unit") + 1]
+        for u in units:
+            if u.name == want:
+                print("unit      %s (%s)" % (u.name, u.kind))
+                print("main()    %s" % ("yes" if u.has_main else "no"))
+                print("prebuilt  %s" % ("yes" if u.name in pre else "no"))
+                print("overlay   %s" % ("yes" if u.overlay else "no"))
+                print("sources   %d" % len(u.paths))
+                for p in u.paths:
+                    print("          %s" % os.path.relpath(p, SRC))
+                print("includes  %d" % len(u.includes))
+                dirs = sorted(set(os.path.dirname(p) for p in u.paths))
+                # Re-walk the sources so the guard is shown: an include the
+                # compiler never reaches must not read as a blocker here
+                # either, or the detail view contradicts the summary.
+                shown = set()
+                for p in u.paths:
+                    for b, h, guard in includes_of(read(p)):
+                        if (b, h) in shown:
+                            continue
+                        shown.add((b, h))
+                        where = resolve(h, b, dirs, u.root)
+                        if where is None:
+                            where = ("absent, but behind #if %s" % guard
+                                     if guard else "*** MISSING ***")
+                        elif guard:
+                            where += "  (behind #if %s)" % guard
+                        print("          %s%s%s  %s"
+                              % (b, h, ">" if b == "<" else '"', where))
+                if u.hints:
+                    print("ANSI hint %s" % ", ".join(u.hints))
+                return 0
+        sys.exit("v10-world: no unit named %s" % want)
+
+    if "--units" in args:
+        for u in units:
+            print("%-16s %-5s main=%-3s pre=%-3s inc=%-3d miss=%d %s"
+                  % (u.name, u.kind, "yes" if u.has_main else "no",
+                     "yes" if u.name in pre else "no",
+                     len(u.includes), len(u.missing),
+                     " ".join(u.missing)))
+        return 0
+
+    if "--headers" in args:
+        hist = {}
+        for u in units:
+            for h in u.missing:
+                hist.setdefault(h, []).append(u.name)
+        for h, who in sorted(hist.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+            print("%-24s %3d  %s" % (h, len(who), " ".join(sorted(who))))
+        return 0
+
+    report(units, pre)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
