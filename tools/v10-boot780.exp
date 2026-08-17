@@ -35,13 +35,28 @@ v10_login root
 v10_sh "PATH=/bin:/etc:/usr/bin; export PATH" 120
 v10_sh "OK=-ok" 120
 
-# THE BANNER IS THE PROOF.  vers.c was written by tools/v10-kernel.exp as
-# "Unix 10e ipnx 780", a string no Bell Labs kernel carries, so seeing it means
-# the machine that booted is the one we linked -- not the tape's seki.
-note "it is OUR kernel, not the tape's seki" \
-    [v10_try "cat /etc/motd; echo ." "." 300]
+# THE VERSION STRING, SEARCHED FOR INSIDE /unix.
+#
+# The banner IS the proof -- vers.c was written as "Unix 10e ipnx 780", a string
+# no Bell Labs kernel carries -- but v10_boot consumes it on the way to `ogin',
+# so an assertion after login cannot see it.  The first version of this checked
+# /etc/motd for a bare "." and passed on anything at all, which is not an
+# assertion.  sed reads the binary instead: V10 has no `strings', but sed will
+# print a matching line out of anything.
+note "the running /unix carries OUR version string" \
+    [v10_try "sed -n '/ipnx 780/p' /unix" "ipnx 780" 900]
 note "the machine answers" [v10_try "echo B780\$OK" "B780-ok" 120]
 note "root filesystem is readable" [v10_try "ls /bin | sed -n '1,3p'" "cat" 300]
+# /etc/motd described the golden -- "The kernel is seki ... linked at Bell Labs"
+# -- which is false of this machine.  The motd is the machine describing itself
+# and it must not lie about which kernel it is running.
+v10_sh "echo 'Research UNIX, Tenth Edition.' > /etc/motd" 120
+v10_sh "echo '' >> /etc/motd" 120
+v10_sh "echo 'Restored by ipnx from the 1995 CSRC source tape.  This kernel was' >> /etc/motd" 120
+v10_sh "echo 'BUILT HERE -- lsys/astro/ipnx780.m, compiled on V10 by V10 -- and' >> /etc/motd" 120
+v10_sh "echo 'runs on a VAX-11/780.  The first V10 kernel built from source.' >> /etc/motd" 120
+note "motd no longer claims to be seki" \
+    [v10_try "sed -n '/BUILT HERE/p' /etc/motd" "BUILT HERE" 300]
 
 puts "\n===== V10 ON A 780 ====="
 set failed 0

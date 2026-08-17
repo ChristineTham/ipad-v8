@@ -197,6 +197,29 @@ hardware terms.
         so a first bootable 780 kernel needs no world build. Rebuilding those `.a` from
         `lsys/` source is a later, separable step — and `lsys/` is now on the source
         disk (36/36) for exactly that.
+- [x] **K8/K9 — IT BOOTS.** 2026-08-17, `tools/v10-boot780.exp`, 5/5:
+
+	Unix 10e ipnx 780
+	mem = 6062080
+	login: root
+
+      That banner is ours — `vers.c` says `"Unix 10e ipnx 780"`, a string no Bell
+      Labs kernel carries — and the assertion for it searches the running `/unix`
+      with `sed` (V10 has no `strings`), because `v10_boot` consumes the banner on
+      its way to `ogin`.
+
+      **No new boot block was needed.** `lsys/boot/star/uda` is used *unpatched*:
+      its compiled-in addresses — `ubamap 0x20006800`, `ubabase 0x20100000`,
+      `udareg 0772150` — are the 780's already, which is exactly what
+      `tools/v10-uda750.py` had to move for the 750. The one retargeting this
+      project ever did to a V10 binary turns out to be the 750's problem alone.
+      Load at `FA00`, enter at `FA02`, as `lsys/boot/star/defboo.cmd` does on real
+      hardware.
+
+      So the chain is complete and every link is V10's: stage 1 rebuilt V10's
+      compiler with V10's compiler (45/46) → `mkconf`/`as`/`cc`/`ld` built a
+      226,263-byte kernel from our config (17/17) → it boots on open-simh's
+      **vax780**, the same simulator the app already ships for V8.
 - [ ] **K6b — run the prebuilt `mkconf`** (`lsys/lib/mkconf`, 37,932 B) on `alice.m` to
       generate the kernel makefile, exactly as V8's `config`(8) does for its own tree.
       It is a 1995 V10 binary, so it runs on the machine we already have — same status
