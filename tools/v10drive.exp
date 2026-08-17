@@ -432,9 +432,59 @@ proc v10_try {cmd pat {t 120}} {
 # it sends all three lines at once, so `echo $M+' is read by the program
 # rather than the shell and the driver waits forever for a marker nobody will
 # print.
+#
+# THE END PATTERN USED TO BE MATCHED OUT OF THE COMMAND'S OWN ECHO, which is the
+# same trap v10_sh already avoids one line up.  Every caller spells the token
+# literally -- `... ; echo DIFFEND' waited on as "DIFFEND" -- and the tty echoes
+# the whole line before the shell runs any of it, so v10_must matched the
+# QUESTION and returned while the command had not started.  `v10_sh ":"' then
+# typed a marker into a tty that was still producing output, and the echo
+# interleaved character by character:
+#
+#	DIFF getpoass.o      <- getpass.o
+#	DIFF p8error.o       <- perror.o
+#	DIFF scanf6.o        <- scanf.o
+#
+# Real member names with single characters of `+ok105+' injected mid-word, in a
+# list a host-side count then read.  Bounded but not harmless: v10_sh's own
+# 60 s budget is what caught up with the command, so a loop slower than that
+# turns this into a bail on a healthy machine.
+#
+# THE FIX IS THE MARKER RULE, APPLIED TO THE END TOKEN.  `RUNE''ND' is what gets
+# typed and therefore what the echo carries; the shell's quote removal makes it
+# print `RUNEND'.  So the two spellings partition the stream -- quoted appears
+# ONLY in the echo, bare ONLY in the output -- and the echo can be consumed
+# deliberately instead of being tripped over.  Three waits, in the order the
+# bytes arrive:
+#
+#	RUNE''ND    the echo of the line we just sent
+#	$endpat     the caller's token, now necessarily from real output
+#	RUNEND      the appended sentinel: the command is over
+#
+# `$endpat' becomes a real assertion this way rather than a coincidence, and no
+# call site changes.
+#
+# LENGTHENING THE LINE IS SAFE ON V10, and that had to be checked because
+# CLAUDE.md's `keep every line under CANBSIZ = 256' is V8's rule.  V10's
+# nttyld.c FLUSHES AND CONTINUES where V8 discards:
+#
+#	*op++ = c;
+#	if (op >= &canonb[CANBSIZ-1]) { putcpy(q->next, canonb, op - canonb);
+#	                                op = canonb; }
+#
+# Confirmed on the machine, not just in the source: stage 2 sends a 302-byte
+# line, the log echoes it complete to its final `echo NOOEND', and it runs.
+#
+# The echo wait does NOT bail, deliberately.  If it were ever to miss, the next
+# wait falls through to matching the echo exactly as before -- degrading to
+# today's behaviour rather than failing a run outright.
 proc v10_run {cmd endpat {t 120}} {
-    send "$cmd\r"
-    v10_must "$endpat" $t
+    global timeout
+    set use [expr {$t > 0 ? $t : $timeout}]
+    send "$cmd; echo RUNE''ND\r"
+    expect -timeout 60 -- "RUNE''ND" {} timeout {} eof {}
+    v10_must "$endpat" $use
+    v10_must "RUNEND" $use
     v10_sh ":" 60
 }
 

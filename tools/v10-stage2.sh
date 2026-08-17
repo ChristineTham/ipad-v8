@@ -149,7 +149,7 @@ echo "     of which: compiled, differ     $(( diff - miss ))"
 if (( tcm )); then
     echo
     echo "   members the TAPE's OWN ccom reproduces but stage 1's does not:"
-    tr -d '\r' < "$LOG" | grep -hoE '^TAPECCMATCH [A-Za-z_0-9]+\.o$' | sed 's/^TAPECCMATCH /     /' \
+    tr -d '\r' < "$LOG" | grep -hoE 'TAPECCMATCH [A-Za-z_0-9]+\.o' | sed 's/^TAPECCMATCH /     /' \
         | sort -u | tr '\n' ' '
     echo
     echo "   -> cmd/ccom/vax/ SOURCE is not the compiler that built this archive."
@@ -157,29 +157,39 @@ fi
 if (( noom )); then
     echo
     echo "   members whose bytes are cc WITHOUT -O:"
-    tr -d '\r' < "$LOG" | grep -hoE '^NOOMATCH [A-Za-z_0-9]+\.o$' | sed 's/^NOOMATCH /     /' \
+    tr -d '\r' < "$LOG" | grep -hoE 'NOOMATCH [A-Za-z_0-9]+\.o' | sed 's/^NOOMATCH /     /' \
         | sort -u | tr '\n' ' '
     echo
 fi
 if (( lccm )); then
     echo
     echo "   members whose bytes are LCC's, not cc's:"
-    tr -d '\r' < "$LOG" | grep -hoE '^LCCMATCH [A-Za-z_0-9]+\.o$' | sed 's/^LCCMATCH /     /' \
+    tr -d '\r' < "$LOG" | grep -hoE 'LCCMATCH [A-Za-z_0-9]+\.o' | sed 's/^LCCMATCH /     /' \
         | sort -u | tr '\n' ' '
     echo
     echo "   -> these belong in LIBC_LCC in v10/mk/mkdep.py: the tape's own"
     echo "      archive says Bell Labs compiled them with lcc."
 fi
+# THE LISTS MUST USE THE SAME PATTERN AS THE COUNTS, and for a while they did
+# not: the five display greps kept their `^' after the counters lost theirs, so
+# the report printed
+#
+#	  of which: did not compile      1
+#	members that did not compile:
+#	                                       <- nothing
+#
+# the exact inverse of the bug that hid atof, and just as quiet.  A count and a
+# list derived from one log by two different patterns will disagree eventually.
 if (( diff )); then
     echo
     echo "   differing members:"
-    grep -hE '^DIFF [A-Za-z_0-9]+\.o' "$LOG" | sed 's/^DIFF /     /' | tr -d '\r' | sort | tr '\n' ' '
+    grep -hoE 'DIFF [A-Za-z_0-9]+\.o' "$LOG" | sed 's/^DIFF /     /' | tr -d '\r' | sort | tr '\n' ' '
     echo
 fi
 if (( miss )); then
     echo
     echo "   members that did not compile:"
-    grep -hE '^MISS [A-Za-z_0-9]+\.o' "$LOG" | sed 's/^MISS /     /' | tr -d '\r' | sort | tr '\n' ' '
+    grep -hoE 'MISS [A-Za-z_0-9]+\.o' "$LOG" | sed 's/^MISS /     /' | tr -d '\r' | sort | tr '\n' ' '
     echo
 fi
 
