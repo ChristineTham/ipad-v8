@@ -354,11 +354,11 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
 	lcc alone                        202 of 261
 	cc + lcc, with the repairs       260 of 261
 	cc alone, after B2.2b/c          249 of 261
-	cc ALONE, after B2.2d's first 4  253 of 261    <- current stage 2
+	cc ALONE, after B2.2d's first 5  254 of 261    <- current stage 2
 
   `LIBC_LCC` is now **empty**, so there is no per-member compiler choice left to
-  get wrong. Eight remain: seven genuinely ANSI (`_dtoa` `_fconv` `malloc`
-  `rdwr` `strtod` `vfprintf` `vfscanf`) and `setupshares`. **Do not
+  get wrong. Seven remain: six ANSI (`_dtoa` `_fconv` `malloc` `strtod`
+  `vfprintf` `vfscanf`) and `setupshares`. **Do not
   reinstate lcc to close them** — it still hits the `bowell.c` defect
   (`0: unknown flag -undef`), so those members become **empty objects that exit
   0**. Eight loud failures beat eight silent holes.
@@ -1519,7 +1519,7 @@ configuration was run, not inferred:
 	cc + lcc, the tape's mixture      246        150
 	cc + lcc, with the 14 repairs     260        150
 	cc alone, after B2.2b/c           249        148
-	cc ALONE, after B2.2d's first 4   253        147
+	cc ALONE, after B2.2d's first 5   254        147
 
 Fifteen members could be built by nothing, and they had **three** causes, not
 the two recorded here for a week:
@@ -1538,11 +1538,34 @@ the two recorded here for a week:
   find it than `cc` could. *A failure under compiler X is not evidence that
   compiler Y would succeed.*
 
-Eight remain, and they are named rather than counted: `_dtoa` `_fconv`
-`malloc` `rdwr` `strtod` `vfprintf` `vfscanf` — genuinely ANSI, and the hard
-ones, since `vfprintf.c` is printf's whole engine and `malloc.c` is 401 lines
-of prototypes — plus `setupshares`, which stays unbuilt on evidence grounds.
-B2.2d's first four (`fgets`, `fputs`, `memmove`, `qsort`) are done and measured.
+Seven remain, and **six of them are now known to be a MISSING-HEADER problem
+rather than a language one** — which is the finding that reframes the rest of
+B2.2d. The build's own diagnostics, once the error filter stopped matching
+filenames:
+
+	malloc.c: 8:     Can't find include file stdlib.h
+	fconv.h: 29/33:  Can't find include file stdlib.h / float.h
+	vfprintf.c: 6/8: Can't find include file stdarg.h / stdlib.h
+	vfscanf.c: 6/8:  the same two
+	setupshares.c:   Can't find include file sys/share.h
+
+So `_dtoa`, `_fconv` and `strtod` share ONE blocker (`stdio/fconv.h`, which is
+Gay's header and includes both), `vfprintf`/`vfscanf` share another, and
+`malloc` wants only `stdlib.h`. **r70 has all three headers — under
+`include/lcc/`, `include/CC/`, `include/olcc/` and `include/oCC/`, never at top
+level.** So the question is not "convert six ANSI files" but "which of the
+tape's four variants belongs at `/usr/include`", which is a *system-layout*
+decision of the same kind as installing `shares.h`. Measured so far:
+`lcc/float.h` and `CC/float.h` have **no prototypes at all** (pure `#define`s,
+so either will parse), `lcc/stdarg.h` is already known K&R-compatible, and
+`CC/stdlib.h` is a **three-line shim** — `#include <libc.h>` — onto a header r70
+*does* have at top level. That is the thread to pull next, and it may close five
+of the six at once.
+
+`fconv.h` also carries `#define CONST const` and twelve prototypes, and its
+`#if defined(A) + defined(B) != 1` needs a cpp that understands `defined()` —
+so it will need work beyond the includes. B2.2d's first five (`fgets`, `fputs`,
+`memmove`, `qsort`, `rdwr`) are done and measured.
 
 **A byte-identical count going DOWN is not necessarily a regression.** 150 → 148
 → 147 across these rounds, while the number that *build* went 246 → 249 → 252.

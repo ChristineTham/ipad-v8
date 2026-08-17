@@ -643,8 +643,8 @@ qsort.o: $(OURS)/libc/gen/qsort.c $(TOOLS)
 rand.o: $(SRC)/libc/gen/rand.c $(TOOLS)
 	$(COMPILE) $(SRC)/libc/gen/rand.c
 
-rdwr.o: $(SRC)/libc/stdio/rdwr.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(TOOLS)
-	$(COMPILE) $(SRC)/libc/stdio/rdwr.c
+rdwr.o: $(OURS)/libc/stdio/rdwr.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(TOOLS)
+	$(COMPILE) -I$(SRC)/libc/stdio $(OURS)/libc/stdio/rdwr.c
 
 read.o: $(SRC)/libc/sys/read.s $(TOOLS)
 	$(COMPILE) $(SRC)/libc/sys/read.s

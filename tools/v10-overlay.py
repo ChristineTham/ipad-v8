@@ -428,6 +428,47 @@ _ANSI93 = [
       ("void qsort(char *a, size_t n, size_t es, int (*cmp)())\n",
        "void qsort(a, n, es, cmp)\t/* ipnx: K&R, see PATCHES.md */\n"
        "\tchar *a; unsigned int n; unsigned int es; int (*cmp)();\n", 1)]),
+    # rdwr.c: fread and fwrite, two definitions in 52 lines.  `void *' -> `char
+    # *' and `const void *' -> `char *'; the bodies already assign both to
+    # `unsigned char *s', so K&R's generic pointer is what they wanted anyway --
+    # `unsigned char *s = ptr;' from a `void *' is a diagnostic under ANSI rules
+    # and silent here.
+    ("libc/stdio/rdwr.c",
+     "81fd95fa1bae514b7132fe93afbd02bcaea874edf6c68893cf786a2a8df624ac",
+     [("fread(void *ptr, unsigned size, unsigned count, FILE *iop)\n",
+       "fread(ptr, size, count, iop)\t/* ipnx: K&R, see PATCHES.md */\n"
+       "\tchar *ptr; unsigned size; unsigned count; FILE *iop;\n", 1),
+      ("fwrite(const void *ptr, unsigned size, unsigned count, FILE *iop)\n",
+       "fwrite(ptr, size, count, iop)\t/* ipnx: K&R, see PATCHES.md */\n"
+       "\tchar *ptr; unsigned size; unsigned count; FILE *iop;\n", 1),
+      # AND THE CASTS, which the parameter change alone does not cover:
+      #	  "rdwr.c":9:illegal pointer combination, op =
+      # `unsigned char *s = ptr;' is legal from a `void *' under ANSI rules and
+      # illegal from a `char *' under K&R's, so converting the parameter list
+      # MOVED the error rather than removing it.  Both functions do it, both get
+      # an explicit cast, and the generated code is identical either way.
+      ("\tunsigned char *s = ptr;\n\tunsigned char *t;\n"
+       "\tunsigned long n = (unsigned long)count*size;\n"
+       "\tfor(;;) {\n\t\tl = iop->_cnt;\n\t\tif(l > n) l = n;\n"
+       "\t\tt = iop->_ptr;\n\t\tiop->_cnt -= l;\n\t\tiop->_ptr += l;\n"
+       "\t\tn -= l;\n\t\twhile(--l >= 0)\n\t\t\t*s++ = *t++;\n",
+       "\tunsigned char *s = (unsigned char *)ptr;\t/* ipnx: K&R cast */\n"
+       "\tunsigned char *t;\n"
+       "\tunsigned long n = (unsigned long)count*size;\n"
+       "\tfor(;;) {\n\t\tl = iop->_cnt;\n\t\tif(l > n) l = n;\n"
+       "\t\tt = iop->_ptr;\n\t\tiop->_cnt -= l;\n\t\tiop->_ptr += l;\n"
+       "\t\tn -= l;\n\t\twhile(--l >= 0)\n\t\t\t*s++ = *t++;\n", 1),
+      ("\tunsigned char *s = ptr;\n\tunsigned char *t;\n"
+       "\tunsigned long n = (unsigned long)count*size;\n"
+       "\tfor(;;) {\n\t\tl = iop->_cnt;\n\t\tif(l > n) l = n;\n"
+       "\t\tt = iop->_ptr;\n\t\tiop->_cnt -= l;\n\t\tiop->_ptr += l;\n"
+       "\t\tn -= l;\n\t\twhile(--l >= 0)\n\t\t\t*t++ = *s++;\n",
+       "\tunsigned char *s = (unsigned char *)ptr;\t/* ipnx: K&R cast */\n"
+       "\tunsigned char *t;\n"
+       "\tunsigned long n = (unsigned long)count*size;\n"
+       "\tfor(;;) {\n\t\tl = iop->_cnt;\n\t\tif(l > n) l = n;\n"
+       "\t\tt = iop->_ptr;\n\t\tiop->_cnt -= l;\n\t\tiop->_ptr += l;\n"
+       "\t\tn -= l;\n\t\twhile(--l >= 0)\n\t\t\t*t++ = *s++;\n", 1)]),
     ("libc/gen/memmove.c",
      "8de6bd16b4d961d41eb7330816e04068b4ba391cedd55fdf95b05ab81a2280db",
      [("#include <stddef.h>\n\nextern void *memcpy(void*, void*, size_t);\n\n"

@@ -493,7 +493,7 @@ LIBC_OURS = [
     # no stddef.h, no stdlib.h, size_t defined nowhere at top level.  The other
     # eight (_dtoa _fconv malloc qsort rdwr strtod vfprintf vfscanf) are real
     # work and stay named in the MISS list until they are done properly.
-    "fgets.o", "fputs.o", "memmove.o", "qsort.o",
+    "fgets.o", "fputs.o", "memmove.o", "qsort.o", "rdwr.o",
 ]
 
 # EMPTY, AND THAT IS THE POINT: V10's libc is built by ONE compiler.

@@ -715,6 +715,54 @@ the spelling moves back eight years.
  	char *pa, *pb, *pc, *pd, *pl, *pm, *pn, *pv;
 ```
 
+## rdwr.c: a 1993 ANSI member, converted to K&R (B2.2d)
+
+`libc/stdio/rdwr.c`, sha256 `81fd95fa1bae514b`
+
+One of the eleven members that only `lcc` could build, and `lcc` cannot be
+trusted to: the prebuilt driver hits the `bowell.c` defect
+(`0: unknown flag -undef`) and emits **empty objects while exiting 0**, so
+routing a member to it buys a silent hole in `libc.a` rather than a member.
+
+These carry `/* Copyright AT&T Bell Laboratories, 1993 */` and are addressed to
+a header set that is not installed: r70's `/usr/include` has no `stddef.h`, no
+`stdlib.h`, and defines `size_t` nowhere. That is the same two-generations split
+as the stdio family, one layer down -- not a prototype to strip but a different
+C to translate out of.
+
+`void *` becomes `char *` and `size_t` becomes `unsigned int`. Both pairs are
+the same width on a VAX, `char *` is K&R's generic pointer, and it is how V8's
+own libc declares these functions -- so the generated code is unchanged and only
+the spelling moves back eight years.
+```diff
+--- tarball/libc/stdio/rdwr.c
++++ ours/libc/stdio/rdwr.c
+@@ -3,8 +3,9 @@
+ 
+ unsigned
+-fread(void *ptr, unsigned size, unsigned count, FILE *iop)
++fread(ptr, size, count, iop)	/* ipnx: K&R, see PATCHES.md */
++	char *ptr; unsigned size; unsigned count; FILE *iop;
+ {
+ 	int l, c;
+-	unsigned char *s = ptr;
++	unsigned char *s = (unsigned char *)ptr;	/* ipnx: K&R cast */
+ 	unsigned char *t;
+ 	unsigned long n = (unsigned long)count*size;
+@@ -29,8 +30,9 @@
+ 
+ unsigned
+-fwrite(const void *ptr, unsigned size, unsigned count, FILE *iop)
++fwrite(ptr, size, count, iop)	/* ipnx: K&R, see PATCHES.md */
++	char *ptr; unsigned size; unsigned count; FILE *iop;
+ {
+ 	int l;
+-	unsigned char *s = ptr;
++	unsigned char *s = (unsigned char *)ptr;	/* ipnx: K&R cast */
+ 	unsigned char *t;
+ 	unsigned long n = (unsigned long)count*size;
+```
+
 ## memmove.c: a 1993 ANSI member, converted to K&R (B2.2d)
 
 `libc/gen/memmove.c`, sha256 `8de6bd16b4d961d4`
