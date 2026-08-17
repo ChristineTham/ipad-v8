@@ -213,7 +213,19 @@ note "sys/lnode.h installed" \
 foreach h {stdlib float stdarg} { v10_sh "test -f $INC/$h.h && echo have-$h" 120 }
 v10_sh "cp $INC/CC/stdlib.h $INC/stdlib.h" 300
 v10_sh "cp $INC/lcc/float.h $INC/float.h" 300
-v10_sh "cp $INC/lcc/stdarg.h $INC/stdarg.h" 300
+# CC's stdarg.h, NOT lcc's, AND THE REASON IS ONE CHARACTER.  lcc's macro is
+#   #define va_arg(list, mode) _littleendian_va_arg(list, mode, 3U)
+# and pcc2 lexes `3U' as the number 3 followed by the IDENTIFIER U -- the
+# unsigned suffix is ANSI.  It shows up nowhere near the header:
+#   "vfprintf.c":169:syntax error / expected operator or ) after expression
+#   "vfprintf.c":169:saw NAME
+#   pragma ref precision:3:saw NAME        <- ccom naming the macro expansion
+# CC's form has no suffix and no compound-expression address-of,
+#   #define va_arg(ap, mode) ((mode *)(ap += sizeof(mode)))[-1]
+# and is BYTE-FOR-BYTE V8's own /usr/include/varargs.h macro -- so it is proven
+# against pcc2 by V8's whole libc rather than hoped at.  The eight converted
+# printf-family members are unaffected: they name <lcc/stdarg.h> explicitly.
+v10_sh "cp $INC/CC/stdarg.h $INC/stdarg.h" 300
 foreach h {stdlib float stdarg} {
     note "$h.h installed at $INC" \
         [v10_try "test -s $INC/$h.h && echo H\$OK" "H-ok" 300]
@@ -431,6 +443,16 @@ if {!$complete} {
     v10_run "cd $OBJ/libc; sed -e '/^cc /d' -e '/^lcc /d' -e '/^as /d' b.log | sed -n '1,60p'; echo ERREND" "ERREND" 900
     # And make's own last word, which says whether it gave up.
     v10_run "cd $OBJ/libc; sed -n '/not remade/p;/Don.t know/p;/Must be a separator/p' b.log; echo E2END" "E2END" 900
+    # UNFILTERED, AND BY HAND.  Every filter in this harness has hidden the
+    # answer at least once -- `/error/p' matched cerror.s, `1,60p' cut the tail,
+    # and deleting lines that begin with a compiler name deletes any diagnostic
+    # printed on the same line as the command.  So the last resort is to run one
+    # compile with nothing between its output and the tty.
+    #
+    # vfprintf.o is the case that needs it: it produces NO diagnostic, NO
+    # `*** Error code', and no object, while make still says `objs not remade
+    # because of errors' -- three things that cannot all be true.
+    v10_run "cd /tmp; rm -f vfprintf.o; echo VFSTART; cc -B$T1/lib/ -t02p -O -DV10 -I$INC -I$S/libc/stdio -c $N/ours/libc/stdio/vfprintf.c; echo VFRC=\$?; ls -l vfprintf.o; echo VFEND" "VFEND" 1800
 }
 
 # ------------------------------------------------------------- the archive ---
