@@ -964,6 +964,19 @@ NEWFILES = [
         title="sys/lnode.h: reconstructed, because lnode(5) prints it verbatim (B2.2b)",
         text=_LNODE_H,
         why="""\
+**WHAT "SHARES" MEANS HERE, because the name misleads.** Not network shares and
+nothing to do with files: this is the **fair-share CPU scheduler**. `share(5)`
+calls it *"Share Scheduling on Unix"* and describes a *"per-user long term
+scheduler"* that weighs *"the history of a user's usage of the resources of the
+machine"*; `l_shares` is *"allocated shares"*, `l_usage` *"decaying accumulated
+costs"*. `/etc/shares` is indexed by uid and holds *"the uid, scheduling group
+and allocated shares for each user"*, and `setupshares(3)` reads a user's
+allocation at login, decays their usage to the current time, and installs it in
+the kernel through `limits(2)`. Users form a tree of scheduling groups, each
+taking a proportion of its parent's CPU. `limits(2)`'s own `.TH` line reads
+`SHARE-deprecated`, so Bell Labs were retiring it by 1995 -- which is of a piece
+with its headers being the ones the 1997 reconstruction lost.
+
 Six libc members include `<shares.h>`, which includes `<sys/lnode.h>`, and
 **neither file is anywhere in the 25,682**. Their objects are in the tape's
 `libc.a`, so both existed; what survived is a source tree with two headers
