@@ -471,6 +471,23 @@ if {$complete} {
     puts "*** below still has something to measure.  This is NOT a pass.\n"
     v10_sh "cd $OBJ/libc; for i in *.o ; do $T1/bin/ld -x -r \$i; mv a.out \$i; done" 7200
     v10_sh "cd $OBJ/libc; echo stripped > stripped" 120
+# crt0.o AND mcrt0.o, WHICH NOTHING HAD EVER BUILT.
+#
+# `install' depends on `libc.a crt0.o mcrt0.o' and this harness only ever asked
+# make for `objs' -- so install's prerequisites did not exist, install failed,
+# and /usr/s2/lib was empty.  Four assertions said so (`install NO', `staged
+# lib/libc.a NO', `staged lib/crt0.o NO', `staged lib/mcrt0.o NO') and none of
+# them named the cause, which is why it stood for every run of this stage.
+#
+# STAGE 3 IS WHAT MADE IT MATTER.  Its very first assertion is `stage 2 present:
+# lib/libc.a', and it came back NO on stage 3's first run -- so the fixpoint had
+# nothing to link against and all 26 of its checks fell over one missing copy.
+# A stage that cannot be consumed by the next one is not finished, however good
+# its own numbers are.
+v10_sh "cd $OBJ/libc; make -f $K/libc.mk \$A \$B \$C $CCM crt0.o mcrt0.o > c.log 2>&1; echo done" 1800
+note "crt0.o and mcrt0.o built" \
+    [v10_try "cd $OBJ/libc; test -s crt0.o && test -s mcrt0.o && echo CR\$OK" "CR-ok" 300]
+
     note "libc.a built BY HAND from what compiled" \
         [v10_try "cd $OBJ/libc; rm -f libc.a; if ar cr libc.a *.o && ranlib libc.a; then echo PA\$OK; fi" \
                  "PA-ok" 3600]
