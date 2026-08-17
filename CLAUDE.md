@@ -138,6 +138,35 @@ source "$ROOT/tools/v8clone.sh"
 IMG=$(v8_clone "${1:-rp07new}" mytag) || exit 1
 ```
 
+**AND TWO SIMULATORS MUST NEVER RUN AT ONCE — that is now a check, not a
+habit** (`tools/norun.sh`, `tools/norun.exp`). On 2026-08-17 a stage-2 run and a
+source-disk rebuild overlapped for the rebuild's last minute:
+`tools/v10-srcdisk.sh` ends with `dd if=/dev/zero of=…/ipnx-v10-src.img` and
+`v10-stage2.sh` had **that exact path attached, uncloned, as `rq1`**. The
+srcdisk finished at 12:11:21 and the stage-2 log closed at 12:12.
+
+**Both runs exited 0**, the srcdisk reported 36/36, and stage 2 reported a full
+set of numbers — a member list, a DIFF list, four compiler trials — every one of
+them measured against an image that changed mid-run. The only evidence was two
+mtimes fifty-one seconds apart. Each harness's own guard was blind to the other
+because they run **different binaries**: stage 2 checked `pgrep -f BIN/vax750`
+and the srcdisk builder boots a `vax780`. So the guard asks about every
+simulator name, and asks a second question the first cannot answer — *is
+anything holding this file?* (the 2026 overlap's writer was a `dd`). It is
+called from `v8_boot`/`v10_boot`, at the instant of `spawn`, which is the one
+choke point all twenty-nine harnesses already share.
+
+**A run finishing in seconds is not evidence that it did nothing.** The
+"ten-second build" of 261 objects was taken for a skipped build, and that was
+wrong: a whole stage-2 run — boot, 260 compiles, archive, ranlib, 261 `cmp`s,
+four whole-library compiler trials, install, link, halt — takes about **seventy
+seconds of host time**. A real 11/750 was half a MIPS and open-simh on an
+M-series Mac is two orders of magnitude quicker, so a tenth of a second per
+small C file is right, and the *guest's* clock under-reports besides. The
+evidence against the wrong reading was in the same output: 150 members came out
+byte-identical to Bell Labs' 1989 archive, which no skipped build can do.
+Iterate freely — these runs are cheap.
+
 The **Phase A0 desktop spike** commands are in [docs/spike-a0.md](docs/spike-a0.md)
 (build SIMH `vax780`, produce `v8.disk` via timnewsham/myv8, connect a 5620/Blit terminal
 emulator, run `mux`), all inside the gitignored `work/` directory.
@@ -315,24 +344,61 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   stdarg*, *pANS with stdarg* and *SGI*, and not *V10 with stdarg on a VAX*. That is
   the unfinished V9→V10 port in miniature, and the fix is a named one-line patch in
   `v10/src/` (the `mv.c`/`fsck.c` model), not a `-Dsgi` on a VAX.
-- **NEITHER COMPILER CAN BUILD libc ALONE — measured over all 261 members.**
-  `cc` fails 15, `lcc` fails 59. So "standardise V10 on one compiler" is not available
-  even as a fallback, which is itself the strongest evidence for the V9→V10 migration
-  reading: the tree needs both because it was half-converted.
+- **ONE COMPILER BUILDS 249 OF 261 — more than the tape's own mixture. This
+  RETIRES "neither compiler can build libc alone".** That claim was true of the
+  tape as it stands and was read as a property of the tree, which it is not: 14
+  of the 15 failures were repairable, and the repairs are a named overlay plus
+  two makefile lines. Measured, all four configurations run:
 
-	cc alone      246 of 261 build      (fails the 9 printf family + 6 shares)
-	lcc alone     202 of 261 build
-	cc + lcc      246 of 261 build      <- current stage 2
+	cc + lcc, the tape's mixture     246 of 261
+	lcc alone                        202 of 261
+	cc + lcc, with the repairs       260 of 261
+	cc ALONE, one compiler           249 of 261    <- current stage 2
 
-  Six of the fifteen are unbuildable by anything (`<shares.h>`), so the ceiling from
-  source is **255**, and the nine printf members need the `iolib.h` patch above.
-- **Six members cannot be built by anything: `<shares.h>` is not on the tape.**
-  `getshares.c`, `getshput.c`, `openshares.c`, `putshares.c`, `setupshares.c` and
-  `setlimits.c` include it and `find` says it does not exist anywhere in the 25,682
-  files. Their objects are in `libc.a` (June 1989), so it existed once. This is not an
-  ANSI problem and was briefly misfiled as one — the compiler error is
-  `syntax error; found 'share' expecting ';'`, i.e. an undeclared type, and the missing
-  header is the cause.
+  `LIBC_LCC` is now **empty**, so there is no per-member compiler choice left to
+  get wrong. Twelve remain: eleven genuinely ANSI (`_dtoa` `_fconv` `fgets`
+  `fputs` `malloc` `memmove` `qsort` `rdwr` `strtod` `vfprintf` `vfscanf`) and
+  `setupshares`. **Do not reinstate lcc to close the eleven** — it still hits
+  the `bowell.c` defect (`0: unknown flag -undef`), so those members become
+  **empty objects that exit 0**. Eleven loud failures beat eleven silent holes.
+- **`-DV10` IS MISSING FROM THE TAPE'S OWN `cc` RULE, AND EVERYTHING DOWNSTREAM
+  LOOKS LIKE A DIFFERENT BUG.** `libc/mkfile` line 123 is the default C recipe —
+  `cc -O -c $prereq`, no `-D`, no `-I` — while line 69 gives lcc
+  `LCCARGS = … -DV10`. So `-DV10` *is* this tree's answer and simply never
+  reached the cc rule. Without it every `#ifdef V10` block is skipped, and the
+  two symptoms point away from the cause: `stdio/iolib.h` takes its pANS `#else`
+  branch and dies on `Can't find include file stdlib.h` (r70 has no top-level
+  `stdlib.h` or `unistd.h`, so that branch cannot be the intended one), and
+  `sprintf.c`'s hand-built `FILE _strbuf` is replaced by a call to `sopenw()`,
+  which does not exist. It belongs in **our** makefile, not in a source patch:
+  V10 never had these makefiles.
+- **`<shares.h>` AND `<sys/lnode.h>` ARE RECONSTRUCTIBLE, AND FIVE OF THE SIX
+  MEMBERS BUILD.** "Six members cannot be built by anything" treated the
+  *source tree* as the only evidence. **The tape also carries its own manual**,
+  and `man/manx/lnode.5` reproduces the header field by field under the words
+  *"The layout as given in the include file is:"* — `struct lnode`, the five
+  `l_flags` bits, `typedef short uid_t`, `struct kern_lnode` — while `limits(2)`
+  tabulates the twelve `L_*` numbers and `shares(5)` gives both installed paths.
+  Then **checked against machine code**, because a manual can drift and an
+  object cannot; disassembling Bell Labs' own June 1989 members:
+
+	putshares.o   subl2 $20,sp   cmpw (r11),$10000   movc3 $16,(r11),(r0)
+	getshares.o   clrw 2/4/6(r11)   movf …,8(r11)   movf …,12(r11)
+	setlimits.o   subl2 $16,sp   tstw 6(r11)   pushl $3      (= L_SETLIM)
+	openshares.o  its only string constant is "/etc/shares"
+
+  Every field lands where `lnode(5)` says, both sizes agree at five independent
+  sites, `MAXUID = 10000` appears twice. **`setupshares.o` is the only real
+  casualty** — it also needs `struct sh_consts` from `<sys/share.h>`, which is
+  printed nowhere and referenced nowhere in *either* kernel tree, and
+  `L_GETCOSTS` has the **kernel** write through that pointer, so a guessed size
+  overwrites the caller's stack. The ceiling from source is **260, not 255**.
+  Two traps met on the way: the header needs `<sys/types.h>` for `u_short`
+  (`"sys/lnode.h":22:syntax error / saw NAME` — line 22 is `u_short l_flags`,
+  *not* the `uid_t` line above it), and it goes in `shares.h` because that is
+  the include order the tape shows (`lsys/os/limits.C` reaches `lnode.h` only
+  after `sys/param.h`, and `setlimits.c` includes `<shares.h>` and nothing
+  else).
 - **V10 MUST STAY AUTHENTIC. This outranks convenience, tidiness and our own
   taste** (Christine, 2026-08-17). V10 is a restoration: the artefact is worth
   something because it is what Bell Labs left, not because it is what we would
@@ -1433,19 +1499,44 @@ ANSI-era stdio family. Every failure is a construct pcc2 cannot parse —
 `int fprintf(FILE *f, const char *fmt, ...)`, `extern void *memcpy(void*,
 void*, size_t)`, `static void swapfunc(char *a, char *b, size_t n, int)`,
 `#include <stdarg.h>`. **So V10's libc has two generations in one tree** and
-the tape's archive is the ANSI one. That leaves stage 2 with no `printf`,
-`sprintf`, `malloc` or `qsort`, so its archive is complete enough to measure
-and not yet a usable library.
+the tape's archive is the ANSI one.
 
-Next: **finish stage 2** by running the ten as the tape did. lcc is available
-as V10's own 1995 binaries and the pieces check out — `cmd/lcc/etc/lcc` (the
-driver, compiled from `bowell.c`), `cmd/lcc/gen2/vax-v9/rcc` (the VAX back
-end: `vax/sel.c`, `vax/pseudos.c`), and `cmd/lcc/ph/cpp` (takes `-I`/`-D`) —
-which the driver expects at `/usr/bin/lcc`, `/usr/lib/rcc` and
-`/usr/lib/gcc-cpp`; the ANSI headers are already installed at
-`/usr/include/lcc` by the r70 cpio. There is **no `gcc-cpp` in the tree**
-(only `cmd/gcc/gcc.c`), so lcc's own cpp has to stand in for it, and none of
-this is on the source disk yet. Then **stage 3** (the fixpoint — and the place
+**ONE COMPILER NOW BUILDS 249 OF THE 261, WHICH IS MORE THAN THE TAPE'S OWN
+MIXTURE MANAGED** (2026-08-17, 27/39; `LIBC_LCC` is empty). All three
+configurations were run, not inferred:
+
+	                                built   byte-identical to the tape
+	cc + lcc, the tape's mixture      246        150
+	cc + lcc, with the 14 repairs     260        150
+	cc ALONE, one compiler            249        148
+
+Fifteen members could be built by nothing, and they had **three** causes, not
+the two recorded here for a week:
+
+- **Eight were a language problem** — the `printf`/`scanf` family, now converted
+  ANSI→K&R in the overlay. Which fix, and where, is settled by the tape:
+  `vfprintf.c` and `vfscanf.c` are the only two of that family that carry
+  `#include <stdarg.h>` themselves *and* the only two that build, so the missing
+  line is a per-file omission rather than a missing branch in `iolib.h`.
+- **Six were a missing header, and it is RECOVERABLE** — see the `<shares.h>`
+  entry in Decisions, which is now largely withdrawn.
+- **One, `jterm.o`, was never ANSI at all** and spent two runs listed as an lcc
+  member on the strength of its failure. It wants
+  `#include "/usr/jerq/include/jioctl.h"`, an absolute path into the 5620 tree,
+  which is in the **v10blit** tarball rather than v10src — so lcc could no more
+  find it than `cc` could. *A failure under compiler X is not evidence that
+  compiler Y would succeed.*
+
+Twelve remain, and they are named rather than counted: `_dtoa` `_fconv` `fgets`
+`fputs` `malloc` `memmove` `qsort` `rdwr` `strtod` `vfprintf` `vfscanf` —
+genuinely ANSI, and the hard ones, since `vfprintf.c` is printf's whole engine —
+plus `setupshares`, which stays unbuilt on evidence grounds.
+
+Next: **B2.2d, the eleven**, as overlay conversions beside the printf family.
+Not by reinstating lcc: it still hits the documented `bowell.c` defect
+(`0: unknown flag -undef`), so a member routed to it can be an **empty object
+that exits 0** — eleven silent holes in `libc.a` against eleven loud failures,
+and the loud ones are worth more. Then **stage 3** (the fixpoint — and the place
 where V10's missing `-t a/l/c` letters have to be faced; V8's
 `docs/build-from-source.md` already settles the theory: `stage 1 == stage 3` is
 the *strong* test and `stage 3 == stage 3b` the *required* one, both on
