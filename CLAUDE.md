@@ -283,9 +283,49 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   - **What the archive IS still good for**: a per-member witness. `atof.o` (dated
     1991-12-19) matches `lcc` and nothing else, which is how we know the tree really
     was mid-migration between compilers.
+  - **The 1989 members are most likely NINTH EDITION** (Christine), and the tooling
+    corroborates it rather than only the dates. lcc's VAX back end on that machine is
+    `cmd/lcc/gen2/`**`vax-v9`**`/rcc`, and the prebuilt driver's own cpp line —
+    `bowell.c`, compiled into `etc/lcc` — passes **`-DV9`**, while libc's `mkfile`
+    passes `-DV10`. So the archive is a V9 libc being migrated to V10 one member at a
+    time, and the compiler that built the June 1989 bulk was V9's. **We have no V9 VAX
+    source at all** (the surviving V9 is the Sun-3 port — see Decisions), so those
+    objects are unreproducible in principle and not merely in practice. `-DV9` in a
+    V10 tree is the kind of detail that looks like noise until it is the answer.
   - So the goal becomes the best archive we can build **from a single compiler**, and
     the tape's own mixture is evidence of an unfinished port rather than a design to
     reproduce. See `tools/v10-stage2.sh`, which reports the breakdown every run.
+- **The printf/scanf family cannot compile under EITHER compiler, and `iolib.h` says
+  why.** `stdio/iolib.h` is a three-way `#ifdef` and none of its branches fits a V10
+  VAX:
+
+	#ifdef V10
+	    #ifdef sgi
+	    #include <stdarg.h>        <- only when `sgi' is ALSO defined
+	    #else
+	    #define _IOREAD 01 ...     <- no stdarg, so va_list is undeclared
+	#else
+	    #define _POSIX_SOURCE      <- pANS branch; wants <stdlib.h>, <unistd.h>
+	    ...
+
+  libc's `mkfile` passes `-DV10`, which selects the branch that declares `va_list`
+  only on an SGI — so `printf.c`'s `va_list args;` fails as `syntax error; found
+  'args' expecting ';'` under lcc and as a bare syntax error under pcc2. It is not a
+  compiler problem and not an include-path problem: the header supports *V10 without
+  stdarg*, *pANS with stdarg* and *SGI*, and not *V10 with stdarg on a VAX*. That is
+  the unfinished V9→V10 port in miniature, and the fix is a named one-line patch in
+  `v10/src/` (the `mv.c`/`fsck.c` model), not a `-Dsgi` on a VAX.
+- **NEITHER COMPILER CAN BUILD libc ALONE — measured over all 261 members.**
+  `cc` fails 15, `lcc` fails 59. So "standardise V10 on one compiler" is not available
+  even as a fallback, which is itself the strongest evidence for the V9→V10 migration
+  reading: the tree needs both because it was half-converted.
+
+	cc alone      246 of 261 build      (fails the 9 printf family + 6 shares)
+	lcc alone     202 of 261 build
+	cc + lcc      246 of 261 build      <- current stage 2
+
+  Six of the fifteen are unbuildable by anything (`<shares.h>`), so the ceiling from
+  source is **255**, and the nine printf members need the `iolib.h` patch above.
 - **Six members cannot be built by anything: `<shares.h>` is not on the tape.**
   `getshares.c`, `getshput.c`, `openshares.c`, `putshares.c`, `setupshares.c` and
   `setlimits.c` include it and `find` says it does not exist anywhere in the 25,682

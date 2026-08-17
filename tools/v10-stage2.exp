@@ -384,6 +384,27 @@ note "the lcc rebuild produced objects" \
 v10_sh "rm -rf /tmp/l1; mkdir /tmp/l1" 120
 v10_run "cd /tmp/l1; lcc \$L -c $S/libc/gen/abort.c; echo ONEEND" "ONEEND" 600
 puts "--- WHICH-COMPILER-END ---"
+
+# ------------------------------------------- CAN ONE COMPILER BUILD ALL 261? ---
+#
+# The tape's mixture is an unfinished port, not a design to reproduce (see the
+# 4.1-year spread of ar dates), so the archive worth building is the best one
+# from a SINGLE compiler.  cc is already ruled out -- it cannot parse the ANSI
+# printf family at all -- which leaves lcc, and C89 accepts old-style function
+# definitions, so it ought to manage the K&R members too.
+#
+# Ought to is not measured.  Try all 261.
+#
+# AND CHECK THE SIZES, because `test -f' is not evidence: a cpp that writes
+# nothing still yields a valid empty object and a zero exit status, which is
+# how 26 empty members passed for real earlier in this same harness.  The sizes
+# go to the host, which can do arithmetic.
+v10_sh "rm -rf $OBJ/alllcc; mkdir $OBJ/alllcc" 300
+puts "\n--- ALL-LCC-START ---"
+v10_run "cd $OBJ/alllcc; for o in `cat $K/libc.ord`; do s=`sed -n \"s/^\$o //p\" $K/libc.src`; lcc \$L -c $S/libc/\$s > /dev/null 2>&1; test -f \$o || echo LCCFAIL \$o; done; echo ALLLCCEND" \
+        "ALLLCCEND" 7200
+v10_run "cd $OBJ/alllcc; ls -l; echo LSEND" "LSEND" 1800
+puts "--- ALL-LCC-END ---"
 puts "--- LIBC-CMP-END ---"
 
 # ---------------------------------------------------------------- install ---
