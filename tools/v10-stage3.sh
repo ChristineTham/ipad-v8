@@ -88,7 +88,7 @@ printf '   byte-identical to stage 1           %s\n' "$(s3count SAME)"
 printf '   differ                              %s\n' "$(s3count DIFF)"
 printf '   no stage-1 binary to compare        %s\n' "$(s3count NOS1)"
 echo "   Differences are EXPECTED: stage 1 linked the tape's libc.a and stage 3"
-echo "   links ours, and only 148 of the tape's 261 members are byte-identical."
+echo "   links ours, and only 143 of the tape's 261 members are byte-identical."
 
 echo
 echo "   the stage-3 machine is $IMG"

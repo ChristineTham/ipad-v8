@@ -1646,6 +1646,27 @@ tape's `fgets.o` was compiled by `lcc` from ANSI source and ours is `cc` from
 K&R source, so it *must* differ. Read the two numbers together or neither means
 anything.
 
+**AND EVERY ONE OF THOSE FIGURES WAS INFLATED, because the channel they were
+measured through was dropping lines. The number is 143.** The DIFF list came
+back over a tty whose marker echo interleaved into it, so a member whose
+"differs" line was damaged **counted as byte-identical** — the error ran in the
+flattering direction, which is why it never looked like an error. Fixing
+`v10_run` (it was matching the *echo* of its own end token, then typing a marker
+into a still-running command) and re-running the identical build:
+
+	                        before   after
+	byte-identical            148      143
+	differ                    113      118
+
+Deterministic build, same source disk, same stage-1 image — so the *set* cannot
+have changed and the second reading is simply the complete one. Six real names
+had been destroyed outright (`_assert.o`, `besjn.o`, `cttyname.o`, `ftw.o`,
+`timezone.o`, `vprintf.o`) and three more were being counted under corrupted
+spellings (`getpoass.o` for `getpass.o`, `p8error.o` for `perror.o`, `scanf6.o`
+for `scanf.o`). Treat 150/148/147 as historical and overstated by about this
+much; **143 is the first one measured through an uncorrupted transcript.**
+*A fidelity metric read out of a tty is only as good as the tty.*
+
 **STAGE 2 IS AT ITS CEILING AND STAGE 3 IS A FIXPOINT** (2026-08-17,
 `tools/v10-stage3.sh`, **33/33**). Stage 2 builds **260 of 261**, 148
 byte-identical; the 261st is `setupshares`, which fails on
@@ -1665,7 +1686,7 @@ Then stage 3, which is the test the whole bootstrap exists to pass:
 **Every one of the seven is byte-identical to the copy its own output built.**
 The toolchain is a fixpoint on V10, from source, against a libc we built. The
 strong test measures 7 differ / 0 same, exactly as predicted: stage 1 linked the
-*tape's* `libc.a` and stage 3 links ours, and only 148 of 261 members agree.
+*tape's* `libc.a` and stage 3 links ours, and only 143 of 261 members agree.
 
 Three things worth carrying forward from how it was reached, because all three
 were faults in *measurement* and none in the code being measured:

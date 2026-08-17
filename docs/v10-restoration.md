@@ -379,8 +379,10 @@ have been made about the tape's mixture.
 - [x] **B2.2e — re-measure, and keep the witness.** Done: **260 of 261 build with `cc`
       alone** — more than the tape's own mixed toolchain managed (246) — with 148
       byte-identical to the tape, reported as information. The prediction that identity
-      would *fall* was right and is recorded: 150 → 148 → 147 while the number that
-      build went 246 → 249 → 252 → 260. The assertion is **260**, not 261: an assertion
+      would *fall* was right and is recorded: 150 → 148 → 147 → **143** while the
+      number that build went 246 → 249 → 252 → 260. The last step is not a further
+      refactor: it is the first reading taken through an uncorrupted transcript, and
+      the earlier three were inflated by a tty that dropped "differs" lines. The assertion is **260**, not 261: an assertion
       that can never pass is not an assertion, and `all 261 members compiled: NO` being
       permanently NO is exactly what let a *second* missing member (`atof.o`) hide behind
       it for a week.
