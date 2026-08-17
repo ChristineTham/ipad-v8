@@ -619,6 +619,12 @@ note "install" \
 # every run of this stage and named nothing; crt0.o turned out to be only half
 # of it.  i.log is where make's own words are, and nothing was reading it.
 v10_run "cd $OBJ/libc; sed -e '/^cc /d' -e '/^as /d' i.log | sed -n '1,40p'; echo IEND" "IEND" 900
+# i.log CAME BACK EMPTY, so run install's own four commands with nothing between
+# them and the tty.  Exactly the technique that cracked vfprintf: every filter in
+# this harness has hidden an answer at least once, and an empty log is not
+# evidence that nothing went wrong -- it is evidence that nothing was captured.
+v10_run "echo IPSTART; ls -ld $T $T/lib; mkdir $T/lib; echo MKRC=\$?; cd $OBJ/libc; ls -l libc.a crt0.o mcrt0.o; cp libc.a $T/lib/libc.a; echo CPRC=\$?; echo IPEND" "IPEND" 900
+v10_run "echo IP2START; cd $OBJ/libc; ranlib $T/lib/libc.a; echo RLRC=\$?; cp crt0.o $T/lib/crt0.o; cp mcrt0.o $T/lib/mcrt0.o; ls -l $T/lib; echo IP2END" "IP2END" 900
 foreach p {lib/libc.a lib/crt0.o lib/mcrt0.o} {
     note "staged $p" [v10_try "test -s $T/$p && echo ST\$OK" "ST-ok" 120]
 }
