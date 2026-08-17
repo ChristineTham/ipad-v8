@@ -199,7 +199,16 @@ foreach c $TC {
         "cd $OBJ/s3-$name; if make -f $K/$name.mk SRC=$S OURS=$N/ours INCDIR=$INC TOOLDIR=$T3 DESTDIR=$T3 $P3 $CCM3 install > b.log 2>&1; then echo B3\$OK; fi" \
         "B3-ok" 3600]
     note "stage 3 built $name" $ok
-    if {!$ok} { v10_run "cd $OBJ/s3-$name; sed -e '/^cc /d' -e '/^as /d' b.log | sed -n '1,60p'; echo E3END" "E3END" 900 }
+    if {!$ok} {
+        v10_run "cd $OBJ/s3-$name; sed -e '/^cc /d' -e '/^as /d' b.log | sed -n '1,60p'; echo E3END" "E3END" 900
+        # UNFILTERED, because the filtered dump came back EMPTY for ccom and as
+        # -- the same signature vfprintf had, where the diagnostic shares a line
+        # with its command and deleting command lines deletes the evidence.  This
+        # re-runs make with its output going straight to the tty.  A DIAGNOSTIC
+        # ONLY: it cannot change what builds, so it is safe to add without a
+        # second thought about correctness.
+        v10_run "echo RAW3START; cd $OBJ/s3-$name; make -f $K/$name.mk SRC=$S OURS=$N/ours INCDIR=$INC TOOLDIR=$T3 DESTDIR=$T3 $P3 $CCM3 install; echo RAW3RC=\$?; echo RAW3END" "RAW3END" 1800
+    }
 }
 
 # ----------------------------------------------------- 2. build stage 3b ---
