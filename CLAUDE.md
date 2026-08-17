@@ -700,6 +700,38 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   the marker as a command-line macro (`make -f m.mk V=MACRO$OK`) so the **shell**
   expands it before make sees a dollar; the marker discipline still holds, because
   the tty echoes the literal `MACRO$OK`.
+- **A TALLY CANNOT LEAVE A REDIRECTED LOOP IN A VARIABLE, and the failure is
+  flattering.** 1970s `sh` **forks** for a compound command carrying an input
+  redirection, so in
+
+	nf=""
+	while read obj src
+	do	... nf="$nf." ; echo "MISS $obj" >> mem.log
+	done < objs.lst
+	if test -z "$nf" ; then echo GOOD ; else echo BAD ; fi
+
+  the `echo >>` survives (it is a *file*) and the `nf=` does not (a variable in a
+  dead child), so the verdict always reads GOOD. K10.2's first run reported
+  **26 of 26 libraries with every member compiled while its own `TALLYM` said 42
+  members had not built** — both numbers written by the same `else` branch,
+  contradicting each other in one report. **Keep the tally in a file**
+  (`echo . >> nf.cnt`, then `test -f nf.cnt`), which is immune either way and so
+  needs no theory about which shell forks when.
+  - **`ar cr` accepts object names that do not exist**, produces an archive from
+    whatever it *can* open, and `ranlib` blesses the result — which is why all 26
+    archives appeared and installed. So **"an archive was built" is never the
+    question; "does it hold every member" is.** Check with
+    `ar t | sed -e '/__\.SYMDEF/d' | sed -n '$='` against the manifest count.
+    An archive of 30 objects out of 33 links until the day something needs the
+    other three.
+  - **A test asserting a non-empty log is inverted for a compiler**, because a
+    compile that *succeeds* writes nothing: `test -s can.log` reported the canary
+    as failed while `LCANARY-cc-ok` sat in the same transcript. Assert a marker
+    the success path writes, never the absence or presence of diagnostics.
+  - And the meta-lesson, since the guest/host cross-check was in place and blind
+    to all of it: **two readings agreeing is not two readings being right.** Both
+    instruments were counting the same tokens. What was missing was an *internal*
+    consistency check — if any member failed, at least one library must have.
 - **V10 is not source-only, and its own toolchain runs on V8.** The tarball carries
   **483 linked VAX executables** — `cmd/ccom/vax/comp` (the C compiler), `cmd/as/as`,
   a complete 262-member `libc.a` — plus 1,525 objects. `tools/v10-probe.sh` proved 9/9
