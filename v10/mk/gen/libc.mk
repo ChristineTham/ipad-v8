@@ -529,8 +529,8 @@ lstat.o: $(SRC)/libc/sys/lstat.s $(TOOLS)
 ltol3.o: $(SRC)/libc/gen/ltol3.c $(TOOLS)
 	$(COMPILE) $(SRC)/libc/gen/ltol3.c
 
-malloc.o: $(SRC)/libc/gen/malloc.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(TOOLS)
-	$(COMPILE) $(SRC)/libc/gen/malloc.c
+malloc.o: $(OURS)/libc/gen/malloc.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(TOOLS)
+	$(COMPILE) -I$(SRC)/libc/gen $(OURS)/libc/gen/malloc.c
 
 max.o: $(SRC)/libc/gen/max.c $(TOOLS)
 	$(COMPILE) $(SRC)/libc/gen/max.c

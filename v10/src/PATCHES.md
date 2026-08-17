@@ -763,6 +763,176 @@ the spelling moves back eight years.
  	unsigned long n = (unsigned long)count*size;
 ```
 
+## malloc.c: a 1993 ANSI member, converted to K&R (B2.2d)
+
+`libc/gen/malloc.c`, sha256 `e193faf74e6a06fc`
+
+One of the eleven members that only `lcc` could build, and `lcc` cannot be
+trusted to: the prebuilt driver hits the `bowell.c` defect
+(`0: unknown flag -undef`) and emits **empty objects while exiting 0**, so
+routing a member to it buys a silent hole in `libc.a` rather than a member.
+
+These carry `/* Copyright AT&T Bell Laboratories, 1993 */` and are addressed to
+a header set that is not installed: r70's `/usr/include` has no `stddef.h`, no
+`stdlib.h`, and defines `size_t` nowhere. That is the same two-generations split
+as the stdio family, one layer down -- not a prototype to strip but a different
+C to translate out of.
+
+`void *` becomes `char *` and `size_t` becomes `unsigned int`. Both pairs are
+the same width on a VAX, `char *` is K&R's generic pointer, and it is how V8's
+own libc declares these functions -- so the generated code is unchanged and only
+the spelling moves back eight years.
+```diff
+--- tarball/libc/gen/malloc.c
++++ ours/libc/gen/malloc.c
+@@ -14,5 +14,6 @@
+ #define ASSERT(p) if(!(p))botch(__LINE__);else
+ static void
+-botch(int n)
++botch(n)
++	int n;
+ {
+ 	fprintf(stderr,"bad arena, malloc.c line %d\n" ,n);
+@@ -68,5 +69,5 @@
+ static	union store *alloct = addr(alloca);	/*top cell*/
+ static	union store *allocx;	/*for benefit of realloc*/
+-extern	void *sbrk(int);
++extern	char *sbrk();
+ 
+ /* A cache list of frequently-used sizes is maintained. From each
+@@ -79,10 +80,10 @@
+ 
+ static union store *cache[CACHESIZ];
+-static union store *stdmalloc(size_t);
+-static void stdfree(union store *);
+-static draincache(void);
+-int cached(union store *p);
+-static int allock(union store *q);
+-extern void ialloc(void *, size_t);
++static union store *stdmalloc();
++static void stdfree();
++static draincache();
++int cached();
++static int allock();
++extern void ialloc();
+ 
+ 
+@@ -96,9 +97,10 @@
+ #endif
+ 
+-void *
+-malloc(size_t nbytes)
++char *				/* ipnx: K&R, see PATCHES.md */
++malloc(nbytes)
++	unsigned int nbytes;
+ {
+ 	register union store *p;
+-	register size_t nw;
++	register unsigned int nw;
+ 	register union store **cp;
+ 
+@@ -121,8 +123,9 @@
+ 
+ static union store *
+-stdmalloc(register size_t nw)
++stdmalloc(nw)
++	register unsigned int nw;
+ {
+ 	register union store *p, *q;
+-	register size_t temp;
++	register unsigned int temp;
+ 	ASSERT(allock(allocp));
+ 	for(; ; ) {	/* done at most thrice */
+@@ -182,8 +185,9 @@
+ 
+ void
+-free(void *ap)
+-{
+-	register union store *p = ap, *q;
+-	register size_t nw;
++free(ap)
++	char *ap;
++{
++	register union store *p = (union store *)ap, *q;	/* ipnx: K&R cast */
++	register unsigned int nw;
+ 	register union store **cp;
+ 
+@@ -213,5 +217,6 @@
+ */
+ static void
+-stdfree(register union store *p)
++stdfree(p)
++	register union store *p;
+ {
+ 	allocp = --p;
+@@ -224,5 +229,5 @@
+ 
+ static
+-draincache(void)
++draincache()
+ {
+ 	register union store **cp = cache+CACHESIZ;
+@@ -253,10 +258,12 @@
+ 
+ void
+-ialloc(void *qq, size_t nbytes)
++ialloc(qq, nbytes)
++	char *qq;
++	unsigned int nbytes;
+ {
+ 	register union store *p, *q, *s;
+ 	union store *r;
+ 
+-	q = qq;
++	q = (union store *)qq;		/* ipnx: K&R cast */
+ 	r = q + (nbytes/WORD) - 1;
+ 	q->ptr = r;
+@@ -299,12 +306,14 @@
+ */
+ 
+-void *
+-realloc(void *pp, size_t nbytes)
+-{
+-	register union store *p = pp;
++char *				/* ipnx: K&R, see PATCHES.md */
++realloc(pp, nbytes)
++	char *pp;
++	unsigned int nbytes;
++{
++	register union store *p = (union store *)pp;	/* ipnx: K&R cast */
+ 	register union store *s, *t;
+ 	register union store *q;
+-	register size_t nw;
+-	size_t onw;
++	register unsigned int nw;
++	unsigned int onw;
+ 
+ 	Mstats(nrealloc++);
+@@ -335,5 +344,6 @@
+ 
+ static int
+-allock(union store *q)
++allock(q)
++	union store *q;
+ {
+ #ifdef longdebug
+@@ -371,5 +381,5 @@
+ 
+ void
+-mstats(void)
++mstats()
+ {
+ #ifdef MSTATS
+@@ -392,5 +402,6 @@
+ #ifdef debug
+ int
+-cached(union store *p)
++cached(p)
++	union store *p;
+ {
+ 	union store *q = cache[(clearbusy(p->ptr)-p)%CACHESIZ];
+```
+
 ## memmove.c: a 1993 ANSI member, converted to K&R (B2.2d)
 
 `libc/gen/memmove.c`, sha256 `8de6bd16b4d961d4`

@@ -469,6 +469,67 @@ _ANSI93 = [
        "\tfor(;;) {\n\t\tl = iop->_cnt;\n\t\tif(l > n) l = n;\n"
        "\t\tt = iop->_ptr;\n\t\tiop->_cnt -= l;\n\t\tiop->_ptr += l;\n"
        "\t\tn -= l;\n\t\twhile(--l >= 0)\n\t\t\t*t++ = *s++;\n", 1)]),
+    # malloc.c: 401 lines, and once <stdlib.h> is installed it is nothing but
+    # prototypes -- eight declarations and ten definitions, no macro trickery in
+    # any of them.  `void *' -> `char *' and `size_t' -> `unsigned int'
+    # throughout, and every prototype loses its parameter list entirely, which is
+    # what K&R has instead of a declaration that carries types.
+    ("libc/gen/malloc.c",
+     "e193faf74e6a06fc34b5d17681127708196953e1ea62ed6c0e2cb08922611118",
+     [("botch(int n)\n", "botch(n)\n\tint n;\n", 1),
+      ("extern	void *sbrk(int);\n", "extern	char *sbrk();\n", 1),
+      ("static union store *stdmalloc(size_t);\n",
+       "static union store *stdmalloc();\n", 1),
+      ("static void stdfree(union store *);\n", "static void stdfree();\n", 1),
+      ("static draincache(void);\n", "static draincache();\n", 1),
+      ("int cached(union store *p);\n", "int cached();\n", 1),
+      ("static int allock(union store *q);\n", "static int allock();\n", 1),
+      ("extern void ialloc(void *, size_t);\n", "extern void ialloc();\n", 1),
+      ("void *\nmalloc(size_t nbytes)\n",
+       "char *\t\t\t\t/* ipnx: K&R, see PATCHES.md */\n"
+       "malloc(nbytes)\n\tunsigned int nbytes;\n", 1),
+      ("stdmalloc(register size_t nw)\n",
+       "stdmalloc(nw)\n\tregister unsigned int nw;\n", 1),
+      ("void\nfree(void *ap)\n", "void\nfree(ap)\n\tchar *ap;\n", 1),
+      ("stdfree(register union store *p)\n",
+       "stdfree(p)\n\tregister union store *p;\n", 1),
+      ("draincache(void)\n", "draincache()\n", 1),
+      ("void\nialloc(void *qq, size_t nbytes)\n",
+       "void\nialloc(qq, nbytes)\n\tchar *qq;\n\tunsigned int nbytes;\n", 1),
+      ("void *\nrealloc(void *pp, size_t nbytes)\n",
+       "char *\t\t\t\t/* ipnx: K&R, see PATCHES.md */\n"
+       "realloc(pp, nbytes)\n\tchar *pp;\n\tunsigned int nbytes;\n", 1),
+      ("allock(union store *q)\n", "allock(q)\n\tunion store *q;\n", 1),
+      ("void\nmstats(void)\n", "void\nmstats()\n", 1),
+      ("int\ncached(union store *p)\n", "int\ncached(p)\n\tunion store *p;\n", 1),
+      # AND THE LOCALS, which the declarations do not cover.  `size_t' is not
+      # only a parameter type here -- five LOCAL variables use it, and pcc2
+      # reports the first as
+      #	  "malloc.c":104:syntax error / saw NAME    (register size_t nw;)
+      # followed by `nw undefined' four lines later, which reads like a scoping
+      # bug and is an unknown type.  Same lesson as rdwr.c: converting the
+      # signature moves the error inward.
+      # COUNT 2, and the generator is why that is known rather than assumed:
+      # `malloc()' and `free()' open with the identical two lines, so an edit
+      # written for one silently matched both.  The occurrence check refused it
+      # -- "found 2 occurrences, expected 1" -- which is exactly the guard that
+      # makes a context-anchored patch safe on a file nobody can eyeball.
+      ("	register size_t nw;\n	register union store **cp;\n",
+       "	register unsigned int nw;\n	register union store **cp;\n", 2),
+      ("	register size_t temp;\n", "	register unsigned int temp;\n", 1),
+      ("	register size_t nw;\n	size_t onw;\n",
+       "	register unsigned int nw;\n	unsigned int onw;\n", 1),
+      # AND THREE CASTS.  Third round on the same file and the same reason each
+      # time: `union store *p = ap;' is legal from a `void *' and illegal from a
+      # `char *', so every parameter that stopped being `void *' needs its
+      # assignment made explicit.  pcc2 names them one round at a time --
+      #	  "malloc.c":190:illegal pointer combination, op =
+      # -- because it stops at the first error in each function.
+      ("	register union store *p = ap, *q;\n",
+       "	register union store *p = (union store *)ap, *q;\t/* ipnx: K&R cast */\n", 1),
+      ("	q = qq;\n", "	q = (union store *)qq;\t\t/* ipnx: K&R cast */\n", 1),
+      ("	register union store *p = pp;\n",
+       "	register union store *p = (union store *)pp;\t/* ipnx: K&R cast */\n", 1)]),
     ("libc/gen/memmove.c",
      "8de6bd16b4d961d41eb7330816e04068b4ba391cedd55fdf95b05ab81a2280db",
      [("#include <stddef.h>\n\nextern void *memcpy(void*, void*, size_t);\n\n"

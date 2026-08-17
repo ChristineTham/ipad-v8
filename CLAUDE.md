@@ -354,11 +354,11 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
 	lcc alone                        202 of 261
 	cc + lcc, with the repairs       260 of 261
 	cc alone, after B2.2b/c          249 of 261
-	cc ALONE, + the three headers    254 of 261    <- current stage 2
+	cc ALONE, + the headers + malloc  255 of 261   <- current stage 2
 
   `LIBC_LCC` is now **empty**, so there is no per-member compiler choice left to
-  get wrong. Seven remain: six ANSI (`_dtoa` `_fconv` `malloc` `strtod`
-  `vfprintf` `vfscanf`) and `setupshares`. **Do not
+  get wrong. Six remain: five ANSI (`_dtoa` `_fconv` `strtod` `vfprintf`
+  `vfscanf`) and `setupshares`. **Do not
   reinstate lcc to close them** — it still hits the `bowell.c` defect
   (`0: unknown flag -undef`), so those members become **empty objects that exit
   0**. Eight loud failures beat eight silent holes.
@@ -1519,7 +1519,7 @@ configuration was run, not inferred:
 	cc + lcc, the tape's mixture      246        150
 	cc + lcc, with the 14 repairs     260        150
 	cc alone, after B2.2b/c           249        148
-	cc ALONE, + the three headers     254        148
+	cc ALONE, + the headers + malloc  255        148
 
 Fifteen members could be built by nothing, and they had **three** causes, not
 the two recorded here for a week:
