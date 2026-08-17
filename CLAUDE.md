@@ -1060,6 +1060,41 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   remembering: **any rule that copies an archive must re-`ranlib` it at the
   destination**, since `cp` bumps the mtime and that alone demotes a good archive to
   case 3. `lorder | tsort` on libc is defence against that, not a hard requirement.
+- **`ar` BUNDLES SOURCE AS WELL AS OBJECTS, AND THIS HAS NOW CAUGHT ME REPEATEDLY.**
+  `ar` predates `tar` being everywhere and was the ordinary way to package *any*
+  file set, so on this tape a `.a` is **not** evidence of a link library. The
+  naming convention distinguishes them and nothing else does: **`X.c.a` is an
+  archive of `.c` files; `libX.a` is an archive of `.o` files.**
+  `libplot/libplot/plot.c.a` holds `subr.c` and `whoami.c`; `libplot/libpen/`
+  carries *both* `libpen.a` (21 objects) and `pen.c.a` (22 sources).
+  - **It is the tape's own designated build route for the whole libplot family,
+    not a stray artefact.** Every one of those makefiles reads:
+
+	lib4014.a: tek.c.a
+		mkdir xplot
+		cd xplot;ar x ../tek.c.a
+		cd xplot;cc -c -O *.c
+		cd xplot;ar rc ../lib4014.a *.o
+
+    So `ar x` is step one of the recipe. This is what explains `libtr`, whose
+    archive has **30 objects while its directory has 6 `.c` files** — the other
+    24 are inside `tr.c.a`, waiting to be extracted exactly as the makefile
+    says. Read as "24 members have no source" it looks like tape rot; it is not.
+  - **Four libraries have their source ONLY in a bundle** — `lib2621`,
+    `libblit`, `libram`, `libplot` — so a survey that reads directories finds
+    them empty and concludes `-lplot` cannot be built. It can.
+  - **Decide by CONTENT, never by suffix**: read the first member's name.
+    `tools/v10-libs.py`'s `ar_members()` returns `objects`/`sources` on that
+    test, which is also what stops a fidelity comparison being run against 1980s
+    source text and reported as bytes that differ.
+  - Two more shapes in the same family, both of which also read as breakage:
+    **not every `lib*.a` is an archive at all** (`libdbm` is `mv dbm.o
+    libdbm.a`, `libsdb` is `as dbxxx.s -o libsdb.a` — bare objects wearing a
+    `.a` name, which `ld` accepts because it reads the magic number and which
+    `ar t`/`ranlib` reject), and **an archive's name need not match its `-l`
+    flag** (`libtermlib` builds `termcap.a`, installs it as `libtermcap.a`, and
+    hard-links `libtermlib.a` to that; `libcurses` calls its archive **`crlib`**;
+    `libl` builds `libl.a` beside a prebuilt `libln.a`).
 - **Patching guest sources: replace whole functions, and rehearse on the host.**
   `streamio.c`'s `stread()` and `istread()` share whole lines verbatim, so
   context-anchored `ed` edits landed in the wrong one and the kernel failed to compile

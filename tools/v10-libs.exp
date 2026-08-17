@@ -1,0 +1,171 @@
+#!/usr/bin/env expect
+# K10.2: build every Tenth Edition library from source, on V10.
+#
+#	expect tools/v10-libs.exp <image> <src-image>
+#
+# WHAT THIS ANSWERS.  K10.1 measured which command units COMPILE -- 241 of 356,
+# a floor -- and the next thing standing between that and a linked command is
+# the libraries.  There are nineteen: libc, which stage 2 built (260 of 261),
+# and eighteen more totalling 500 members.  This run compiles every one of those
+# members, archives them in the tape's own member order, ranlibs, and installs.
+#
+# WHY THE DELIVERABLE IS DIFFERENT FROM K10.1's.  A command only has to compile
+# for the survey to learn something, so K10.1 could stop at `cc -c'.  A library
+# has to become an archive that ld will accept, which means member order matters
+# (V8's ld is single-pass without a valid __.SYMDEF) and so does the install
+# name.  Hence three assertions per library rather than one: every member
+# compiled, an archive appeared, and it went where the `-l' flag will look.
+#
+# THE HOST ALREADY PREDICTED IT.  tools/v10-libs.py resolves every #include
+# against this machine's header set and says 499 of 500 members should get that
+# far -- the one exception being a 5620 header named by ABSOLUTE path
+# (/usr/blit/include/jioctl.h), which no -I can satisfy and which is the third
+# appearance of that same finding.  Two instruments, and the disagreement is the
+# result: a member the host called ready that the compiler rejects is a language
+# fact the host cannot see.
+#
+# AND ONE FACT WORTH KNOWING BEFORE READING THE NUMBERS.  `-lm' is the most
+# requested flag in the whole command tree -- 51 uses -- and libm is a DUMMY, in
+# Bell Labs' own words: "libm is now a dummy for those who still want to say
+# -lm", one object containing `int ________ = 0;'.  The mathematics moved into
+# libc and stage 2 already built it.  So the loudest demand in the tree costs
+# one compile, and K10.2 is much smaller than the demand table suggests.
+#
+# NOT the 780.  Stages 2 and 3's machine and configuration exactly -- the 750,
+# stage 1's passes at /usr/s1 -- because the question is about the compiler and
+# the headers, and reusing the proven harness means a failure here cannot be a
+# new machine's fault.
+log_user 1
+source [file dirname [info script]]/v10drive.exp
+
+# 500 compiles, 26 archives, 26 ranlibs.  Stage 2's 261 compiles plus an
+# archive, 261 comparisons and four whole-library trials take about 70 s of host
+# time, so this should be minutes -- but the ceiling is set by what a run needs
+# to be TOLD, not by what it should take, and a watchdog that can fire during
+# real work is worse than the hang it guards against.
+set V10_RUN_SECS 21600
+
+if {[llength $argv] < 2} {
+    puts "usage: v10-libs.exp <image> <src-image>"
+    exit 2
+}
+set img [lindex $argv 0]
+set src [lindex $argv 1]
+
+set N   /n/v10            ;# the courier disk, mounted
+set K   /n/v10/mk         ;# our generated lists
+set T1  /usr/s1           ;# stage 1's passes -- and its ar, which the golden
+                          ;# does NOT have (prebuilt.txt); ranlib it does
+set OBJ /usr/k10lib       ;# scratch on a WRITABLE filesystem
+
+set results {}
+proc note {name ok} { global results; lappend results [list $name $ok assert] }
+
+proc report {} {
+    global results
+    puts "\n===== V10 K10.2: BUILD THE LIBRARIES ====="
+    set failed 0
+    foreach r $results {
+        set ok [lindex $r 1]
+        puts [format "  %-52s %s" [lindex $r 0] [expr {$ok ? "ok" : "NO"}]]
+        if {!$ok} { incr failed }
+    }
+    puts "===== [expr {[llength $results] - $failed}]/[llength $results] =====\n"
+    return $failed
+}
+
+v10_boot $img [list "set rq1 ra81" "attach rq1 $src"]
+v10_login root
+v10_sh "PATH=/bin:/etc:/usr/bin; export PATH" 120
+v10_sh "OK=-ok" 120
+
+# ------------------------------------------------------------ preconditions ---
+#
+# EVERY ONE OF THESE COSTS A WHOLE RUN IF IT IS ASSUMED.  /n has to exist
+# because V10's mkdir makes one level at a time, and `mkdir /n/v10' failing
+# silently once cost 26 assertions with nothing naming the cause.
+v10_sh "mkdir /n; mkdir $N" 120
+note "courier disk mounts" \
+    [v10_try "/etc/mount /dev/ra1c $N && echo MT\$OK" "MT-ok" 600]
+note "the libraries are on it" \
+    [v10_try "test -s $N/src/libF77/pow_dd.c && echo LS\$OK" "LS-ok" 300]
+# THE SOURCE BUNDLES MUST BE THERE TOO, and they are easy to lose: they are
+# `.a' files in a source manifest, which every instinct says to filter out.  Four
+# libraries have their only copy of the source inside one.
+note "the source BUNDLES are on it (ar bundles source)" \
+    [v10_try "test -s $N/src/libplot/lib4014/tek.c.a && echo LB\$OK" "LB-ok" 300]
+note "the unit list is on it" \
+    [v10_try "test -s $K/libs.units && echo LU\$OK" "LU-ok" 300]
+note "the member table is on it" \
+    [v10_try "test -s $K/libs.objs && echo LO\$OK" "LO-ok" 300]
+note "the build script is on it" \
+    [v10_try "test -s $K/libsc.sh && echo LC\$OK" "LC-ok" 300]
+# Stage 1's passes are what this compiles with, so their absence must be a named
+# failure and not a canary that merely looks like a compiler bug.
+note "stage 1's ccom is installed" \
+    [v10_try "test -s $T1/lib/ccom && echo S1\$OK" "S1-ok" 300]
+# AND STAGE 1'S ar, WHICH IS NOT OPTIONAL: the V10 golden has no ar at all --
+# measured against v10/mk/gen/prebuilt.txt, along with cmp, tail, grep and wc --
+# so stage 2 could not have archived libc without it either.  A library build
+# with no ar fails on every single library, which reads as a catastrophe rather
+# than a missing tool.
+note "stage 1's ar is installed" \
+    [v10_try "test -s $T1/bin/ar && echo AR\$OK" "AR-ok" 300]
+# ranlib the golden DOES have (prebuilt.txt: usr/bin/ranlib, 12288 bytes).
+note "ranlib is present" \
+    [v10_try "test -s /usr/bin/ranlib && echo RL\$OK" "RL-ok" 300]
+# libc must already be installed, because an archive is only useful beside one.
+# Not used by this run -- `cc -c' never links -- but its absence means the image
+# is not the one this stage is meant to follow.
+note "stage 2's libc is installed" \
+    [v10_try "test -s $T1/lib/libc.a && echo LI\$OK" "LI-ok" 300]
+
+# ----------------------------------------------------------------- the build ---
+#
+# One command, minutes of output, and the script's own `LIBSC-done' as the end
+# marker -- v10_run waits for the program's own closing output and re-syncs
+# afterwards, which is what a command that takes the tty needs.  v10_sh would
+# send the marker along WITH the command and then wait forever for a string the
+# script had already consumed.
+v10_run "sh $K/libsc.sh $N $OBJ /bin/cc $T1/lib/ $T1/bin/ar /usr/bin/ranlib /bin/as" \
+        "LIBSC-done" 18000
+
+# THE CANARIES ARE ASSERTIONS, NOT COURTESIES.  If the flags are wrong every
+# library fails, and 0/26 reads as a devastating finding about the Tenth Edition
+# rather than as a mistake in this file.
+note "the cc canary compiled -- so the flags are right" \
+    [v10_try "test -s $OBJ/can.log && echo CL\$OK" "CL-ok" 300]
+note "the build produced a result file" \
+    [v10_try "test -s $OBJ/res.log && echo RS\$OK" "RS-ok" 300]
+
+# ---------------------------------------------------- did they reach /usr/lib ---
+#
+# INSTALLED, NOT MERELY BUILT.  This is the app's "it is in the golden, it will
+# arrive on Reset is not shipping it" lesson in miniature: an archive in a
+# scratch directory answers no `-l' flag at all.  The four checked here are the
+# four highest demands in the tree, and each is a different kind of case --
+# libm is the dummy that answers 51 asks, libipc a normal archive answering 30,
+# libcbt reaches its member list through mk's `$L(x.o)' idiom, and libtermlib
+# installs under a name matching neither its directory nor its product.
+note "libm.a installed (answers 51 of the tree's -lm)" \
+    [v10_try "test -s /usr/lib/libm.a && echo I1\$OK" "I1-ok" 300]
+note "libipc.a installed (30 uses)" \
+    [v10_try "test -s /usr/lib/libipc.a && echo I2\$OK" "I2-ok" 300]
+note "libcbt.a installed (17 uses)" \
+    [v10_try "test -s /usr/lib/libcbt.a && echo I3\$OK" "I3-ok" 300]
+note "libtermcap.a AND libtermlib.a, from one build" \
+    [v10_try "test -s /usr/lib/libtermcap.a -a -s /usr/lib/libtermlib.a && echo I4\$OK" \
+             "I4-ok" 300]
+# A LIBRARY BUILT FROM A SOURCE BUNDLE, because that route is the one nothing
+# else exercises: `ar x' on a .c.a, compile what falls out, archive that.
+note "lib4014.a installed (built via ar x on a source bundle)" \
+    [v10_try "test -s /usr/lib/lib4014.a && echo I5\$OK" "I5-ok" 300]
+# And ranlib's table of contents, without which V8-lineage ld makes ONE
+# sequential pass and warns on stderr naming ranlib.  `ar t' listing __.SYMDEF
+# is the evidence that the archive has one.
+note "libipc.a carries a __.SYMDEF (ld needs it)" \
+    [v10_try "$T1/bin/ar t /usr/lib/libipc.a | sed -e 1q" "__.SYMDEF" 300]
+
+set failed [report]
+v10_halt
+exit [expr {$failed ? 1 : 0}]

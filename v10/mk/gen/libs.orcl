@@ -1,0 +1,10 @@
+# name oracle members  -- the tape's own archive, for comparison
+libj libj/libj.a 12
+libl libl/libln.a 5
+libmp libmp/libmp.a 9
+libpicfile libpicfile/libpicfile.a 14
+libin ipc/libin/libin.a 9
+libipc ipc/libipc/libipc.a 9
+libpen libplot/libpen/libpen.a 21
+libtr libplot/libtr/libtr.a 30
+libnetb netfs/libnetb/libnetb.a 24

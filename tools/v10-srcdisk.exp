@@ -187,6 +187,38 @@ note "lsys: mkconf present" \
 note "src: libc" \
     [v8_try "cd $V/libc; find . -print | cpio -pd $M/src/libc && echo CP\$OK" "CP-ok" 1800]
 
+# ------------------------------------------------------------ K10.2's libraries ---
+#
+# The other eighteen libraries, by manifest -- tools/v10-libs.py's libs.cpio,
+# 460 files and 2.4 MB.  By manifest rather than wholesale because libI77 keeps
+# 89 SUPERSEDED sources under old/, old1/, notused/ and d/ against 33 real ones,
+# so a `find . -print' here would carry three copies of a library and invite
+# something to compile the wrong generation.
+#
+# THE `.a' FILES GO TOO, and that is not laziness about filtering.  On this tape
+# `ar' bundles source as well as objects -- it predates tar being everywhere --
+# so `X.c.a' is a SOURCE BUNDLE and `libX.a' is an object library, and both are
+# load-bearing here for different reasons.  Four libraries (lib2621, libblit,
+# libram, libplot) keep their only copy of the source inside a bundle and libtr
+# keeps 24 of its 30 members there, with the headers (hp.h, ram.h, jcom.h,
+# jplot.h) bundled alongside; the tape's own recipe is `cd xplot;ar x
+# ../tek.c.a'.  Meanwhile nine of them ship the archive Bell Labs built, which
+# is the oracle the fidelity comparison needs on the guest and not on the host.
+note "src: K10.2's libraries, by manifest" \
+    [v8_try "cd $V; cpio -pd $M/src < /n/v10mk/libs.cpio && echo CL\$OK" "CL-ok" 3600]
+# Content, not exit status, and four chosen because each would fail differently:
+# libipc is a plain ipc/ unit, libF77's 113 members are the bulk, lib4014's
+# source is only inside a bundle, and libtr's oracle is what the fidelity test
+# reads.
+note "libs: libipc (an ipc/ unit)" \
+    [v8_try "test -s $M/src/ipc/libipc/ipcopen.c && echo L1\$OK" "L1-ok" 120]
+note "libs: libF77 (the bulk)" \
+    [v8_try "test -s $M/src/libF77/pow_dd.c && echo L2\$OK" "L2-ok" 120]
+note "libs: lib4014's SOURCE BUNDLE (ar bundles source)" \
+    [v8_try "test -s $M/src/libplot/lib4014/tek.c.a && echo L3\$OK" "L3-ok" 120]
+note "libs: libtr's oracle (ar bundles objects too)" \
+    [v8_try "test -s $M/src/libplot/libtr/libtr.a && echo L4\$OK" "L4-ok" 120]
+
 # ------------------------------------------------------------------- lcc ---
 #
 # THREE PREBUILT BINARIES, FLAT, BECAUSE STAGE 2 CANNOT FINISH WITHOUT THEM.
