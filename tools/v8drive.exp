@@ -73,6 +73,12 @@ set V8_RUN_SECS 7200
 set V8_MEDIA [file normalize [file join [file dirname [info script]] .. work myv8]]
 set V8_SIMH  [file normalize [file join [file dirname [info script]] .. work opensimh BIN vax780]]
 
+# The overlap guard, called from v8_boot.  See tools/norun.exp: a V8 harness and
+# a V10 harness run DIFFERENT binaries, so each one's own `pgrep' was blind to
+# the other -- which is how a source-disk rebuild came to overwrite an image a
+# running stage-2 had attached.
+source [file dirname [info script]]/norun.exp
+
 # --------------------------------------------------------------- teardown ---
 
 # THE HARNESS MUST ALWAYS TERMINATE ITSELF.  Identical to v10drive.exp's, and
@@ -183,6 +189,15 @@ proc v8_boot {img {extra {}} {dtype ""}} {
         puts "\nV8-BAIL: no image '$img' in $V8_MEDIA"
         exit 2
     }
+    # NOTHING ELSE MAY BE RUNNING -- at the instant of spawn, not merely when
+    # the wrapper started.  $extra is where a second disk arrives, so its
+    # attach targets are claimed too.  tools/norun.exp.
+    set claim [list $img]
+    foreach c $extra {
+        if {[regexp {^(?:attach|at) +\S+ +(.+)$} $c -> f]} { lappend claim [string trim $f] }
+    }
+    eval sim_guard $claim
+
     spawn $V8_SIMH
     set V8_RUNNING 1
     # ARMED THE MOMENT THERE IS SOMETHING TO REAP, and not before: from here

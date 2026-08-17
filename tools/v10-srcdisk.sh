@@ -45,6 +45,14 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/tools/v8clone.sh"
+source "$ROOT/tools/norun.sh"
+
+# THIS SCRIPT IS THE WRITER IN THE 2026-08-17 OVERLAP, so the guard belongs
+# here most of all: it ends by zeroing and rebuilding
+# work/v10gold/ipnx-v10-src.img, and a stage-2 run had that file attached as
+# rq1 at the time.  It boots a vax780 while stage 2 runs a vax750, so neither
+# one's `pgrep' saw the other.  See tools/norun.sh.
+no_other_sims || exit 1
 
 TPORT="${TPORT:-9270}"; OPORT="${OPORT:-9271}"; MPORT="${MPORT:-9272}"
 GOLD="$ROOT/work/v10gold"
@@ -99,6 +107,11 @@ rc=${PIPESTATUS[0]}
 OUT="$GOLD/ipnx-v10-src.img"
 echo
 echo "== assembling $OUT =="
+# CHECKED AGAIN, HERE, and not only at the top.  The run above takes minutes,
+# and the guard that matters is the one held at the moment of the write: a
+# stage-2 run started meanwhile would have this file open right now.  The
+# top-of-script check cannot see the future; this one can see the present.
+claim_images "$OUT" || exit 1
 # Sized to the whole RA81 so SIMH's autosize picks RA81 rather than guessing
 # from a short file -- the same reason the golden is full-sized.
 dd if=/dev/zero of="$OUT" bs=512 count=891072 2>/dev/null

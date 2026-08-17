@@ -22,12 +22,21 @@
 # image to restore from, and recovery is a half-hour tools/v10-golden.sh
 # followed by a stage-1 run.  See tools/v10clone.sh.
 #
-# The source disk is NOT cloned -- it is mounted read-write but only read,
-# and rebuilding it is a five-minute tools/v10-srcdisk.sh.
+# THE SOURCE DISK IS CLONED TOO, and it did not used to be.  The comment here
+# used to read "the source disk is NOT cloned -- it is mounted read-write but
+# only read", which was true of THIS run and irrelevant, because the hazard was
+# never this run writing it.  tools/v10-srcdisk.sh REBUILDS that path with
+# `dd if=/dev/zero of=$GOLD/ipnx-v10-src.img', and on 2026-08-17 it did so
+# while a stage-2 run had the file attached as rq1.  Both exited 0 and every
+# number the stage-2 run produced was measured against an image that changed
+# mid-run.  See tools/norun.sh.
+#
+# `cp -c' is free on APFS, so "we only read it" was never worth the exposure.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/tools/v10clone.sh"
+source "$ROOT/tools/norun.sh"
 
 GOLD="${1:-ipnx-v10-ra81.img.stage1}"
 SRC="${2:-$ROOT/work/v10gold/ipnx-v10-src.img}"
@@ -35,16 +44,21 @@ LOG="$ROOT/work/v10-stage2.log"
 
 [[ -f "$SRC" ]] || { echo "v10-stage2: no $SRC -- run tools/v10-srcdisk.sh"; exit 1; }
 [[ -f "$ROOT/work/v10boot/uda750" ]] || { echo "v10-stage2: no uda750 -- run tools/v10-uda750.py"; exit 1; }
-pgrep -f "BIN/vax750" >/dev/null && { echo "v10-stage2: a vax750 is already running"; exit 1; }
+
+# EVERY simulator, not just a vax750.  The check that stood here was
+# `pgrep -f BIN/vax750', which is blind to the vax780 the source-disk builder
+# runs -- and that is exactly the overlap that voided a run.
+no_overlap "$SRC" "$ROOT/work/v10gold/$GOLD" || exit 1
 
 python3 "$ROOT/v10/mk/mkdep.py" --check || { echo "regenerate the makefiles first"; exit 1; }
 
 IMG=$(v10_clone "$GOLD" s2) || exit 1
+SRCIMG=$(v10_clone "$SRC" s2src) || exit 1
 echo "== stage 2 on $(basename "$IMG") =="
-echo "   source disk $SRC"
+echo "   source disk $(basename "$SRCIMG")"
 echo
 
-expect "$ROOT/tools/v10-stage2.exp" "$IMG" "$SRC" 2>&1 | tee "$LOG"
+expect "$ROOT/tools/v10-stage2.exp" "$IMG" "$SRCIMG" 2>&1 | tee "$LOG"
 rc=${PIPESTATUS[0]}
 
 # ------------------------------------------------------------ the measurement ---

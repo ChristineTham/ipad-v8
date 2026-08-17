@@ -106,6 +106,11 @@ set V10_SIMH  [file normalize [file join [file dirname [info script]] .. work op
 set V10_ROM   [file normalize [file join [file dirname [info script]] .. work v10boot uda750]]
 set V10_GEN   [file normalize [file join [file dirname [info script]] .. v10 mk gen]]
 
+# The overlap guard, called from v10_boot.  Sourced here rather than by each
+# harness for the same reason the boot itself lives here: there are twenty-nine
+# of them and a rule they each have to remember is a rule that will be missed.
+source [file dirname [info script]]/norun.exp
+
 # ------------------------------------------------------------------ lists ---
 
 # The component lists, READ rather than restated.
@@ -248,6 +253,17 @@ proc v10_boot {img {extra {}} {r5 0}} {
     if {![file readable $V10_ROM]}    { puts "\nV10-BAIL: no boot ROM at $V10_ROM -- run tools/v10-uda750.py"; exit 2 }
     cd $V10_MEDIA
     if {![file readable $img]}        { puts "\nV10-BAIL: no image '$img' in $V10_MEDIA"; exit 2 }
+
+    # NOTHING ELSE MAY BE RUNNING, and this is the moment to insist.  The
+    # wrapper checks before a run that then lasts hours; this checks at the
+    # instant of spawn.  Every image about to be attached is offered to the
+    # guard -- $img plus any `attach' in $extra, which is where the source disk
+    # arrives.  See tools/norun.exp.
+    set claim [list $img]
+    foreach c $extra {
+        if {[regexp {^attach +\S+ +(.+)$} $c -> f]} { lappend claim [string trim $f] }
+    }
+    eval sim_guard $claim
 
     spawn $V10_SIMH
     set V10_RUNNING 1

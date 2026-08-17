@@ -1,0 +1,69 @@
+# tools/norun.exp -- two simulators must never run at once.  Source; do not run.
+#
+#	source [file dirname [info script]]/norun.exp
+#	sim_guard $img ?more images?
+#
+# The Tcl half of tools/norun.sh, and the shell half's header carries the whole
+# story: on 2026-08-17 a stage-2 run and a source-disk rebuild overlapped, the
+# rebuild zeroed and rewrote the very image the stage-2 simulator had attached
+# as rq1, and BOTH RUNS EXITED 0.  Every number that run produced was measured
+# against an image that changed underneath it.
+#
+# WHY THE CHECK IS HERE AS WELL AS IN THE WRAPPERS.  The wrapper checks once,
+# before a run that then lasts hours; this one runs at the instant of `spawn',
+# which is the only moment that actually matters.  It is also the choke point
+# that needs no per-harness edit: CLAUDE.md already records that every guest
+# harness sources v8drive.exp or v10drive.exp and none rolls its own boot, so
+# one call in v8_boot and one in v10_boot covers all twenty-nine of them.
+#
+# Verified against the real binary rather than a stand-in -- see norun.sh for
+# the two plausible tests that both give a FALSE PASS.
+
+# sim_guard <image> ?image ...?  -- bails the run rather than returning a status.
+#
+# A harness that reaches here has not spawned anything yet, so there is nothing
+# to reap and `exit' is safe.  That is the one place in this project where a
+# bare exit is correct: after `spawn' it would close the pty on a live guest,
+# which is the thing we never do.
+proc sim_guard {args} {
+    # `exec' THROWS when the command exits non-zero, and pgrep exits 1 when it
+    # matches nothing -- which is the answer we want and not an error.  So
+    # every probe here is wrapped in catch and the OUTPUT is what decides.
+    set running {}
+    foreach name {vax750 vax780 vax730 vax} {
+        set out {}
+        catch {exec pgrep -x $name} out
+        # A caught failure puts the error message in `out', so only accept
+        # something that looks like a pid list.
+        foreach pid [split [string trim $out] "\n"] {
+            if {[string is integer -strict $pid]} { lappend running $pid }
+        }
+    }
+    if {[llength $running]} {
+        puts "\nSIM-BAIL: a simulator is already running (pid [join $running { }])."
+        puts "SIM-BAIL: overlapping runs are how images get corrupted here --"
+        puts "SIM-BAIL: let it finish; every harness halts its guest and reaps itself."
+        catch {exec ps -o pid,etime,command -p [join $running ,]} ps
+        puts $ps
+        exit 2
+    }
+
+    # And is anything holding the images this run is about to attach?  This is
+    # the guard that catches a `dd', an editor or a stray python -- the 2026
+    # overlap's writer was a `dd', not a simulator.
+    foreach img $args {
+        if {$img eq "" || ![file exists $img]} { continue }
+        set out {}
+        catch {exec lsof -t -- $img} out
+        set holders {}
+        foreach pid [split [string trim $out] "\n"] {
+            if {[string is integer -strict $pid]} { lappend holders $pid }
+        }
+        if {[llength $holders]} {
+            puts "\nSIM-BAIL: $img is open by another process (pid [join $holders { }])."
+            catch {exec ps -o pid,etime,command -p [join $holders ,]} ps
+            puts $ps
+            exit 2
+        }
+    }
+}
