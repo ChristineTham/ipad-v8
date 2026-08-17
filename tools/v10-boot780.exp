@@ -1,7 +1,25 @@
 #!/usr/bin/env expect
-# K9: boot a Tenth Edition kernel on a VAX-11/780.
+# K8/K9: boot a Tenth Edition kernel on a VAX-11/780.
 #
-#	expect tools/v10-boot780.exp <image>
+#	expect tools/v10-boot780.exp <image>        desktop open-simh  (K8)
+#	expect tools/v10-boot780.exp <image> app    the APP's libsimh  (K9)
+#
+# ONE HARNESS, TWO SIMULATORS, AND THAT IS THE POINT OF K9.  K8 proves a V10
+# kernel boots; K9 proves it boots under the code that SHIPS -- libsimh, the
+# static library both app targets link, rather than the desktop open-simh build.
+# Forking this file for the second one would let the assertions drift, and then
+# "it boots in the app" would rest on a different set of claims from "it boots".
+# The only difference between the two invocations is which binary is spawned.
+#
+# THREE THINGS DIFFER ABOUT THE LIBRARY, all of them expected:
+#   * it REQUIRES a config-file argument (libsimh/test/main.c returns 2 without
+#     one), so V10_SIMH_ARGS hands it a throwaway config and it then reads stdin
+#     exactly as the desktop build does;
+#   * `set noasynch' answers "Command not allowed" -- libsimh is compiled
+#     without SIM_ASYNCH_IO, so synchronous operation is a BUILD-TIME guarantee
+#     rather than a setting, and the error is the guarantee reporting itself;
+#   * `set il enable' works, because the NI1010 model is this project's own
+#     patch and it is in both builds.
 #
 # THE ROM IS THE TAPE'S, UNPATCHED, AND THAT IS THE POINT.  tools/v10-uda750.py
 # exists because `lsys/boot/star/uda' has the 780's addresses compiled in --
@@ -22,7 +40,36 @@ set V10_SIMH [file normalize [file join $here .. work opensimh BIN vax780]]
 set V10_ROM  [file normalize [file join $here .. work v10 src lsys boot star uda]]
 set timeout 1800
 
-if {[llength $argv] < 1} { puts "usage: v10-boot780.exp <image>"; exit 2 }
+if {[llength $argv] < 1} { puts "usage: v10-boot780.exp <image> ?app?"; exit 2 }
+
+# `app' selects the library the app links instead of the desktop binary.
+set WHICH "desktop open-simh"
+set APP 0
+if {[llength $argv] > 1 && [lindex $argv 1] eq "app"} {
+    set APP 1
+    set WHICH "the app's libsimh"
+    set V10_SIMH [file normalize [file join $here .. libsimh build macos vax780cli]]
+    if {![file executable $V10_SIMH]} {
+        puts "\nV10-BAIL: no $V10_SIMH"
+        puts "V10-BAIL: build it first --"
+        puts "V10-BAIL:   cd libsimh/build/macos && make vax780cli"
+        exit 2
+    }
+    # The config file it insists on.  Deliberately EMPTY of machine setup: every
+    # `set' and `attach' still comes from v10_boot, so the two invocations
+    # configure the machine identically and a difference in the result cannot be
+    # a difference in the config.
+    set cfg [file join $V10_MEDIA scratch libsimh-v10.conf]
+    file mkdir [file dirname $cfg]
+    set fh [open $cfg w]
+    puts $fh "# Written by tools/v10-boot780.exp.  Intentionally empty: libsimh's"
+    puts $fh "# CLI requires argv\[1\], and every device setting comes from v10_boot"
+    puts $fh "# so that K8 and K9 configure the same machine."
+    close $fh
+    set V10_SIMH_ARGS [list $cfg]
+}
+puts "\n===== V10 on a 780, under $WHICH ====="
+puts "      $V10_SIMH\n"
 
 set results {}
 proc note {name ok} { global results; lappend results [list $name $ok] }
@@ -30,7 +77,7 @@ proc note {name ok} { global results; lappend results [list $name $ok] }
 # `set il enable' because our config declares ni1010a and the device model is
 # ours (libsimh/patches/pdp11_il.c); SIMH ships it disabled.
 v10_boot [lindex $argv 0] {"set il enable"}
-note "the 780 booted V10 to a login prompt" 1
+note "the 780 booted V10 to a login prompt, under $WHICH" 1
 v10_login root
 v10_sh "PATH=/bin:/etc:/usr/bin; export PATH" 120
 v10_sh "OK=-ok" 120
@@ -58,7 +105,7 @@ v10_sh "echo 'runs on a VAX-11/780.  The first V10 kernel built from source.' >>
 note "motd no longer claims to be seki" \
     [v10_try "sed -n '/BUILT HERE/p' /etc/motd" "BUILT HERE" 300]
 
-puts "\n===== V10 ON A 780 ====="
+puts "\n===== V10 ON A 780, under $WHICH ====="
 set failed 0
 foreach r $results {
     puts [format "  %-46s %s" [lindex $r 0] [expr {[lindex $r 1] ? "ok" : "NO"}]]

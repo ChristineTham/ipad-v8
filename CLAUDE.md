@@ -1727,11 +1727,39 @@ were faults in *measurement* and none in the code being measured:
 - Regenerating a makefile changed **nothing the guest saw**, because the source
   disk is a copy. `tools/srcid.sh` stamps and checks it now.
 
-Next: **K8**, a bootable 780 disk — `tools/v10-kernel.sh` already passes 17/17,
-so `mkconf` accepts our config, stage 1's `cc` compiles the generated `conf.c`,
-and `ld` links a 780 kernel installed as `/unix`. Then K9 (boot it under the
-app's own `vax780`), K10 (the world), and the two workarounds a 780 kernel
-retires: K11's full-capacity filesystem and K12's netfs.
+**AND IT BOOTS UNDER THE CODE THAT SHIPS** (K9, 2026-08-17,
+`bash tools/v10-boot780.sh app`, 5/5) — `libsimh/build/macos/vax780cli`, the CLI
+over the static library *both app targets link*:
+
+	sim> run FA02
+	unix
+	Unix 10e ipnx 780
+	mem = 6062080
+	login: root
+
+One harness drives both simulators, selected by one argument, so the assertions
+cannot drift between "it boots" and "it boots in the app". The library already
+had every device the config needs — `RQ` UDA50A at `2013F468` = **`0772150`,
+exactly the address compiled into the tape's own boot ROM**. Three differences,
+all expected: it needs a config-file argument (`V10_SIMH_ARGS` supplies one, and
+it then reads stdin like the desktop build); `set noasynch` answers *Command not
+allowed*, because synchronous operation is a build-time guarantee there rather
+than a setting; `set il enable` works, since the NI1010 model is ours and is in
+both builds.
+
+**Beware the plan's own stale checkboxes.** `docs/v10-restoration.md` carried
+`[ ] K8` and `[ ] K9` *below* the `[x] K8/K9 — IT BOOTS` that superseded them,
+and they were read as the current state and reported as the next step. They are
+resolved in place now. A plan with two answers to the same question gets read at
+the wrong one.
+
+Next: **K10** — recompile the world on it, which is where the libc questions and
+the 283 commands become work done *inside* V10. Then the two workarounds a 780
+kernel retires: K11's full-capacity filesystem (V8's `filsys.h` caps a
+filesystem at 30,752 blocks and V8 no longer has to read the result) and K12's
+netfs (`ipnx780.m` already carries `netafs 4`/`netbfs 4` and the app's `vax780`
+has the Interlan), which together retire the courier disk whose staleness cost a
+run today.
 Also **submit** — the remaining steps need the Apple account and a
 final name decision, all listed in [docs/app-store.md](docs/app-store.md).
 **Not yet exercised — one thing, and it needs a human at a mouse**: `mux`/`jim`

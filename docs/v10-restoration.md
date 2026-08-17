@@ -220,26 +220,57 @@ hardware terms.
       compiler with V10's compiler (45/46) → `mkconf`/`as`/`cc`/`ld` built a
       226,263-byte kernel from our config (17/17) → it boots on open-simh's
       **vax780**, the same simulator the app already ships for V8.
-- [ ] **K6b — run the prebuilt `mkconf`** (`lsys/lib/mkconf`, 37,932 B) on `alice.m` to
-      generate the kernel makefile, exactly as V8's `config`(8) does for its own tree.
-      It is a 1995 V10 binary, so it runs on the machine we already have — same status
-      as `ccom` and `as`.
-- [ ] **K7 — compile the 780 kernel with the STAGE 1 toolchain**, on V10, and let the
-      failures name themselves. This is the first real test of stage 1 against something
-      other than itself: ~750 files of K&R C and VAX assembler, none of it ANSI, so the
-      `iolib.h`/`lcc` class of problem should not appear at all.
+> **The five entries that used to stand here are RESOLVED, and they are kept rather than
+> deleted because the marker convention says so — a superseded step is recorded as
+> superseded, never silently dropped.** They were written before the work and were
+> overtaken by the `[x]` entries above, which is a real hazard and not just untidiness:
+> the stale `[ ] K8` and `[ ] K9` sat *below* the `[x] K8/K9 — IT BOOTS` that supersedes
+> them, and on 2026-08-17 they were read as the current state and reported as the next
+> step. **A plan with two answers to the same question will be read at the wrong one.**
+>
+> - ~~**K5c — write OUR 780 config**~~ → done: `v10/src/lsys/astro/ipnx780.m`, derived
+>   from `alice.m`, one Unibus adapter, one UDA50 at SIMH's address, `il` enabled.
+> - ~~**K6b — run the prebuilt `mkconf`**~~ → done, on **our** config rather than
+>   `alice.m` verbatim, which is the same instruction one level up. `tools/v10-kernel.sh`
+>   asserts `mkconf accepted our config`, `mkconf wrote conf.c` and `mkconf wrote low.s`.
+> - ~~**K7 — compile the 780 kernel with the STAGE 1 toolchain**~~ → done, **17/17**,
+>   and the prediction held: no kernel file needed a patch. Also much smaller than
+>   planned — `lsys/lib/mk.star` compiles **two** files, not ~750, because the kernel
+>   ships as eight prebuilt per-subsystem archives.
+> - ~~**K8 — a bootable 780 disk**~~ → done, **5/5**. The plan expected an RP07 image and
+>   an `hpboot`-equivalent; both were wrong. Root is `ra` (UDA50/RA81), and
+>   `lsys/boot/star/uda` needed **no** patching — its compiled-in addresses are the
+>   780's already, which is what `tools/v10-uda750.py` had to move for the 750.
+> - ~~**K9 — boot it under the app's own `vax780`**~~ → done, **5/5** (2026-08-17). See
+>   below.
 
-      **THE KERNEL IS NOT REFACTORED** (Christine, 2026-08-17) — refactoring libc is
-      enough. It is compiled as it stands, which the evidence says should work: the
-      kernel is K&R throughout and `cc` is a K&R compiler, so there is nothing to
-      convert and no second compiler to reach for. If a kernel file *does* fail, treat
-      it as `mv.c` and `fsck.c` were treated — a one-line named patch with the reason
-      recorded — and not as licence to start a conversion.
-- [ ] **K8 — a bootable 780 disk**: RP07 image, V10 root filesystem, `hpboot`-equivalent
-      boot block from `lsys/boot/star/`, and the 780's own console protocol rather than
-      the retargeted `uda750` ROM this project wrote for the 750.
-- [ ] **K9 — boot it under the app's own `vax780`**, not the desktop build, which is
-      what makes V10 shippable rather than merely demonstrable.
+- [x] **K9 — IT BOOTS UNDER THE CODE THAT SHIPS.** 2026-08-17,
+      `bash tools/v10-boot780.sh app`, 5/5 — `libsimh/build/macos/vax780cli`, the CLI
+      over the *static library both app targets link*, not the desktop open-simh build:
+
+	sim> run FA02
+	unix
+	Unix 10e ipnx 780
+	mem = 6062080
+	login: root
+
+      **One harness, two simulators**, selected by a single argument, so the assertions
+      cannot drift between "it boots" and "it boots in the app" — the only difference
+      between the runs is which binary is spawned. Three things differ about the library
+      and all three are expected: it requires a config-file argument (`test/main.c`
+      returns 2 without one, so `V10_SIMH_ARGS` hands it a throwaway config and it then
+      reads stdin as the desktop build does); `set noasynch` answers *Command not
+      allowed*, because synchronous operation is a **build-time guarantee** there rather
+      than a setting; and `set il enable` works, since the NI1010 model is this project's
+      own patch and is in both builds.
+
+      The library already had every device V10's 780 config needs — `RQ` UDA50A at
+      `2013F468`, which is `0772150`, **exactly the address compiled into the tape's own
+      boot ROM**.
+
+      `tools/v10-boot780.sh` is new and is the wrapper this harness never had: it was
+      being run by hand, so the clone rule was whoever typed it. It writes `/etc/motd`,
+      and booting rewrites the superblock, so it must have its own copy.
 - [ ] **K10 — recompile the world on it.** At that point the mixed-compiler libc, the
       283 commands and the fixpoint all become work done *inside* V10 rather than
       against it.

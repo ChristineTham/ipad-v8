@@ -106,6 +106,22 @@ set V10_SIMH  [file normalize [file join [file dirname [info script]] .. work op
 set V10_ROM   [file normalize [file join [file dirname [info script]] .. work v10boot uda750]]
 set V10_GEN   [file normalize [file join [file dirname [info script]] .. v10 mk gen]]
 
+# ARGUMENTS FOR THE SIMULATOR ITSELF, and the app's library is why this exists.
+#
+# The desktop open-simh binaries take no argument and drop straight to `sim>',
+# which is what every harness here drives.  `libsimh/test/main.c' -- the CLI over
+# the static library the APP links -- requires one:
+#
+#	if (argc < 2) { fprintf(stderr, "usage: %s <config-file>\n", ...); return 2; }
+#
+# so spawning it bare exits 2 before printing a prompt, and `v10_must "sim>"'
+# then reports a simulator that started and died.  It does accept a config file
+# and THEN read stdin, so one throwaway config is the whole difference between
+# driving the desktop build and driving the code that ships.
+#
+# Empty by default, so nothing that worked before behaves differently.
+set V10_SIMH_ARGS {}
+
 # The overlap guard, called from v10_boot.  Sourced here rather than by each
 # harness for the same reason the boot itself lives here: there are twenty-nine
 # of them and a rule they each have to remember is a rule that will be missed.
@@ -293,7 +309,7 @@ proc v10_boot {img {extra {}} {r5 0}} {
     # scope, so a spawn inside a proc leaves the global one alone and every
     # other proc here then talks to stdin, reads EOF at once, and reports
     # "simulator exited".  A scoping bug arrives dressed as a dead simulator.
-    global spawn_id V10_RUNNING V10_MEDIA V10_SIMH V10_ROM V10_RUN_SECS
+    global spawn_id V10_RUNNING V10_MEDIA V10_SIMH V10_SIMH_ARGS V10_ROM V10_RUN_SECS
 
     # Say what is missing while it is still a filename.
     if {![file executable $V10_SIMH]} { puts "\nV10-BAIL: no simulator at $V10_SIMH"; exit 2 }
@@ -312,7 +328,7 @@ proc v10_boot {img {extra {}} {r5 0}} {
     }
     eval sim_guard $claim
 
-    spawn $V10_SIMH
+    eval spawn [list $V10_SIMH] $V10_SIMH_ARGS
     set V10_RUNNING 1
     # ARMED THE MOMENT THERE IS SOMETHING TO REAP, and not before: from here
     # on the harness owns a simulator and a disk image, so from here on it
