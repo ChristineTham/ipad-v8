@@ -77,6 +77,27 @@ set INC /usr/include
 set CCM3  "'CC=cc -B$T2/lib/ -t02p'"   ;# stage 3 is built BY stage 1/2's passes
 set CCM3B "'CC=cc -B$T3/lib/ -t02p'"   ;# stage 3b is built BY stage 3
 
+# THE PASS PATHS, WHICH OVERRIDING $(CC) DOES NOT COVER.  This cost stage 3 two
+# whole runs, and the message was the same every time for all seven components:
+#
+#	Make:  Don't know how to make /usr/v10/lib/ccom.  Stop.
+#
+# `TOOLS = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)' and every object depends on it,
+# so make needs those files to EXIST -- and libc.mk derives them all from
+# `V10LIB = /usr/v10/lib', which is where a finished system keeps them and not
+# where a stage-2 machine does.  Setting CC alone changes what runs and leaves
+# the PREREQUISITES pointing at a directory that is not there.
+#
+# Stage 2 already solved this with its $B and $C macro lines; stage 3 simply did
+# not copy them.  A macro that has to be repeated per stage is a macro that will
+# be forgotten in one of them -- which is exactly what happened.
+#
+# V10LIB carries CPP, CCOM, C2, AS and LD together; AS and LD are named
+# separately anyway because stage 1 installs `as' and `ld' into bin/ rather than
+# lib/, and AR/RANLIB are the running system's throughout.
+set P3  "V10LIB=$T2/lib CCPATH=/bin/cc AS=/bin/as LD=/usr/s1/bin/ld AR=/bin/ar RANLIB=/usr/bin/ranlib"
+set P3B "V10LIB=$T3/lib CCPATH=/bin/cc AS=/bin/as LD=$T3/bin/ld AR=/bin/ar RANLIB=/usr/bin/ranlib"
+
 set results {}
 proc note {name ok} { global results; lappend results [list $name $ok] }
 proc report {} {
@@ -153,7 +174,7 @@ foreach c $TC {
     set inst [lindex $c 2]
     v10_sh "rm -rf $OBJ/s3-$name; mkdir $OBJ/s3-$name" 300
     set ok [v10_try \
-        "cd $OBJ/s3-$name; if make -f $K/$name.mk SRC=$S OURS=$N/ours INCDIR=$INC TOOLDIR=$T3 DESTDIR=$T3 $CCM3 install > b.log 2>&1; then echo B3\$OK; fi" \
+        "cd $OBJ/s3-$name; if make -f $K/$name.mk SRC=$S OURS=$N/ours INCDIR=$INC TOOLDIR=$T3 DESTDIR=$T3 $P3 $CCM3 install > b.log 2>&1; then echo B3\$OK; fi" \
         "B3-ok" 3600]
     note "stage 3 built $name" $ok
     if {!$ok} { v10_run "cd $OBJ/s3-$name; sed -e '/^cc /d' -e '/^as /d' b.log | sed -n '1,60p'; echo E3END" "E3END" 900 }
@@ -168,7 +189,7 @@ foreach c $TC3B {
     set name [lindex $c 0]
     v10_sh "rm -rf $OBJ/s3b-$name; mkdir $OBJ/s3b-$name" 300
     set ok [v10_try \
-        "cd $OBJ/s3b-$name; if make -f $K/$name.mk SRC=$S OURS=$N/ours INCDIR=$INC TOOLDIR=$T3B DESTDIR=$T3B $CCM3B install > b.log 2>&1; then echo BB\$OK; fi" \
+        "cd $OBJ/s3b-$name; if make -f $K/$name.mk SRC=$S OURS=$N/ours INCDIR=$INC TOOLDIR=$T3B DESTDIR=$T3B $P3B $CCM3B install > b.log 2>&1; then echo BB\$OK; fi" \
         "BB-ok" 3600]
     note "stage 3b built $name (by stage 3)" $ok
     if {!$ok} { v10_run "cd $OBJ/s3b-$name; sed -e '/^cc /d' -e '/^as /d' b.log | sed -n '1,60p'; echo EBEND" "EBEND" 900 }
