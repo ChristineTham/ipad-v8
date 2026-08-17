@@ -1907,9 +1907,8 @@ ran *before* the system path, so `ccom`'s `#include "stdio.h"` resolved to
 `cmd/lcc/include/sparc_sun/stdio.h` — a **Sun** header. `sanity()` now refuses to
 print a measurement taken through a scan that read implausibly little.
 
-**K10.2 — THE LIBRARIES ARE BUILT: 499 of 500 members, 25 of 26 libraries
-complete** (2026-08-18, `bash tools/v10-libs.sh`, exit 0 with every assertion
-passing). Nineteen libraries: `libc`, which stage 2 built, and eighteen more
+**K10.2 — THE LIBRARIES ARE BUILT: 500 of 500 members, 26 of 26 libraries**
+(2026-08-18, `bash tools/v10-libs.sh`, **24/24 assertions, exit 0**). Nineteen libraries: `libc`, which stage 2 built, and eighteen more
 whose 500 members are compiled with stage 1's passes, archived in **the tape's
 own member order**, `ranlib`'d and installed to `/usr/lib` under every `-l` name
 each answers to. `tools/v10-libs.py` predicts host-side which members can
@@ -1939,7 +1938,7 @@ switch — lcc is unusable here (`bowell.c`'s `-undef` makes it emit empty objec
 and exit 0).
 
 Five faults, four of them mine and one a discovery, took the number 458 → 496 →
-499. All are recorded in
+499 → 500. All are recorded in
 [docs/v10-log/2026-08-18.md](docs/v10-log/2026-08-18.md); the durable ones are
 gotchas above (`ar` bundles source; a tally cannot leave a redirected loop; the
 golden has no `find`). The discovery: **`JMUX` is defined by no header on the
