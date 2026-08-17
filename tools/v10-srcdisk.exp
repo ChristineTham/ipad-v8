@@ -113,7 +113,7 @@ note "source filesystem mounts" \
     [v8_try "/etc/mount /dev/rp1c $M && echo MT\$OK" "MT-ok" 300]
 
 # ------------------------------------------------------------ the contents ---
-foreach d {src src/cmd ours ours/cmd mk} { v8_sh "mkdir $M/$d" 60 }
+foreach d {src src/cmd src/lsys ours mk} { v8_sh "mkdir $M/$d" 60 }
 
 # EVERY cpio DESTINATION HAS TO EXIST FIRST.  `-d' makes the directories that
 # appear inside the archive; it does NOT make the one you are copying into,
@@ -135,6 +135,18 @@ foreach d $SRCDIRS {
 # One cpio for the loose files: four round trips instead of four processes.
 v8_sh "cd $V/cmd; for f in [join $SRCFILES { }]; do cp \$f $M/src/cmd/\$f; done" 600
 note "src: the loose .c files" [v8_try "test -s $M/src/cmd/ld.c && echo LD\$OK" "LD-ok" 120]
+
+# THE KERNEL TREE.  6.6 MB of it, which fits easily: these blocks are 4096
+# bytes, so the 16384-block disk is 64 MB and MAXSMALL (30752) is 126 MB.
+# lsys/ and not sys/ -- settled in docs/v10-restoration.md K5: sys/ carries 126
+# .O files from being compiled in place, lsys/ is clean source, and seki (the
+# kernel this project boots) exists only in lsys/.
+note "src: lsys (the kernel)" \
+    [v8_try "cd $V/lsys; find . -print | cpio -pd $M/src/lsys && echo CP\$OK" "CP-ok" 3600]
+note "lsys: alice.m present" \
+    [v8_try "test -s $M/src/lsys/astro/alice.m && echo AL\$OK" "AL-ok" 120]
+note "lsys: mkconf present" \
+    [v8_try "test -s $M/src/lsys/lib/mkconf && echo MC\$OK" "MC-ok" 120]
 
 note "src: libc" \
     [v8_try "cd $V/libc; find . -print | cpio -pd $M/src/libc && echo CP\$OK" "CP-ok" 1800]
@@ -176,8 +188,14 @@ foreach f {lcc rcc cpp} {
 
 # Our overlay and our makefiles.  Both are small and both are what makes the
 # build ours rather than a re-run of 1995.
+# THE WHOLE OVERLAY, not just cmd/.  It used to be `cd /n/v10ours/cmd', which
+# was right while every correction was a loose command source -- and stopped
+# being right the moment v10/src/lsys/astro/ipnx780.m existed.  cpio -pd makes
+# the directories that appear INSIDE the archive, so one copy covers both.
 note "ours: the overlay" \
-    [v8_try "cd /n/v10ours/cmd; find . -print | cpio -pd $M/ours/cmd && echo CP\$OK" "CP-ok" 600]
+    [v8_try "cd /n/v10ours; find . -print | cpio -pd $M/ours && echo CP\$OK" "CP-ok" 600]
+note "ours: our 780 config" \
+    [v8_try "test -s $M/ours/lsys/astro/ipnx780.m && echo K7\$OK" "K7-ok" 120]
 note "mk: the makefiles" \
     [v8_try "cd /n/v10mk; find . -print | cpio -pd $M/mk && echo CP\$OK" "CP-ok" 600]
 

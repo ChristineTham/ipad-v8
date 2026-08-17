@@ -168,7 +168,36 @@ hardware terms.
       non-zero, swap sized for the image we actually build. Derived from `alice.m` and
       diffed against it in `v10/src/PATCHES.md`, so what is Bell Labs' and what is ours
       stays visible.
-- [ ] **K6 — run the prebuilt `mkconf`** (`lsys/lib/mkconf`, 37,932 B) on `alice.m` to
+- [x] **K6/K7 ARE FIVE COMMANDS, NOT A 750-FILE BUILD.** Found 2026-08-17 by reading
+      `lsys/lib/mk.star`, which is 23 lines. **Only two files are compiled** — the
+      generated `conf.c` and a `vers.c` date stamp — because the kernel is on the tape
+      as prebuilt archives, one per subsystem:
+
+	asstar.o  fs.a  io.a  star.a  bvax.a  os.a  vm.a  inet.a
+
+      and `lsys/lib/` carries the whole star (780) tool-set beside them: `mkconf`,
+      `devs`, `tab`, **`conf.star`** (the 780's standard table sizes), **`low.star`**,
+      `hupdate`, `listdep`, `mkall`. The recipe, translated out of `mk` syntax into the
+      commands to run, with `$M` the config name:
+
+	1  mkconf -t tab -l low.star -d devs -s $M.s.s -c $M.c.c conf.star $M.m
+	2  as -o $M.l.o ../ml/param.s ../ml/logen.s $M.s.s
+	3  cc -DKERNEL -I.. -c $M.c.c
+	4  echo 'char version[] = "Unix 10e <date>";' >vers.c ; cc -c vers.c
+	5  ld -n -X -o $M.u -T 80000000 -e start $M.l.o $M.c.o $LIBS vers.o
+
+      Three things follow, and they are the reason this was worth reading before
+      writing any harness:
+      - **The stage-1 toolchain is barely exercised by a kernel build** — one `cc -c`,
+        one `as`, one `ld`. So "can stage 1 build a kernel" is nearly free to answer,
+        and a failure will be in `mkconf`'s output or the link, not in 750 compiles.
+      - **`-T 80000000 -e start`** is the load address and entry point, which is exactly
+        what the boot block and the console must agree with. `ld -n` is shared text.
+      - **The archives are prebuilt 1995 binaries**, same provenance as `ccom` and `as`,
+        so a first bootable 780 kernel needs no world build. Rebuilding those `.a` from
+        `lsys/` source is a later, separable step — and `lsys/` is now on the source
+        disk (36/36) for exactly that.
+- [ ] **K6b — run the prebuilt `mkconf`** (`lsys/lib/mkconf`, 37,932 B) on `alice.m` to
       generate the kernel makefile, exactly as V8's `config`(8) does for its own tree.
       It is a 1995 V10 binary, so it runs on the machine we already have — same status
       as `ccom` and `as`.

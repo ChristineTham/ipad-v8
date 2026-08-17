@@ -262,35 +262,3 @@ arrives.
  
 ```
 
-
-## `lsys/astro/ipnx780.m` — our VAX-11/780 configuration (new file, 2026-08-17)
-
-Not a patch to a Bell Labs file: a **new** machine configuration beside theirs,
-derived from `lsys/astro/alice.m`. Recorded here because it is the one place a
-V10 kernel stops being purely Bell Labs' and starts being ours, and that
-boundary should be visible rather than inferred.
-
-**Why a new config rather than `alice.m` verbatim.** Christine, 2026-08-17:
-*"we need to generate a new config that we can build from."* `alice.m`
-describes one specific machine at Bell Labs — two Unibus adapters, two UDA50s
-at addresses its own comment calls *"annoyingly nonstandard"*, a TU78 tape, a
-Datakit interface, a DN11 autodialer. Compiling that and then failing to boot
-it teaches nothing about V10.
-
-**Which side moved.** Register and vector numbers are compiled into the kernel
-and are *settable* in the simulator, so where the two disagree the simulator
-moves and V10 keeps its own numbers. A device leaves the config only where SIMH
-has no counterpart at all. Measured with `show devices` on
-`work/opensimh/BIN/vax780`.
-
-| | |
-|---|---|
-| kept unchanged | `root regfs ra 0100` (UDA50/RA81, `0100` = the BITFS bit — exactly what `tools/v10-golden.sh` already writes); `ms780 0/1` = MCTL0/1; `ni1010a 0` = SIMH `IL`, this project's own device model; `ip/udp/tcp/arp` — alice already configured the whole stack |
-| `dw780 1` removed | SIMH has one Unibus adapter, so everything on `ub 1` moves to `ub 0` |
-| `uda50 1` removed | SIMH's `RQ` is one controller; unit 0 is the system disk, unit 1 the source disk |
-| `uda50 0` readdressed | `0772150`, SIMH's default, rather than alice's `0772160`. **The one place the config moved instead of the simulator** — the standard address is also V10's own elsewhere, so nothing is lost |
-| `ra 2..5`, six-way `swap` reduced | one controller, two disks. Swap is `ra 01` = unit 0 partition b, 20480 blocks at offset 10240 in `ra_sizes[]` |
-| `tm78`/`tu78`/`mba` removed | SIMH's MBA1 carries a TM03, not a TM78 — and the tape route is dead here anyway (`docs/media-exchange.md`: V8's `ht` driver panics the kernel) |
-| `dn11`, `drbit`, `dk`, `kmc11b` removed | no counterpart in SIMH's vax780. `dk` is Datakit, the network V10 lost in 1985 |
-| `dz11 4/5` removed, `dz11 0` at `vec 0300` | SIMH's `DZ` is one controller with 32 lines, and `C0` is its vector base |
-| **`netafs 4`, `netbfs 4`** | **the two lines this config exists for.** alice and seki both say `netafs 0`/`netbfs 0` — the network filesystem types compiled in with *zero instances* — which is half of why "there is no netfs on V10"; the other half was the 750 having no Interlan. Both halves are ours here: we write the config, and the 780 has our NI1010 |
