@@ -68,13 +68,26 @@ set src [lindex $argv 1]
 set N   /n/v10
 set S   /n/v10/src
 set K   /n/v10/mk
-set T2  /usr/s2               ;# stage 2: the libc this stage links
+set T1  /usr/s1               ;# stage 1: the PASSES that build this stage
+set T2  /usr/s2               ;# stage 2: the LIBC this stage links
 set T3  /usr/s3               ;# what this stage builds
 set T3B /usr/s3b              ;# and what stage 3 then builds with itself
 set OBJ /usr/obj
 set INC /usr/include
 
-set CCM3  "'CC=cc -B$T2/lib/ -t02p'"   ;# stage 3 is built BY stage 1/2's passes
+# -B NAMES WHERE THE PASSES ARE, AND STAGE 2 HAS NONE.  This was written as
+# -B$T2/lib/ on the reasoning that stage 3 is "built against stage 2" -- but
+# stage 2 built a LIBRARY, not a compiler: /usr/s2/lib holds libc.a, crt0.o and
+# mcrt0.o and nothing else.  The passes are stage 1's, at /usr/s1/lib, which is
+# exactly what stage 2's own macro line says (CCOM=/usr/s1/lib/ccom).
+#
+#	Make:  Don't know how to make /usr/s2/lib/ccom.  Stop.
+#
+# Stage 2's libc reaches this build the OTHER way -- installed over /lib/libc.a
+# and proved by cmp above -- because V10's cc has no `-t c' to redirect it.
+# Two different questions that both look like "which stage does this link
+# against", and conflating them cost a run.
+set CCM3  "'CC=cc -B$T1/lib/ -t02p'"   ;# built BY stage 1's passes
 set CCM3B "'CC=cc -B$T3/lib/ -t02p'"   ;# stage 3b is built BY stage 3
 
 # THE PASS PATHS, WHICH OVERRIDING $(CC) DOES NOT COVER.  This cost stage 3 two
@@ -95,7 +108,7 @@ set CCM3B "'CC=cc -B$T3/lib/ -t02p'"   ;# stage 3b is built BY stage 3
 # V10LIB carries CPP, CCOM, C2, AS and LD together; AS and LD are named
 # separately anyway because stage 1 installs `as' and `ld' into bin/ rather than
 # lib/, and AR/RANLIB are the running system's throughout.
-set P3  "V10LIB=$T2/lib CCPATH=/bin/cc AS=/bin/as LD=/usr/s1/bin/ld AR=/bin/ar RANLIB=/usr/bin/ranlib"
+set P3  "V10LIB=$T1/lib CCPATH=/bin/cc AS=/bin/as LD=$T1/bin/ld AR=/bin/ar RANLIB=/usr/bin/ranlib"
 set P3B "V10LIB=$T3/lib CCPATH=/bin/cc AS=/bin/as LD=$T3/bin/ld AR=/bin/ar RANLIB=/usr/bin/ranlib"
 
 set results {}
