@@ -1,0 +1,191 @@
+#!/usr/bin/env expect
+# K7: build a Tenth Edition kernel for the VAX-11/780, on V10.
+#
+#	expect tools/v10-kernel.exp <stage1-image> <src-image>
+#
+# Normally run through tools/v10-kernel.sh.
+#
+# THE RECIPE IS lsys/lib/mk.star's, TRANSLATED OUT OF mk SYNTAX.  It is 23
+# lines and only TWO files are compiled -- the conf.c that mkconf generates and
+# a vers.c date stamp -- because the kernel is on the tape as prebuilt
+# per-subsystem archives (asstar.o fs.a io.a star.a bvax.a os.a vm.a inet.a).
+# So this exercises the stage-1 toolchain exactly three times: one `as', one
+# `cc -c', one `ld'.  A failure will be in mkconf's output or in the link, and
+# not in seven hundred compiles.
+#
+# THE CONFIG IS OURS.  v10/src/lsys/astro/ipnx780.m, derived from Bell Labs'
+# alice.m and reduced to the hardware open-simh's vax780 actually provides --
+# one Unibus adapter, one UDA50, our NI1010 -- with netafs and netbfs given
+# non-zero instances, which alice and seki both leave at zero.  See its header
+# and docs/v10-restoration.md.
+#
+# WHY IT IS COPIED TO LOCAL DISK.  mkconf writes its output beside the config,
+# and `as'/`cc' write beside their input.  The source disk is mounted
+# read-write but is not ours to write into -- it is rebuilt from the host by
+# tools/v10-srcdisk.sh and a build that dirtied it would make the next run's
+# inputs depend on this one's outputs.
+log_user 1
+source [file dirname [info script]]/v10drive.exp
+set timeout 7200
+set V10_RUN_SECS 10800
+
+if {[llength $argv] < 2} {
+    puts "usage: v10-kernel.exp <stage1-image> <src-image>"
+    exit 2
+}
+set img [lindex $argv 0]
+set src [lindex $argv 1]
+
+set N   /n/v10
+set S   /n/v10/src
+set T1  /usr/s1               ;# stage 1's toolchain
+set K   /usr/obj/k780         ;# where WE write; the tree stays on the share
+set M   ipnx780               ;# our machine config
+
+set results {}
+proc note {name ok} { global results; lappend results [list $name $ok] }
+proc report {} {
+    global results
+    puts "\n===== V10 780 KERNEL RESULTS ====="
+    set failed 0
+    foreach r $results {
+        puts [format "  %-46s %s" [lindex $r 0] [expr {[lindex $r 1] ? "ok" : "NO"}]]
+        if {![lindex $r 1]} { incr failed }
+    }
+    puts "===== [expr {[llength $results] - $failed}]/[llength $results] =====\n"
+    return $failed
+}
+
+# ---------------------------------------------------------------------------
+v10_boot $img [list "set rq1 ra81" "attach rq1 $src"]
+v10_login root
+
+puts "\n===== V10 780 KERNEL (K7) ====="
+v10_sh "PATH=/bin:/etc:/usr/bin; export PATH" 120
+v10_sh "OK=-ok" 120
+
+v10_sh "mkdir /n; mkdir $N" 120
+note "source disk mounts" \
+    [v10_try "/etc/mount /dev/ra1c $N && echo MT\$OK" "MT-ok" 600]
+note "lsys on the source disk" \
+    [v10_try "test -s $S/lsys/lib/mkconf && echo LS\$OK" "LS-ok" 300]
+note "our 780 config on the source disk" \
+    [v10_try "test -s $N/ours/lsys/astro/$M.m && echo CF\$OK" "CF-ok" 300]
+note "stage 1 toolchain present" \
+    [v10_try "test -s $T1/lib/ccom && echo S1\$OK" "S1-ok" 120]
+
+# --------------------------------------------- nothing is copied, and why ---
+#
+# THE V10 GOLDEN HAS NO `find'.  The V8 idiom `find . -print | cpio -pd' is what
+# tools/v10-srcdisk.sh uses, and it is a V8 idiom -- on V10 it answers
+# `find: not found' and cpio then copies nothing, with the shell reporting
+# success.  That cost this harness its first run.
+#
+# It turns out no copy is needed at all.  mkconf takes its inputs as paths and
+# its outputs as -s/-c, and both `as -o' and `cc -c' write to the CURRENT
+# directory -- cc.c's setsuf() returns the basename, which is the same property
+# that makes the whole out-of-tree build work.  So the kernel tree is read from
+# the share where it lives, and every byte we produce lands in $K.
+#
+# That is also strictly better than copying: the source disk cannot be dirtied
+# by a build, so the next run's inputs cannot depend on this run's outputs.
+v10_sh "rm -rf $K; mkdir /usr/obj; mkdir $K" 300
+note "a place to build" [v10_try "test -d $K && echo BD\$OK" "BD-ok" 120]
+# Paths as shell variables: CANBSIZ is 256 and the mkconf line would not fit.
+v10_sh "P=$S/lsys/lib; Q=$S/lsys; C=$N/ours/lsys/astro/$M.m" 120
+note "the star tool-set is readable" \
+    [v10_try "test -s \$P/conf.star && test -s \$P/devs && echo TS\$OK" "TS-ok" 300]
+
+# ----------------------------------------------------------- 1. mkconf ------
+#
+# mk.star: mkconf -t tab -l low.star -d devs -s $stem.s.s -c $stem.c.c
+#          conf.star $stem.m
+# conf.star carries the 780's standard table sizes; our .m carries the devices.
+set mk [v10_try \
+    "cd $K; if \$P/mkconf -t \$P/tab -l \$P/low.star -d \$P/devs -s $M.s.s -c $M.c.c \$P/conf.star \$C > mk.log 2>&1; then echo MK\$OK; fi" \
+    "MK-ok" 900]
+note "mkconf accepted our config" $mk
+if {!$mk} { v10_run "cd $K; cat mk.log; echo MKEND" "MKEND" 600 }
+note "mkconf wrote conf.c" [v10_try "cd $K; test -s $M.c.c && echo CC\$OK" "CC-ok" 120]
+note "mkconf wrote low.s"  [v10_try "cd $K; test -s $M.s.s && echo LO\$OK" "LO-ok" 120]
+
+# ----------------------------------------------------------- 2. as ----------
+# mk.star: as -o $target ../ml/param.s ../ml/logen.s %.s.s
+set asm [v10_try \
+    "cd $K; if as -o $M.l.o \$Q/ml/param.s \$Q/ml/logen.s $M.s.s > as.log 2>&1; then echo AS\$OK; fi" \
+    "AS-ok" 1800]
+note "as assembled low core" $asm
+if {!$asm} { v10_run "cd $K; cat as.log; echo ASEND" "ASEND" 600 }
+
+# ----------------------------------------------------------- 3. cc conf.c ---
+# mk.star: CFLAGS=-DKERNEL -I..    (and cc's setsuf turns .c.c into .c.o)
+set ccc [v10_try \
+    "cd $K; if cc -B$T1/lib/ -t02p -DKERNEL -I\$Q -c $M.c.c > cc.log 2>&1; then echo CO\$OK; fi" \
+    "CO-ok" 1800]
+note "stage 1 cc compiled the generated conf.c" $ccc
+if {!$ccc} { v10_run "cd $K; cat cc.log; echo CCEND" "CCEND" 600 }
+
+# ----------------------------------------------------------- 4. vers.c ------
+# The kernel's banner.  mk.star derives it from date(1); we write it plainly so
+# the string is ours to recognise on the console -- this is the line that will
+# say whether the machine that boots is the one we built.
+v10_sh "cd $K; echo 'char version\[\] = \"Unix 10e ipnx 780\";' > vers.c" 120
+note "vers.c compiles" \
+    [v10_try "cd $K; if cc -B$T1/lib/ -t02p -c vers.c > v.log 2>&1; then echo VE\$OK; fi" \
+             "VE-ok" 900]
+
+# --------------------------------------- 4b. the archives, and ranlib ------
+#
+# `ld: warning: table of contents for archive is out of date; rerun ranlib(1)'
+# on all seven .a files, followed by a page of undefined symbols -- and this is
+# a rule CLAUDE.md already states: ANY RULE THAT COPIES AN ARCHIVE MUST
+# RE-RANLIB IT AT THE DESTINATION.  The tape's archives reached the source disk
+# through cpio, which gave each one a new mtime while its __.SYMDEF kept the
+# old one; getfile() reads that as case 3, stale, and falls back to ONE
+# sequential pass.  A kernel cannot link in one pass -- io.a's drivers reference
+# os.a and back again -- so the undefined list is a symptom and not the disease.
+#
+# The archives are copied locally to be ranlib'd, because the share must not be
+# written.  Eight files, so `cp' by glob does what `find | cpio' cannot.
+v10_sh "cp \$P/asstar.o $K" 600
+v10_sh "cp \$P/fs.a \$P/io.a \$P/star.a \$P/bvax.a $K" 900
+v10_sh "cp \$P/os.a \$P/vm.a \$P/inet.a $K" 900
+note "the archives copied" \
+    [v10_try "cd $K; test -s inet.a && test -s asstar.o && echo AC\$OK" "AC-ok" 300]
+v10_sh "cd $K; for a in fs.a io.a star.a bvax.a os.a vm.a inet.a; do ranlib \$a; done" 1800
+note "ranlib rebuilt every table of contents" \
+    [v10_try "cd $K; if ar t fs.a > /dev/null && ranlib inet.a; then echo RL\$OK; fi" "RL-ok" 600]
+
+# ----------------------------------------------------------- 5. ld ----------
+#
+# mk.star: ld -n -X -o $target -T 80000000 -e start $prereq vers.o
+# with $prereq = %.l.o %.c.o $LIBS, and LIBS in this exact order.
+#
+# The library list goes in a shell variable: CANBSIZ is 256 and the whole line
+# would not survive the tty.
+v10_sh "LB=\"asstar.o fs.a io.a star.a\"" 120
+v10_sh "LC=\"bvax.a os.a vm.a inet.a\"" 120
+set lnk [v10_try \
+    "cd $K; if ld -n -X -o $M.u -T 80000000 -e start $M.l.o $M.c.o \$LB \$LC vers.o > ld.log 2>&1; then echo LD\$OK; fi" \
+    "LD-ok" 3600]
+note "ld linked a 780 kernel" $lnk
+if {!$lnk} { v10_run "cd $K; cat ld.log; echo LDEND" "LDEND" 900 }
+
+# ---------------------------------------------------------------- what we got ---
+#
+# `test -s' is not evidence -- ld writes a partial a.out and THEN finds an
+# undefined symbol, so the file exists after a failed link.  Size and type are
+# what say whether this is a kernel.
+v10_sh "cd $K; ls -l $M.u vers.o $M.c.o $M.l.o" 600
+# THE SIZE CHECK IS THE HOST'S.  It was written here first as a sed with a
+# `[0-9]*' capture, which Tcl reads as COMMAND SUBSTITUTION -- `invalid command
+# name "0-9"' -- the exact trap tools/expdry.tcl exists to catch, and it caught
+# it before a boot was spent.  The guest prints the size; v10-kernel.sh reads
+# it, where there is arithmetic and no bracket to misparse.
+v10_run "cd $K; echo KSIZE; ls -l $M.u; echo KSIZEEND" "KSIZEEND" 600
+note "the kernel file exists" \
+    [v10_try "cd $K; test -s $M.u && echo KE\$OK" "KE-ok" 120]
+
+report
+v10_halt
+exit 0
