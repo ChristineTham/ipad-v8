@@ -321,6 +321,11 @@ Four reasons it is `cc`:
 So the direction of conversion is **ANSI → K&R**, which is the opposite of V11's and
 correct for exactly that reason: V10 keeps the 1989 language, V11 changes it.
 
+**Outcome (same day): `cc` alone reached 260 of 261**, so the numbers in the table above
+are the *starting* measurement and not the current one. Reason 4 was the load-bearing
+one — stage 3 is now a fixpoint, 7 of 7, which is precisely the statement that could not
+have been made about the tape's mixture.
+
 ### The work, in dependency order
 
 - [x] **B2.2a is HALF a header fix, and the other half is per-file.** Measured
@@ -343,30 +348,51 @@ correct for exactly that reason: V10 keeps the 1989 language, V11 changes it.
       header says. So each of the nine needs its parameter list rewritten
       old-style with the `...` dropped, keeping `va_start(args, fmt)` working off
       the last named parameter. Nine small, reviewable, per-file patches.
-- [ ] **B2.2a-2 — fix `stdio/iolib.h`.** It has branches for *V10 without stdarg*, *pANS
-      with stdarg* and *SGI*, and none for a V10 VAX, so nine members fail under both
-      compilers. r70 ships `varargs.h`, which is the K&R spelling; the V10 branch needs
-      it. One named patch in `v10/src/`, `mv.c`/`fsck.c` model. **Unblocks 9.**
-- [ ] **B2.2b — reconstruct `<shares.h>`.** Six members include it and it is in none of
-      the 25,682 files, but it is recoverable rather than lost: the six `.c` files name
-      every field they touch, their compiled objects are in `libc.a` to check offsets
-      against, and V10's share scheduler is in the kernel tree — so the struct can be
-      derived and verified. **Unblocks 6, and takes the ceiling to 261.**
-- [ ] **B2.2c — K&R the remaining ANSI members** (~20, listed in `mkdep.py`'s
-      `LIBC_LCC`). Mechanical and reviewable: prototypes → old-style definitions,
-      `void *` → `char *`, `size_t` → `int`, `<stdarg.h>`/`va_list` →
-      `<varargs.h>`/`va_list`, `const` dropped. Behaviour is unchanged; only the
-      spelling moves back. Each file a named patch.
-- [ ] **B2.2d — delete `LIBC_LCC` and the second compiler** from the generated
-      makefile, so `libc.mk` uses `$(COMPILE)` for all 261 and there is one compiler in
-      the build by construction rather than by policy.
-- [ ] **B2.2e — re-measure, and keep the witness.** Assert 261/261 build with `cc`
-      alone and that the archive links and runs a program; report byte-identity with the
-      tape as information, never as a pass condition. Expect it to *fall* as members are
-      refactored, and that is correct: we are no longer trying to match a V9 artefact.
-- [ ] **B2.2f — then stage 3**, on **stripped** binaries (V10's `cc.c` puts `getpid()`
-      into its temp filenames exactly as V8's does), with `stage 3 == stage 3b` as the
-      required test and `stage 1 == stage 3` as the interesting one.
+- [x] ~~**B2.2a-2 — fix `stdio/iolib.h`.**~~ **SUPERSEDED, not done** — the premise was
+      wrong and the tape said so. The claim was that `iolib.h` has no branch for a V10
+      VAX and therefore needs one. But `vfprintf.c` and `vfscanf.c` are the only two
+      members of the family that carry `#include <stdarg.h>` **themselves** and the only
+      two that build, so the missing line is a *per-file omission*, not a missing branch
+      in the header. Fixed per file with `#include <lcc/stdarg.h>` (the r70 variant that
+      is K&R-compatible), which leaves `iolib.h` byte-identical to the tape's — the more
+      authentic outcome of the two. See `v10/src/PATCHES.md` under `libc/stdio/printf.c`.
+- [x] **B2.2b — reconstruct `<shares.h>`.** Done, and verified against machine code
+      rather than only against the manual: `man/manx/lnode.5` prints the struct field by
+      field, and disassembling Bell Labs' own June 1989 `putshares.o`, `getshares.o`,
+      `setlimits.o` and `openshares.o` confirms every offset, both sizes at five
+      independent sites, and `MAXUID = 10000` twice. **Unblocked 5, not 6** — the
+      ceiling is **260**: `setupshares` also needs `struct sh_consts` from
+      `<sys/share.h>`, which is printed nowhere and referenced nowhere in either kernel
+      tree, and `L_GETCOSTS` has the *kernel* write through that pointer, so a guessed
+      size overwrites the caller's stack.
+- [x] **B2.2c — K&R the remaining ANSI members.** Done, as named overlay patches. One
+      correction to the recipe as written: `size_t` → **`unsigned int`**, not `int`, and
+      `<stdarg.h>` → **`<lcc/stdarg.h>`**, not `<varargs.h>`. Three of the batch also
+      needed a *system-layout* decision rather than a source edit — `stdlib.h`,
+      `float.h` and `stdarg.h` installed at `/usr/include` from r70's `CC/` and `lcc/`
+      variants, because r70 has all three but never at top level.
+- [x] **B2.2d — delete `LIBC_LCC` and the second compiler.** Done; `LIBC_LCC = []`, so
+      `libc.mk` uses `$(COMPILE)` for every member and there is one compiler by
+      construction. Do **not** reinstate lcc to close a member: the prebuilt driver hits
+      the `bowell.c` defect and emits empty objects while exiting 0, so a routed member
+      becomes a silent hole rather than a member.
+- [x] **B2.2e — re-measure, and keep the witness.** Done: **260 of 261 build with `cc`
+      alone** — more than the tape's own mixed toolchain managed (246) — with 148
+      byte-identical to the tape, reported as information. The prediction that identity
+      would *fall* was right and is recorded: 150 → 148 → 147 while the number that
+      build went 246 → 249 → 252 → 260. The assertion is **260**, not 261: an assertion
+      that can never pass is not an assertion, and `all 261 members compiled: NO` being
+      permanently NO is exactly what let a *second* missing member (`atof.o`) hide behind
+      it for a week.
+- [x] **B2.2f — then stage 3.** Done, **33/33** (`tools/v10-stage3.sh`). All seven
+      components — `yacc cpp ccom as c2 ld cc` — are byte-identical to the copy built by
+      their own output, stripped with `ld -x -r` because V10 has no `strip`. The strong
+      test measures 7 differ / 0 same, as predicted. Note two things the harness had to
+      learn: the seal is option (a) (stage 2's `libc.a` installed over `/lib/libc.a` and
+      asserted before anything is built, since V10's `cc` has no `-t a/l/c`), and the
+      strip must be asserted **separately** from the comparison — `cmp` on a missing file
+      reports as a difference, so a fixpoint that compared nothing read as a compiler
+      that does not reproduce itself.
 
 ### What this costs, stated plainly
 

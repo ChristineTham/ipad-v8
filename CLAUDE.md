@@ -1646,17 +1646,45 @@ tape's `fgets.o` was compiled by `lcc` from ANSI source and ours is `cc` from
 K&R source, so it *must* differ. Read the two numbers together or neither means
 anything.
 
-Next: **the remaining eight**, as overlay conversions beside these.
-Not by reinstating lcc: it still hits the documented `bowell.c` defect
-(`0: unknown flag -undef`), so a member routed to it can be an **empty object
-that exits 0** — eleven silent holes in `libc.a` against eleven loud failures,
-and the loud ones are worth more. Then **stage 3** (the fixpoint — and the place
-where V10's missing `-t a/l/c` letters have to be faced; V8's
-`docs/build-from-source.md` already settles the theory: `stage 1 == stage 3` is
-the *strong* test and `stage 3 == stage 3b` the *required* one, both on
-**stripped** binaries, since V10's `cc.c` puts `getpid()` into its temp
-filenames exactly as V8's does). Then stage 7, the 780 kernel from `alice.m`
-via the prebuilt `mkconf`.
+**STAGE 2 IS AT ITS CEILING AND STAGE 3 IS A FIXPOINT** (2026-08-17,
+`tools/v10-stage3.sh`, **33/33**). Stage 2 builds **260 of 261**, 148
+byte-identical; the 261st is `setupshares`, which fails on
+`Can't find include file sys/share.h` — a header printed nowhere and referenced
+nowhere — and which nothing in the system we build calls any more, because the
+Share scheduler is out of `login`. So 260 is the whole library, not a shortfall.
+
+Then stage 3, which is the test the whole bootstrap exists to pass:
+
+	stage 3   built by stage 1's passes, linked against stage 2's libc
+	stage 3b  built by STAGE 3's passes, same libc
+	stripped with `ld -x -r' (there is no strip on V10)
+
+	components reproducing themselves   7      <- yacc cpp ccom as c2 ld cc
+	components that do NOT              0
+
+**Every one of the seven is byte-identical to the copy its own output built.**
+The toolchain is a fixpoint on V10, from source, against a libc we built. The
+strong test measures 7 differ / 0 same, exactly as predicted: stage 1 linked the
+*tape's* `libc.a` and stage 3 links ours, and only 148 of 261 members agree.
+
+Three things worth carrying forward from how it was reached, because all three
+were faults in *measurement* and none in the code being measured:
+- `atof.o` was missing from `libc.a` and **stage 3's link was the first thing to
+  say so** (`Undefined: _atof`). Stage 2 had reported it and an anchored grep
+  dropped the line.
+- The fixpoint's first run reported **seven differences from zero comparisons** —
+  `v10_order` returns one column and the harness destructured it as rows, so
+  every install path was empty and `ld` was handed a directory. `v10_rows` now
+  checks the column count, and the strip is asserted separately from the
+  comparison, because `cmp` on a missing file reports as a difference.
+- A diagnostic that re-ran a failing `make` **reported success**, because V10's
+  `ld` writes its output even when symbols are undefined.
+
+Next: **K8**, a bootable 780 disk — `tools/v10-kernel.sh` already passes 17/17,
+so `mkconf` accepts our config, stage 1's `cc` compiles the generated `conf.c`,
+and `ld` links a 780 kernel installed as `/unix`. Then K9 (boot it under the
+app's own `vax780`), K10 (the world), and the two workarounds a 780 kernel
+retires: K11's full-capacity filesystem and K12's netfs.
 Also **submit** — the remaining steps need the Apple account and a
 final name decision, all listed in [docs/app-store.md](docs/app-store.md).
 **Not yet exercised — one thing, and it needs a human at a mouse**: `mux`/`jim`
