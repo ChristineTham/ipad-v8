@@ -493,7 +493,7 @@ LIBC_OURS = [
     # no stddef.h, no stdlib.h, size_t defined nowhere at top level.  The other
     # eight (_dtoa _fconv malloc qsort rdwr strtod vfprintf vfscanf) are real
     # work and stay named in the MISS list until they are done properly.
-    "fgets.o", "fputs.o", "memmove.o", "qsort.o", "rdwr.o", "malloc.o",
+    "fgets.o", "fputs.o", "memmove.o", "qsort.o", "rdwr.o", "malloc.o", "_dtoa.o", "_fconv.o", "strtod.o",
 ]
 
 # EMPTY, AND THAT IS THE POINT: V10's libc is built by ONE compiler.
@@ -637,10 +637,25 @@ def emit_libc():
     d = os.path.join(SRC, LIBC_DIR)
     srcdir = "$(SRC)/" + LIBC_DIR
 
+    ourdir = os.path.join(OURS, LIBC_DIR)
+
     def dep(path):
         path = os.path.normpath(path)
         if path.startswith(INC + os.sep):
             return "$(INCDIR)/" + mkgen.rel(path, INC)
+        # A HEADER IN THE OVERLAY MUST BE NAMED $(OURS), not walked to from
+        # $(SRC).  An overlay source's quoted `#include "fconv.h"' resolves next
+        # to that source, so the scanner hands back a path under v10/src/, and
+        # relativising it against the pristine tree produced
+        #
+        #	$(SRC)/libc/../../../../v10/src/libc/stdio/fconv.h
+        #
+        # -- a prerequisite naming a file that does not exist on the guest at
+        # all, so make answers `Don't know how to make' and the member never
+        # compiles.  Only an OVERLAY header can reach here, since the pristine
+        # tree is what $(SRC) is.
+        if path.startswith(ourdir + os.sep):
+            return "$(OURS)/" + LIBC_DIR + "/" + mkgen.rel(path, ourdir)
         return srcdir + "/" + mkgen.rel(path, d)
 
     # -DV10, WHICH THE TAPE'S OWN cc RULE DOES NOT PASS AND ITS lcc RULE DOES.

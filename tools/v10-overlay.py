@@ -530,6 +530,106 @@ _ANSI93 = [
       ("	q = qq;\n", "	q = (union store *)qq;\t\t/* ipnx: K&R cast */\n", 1),
       ("	register union store *p = pp;\n",
        "	register union store *p = (union store *)pp;\t/* ipnx: K&R cast */\n", 1)]),
+    # fconv.h: Gay's shared header, and the door in front of THREE members --
+    # _dtoa.c, _fconv.c and strtod.c all include it and nothing else does.
+    #
+    # `#define CONST const' becomes an EMPTY macro, which is the whole fix for
+    # `const' in this subtree: CONST is used only in strtod.c (three times), so
+    # emptying the definition converts all three without touching that file's
+    # text.  Gay wrote the macro for exactly this -- a 1991 header meant to
+    # build on pre-ANSI compilers too.
+    #
+    # AND IT HAS TO BE AN OVERLAY .h WITH OVERLAY .c FILES BESIDE IT.
+    # `#include "fconv.h"' is quoted, so it resolves against the INCLUDING
+    # file's directory: a pristine _dtoa.c in $(SRC)/libc/stdio/ would find the
+    # tape's fconv.h no matter what we install elsewhere.  Our copies sit in
+    # $(OURS)/libc/stdio/ and find ours first -- which is why the header and its
+    # three users convert together or not at all.
+    ("libc/stdio/fconv.h",
+     "9332aed85806f8f8a45039f3dc995d3854bd7aa7b98f405109fe8e13fd7bdf5c",
+     [("#define CONST const\n",
+       "#define CONST\t\t/* ipnx: pcc2 has no const -- see PATCHES.md */\n", 1),
+      ("extern Bigint	*_Balloc(int);\nextern void	_Bfree(Bigint *);\n"
+       "extern Bigint	*_multadd(Bigint *, int, int);\n"
+       "extern int	_hi0bits(unsigned long);\n"
+       "extern Bigint	*_mult(Bigint *, Bigint *);\n"
+       "extern Bigint	*_pow5mult(Bigint *, int);\n"
+       "extern Bigint	*_lshift(Bigint *, int);\n"
+       "extern int	_cmp(Bigint *, Bigint *);\n"
+       "extern Bigint	*_diff(Bigint *, Bigint *);\n"
+       "extern Bigint	*_d2b(double, int *, int *);\n"
+       "extern Bigint	*_i2b(int);\n",
+       "/* ipnx: K&R declarations -- see PATCHES.md */\n"
+       "extern Bigint	*_Balloc();\nextern void	_Bfree();\n"
+       "extern Bigint	*_multadd();\n"
+       "extern int	_hi0bits();\n"
+       "extern Bigint	*_mult();\n"
+       "extern Bigint	*_pow5mult();\n"
+       "extern Bigint	*_lshift();\n"
+       "extern int	_cmp();\n"
+       "extern Bigint	*_diff();\n"
+       "extern Bigint	*_d2b();\n"
+       "extern Bigint	*_i2b();\n", 1)]),
+    # _dtoa.c: 745 lines and only THREE declarations, because Gay's style puts
+    # everything else in macros.  The body is untouched.
+    ("libc/stdio/_dtoa.c",
+     "451cddacdadac850e39486af1aaa62668824a1d25f6998f681e4372f2097a66c",
+     [("static int quorem(Bigint *, Bigint *);\n",
+       "static int quorem();\t\t/* ipnx: K&R, see PATCHES.md */\n", 1),
+      ("_dtoa(double darg, int mode, int ndigits, int *decpt, int *sign, char **rve)\n",
+       "_dtoa(darg, mode, ndigits, decpt, sign, rve)\t/* ipnx: K&R */\n"
+       "\tdouble darg;\n\tint mode;\n\tint ndigits;\n"
+       "\tint *decpt;\n\tint *sign;\n\tchar **rve;\n", 1),
+      ("quorem(Bigint *b, Bigint *S)\n",
+       "quorem(b, S)\n\tBigint *b;\n\tBigint *S;\n", 1)]),
+    # _fconv.c and strtod.c: the other two users of fconv.h.  They MUST be
+    # overlay files even though their own ANSI surface is small, because
+    # `#include "fconv.h"' is quoted and resolves next to the including source --
+    # a pristine copy in $(SRC)/libc/stdio/ finds the TAPE's header no matter
+    # what, and the run that converted only fconv.h and _dtoa.c proved it:
+    #	"$(SRC)/libc/stdio/fconv.h":220:syntax error
+    # still, from these two, while _dtoa.o built.  The header and its three
+    # users convert together or not at all.
+    ("libc/stdio/_fconv.c",
+     "d7aaa4c59e24c5b82f273be23d9dbdab4e9f3c06a3342d48531cc88260b1dfbc",
+     [("_Balloc(int k)\n", "_Balloc(k)\n\tint k;\n", 1),
+      ("_Bfree(Bigint *v)\n", "_Bfree(v)\n\tBigint *v;\n", 1),
+      ("_multadd(Bigint *b, int m, int a)	/* multiply by m and add a */\n",
+       "_multadd(b, m, a)	/* multiply by m and add a */\n"
+       "\tBigint *b;\n\tint m;\n\tint a;\n", 1),
+      ("_hi0bits(register unsigned long x)\n",
+       "_hi0bits(x)\n\tregister unsigned long x;\n", 1),
+      ("lo0bits(unsigned long *y)\n", "lo0bits(y)\n\tunsigned long *y;\n", 1),
+      ("_i2b(int i)\n", "_i2b(i)\n\tint i;\n", 1),
+      ("_mult(Bigint *a, Bigint *b)\n", "_mult(a, b)\n\tBigint *a;\n\tBigint *b;\n", 1),
+      ("_pow5mult(Bigint *b, int k)\n", "_pow5mult(b, k)\n\tBigint *b;\n\tint k;\n", 1),
+      ("_lshift(Bigint *b, int k)\n", "_lshift(b, k)\n\tBigint *b;\n\tint k;\n", 1),
+      ("_cmp(Bigint *a, Bigint *b)\n", "_cmp(a, b)\n\tBigint *a;\n\tBigint *b;\n", 1),
+      ("_diff(Bigint *a, Bigint *b)\n", "_diff(a, b)\n\tBigint *a;\n\tBigint *b;\n", 1),
+      ("_d2b(double darg, int *e, int *bits)\n",
+       "_d2b(darg, e, bits)\n\tdouble darg;\n\tint *e;\n\tint *bits;\n", 1)]),
+    ("libc/stdio/strtod.c",
+     "a15e37af35e7c179faf4e04c7815b720a4f52fa2e9b1cb7531a8e17ed35aefd1",
+     [("ulp(double xarg)\n", "ulp(xarg)\n\tdouble xarg;\n", 1),
+      ("s2b(CONST char *s, int nd0, int nd, unsigned long y9)\n",
+       "s2b(s, nd0, nd, y9)\n\tCONST char *s;\n\tint nd0;\n\tint nd;\n"
+       "\tunsigned long y9;\n", 1),
+      # b2d WAS MISSED ON THE FIRST PASS, and by a truncated grep rather than by
+      # anything subtle: two files were listed in one `grep | head -24' and
+      # _fconv.c's eleven definitions used up the lines.  The build named it at
+      # once ("strtod.c":116:syntax error / saw *), so nothing was lost -- but
+      # when enumerating what to convert, count the matches instead of reading a
+      # window of them.
+      ("b2d(Bigint *a, int *e)\n", "b2d(a, e)\n\tBigint *a;\n\tint *e;\n", 1),
+      ("ratio(Bigint *a, Bigint *b)\n", "ratio(a, b)\n\tBigint *a;\n\tBigint *b;\n", 1),
+      # CONST SURVIVES IN THE PARAMETER DECLARATIONS, and that is deliberate:
+      # fconv.h's `#define CONST' is now empty, so `CONST char *s;' expands to
+      # `char *s;'.  Gay put the macro there for pre-ANSI compilers and it is
+      # doing exactly its job -- leaving it in place keeps this file closer to
+      # the tape than spelling the expansion out would.
+      ("strtod(CONST char *s00, char **se)\n",
+       "strtod(s00, se)\t\t/* ipnx: K&R, see PATCHES.md */\n"
+       "\tCONST char *s00;\n\tchar **se;\n", 1)]),
     ("libc/gen/memmove.c",
      "8de6bd16b4d961d41eb7330816e04068b4ba391cedd55fdf95b05ab81a2280db",
      [("#include <stddef.h>\n\nextern void *memcpy(void*, void*, size_t);\n\n"

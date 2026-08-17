@@ -895,17 +895,17 @@ llseek.o: $(SRC)/libc/sys/llseek.s $(TOOLS)
 LL.o: $(SRC)/libc/gen/LL.c $(INCDIR)/signal.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h $(TOOLS)
 	$(COMPILE) $(SRC)/libc/gen/LL.c
 
-_dtoa.o: $(SRC)/libc/stdio/_dtoa.c $(INCDIR)/errno.h $(INCDIR)/math.h $(INCDIR)/string.h $(SRC)/libc/stdio/fconv.h $(TOOLS)
-	$(COMPILE) $(SRC)/libc/stdio/_dtoa.c
+_dtoa.o: $(OURS)/libc/stdio/_dtoa.c $(INCDIR)/errno.h $(INCDIR)/math.h $(INCDIR)/string.h $(OURS)/libc/stdio/fconv.h $(TOOLS)
+	$(COMPILE) -I$(SRC)/libc/stdio $(OURS)/libc/stdio/_dtoa.c
 
-_fconv.o: $(SRC)/libc/stdio/_fconv.c $(INCDIR)/errno.h $(INCDIR)/math.h $(INCDIR)/stdio.h $(INCDIR)/string.h $(INCDIR)/tmpnam.h $(SRC)/libc/stdio/fconv.h $(TOOLS)
-	$(COMPILE) $(SRC)/libc/stdio/_fconv.c
+_fconv.o: $(OURS)/libc/stdio/_fconv.c $(INCDIR)/errno.h $(INCDIR)/math.h $(INCDIR)/stdio.h $(INCDIR)/string.h $(INCDIR)/tmpnam.h $(OURS)/libc/stdio/fconv.h $(TOOLS)
+	$(COMPILE) -I$(SRC)/libc/stdio $(OURS)/libc/stdio/_fconv.c
 
 snprintf.o: $(OURS)/libc/stdio/snprintf.c $(INCDIR)/lcc/stdarg.h $(TOOLS)
 	$(COMPILE) -I$(SRC)/libc/stdio $(OURS)/libc/stdio/snprintf.c
 
-strtod.o: $(SRC)/libc/stdio/strtod.c $(INCDIR)/errno.h $(INCDIR)/math.h $(INCDIR)/string.h $(SRC)/libc/stdio/fconv.h $(TOOLS)
-	$(COMPILE) $(SRC)/libc/stdio/strtod.c
+strtod.o: $(OURS)/libc/stdio/strtod.c $(INCDIR)/errno.h $(INCDIR)/math.h $(INCDIR)/string.h $(OURS)/libc/stdio/fconv.h $(TOOLS)
+	$(COMPILE) -I$(SRC)/libc/stdio $(OURS)/libc/stdio/strtod.c
 
 fscanf.o: $(OURS)/libc/stdio/fscanf.c $(INCDIR)/lcc/stdarg.h $(TOOLS)
 	$(COMPILE) -I$(SRC)/libc/stdio $(OURS)/libc/stdio/fscanf.c

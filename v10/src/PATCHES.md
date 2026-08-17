@@ -933,6 +933,317 @@ the spelling moves back eight years.
  	union store *q = cache[(clearbusy(p->ptr)-p)%CACHESIZ];
 ```
 
+## fconv.h: a 1993 ANSI member, converted to K&R (B2.2d)
+
+`libc/stdio/fconv.h`, sha256 `9332aed85806f8f8`
+
+One of the eleven members that only `lcc` could build, and `lcc` cannot be
+trusted to: the prebuilt driver hits the `bowell.c` defect
+(`0: unknown flag -undef`) and emits **empty objects while exiting 0**, so
+routing a member to it buys a silent hole in `libc.a` rather than a member.
+
+These carry `/* Copyright AT&T Bell Laboratories, 1993 */` and are addressed to
+a header set that is not installed: r70's `/usr/include` has no `stddef.h`, no
+`stdlib.h`, and defines `size_t` nowhere. That is the same two-generations split
+as the stdio family, one layer down -- not a prototype to strip but a different
+C to translate out of.
+
+`void *` becomes `char *` and `size_t` becomes `unsigned int`. Both pairs are
+the same width on a VAX, `char *` is K&R's generic pointer, and it is how V8's
+own libc declares these functions -- so the generated code is unchanged and only
+the spelling moves back eight years.
+```diff
+--- tarball/libc/stdio/fconv.h
++++ ours/libc/stdio/fconv.h
+@@ -32,5 +32,5 @@
+ #include <float.h>
+ #include <math.h>
+-#define CONST const
++#define CONST		/* ipnx: pcc2 has no const -- see PATCHES.md */
+ 
+ #ifdef vax
+@@ -218,15 +218,16 @@
+ 
+ /* This routines shouldn't be visible externally */
+-extern Bigint	*_Balloc(int);
+-extern void	_Bfree(Bigint *);
+-extern Bigint	*_multadd(Bigint *, int, int);
+-extern int	_hi0bits(unsigned long);
+-extern Bigint	*_mult(Bigint *, Bigint *);
+-extern Bigint	*_pow5mult(Bigint *, int);
+-extern Bigint	*_lshift(Bigint *, int);
+-extern int	_cmp(Bigint *, Bigint *);
+-extern Bigint	*_diff(Bigint *, Bigint *);
+-extern Bigint	*_d2b(double, int *, int *);
+-extern Bigint	*_i2b(int);
++/* ipnx: K&R declarations -- see PATCHES.md */
++extern Bigint	*_Balloc();
++extern void	_Bfree();
++extern Bigint	*_multadd();
++extern int	_hi0bits();
++extern Bigint	*_mult();
++extern Bigint	*_pow5mult();
++extern Bigint	*_lshift();
++extern int	_cmp();
++extern Bigint	*_diff();
++extern Bigint	*_d2b();
++extern Bigint	*_i2b();
+ 
+ extern double	_tens[], _bigtens[], _tinytens[];
+```
+
+## _dtoa.c: a 1993 ANSI member, converted to K&R (B2.2d)
+
+`libc/stdio/_dtoa.c`, sha256 `451cddacdadac850`
+
+One of the eleven members that only `lcc` could build, and `lcc` cannot be
+trusted to: the prebuilt driver hits the `bowell.c` defect
+(`0: unknown flag -undef`) and emits **empty objects while exiting 0**, so
+routing a member to it buys a silent hole in `libc.a` rather than a member.
+
+These carry `/* Copyright AT&T Bell Laboratories, 1993 */` and are addressed to
+a header set that is not installed: r70's `/usr/include` has no `stddef.h`, no
+`stdlib.h`, and defines `size_t` nowhere. That is the same two-generations split
+as the stdio family, one layer down -- not a prototype to strip but a different
+C to translate out of.
+
+`void *` becomes `char *` and `size_t` becomes `unsigned int`. Both pairs are
+the same width on a VAX, `char *` is K&R's generic pointer, and it is how V8's
+own libc declares these functions -- so the generated code is unchanged and only
+the spelling moves back eight years.
+```diff
+--- tarball/libc/stdio/_dtoa.c
++++ ours/libc/stdio/_dtoa.c
+@@ -1,5 +1,5 @@
+ #include "fconv.h"
+ 
+-static int quorem(Bigint *, Bigint *);
++static int quorem();		/* ipnx: K&R, see PATCHES.md */
+ 
+ /* dtoa for IEEE arithmetic (dmg): convert double to ASCII string.
+@@ -38,5 +38,11 @@
+ 
+  char *
+-_dtoa(double darg, int mode, int ndigits, int *decpt, int *sign, char **rve)
++_dtoa(darg, mode, ndigits, decpt, sign, rve)	/* ipnx: K&R */
++	double darg;
++	int mode;
++	int ndigits;
++	int *decpt;
++	int *sign;
++	char **rve;
+ {
+  /*	Arguments ndigits, decpt, sign are similar to those
+@@ -645,5 +651,7 @@
+ 
+  static int
+-quorem(Bigint *b, Bigint *S)
++quorem(b, S)
++	Bigint *b;
++	Bigint *S;
+ {
+ 	int n;
+```
+
+## _fconv.c: a 1993 ANSI member, converted to K&R (B2.2d)
+
+`libc/stdio/_fconv.c`, sha256 `d7aaa4c59e24c5b8`
+
+One of the eleven members that only `lcc` could build, and `lcc` cannot be
+trusted to: the prebuilt driver hits the `bowell.c` defect
+(`0: unknown flag -undef`) and emits **empty objects while exiting 0**, so
+routing a member to it buys a silent hole in `libc.a` rather than a member.
+
+These carry `/* Copyright AT&T Bell Laboratories, 1993 */` and are addressed to
+a header set that is not installed: r70's `/usr/include` has no `stddef.h`, no
+`stdlib.h`, and defines `size_t` nowhere. That is the same two-generations split
+as the stdio family, one layer down -- not a prototype to strip but a different
+C to translate out of.
+
+`void *` becomes `char *` and `size_t` becomes `unsigned int`. Both pairs are
+the same width on a VAX, `char *` is K&R's generic pointer, and it is how V8's
+own libc declares these functions -- so the generated code is unchanged and only
+the spelling moves back eight years.
+```diff
+--- tarball/libc/stdio/_fconv.c
++++ ours/libc/stdio/_fconv.c
+@@ -35,5 +35,6 @@
+ 
+  Bigint *
+-_Balloc(int k)
++_Balloc(k)
++	int k;
+ {
+ 	int x;
+@@ -54,5 +55,6 @@
+ 
+  void
+-_Bfree(Bigint *v)
++_Bfree(v)
++	Bigint *v;
+ {
+ 	if (v) {
+@@ -64,5 +66,8 @@
+ 
+  Bigint *
+-_multadd(Bigint *b, int m, int a)	/* multiply by m and add a */
++_multadd(b, m, a)	/* multiply by m and add a */
++	Bigint *b;
++	int m;
++	int a;
+ {
+ 	int i, wds;
+@@ -104,5 +109,6 @@
+ 
+  int
+-_hi0bits(register unsigned long x)
++_hi0bits(x)
++	register unsigned long x;
+ {
+ 	register int k = 0;
+@@ -133,5 +139,6 @@
+ 
+  static int
+-lo0bits(unsigned long *y)
++lo0bits(y)
++	unsigned long *y;
+ {
+ 	register int k;
+@@ -176,5 +183,6 @@
+ 
+  Bigint *
+-_i2b(int i)
++_i2b(i)
++	int i;
+ {
+ 	Bigint *b;
+@@ -187,5 +195,7 @@
+ 
+  Bigint *
+-_mult(Bigint *a, Bigint *b)
++_mult(a, b)
++	Bigint *a;
++	Bigint *b;
+ {
+ 	Bigint *c;
+@@ -272,5 +282,7 @@
+ 
+  Bigint *
+-_pow5mult(Bigint *b, int k)
++_pow5mult(b, k)
++	Bigint *b;
++	int k;
+ {
+ 	Bigint *b1, *p5, *p51;
+@@ -306,5 +318,7 @@
+ 
+  Bigint *
+-_lshift(Bigint *b, int k)
++_lshift(b, k)
++	Bigint *b;
++	int k;
+ {
+ 	int i, k1, n, n1;
+@@ -361,5 +375,7 @@
+ 
+  int
+-_cmp(Bigint *a, Bigint *b)
++_cmp(a, b)
++	Bigint *a;
++	Bigint *b;
+ {
+ 	unsigned long *xa, *xa0, *xb, *xb0;
+@@ -390,5 +406,7 @@
+ 
+  Bigint *
+-_diff(Bigint *a, Bigint *b)
++_diff(a, b)
++	Bigint *a;
++	Bigint *b;
+ {
+ 	Bigint *c;
+@@ -467,5 +485,8 @@
+ 
+  Bigint *
+-_d2b(double darg, int *e, int *bits)
++_d2b(darg, e, bits)
++	double darg;
++	int *e;
++	int *bits;
+ {
+ 	Bigint *b;
+```
+
+## strtod.c: a 1993 ANSI member, converted to K&R (B2.2d)
+
+`libc/stdio/strtod.c`, sha256 `a15e37af35e7c179`
+
+One of the eleven members that only `lcc` could build, and `lcc` cannot be
+trusted to: the prebuilt driver hits the `bowell.c` defect
+(`0: unknown flag -undef`) and emits **empty objects while exiting 0**, so
+routing a member to it buys a silent hole in `libc.a` rather than a member.
+
+These carry `/* Copyright AT&T Bell Laboratories, 1993 */` and are addressed to
+a header set that is not installed: r70's `/usr/include` has no `stddef.h`, no
+`stdlib.h`, and defines `size_t` nowhere. That is the same two-generations split
+as the stdio family, one layer down -- not a prototype to strip but a different
+C to translate out of.
+
+`void *` becomes `char *` and `size_t` becomes `unsigned int`. Both pairs are
+the same width on a VAX, `char *` is K&R's generic pointer, and it is how V8's
+own libc declares these functions -- so the generated code is unchanged and only
+the spelling moves back eight years.
+```diff
+--- tarball/libc/stdio/strtod.c
++++ ours/libc/stdio/strtod.c
+@@ -41,5 +41,6 @@
+ 
+  static double
+-ulp(double xarg)
++ulp(xarg)
++	double xarg;
+ {
+ 	register long L;
+@@ -76,5 +77,9 @@
+ 
+  static Bigint *
+-s2b(CONST char *s, int nd0, int nd, unsigned long y9)
++s2b(s, nd0, nd, y9)
++	CONST char *s;
++	int nd0;
++	int nd;
++	unsigned long y9;
+ {
+ 	Bigint *b;
+@@ -109,5 +114,7 @@
+ 
+  static double
+-b2d(Bigint *a, int *e)
++b2d(a, e)
++	Bigint *a;
++	int *e;
+ {
+ 	unsigned long *xa, *xa0, w, y, z;
+@@ -174,5 +181,7 @@
+ 
+  static double
+-ratio(Bigint *a, Bigint *b)
++ratio(a, b)
++	Bigint *a;
++	Bigint *b;
+ {
+ 	Dul da, db;
+@@ -210,5 +219,7 @@
+ 
+  double
+-strtod(CONST char *s00, char **se)
++strtod(s00, se)		/* ipnx: K&R, see PATCHES.md */
++	CONST char *s00;
++	char **se;
+ {
+ 	int bb2, bb5, bbe, bd2, bd5, bbbits, bs2, c, dsign,
+```
+
 ## memmove.c: a 1993 ANSI member, converted to K&R (B2.2d)
 
 `libc/gen/memmove.c`, sha256 `8de6bd16b4d961d4`
