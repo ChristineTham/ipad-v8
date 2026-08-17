@@ -108,8 +108,17 @@ set CCM3B "'CC=cc -B$T3/lib/ -t02p'"   ;# stage 3b is built BY stage 3
 # V10LIB carries CPP, CCOM, C2, AS and LD together; AS and LD are named
 # separately anyway because stage 1 installs `as' and `ld' into bin/ rather than
 # lib/, and AR/RANLIB are the running system's throughout.
-set P3  "V10LIB=$T1/lib CCPATH=/bin/cc AS=/bin/as LD=$T1/bin/ld AR=/bin/ar RANLIB=/usr/bin/ranlib"
-set P3B "V10LIB=$T3/lib CCPATH=/bin/cc AS=/bin/as LD=$T3/bin/ld AR=/bin/ar RANLIB=/usr/bin/ranlib"
+# LIBC IS NAMED SEPARATELY, because it is the one thing that does NOT come from
+# where the passes live.  libc.mk has `LIBC = $(V10LIB)/libc.a', and V10LIB is
+# stage 1's directory -- which has no libc.a in it, because stage 1 linked the
+# TAPE's:
+#	Make:  Don't know how to make /usr/s1/lib/libc.a.  Stop.
+# Stage 3's whole point is stage 2's library under stage 1's compiler, so the two
+# halves genuinely come from two different stages and one macro cannot serve
+# both.  Both stage 3 and stage 3b use stage 2's libc: stage 3 built a compiler,
+# not a library.
+set P3  "V10LIB=$T1/lib LIBC=$T2/lib/libc.a CCPATH=/bin/cc AS=/bin/as LD=$T1/bin/ld AR=/bin/ar RANLIB=/usr/bin/ranlib"
+set P3B "V10LIB=$T3/lib LIBC=$T2/lib/libc.a CCPATH=/bin/cc AS=/bin/as LD=$T3/bin/ld AR=/bin/ar RANLIB=/usr/bin/ranlib"
 
 set results {}
 proc note {name ok} { global results; lappend results [list $name $ok] }
