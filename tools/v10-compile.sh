@@ -64,6 +64,21 @@ python3 "$ROOT/tools/v10-world.py" --check || {
 # correct.  srcid_check refuses a disk stamped from different sources.
 srcid_check "$SRC" || exit 1
 
+# ROOM, CHECKED ON THE HOST, BECAUSE A FULL V10 FILESYSTEM HANGS RATHER THAN
+# FAILING.  lsys/fs/alloc.c prints `file system full' and sleeps waiting for
+# space that is not coming, so no guest-side probe can catch it -- the probe
+# blocks in the same place as the thing it guards.  tools/v10-free.py reads the
+# superblock out of the image file and counts the bitmap, on the same argument
+# tools/v8fs.py was written from: read a disk from the host, don't boot one to
+# look.
+#
+# 8,000 blocks is 31 MB, far above the survey's real peak (objects are removed
+# per unit) and low enough that a normal stage image passes easily.
+python3 "$ROOT/tools/v10-free.py" "$ROOT/work/v10gold/$GOLD" c --need 8000 || {
+    echo "v10-compile: not enough room on the object filesystem."
+    exit 1
+}
+
 no_overlap "$SRC" "$ROOT/work/v10gold/$GOLD" || exit 1
 
 IMG=$(v10_clone "$GOLD" k10) || exit 1

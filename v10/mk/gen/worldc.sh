@@ -101,15 +101,40 @@ do
 	done
 	for f in $srcs
 	do
-		# BOTH TESTS, because either alone has lied here before.  The
-		# prebuilt lcc exits 0 while writing an EMPTY object, and V10's
-		# ld writes its output file even with symbols undefined -- so a
-		# status of 0 is not proof, and a file existing is not proof.
+		# THE COMPILER'S OUTPUT IS BOUNDED BY A PIPE, AND THAT IS A BUG
+		# FIX, NOT TIDINESS.  This was `>> u.log', unbounded, and it
+		# filled a 120 MB filesystem twice at the same unit -- `asd',
+		# whose asd.h includes a config.h that does not exist.  The
+		# transcript showed the message three times only because the
+		# DISPLAY was `sed -e 3q'; u.log itself had no limit, so a cpp
+		# that does not advance past a missing include writes the same
+		# line until the disk is gone.  The kernel then printed
+		# `/mnt2: file system full' every few seconds while alloc()
+		# slept -- V10's allocator waits for space rather than failing --
+		# so the run neither progressed nor died, twice.
+		#
+		# `sed -e 40q' closes the pipe after forty lines, which sends the
+		# compiler EPIPE and kills it.  Structural, so no counting and no
+		# truncation is needed, and it cannot be defeated by a faster
+		# loop.
+		#
+		# BOTH TESTS SURVIVE, because either alone has lied here before:
+		# the prebuilt lcc exits 0 while writing an EMPTY object, and
+		# V10's ld writes its output file even with symbols undefined.
+		# The status is carried through the pipe as its own line, since a
+		# pipeline's status is sed's and 1985 sh has no PIPESTATUS.
 		b=`echo $f | sed -e 's|.*/||' -e 's|\.c$|.o|'`
 		rm -f $b
-		$CC $CF -I$SD -I$SD/common -I$SD/vax $XI -I$JQ $SD/$f \
-			>> u.log 2>&1 || ok=n
+		( $CC $CF -I$SD -I$SD/common -I$SD/vax $XI -I$JQ $SD/$f 2>&1
+		  echo "CCST=$?" ) | sed -e 40q > u1.log
+		st=`sed -e '/^CCST=/!d' -e 's/CCST=//' -e 1q u1.log`
+		if test "$st" != 0
+		then
+			ok=n
+		fi
 		test -s $b || ok=n
+		sed -e 6q u1.log >> u.log
+		rm -f u1.log
 	done
 	if test $ok = y
 	then
