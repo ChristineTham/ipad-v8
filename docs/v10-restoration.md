@@ -122,10 +122,52 @@ hardware terms.
 
 ### The work
 
-- [ ] **K5 — settle `sys/` vs `lsys/` before compiling anything.** 756 files against
-      763, 522 shared of which **131 differ**, and different machine-config sets (10
-      against 17). `alice.m` lives in `lsys/astro/`, which is evidence but not proof.
-      Decide it, record why, and never compile from both.
+- [x] **K5 — `lsys/` is the kernel.** Settled 2026-08-17 on three pieces of evidence,
+      none of them preference:
+      - `sys/` carries **126 `.O` files**, `lsys/` **zero**. `sys/` is a tree that was
+        compiled in place; `lsys/` is clean source.
+      - **`seki` exists only in `lsys/`**, and `tools/v10-golden.exp:167` copies
+        `lsys/astro/seki.u` as the `/unix` this project already boots. The kernel we
+        have running came from this tree.
+      - Both trees carry `alice.m`, `mkconf`, `io/hp.c` and `io/ni1010a.c`, and the two
+        `alice.m` **differ substantially** (`sys/`'s carries machine-specific comments
+        `855bb-ce`/`ba11-aw` and a different swap layout), so this could not have been
+        left to chance.
+
+      `lsys/astro/` also has the larger config set — 17 against 10, and the extra ones
+      are the comets, where `sys/` instead keeps `o.alice.m`/`o.bowell.m` backups.
+- [x] **K5b — the 780 target is real, and `alice.m` needed reading rather than
+      quoting.** Two of this project's own notes were wrong about it:
+      - **Root is `ra`, not `hp`.** `root regfs ra 0100` — UDA50/RA81, with 0100 being
+        the BITFS bit. `mba 1` is present only for the `tm78`/`tu78` tape, so "alice
+        uses the same Massbus disks V8 does" is false. That is fine, and arguably
+        better: the golden is already an RA81 and `v10mkbitfs` already writes for it.
+      - **`ni1010a` and the whole TCP/IP stack are already configured** (`ni1010a 0 ub 1
+        reg 0764000 vec 0350`; `ip 4 udp 16 tcp 96 arp 4`). What is *not* configured is
+        `netafs 0`/`netbfs 0` — so K12 is a two-line change to a config we write, exactly
+        as predicted.
+
+      Measured against our own simulator (`show devices` on `work/opensimh/BIN/vax780`),
+      the machine is a close match and the deltas are known:
+
+      | `alice.m` | our `vax780` | action |
+      |---|---|---|
+      | `ms780 0/1` | `MCTL0`, `MCTL1` | as-is |
+      | `dw780 0` **and** `1` | `UBA` — **one only** | move everything on `ub 1` to `ub 0` |
+      | `uda50 0` **and** `1` | `RQ` (UDA50A) + `RQB/C/D` disabled | one controller, or enable RQB |
+      | `ni1010a 0` | `IL` — present but **disabled** | `set il enable`; it is our own device model |
+      | `dz11 0/4/5` | `DZ`, 32 lines | as-is |
+      | `mba 1`, `tu78` | `MBA1`, `TU` | as-is |
+
+      alice's UDA50 addresses are, in its own words, *"annoyingly nonstandard"*
+      (`0772160`) where SIMH's RQ defaults to `0772150` — so either the config moves or
+      `set rq addr=` does.
+- [ ] **K5c — write OUR 780 config** rather than compiling `alice.m` verbatim. This is
+      the "generate a new config we can build from" instruction applied to the kernel:
+      one Unibus adapter, one UDA50 at SIMH's address, `il` enabled, `netafs`/`netbfs`
+      non-zero, swap sized for the image we actually build. Derived from `alice.m` and
+      diffed against it in `v10/src/PATCHES.md`, so what is Bell Labs' and what is ours
+      stays visible.
 - [ ] **K6 — run the prebuilt `mkconf`** (`lsys/lib/mkconf`, 37,932 B) on `alice.m` to
       generate the kernel makefile, exactly as V8's `config`(8) does for its own tree.
       It is a 1995 V10 binary, so it runs on the machine we already have — same status
