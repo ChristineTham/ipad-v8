@@ -21,10 +21,42 @@ P=CBUILT
 Q=CFAILED
 N=CNOSRC
 K=CANARY
+SP=SPACE
 
 rm -rf $OBJ
 mkdir $OBJ
 cd $OBJ
+
+# ----------------------------------------------------------------- space ---
+# A SECOND CANARY, FOR ROOM, because the first run of this survey died of a
+# full filesystem 22 units in and kept going for hours -- the kernel printing
+# `/mnt2: file system full' every few seconds while every remaining unit failed
+# for a reason that had nothing to do with the Tenth Edition.  A wrong image is
+# as fatal as wrong flags and was not being checked.
+#
+# 20 MB, which is far more than the survey's peak (objects are removed per
+# unit, so the peak is one unit's worth) and therefore a fair proxy for "this
+# filesystem has room to work".  There is no `df' to ask, so the probe is to
+# write and see.  dd's status alone is not enough -- it can write short -- so
+# its log is also searched for the kernel's own complaint.
+if dd if=/dev/zero of=$OBJ/space.chk bs=1024 count=20480 > dd.log 2>&1
+then
+	sed -e '/full/!d' dd.log > f.log
+	n=`sed -n '$=' f.log`
+	if test -z "$n"
+	then
+		echo "$SP-ok"
+	else
+		echo "NO$SP"
+		sed -e 3q dd.log
+		exit 1
+	fi
+else
+	echo "NO$SP"
+	sed -e 3q dd.log
+	exit 1
+fi
+rm -f $OBJ/space.chk
 
 # ---------------------------------------------------------------- canary ---
 # halt.c is built by stage 1 on this very machine, so if it fails here the

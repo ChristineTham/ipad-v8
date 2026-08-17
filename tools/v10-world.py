@@ -190,6 +190,7 @@ class Unit(object):
         self.includes = []            # (bracket, header) as written
         self.missing = []             # UNCONDITIONALLY absent -- blocks the unit
         self.conditional = []         # (header, guard) absent but behind an #if
+        self.foreign = []             # (header, where) only in another unit
         self.variant = []             # only under r70's lcc/CC/... -- a decision
         self.hints = []               # ANSI constructs found, by label
         self.has_main = False
@@ -248,16 +249,16 @@ def resolve(header, bracket, unit_dirs, unit_root=None):
             for base, _dirs, files in os.walk(unit_root):
                 if header in files:
                     return "-I" + os.path.relpath(base, unit_root)
-        # Across units: lint includes pcc1/mip's `manifest' and `mfile1'.
-        # Bounded to one level under cmd/ so this stays a fast, explainable
-        # search rather than a hunt for any file of that name anywhere.
-        for n in sorted(os.listdir(CMD)):
-            p = os.path.join(CMD, n)
-            if not os.path.isdir(p):
-                continue
-            for base, _dirs, files in os.walk(p):
-                if header in files:
-                    return "-I../" + os.path.relpath(base, CMD)
+        # NOTE: the search across OTHER units happens at the very end, after
+        # the system path.  Putting it here -- which is where it started --
+        # resolved ccom's `#include "stdio.h"' to
+        # cmd/lcc/include/sparc_sun/stdio.h, a SUN header, and did the same for
+        # cbt, cflow, cfront, chuck, dimpress, du and btree.  54 units were
+        # resolved only that way and most of those resolutions were nonsense,
+        # so the survey reported them ready on the strength of a file no build
+        # would ever reach.  cpp searches the including file's directory and
+        # then the SYSTEM path; it does not search other programs' source
+        # directories.  See foreign_include().
     if header in INSTALLED_EXTRA:
         return "installed: " + INSTALLED_EXTRA[header]
     if os.path.exists(os.path.join(R70, header)):
@@ -280,6 +281,28 @@ def resolve(header, bracket, unit_dirs, unit_root=None):
     for k in ("lsys", "sys"):
         if os.path.exists(os.path.join(SRC, k, header)):
             return "kernel-tree (needs -I)"
+    # LAST, AND REPORTED AS ITS OWN CLASS.  Some units really do include across
+    # the tree -- lint takes `manifest' and `mfile1' from pcc1/mip -- but a file
+    # merely EXISTING somewhere under cmd/ is not something a build can find,
+    # and treating it as a hit is what let a Sun stdio.h satisfy ccom.  So this
+    # runs only once everything a compiler would actually search has failed,
+    # and its answer is a lead to follow, not a resolution.
+    if bracket == '"':
+        who = foreign_include(header)
+        if who:
+            return "FOREIGN: only in cmd/%s" % who
+    return None
+
+
+def foreign_include(header):
+    """Where else under cmd/ does this header exist?  Relative path or None."""
+    for n in sorted(os.listdir(CMD)):
+        p = os.path.join(CMD, n)
+        if not os.path.isdir(p):
+            continue
+        for base, _dirs, files in os.walk(p):
+            if header in files:
+                return os.path.relpath(base, CMD)
     return None
 
 
@@ -326,10 +349,15 @@ def scan(unit):
             seen.add(key)
             unit.includes.append(key)
             where = resolve(header, bracket, dirs, unit.root)
-            if where is None:
+            if where is None or where.startswith("FOREIGN"):
+                # A FOREIGN hit is not a resolution -- see resolve().  It is
+                # recorded so the reason is visible, and still counts against
+                # the unit, because a build cannot reach it as written.
                 if guard is None:
                     if header not in unit.missing:
                         unit.missing.append(header)
+                    if where and header not in unit.foreign:
+                        unit.foreign.append((header, where))
                 elif header not in unit.conditional:
                     unit.conditional.append((header, guard))
             elif where.startswith("VARIANT") and header not in unit.variant:
@@ -661,10 +689,42 @@ P=CBUILT
 Q=CFAILED
 N=CNOSRC
 K=CANARY
+SP=SPACE
 
 rm -rf $OBJ
 mkdir $OBJ
 cd $OBJ
+
+# ----------------------------------------------------------------- space ---
+# A SECOND CANARY, FOR ROOM, because the first run of this survey died of a
+# full filesystem 22 units in and kept going for hours -- the kernel printing
+# `/mnt2: file system full' every few seconds while every remaining unit failed
+# for a reason that had nothing to do with the Tenth Edition.  A wrong image is
+# as fatal as wrong flags and was not being checked.
+#
+# 20 MB, which is far more than the survey's peak (objects are removed per
+# unit, so the peak is one unit's worth) and therefore a fair proxy for "this
+# filesystem has room to work".  There is no `df' to ask, so the probe is to
+# write and see.  dd's status alone is not enough -- it can write short -- so
+# its log is also searched for the kernel's own complaint.
+if dd if=/dev/zero of=$OBJ/space.chk bs=1024 count=20480 > dd.log 2>&1
+then
+	sed -e '/full/!d' dd.log > f.log
+	n=`sed -n '$=' f.log`
+	if test -z "$n"
+	then
+		echo "$SP-ok"
+	else
+		echo "NO$SP"
+		sed -e 3q dd.log
+		exit 1
+	fi
+else
+	echo "NO$SP"
+	sed -e 3q dd.log
+	exit 1
+fi
+rm -f $OBJ/space.chk
 
 # ---------------------------------------------------------------- canary ---
 # halt.c is built by stage 1 on this very machine, so if it fails here the

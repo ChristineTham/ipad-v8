@@ -32,11 +32,11 @@ arff               file  no   ready    -
 as                 dir   yes  ready    -
 asa                file  no   ready    -
 ascii              file  no   ready    -
-asd                dir   no   ready    -
+asd                dir   no   blocked  missing:config.h
 asd++              dir   no   variant  variant:fstream.h,generic.h,list.h,stream.h
 at                 dir   no   ready    -
-awk                dir   no   ready    -
-backup.old         dir   no   ready    -
+awk                dir   no   blocked  missing:y.tab.h
+backup.old         dir   no   blocked  missing:sym.h,worm.h
 bad144             file  no   ready    -
 basename           file  no   ready    -
 bcd                file  no   ready    -
@@ -56,7 +56,7 @@ cb                 dir   no   variant  variant:stddef.h
 cbt                dir   no   ready    -
 cc                 file  no   ready    -
 ccom               dir   no   ready    -
-cflow              dir   no   ready    -
+cflow              dir   no   blocked  missing:manifest
 cfront             dir   no   ready    -
 charge             file  no   blocked  missing:sys/charges.h,sys/share.h,trace.h
 chdate             file  no   ready    -
@@ -72,11 +72,11 @@ comm               file  no   ready    -
 compact            dir   no   ready    -
 compat             dir   no   ready    -
 compress           dir   yes  ready    -
-config             dir   no   ready    -
+config             dir   no   blocked  missing:y.tab.h
 coreid             file  no   ready    -
 cp                 dir   no   ready    -
 cpio               file  yes  ready    -
-cpp                dir   no   ready    -
+cpp                dir   no   blocked  missing:y.tab.h
 cref               dir   no   ready    -
 cron               file  yes  ready    -
 ct                 dir   yes  ready    -
@@ -85,7 +85,7 @@ cu                 file  no   ready    -
 cut                file  no   ready    -
 cvcrypt            file  no   ready    -
 daemon             dir   no   blocked  missing:gcos.c
-dag                dir   yes  variant  variant:memory.h
+dag                dir   yes  blocked  missing:unistd.h
 date               file  no   ready    -
 dblbuf             file  no   ready    -
 dc                 dir   no   ready    -
@@ -114,9 +114,9 @@ dumpdir            file  no   ready    -
 echo               file  no   ready    -
 ed                 file  no   ready    -
 ed/                dir   no   blocked  missing:ansi.h,dirent.h,posix.h,sys/wait.h,unistd.h
-efl                dir   no   ready    -
+efl                dir   no   blocked  missing:tokdefs
 egrep              dir   no   ready    -
-eqn                dir   no   ready    -
+eqn                dir   no   blocked  missing:y.tab.h
 equal              dir   no   ready    -
 error              dir   yes  ready    -
 ether              dir   no   blocked  missing:sys/ioctl.h,sys/order.h
@@ -124,7 +124,7 @@ ex                 dir   no   ready    -
 expand             file  no   ready    -
 expr               dir   no   nosrc    no .c found under the unit -- not surveyed
 f2c                dir   no   variant  variant:stddef.h
-f77                dir   no   ready    -
+f77                dir   no   variant  variant:stddef.h
 face               dir   no   ready    -
 factor             dir   no   ready    -
 false              file  no   ready    -
@@ -134,7 +134,7 @@ file               file  yes  ready    -
 find               file  no   ready    -
 findo              file  no   ready    -
 flcopy             file  no   ready    -
-flex               dir   no   ready    -
+flex               dir   no   blocked  missing:parse.h
 fmt                file  no   ready    -
 fold               file  no   ready    -
 fsck               file  no   blocked  missing:stat.h
@@ -143,7 +143,7 @@ gcc                dir   no   blocked  missing:insn-codes.h,insn-config.h,insn-f
 getopt             file  no   ready    -
 getty              file  no   ready    -
 getuid             file  no   ready    -
-grap               dir   no   ready    -
+grap               dir   no   blocked  missing:y.tab.h
 graph              dir   no   ready    -
 gre                dir   yes  ready    -
 grep               file  no   ready    -
@@ -152,7 +152,7 @@ halt               file  no   ready    -
 hang               file  no   ready    -
 head               file  no   ready    -
 hideblock          file  no   ready    -
-hoc                dir   no   ready    -
+hoc                dir   no   blocked  missing:y.tab.h
 hp                 file  no   ready    -
 icheck             file  no   ready    -
 id                 file  no   ready    -
@@ -174,7 +174,7 @@ lex                dir   yes  ready    -
 lfactor            dir   no   ready    -
 library            dir   yes  blocked  missing:dos.h
 limiter            file  no   ready    -
-lint               dir   no   ready    -
+lint               dir   no   blocked  missing:manifest,mfile1
 ln                 file  no   ready    -
 load               dir   no   ready    -
 log                file  no   ready    -
@@ -230,8 +230,8 @@ paper              dir   no   ready    -
 passwdx            file  no   ready    -
 paste              file  no   ready    -
 patch              file  no   ready    -
-pic                dir   no   ready    -
-picasso            dir   yes  ready    -
+pic                dir   no   blocked  missing:y.tab.h
+picasso            dir   yes  blocked  missing:comments.h,dpost.h,ext.h,gen.h,motion.h,path.h
 pico               dir   yes  ready    -
 plot               dir   no   ready    -
 poly               dir   no   blocked  missing:poly.h
@@ -240,7 +240,7 @@ post.src           dir   no   ready    -
 postscript         dir   no   ready    -
 pp                 dir   yes  ready    -
 pr                 file  yes  ready    -
-pret               dir   no   ready    -
+pret               dir   no   blocked  missing:y.tab.h
 primes             dir   no   ready    -
 printenv           file  no   ready    -
 printf             file  no   ready    -
@@ -258,7 +258,7 @@ quot               file  no   ready    -
 random             file  no   ready    -
 ranlib             file  yes  ready    -
 rarepl             dir   yes  ready    -
-ratfor             dir   no   ready    -
+ratfor             dir   no   blocked  missing:y.tab.h
 readslow           file  no   ready    -
 reboot             file  no   ready    -
 reccp              file  no   ready    -

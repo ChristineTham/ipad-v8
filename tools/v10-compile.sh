@@ -26,7 +26,18 @@ source "$ROOT/tools/srcid.sh"
 # to what it is given, so it needs the path.  Matching them exactly rather than
 # tidying it, because a harness that differs from the proven ones in a small way
 # is a harness whose failures are ambiguous.
-GOLD="${1:-ipnx-v10-ra81.img.stage1.s2.s3}"
+# STAGE 1'S IMAGE, NOT THE MOST COMPLETE ONE, AND THE FIRST RUN FAILED ON EXACTLY
+# THAT MISTAKE.  `.stage1.s2.s3' was chosen for having the whole toolchain -- and
+# it carries /usr/s1, /usr/s2, /usr/s3, /usr/s3b AND stage 2's and stage 3's
+# object trees, all on a 128 MB partition that was nearly full before this run's
+# scratch directory existed.  22 units in, the kernel began printing
+# `/mnt2: file system full' once every few seconds and the run ground on
+# uselessly.
+#
+# Compiling needs the PASSES and nothing else -- no libc, because -c never
+# links -- so stage 1's image is both sufficient and roomy.  "Most complete" was
+# the wrong axis; the right one was "has room".
+GOLD="${1:-ipnx-v10-ra81.img.stage1}"
 SRC="${2:-$ROOT/work/v10gold/ipnx-v10-src.img}"
 LOG="$ROOT/work/v10-compile.log"
 
@@ -80,6 +91,25 @@ gb=$(grep -oE 'TALLYB [0-9]+' "$LOG" 2>/dev/null | tail -1 | awk '{print $2}')
 gf=$(grep -oE 'TALLYF [0-9]+' "$LOG" 2>/dev/null | tail -1 | awk '{print $2}')
 
 echo
+if grep -q 'NOSPACE' "$LOG" 2>/dev/null; then
+    echo "== NO MEASUREMENT: the object filesystem has no room =="
+    echo "   Pick an image whose /usr is not already carrying stage 2's and"
+    echo "   stage 3's object trees; ipnx-v10-ra81.img.stage1 is the roomy one."
+    sed -n '/NOSPACE/,+4p' "$LOG"
+    echo "== v10-compile exit $rc =="
+    exit 1
+fi
+# The kernel's own complaint, in case the probe passed and the survey then filled
+# the disk anyway -- a partial run whose failures are all one cause must not be
+# reported as 353 findings.
+if grep -q 'file system full' "$LOG" 2>/dev/null; then
+    echo "== NO MEASUREMENT: the filesystem filled DURING the survey =="
+    echo "   Every unit after the first failure failed for that reason and not"
+    echo "   for a reason about the Tenth Edition."
+    grep -c 'file system full' "$LOG" | sed -e 's/^/   kernel complaints: /'
+    echo "== v10-compile exit $rc =="
+    exit 1
+fi
 if grep -q 'NOCANARY' "$LOG" 2>/dev/null; then
     echo "== NO MEASUREMENT: the canary did not compile =="
     echo "   halt.c is built by stage 1 on this machine, so the flags in"
