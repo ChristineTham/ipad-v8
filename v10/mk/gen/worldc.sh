@@ -83,6 +83,14 @@ do
 	SD=$UD/$dir
 	ok=y
 	rm -f u.log
+	# The four units that need more than the unit dir, common/ and vax/ --
+	# adb/comm, f77/alt, mk/export, nupas/attin.  Absent from world.incs is
+	# the usual case and adds nothing.
+	XI=""
+	for x in `sed -e "/^$name /!d" -e "s/^$name //" $SRC/mk/world.incs`
+	do
+		XI="$XI -I$SD/$x"
+	done
 	for f in $srcs
 	do
 		# BOTH TESTS, because either alone has lied here before.  The
@@ -91,7 +99,7 @@ do
 		# status of 0 is not proof, and a file existing is not proof.
 		b=`echo $f | sed -e 's|.*/||' -e 's|\.c$|.o|'`
 		rm -f $b
-		$CC $CF -I$SD -I$SD/common -I$SD/vax -I$JQ $SD/$f \
+		$CC $CF -I$SD -I$SD/common -I$SD/vax $XI -I$JQ $SD/$f \
 			>> u.log 2>&1 || ok=n
 		test -s $b || ok=n
 	done
