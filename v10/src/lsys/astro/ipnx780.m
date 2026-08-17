@@ -51,8 +51,10 @@
 #				tape route is dead here anyway (docs/media-
 #				exchange.md: V8's ht driver panics the kernel).
 #	mba REMOVED		nothing left on it once the tape goes.
-#	dn11, drbit, dk,	no counterpart in SIMH's vax780.  dk is Datakit,
-#	kmc11b REMOVED		which is the network V10 lost in 1985.
+#	dn11, drbit, dk		no counterpart in SIMH's vax780.  dk is Datakit,
+#	REMOVED			which is the network V10 lost in 1985.
+#	kmc11b KEPT		SIMH has none either, but removing it left ld
+#				three symbols short -- see below.
 #	dz11 4/5 REMOVED	SIMH's DZ is one controller with 32 lines; one
 #				dz11 is what we can drive.
 #	dz11 0 vec 0300		SIMH's DZ vector base (C0), not alice's 0320.
@@ -85,6 +87,16 @@ ra 1	uda50 0	unit 1
 
 dz11 0	ub 0	reg 0760100	vec 0300
 ni1010a 0 ub 0	reg 0764000	vec 0350
+
+#
+# KEPT, THOUGH SIMH HAS NO SUCH DEVICE, and the reason is a linker error.
+#
+# Dropping kmc11b left `ld' three symbols short -- _kmccnt, _kmc, _kmcaddr --
+# because something in the kernel references the KMC11B whether or not the
+# config declares one.  A configured-but-absent device is exactly what
+# autoconfig is for: V10 probes at boot, finds nothing at 0760200, and carries
+# on.  alice.m's own line, restored verbatim.
+kmc11b 0 ub 0	reg 0760200	vec 0600
 
 kdi	1
 drum	0
