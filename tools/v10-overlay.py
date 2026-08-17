@@ -710,6 +710,20 @@ _ANSI93 = [
        "int vfscanf(f, s, args)\t\t/* ipnx: K&R, see PATCHES.md */\n"
        "\tFILE *f;\n\tchar *s;\n\tva_list args;\n{\n", 1),
       ("xfilbuf(FILE *p)\n", "xfilbuf(p)\n\tFILE *p;\n", 1),
+      # THE THREE `const's, which are the last thing in the way.  pcc2 has no
+      # such qualifier and reports the file-scope one as
+      #	  "vfscanf.c":89:syntax error / saw TYPE
+      # followed by `fmtp undefined' sixteen lines later -- the declaration was
+      # thrown away, so every USE of it is a second error.  Unlike strtod.c, this
+      # file spells `const' directly rather than through Gay's CONST macro, so
+      # there is nothing to empty and the word comes out.
+      ("static const char *fmtp;\n",
+       "static char *fmtp;\t\t/* ipnx: pcc2 has no const */\n", 1),
+      ("static int match(int c, const char *pat){\n",
+       "static int match(c, pat)\t/* ipnx: K&R, see PATCHES.md */\n"
+       "\tint c;\n\tchar *pat;\n{\n", 1),
+      ("	register const char *pat;\n",
+       "	register char *pat;\t/* ipnx: pcc2 has no const */\n", 1),
       ("static int icvt_fixed(FILE *f, va_list *args,\n"
        "\t\t\t\tint store, int width, int type, int unsgned, int base){\n",
        "static int icvt_fixed(f, args, store, width, type, unsgned, base)\n"

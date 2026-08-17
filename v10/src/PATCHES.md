@@ -1593,8 +1593,11 @@ the spelling moves back eight years.
 +static int (*icvt[])()={	/* ipnx: K&R, see PATCHES.md */
  0,	0,	0,	0,	0,	0,	0,	0,	/* ^@ ^A ^B ^C ^D ^E ^F ^G */
  0,	0,	0,	0,	0,	0,	0,	0,	/* ^H ^I ^J ^K ^L ^M ^N ^O */
-@@ -88,5 +89,9 @@
- static const char *fmtp;
+@@ -86,7 +87,11 @@
+ #define	wungetc(c, f)		(++width, nungetc(c, f))
+ static int nread, ncvt;
+-static const char *fmtp;
++static char *fmtp;		/* ipnx: pcc2 has no const */
  
 -int vfscanf(FILE *f, const char *s, va_list args){
 +int vfscanf(f, s, args)		/* ipnx: K&R, see PATCHES.md */
@@ -1741,7 +1744,17 @@ the spelling moves back eight years.
 +/* #pragma ref type -- ipnx: pcc2 has no #pragma */
  	int c;
  	register char *s;
-@@ -371,6 +443,12 @@
+@@ -353,5 +425,8 @@
+ 	return 1;
+ }
+-static int match(int c, const char *pat){
++static int match(c, pat)	/* ipnx: K&R, see PATCHES.md */
++	int c;
++	char *pat;
++{
+ 	int ok=1;
+ 	if(*pat=='^'){
+@@ -371,9 +446,15 @@
  	return !ok;
  }
 -static int icvt_sq(FILE *f, va_list *args, int store, int width, int type){
@@ -1756,6 +1769,10 @@ the spelling moves back eight years.
 +/* #pragma ref type -- ipnx: pcc2 has no #pragma */
  	int c, nn;
  	register char *s;
+-	register const char *pat;
++	register char *pat;	/* ipnx: pcc2 has no const */
+ 	pat=++fmtp;
+ 	if(*fmtp=='^') fmtp++;
 ```
 
 ## memmove.c: a 1993 ANSI member, converted to K&R (B2.2d)

@@ -354,11 +354,11 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
 	lcc alone                        202 of 261
 	cc + lcc, with the repairs       260 of 261
 	cc alone, after B2.2b/c          249 of 261
-	cc ALONE, + Gay's three           258 of 261   <- current stage 2
+	cc ALONE, EVERY conversion done    260 of 261  <- THE CEILING
 
   `LIBC_LCC` is now **empty**, so there is no per-member compiler choice left to
-  get wrong. **Three remain**: `vfprintf` and `vfscanf` — printf's and scanf's
-  engines — and `setupshares`. **Do not
+  get wrong, and **the ceiling is reached**: the only member that does not
+  build is `setupshares`, ruled out on evidence before any of this began. **Do not
   reinstate lcc to close them** — it still hits the `bowell.c` defect
   (`0: unknown flag -undef`), so those members become **empty objects that exit
   0**. Eight loud failures beat eight silent holes.
@@ -1519,7 +1519,7 @@ configuration was run, not inferred:
 	cc + lcc, the tape's mixture      246        150
 	cc + lcc, with the 14 repairs     260        150
 	cc alone, after B2.2b/c           249        148
-	cc ALONE, + Gay's three           258        147
+	cc ALONE, every conversion done   260        148
 
 Fifteen members could be built by nothing, and they had **three** causes, not
 the two recorded here for a week:

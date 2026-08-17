@@ -86,7 +86,7 @@ icvt_x,	0,	0,	0,	0,	0,	0,	0,	/*  x  y  z  {  |  }  ~ ^? */
 #define	wgetc(c, f, out)	if(width--==0) goto out; (c)=ngetc(f)
 #define	wungetc(c, f)		(++width, nungetc(c, f))
 static int nread, ncvt;
-static const char *fmtp;
+static char *fmtp;		/* ipnx: pcc2 has no const */
 
 int vfscanf(f, s, args)		/* ipnx: K&R, see PATCHES.md */
 	FILE *f;
@@ -424,7 +424,10 @@ static int icvt_c(f, args, store, width, type)	/* ipnx: K&R */
 Done:
 	return 1;
 }
-static int match(int c, const char *pat){
+static int match(c, pat)	/* ipnx: K&R, see PATCHES.md */
+	int c;
+	char *pat;
+{
 	int ok=1;
 	if(*pat=='^'){
 		ok=!ok;
@@ -452,7 +455,7 @@ static int icvt_sq(f, args, store, width, type)	/* ipnx: K&R */
 /* #pragma ref type -- ipnx: pcc2 has no #pragma */
 	int c, nn;
 	register char *s;
-	register const char *pat;
+	register char *pat;	/* ipnx: pcc2 has no const */
 	pat=++fmtp;
 	if(*fmtp=='^') fmtp++;
 	if(*fmtp!='\0') fmtp++;
