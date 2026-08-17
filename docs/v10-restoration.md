@@ -376,8 +376,8 @@ have been made about the tape's mixture.
       construction. Do **not** reinstate lcc to close a member: the prebuilt driver hits
       the `bowell.c` defect and emits empty objects while exiting 0, so a routed member
       becomes a silent hole rather than a member.
-- [x] **B2.2e — re-measure, and keep the witness.** Done: **260 of 261 build with `cc`
-      alone** — more than the tape's own mixed toolchain managed (246) — with 148
+- [x] **B2.2e — re-measure, and keep the witness.** Done, and stage 2 now reports
+      **38/38**: **260 of 261 build with `cc` alone** — more than the tape's own mixed toolchain managed (246) — with 148
       byte-identical to the tape, reported as information. The prediction that identity
       would *fall* was right and is recorded: 150 → 148 → 147 → **143** while the
       number that build went 246 → 249 → 252 → 260. The last step is not a further

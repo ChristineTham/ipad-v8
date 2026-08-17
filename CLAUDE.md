@@ -1682,12 +1682,14 @@ for `scanf.o`). Treat 150/148/147 as historical and overstated by about this
 much; **143 is the first one measured through an uncorrupted transcript.**
 *A fidelity metric read out of a tty is only as good as the tty.*
 
-**STAGE 2 IS AT ITS CEILING AND STAGE 3 IS A FIXPOINT** (2026-08-17,
-`tools/v10-stage3.sh`, **33/33**). Stage 2 builds **260 of 261**, 148
-byte-identical; the 261st is `setupshares`, which fails on
-`Can't find include file sys/share.h` — a header printed nowhere and referenced
-nowhere — and which nothing in the system we build calls any more, because the
-Share scheduler is out of `login`. So 260 is the whole library, not a shortfall.
+**STAGE 2 IS AT ITS CEILING AND STAGE 3 IS A FIXPOINT** — `tools/v10-stage2.sh`
+**38/38** and `tools/v10-stage3.sh` **33/33**, both exit 0 (2026-08-17). Stage 2
+builds **260 of 261**, 143 byte-identical; `setupshares` is a **named exclusion**
+(`LIBC_DROP` in `mkdep.py`), not a shortfall — `<sys/share.h>` is printed nowhere
+and reconstructible from nothing, and nothing we build calls it now that the
+Share scheduler is out of `login`. `libc.a` is built by the makefile from
+`$(OBJS)` in **the tape's own member order**, and the archive's member list is
+asserted against that order.
 
 Then stage 3, which is the test the whole bootstrap exists to pass:
 
@@ -1715,6 +1717,15 @@ were faults in *measurement* and none in the code being measured:
   comparison, because `cmp` on a missing file reports as a difference.
 - A diagnostic that re-ran a failing `make` **reported success**, because V10's
   `ld` writes its output even when symbols are undefined.
+- The **fidelity metric itself was inflated** — 148 → 143 on the identical
+  build — because the DIFF list arrived over a tty that was dropping lines.
+- Three stage-2 assertions **could never pass**, and that is what let `atof`
+  hide: `all 261 members compiled: NO` was permanently NO, so it stopped being
+  read. They are achievable now, and the four `lcc` probes whose negative answer
+  *is* the finding print `yes`/`no` and are not counted — so the tally means
+  "nothing unexpected" and any `NO` in it is news.
+- Regenerating a makefile changed **nothing the guest saw**, because the source
+  disk is a copy. `tools/srcid.sh` stamps and checks it now.
 
 Next: **K8**, a bootable 780 disk — `tools/v10-kernel.sh` already passes 17/17,
 so `mkconf` accepts our config, stage 1's `cc` compiles the generated `conf.c`,
