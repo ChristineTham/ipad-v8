@@ -1313,18 +1313,22 @@ the spelling moves back eight years.
 +	va_list args;
  {
  	int flags, width, precision;
-@@ -200,5 +203,10 @@
+@@ -200,7 +203,12 @@
  
  static int
 -ocvt_c(FILE *f, va_list *args, int flags, int width, int precision)
+-{
+-#pragma ref precision
 +ocvt_c(f, args, flags, width, precision)	/* ipnx: K&R */
 +	FILE *f;
 +	va_list *args;
 +	int flags;
 +	int width;
 +	int precision;
- {
- #pragma ref precision
++{
++/* #pragma ref precision -- ipnx: pcc2 has no #pragma */
+ 	int i;
+ 
 @@ -212,5 +220,10 @@
  
  static int
@@ -1337,18 +1341,26 @@ the spelling moves back eight years.
 +	int precision;
  {
  	int i, n = 0;
-@@ -249,5 +262,10 @@
+@@ -249,9 +262,14 @@
  
  static int
 -ocvt_n(FILE *f, va_list *args, int flags, int width, int precision)
+-{
+-#pragma ref f
+-#pragma ref width
+-#pragma ref precision
 +ocvt_n(f, args, flags, width, precision)	/* ipnx: K&R */
 +	FILE *f;
 +	va_list *args;
 +	int flags;
 +	int width;
 +	int precision;
- {
- #pragma ref f
++{
++/* #pragma ref f -- ipnx: pcc2 has no #pragma */
++/* #pragma ref width -- ipnx: pcc2 has no #pragma */
++/* #pragma ref precision -- ipnx: pcc2 has no #pragma */
+ 	if(flags&SHORT)
+ 		*va_arg(*args, short *) = nprint;
 @@ -274,6 +292,14 @@
   */
  static int
@@ -1516,6 +1528,230 @@ the spelling moves back eight years.
 +	char afmt;
  {
  	extern char *_dtoa(double, int, int, int*, int*, char **);
+```
+
+## vfscanf.c: a 1993 ANSI member, converted to K&R (B2.2d)
+
+`libc/stdio/vfscanf.c`, sha256 `635049b42af56fc0`
+
+One of the eleven members that only `lcc` could build, and `lcc` cannot be
+trusted to: the prebuilt driver hits the `bowell.c` defect
+(`0: unknown flag -undef`) and emits **empty objects while exiting 0**, so
+routing a member to it buys a silent hole in `libc.a` rather than a member.
+
+These carry `/* Copyright AT&T Bell Laboratories, 1993 */` and are addressed to
+a header set that is not installed: r70's `/usr/include` has no `stddef.h`, no
+`stdlib.h`, and defines `size_t` nowhere. That is the same two-generations split
+as the stdio family, one layer down -- not a prototype to strip but a different
+C to translate out of.
+
+`void *` becomes `char *` and `size_t` becomes `unsigned int`. Both pairs are
+the same width on a VAX, `char *` is K&R's generic pointer, and it is how V8's
+own libc declares these functions -- so the generated code is unchanged and only
+the spelling moves back eight years.
+```diff
+--- tarball/libc/stdio/vfscanf.c
++++ ours/libc/stdio/vfscanf.c
+@@ -15,5 +15,6 @@
+ 
+  static int
+-xfilbuf(FILE *p)
++xfilbuf(p)
++	FILE *p;
+ {
+ 	int rv;
+@@ -34,16 +35,16 @@
+ 	}
+ #endif
+-static int icvt_f(FILE *f, va_list *args, int store, int width, int type);
+-static int icvt_x(FILE *f, va_list *args, int store, int width, int type);
+-static int icvt_sq(FILE *f, va_list *args, int store, int width, int type);
+-static int icvt_c(FILE *f, va_list *args, int store, int width, int type);
+-static int icvt_d(FILE *f, va_list *args, int store, int width, int type);
+-static int icvt_i(FILE *f, va_list *args, int store, int width, int type);
+-static int icvt_n(FILE *f, va_list *args, int store, int width, int type);
+-static int icvt_o(FILE *f, va_list *args, int store, int width, int type);
+-static int icvt_p(FILE *f, va_list *args, int store, int width, int type);
+-static int icvt_s(FILE *f, va_list *args, int store, int width, int type);
+-static int icvt_u(FILE *f, va_list *args, int store, int width, int type);
+-static int (*icvt[])(FILE *, va_list *, int, int, int)={
++static int icvt_f();
++static int icvt_x();
++static int icvt_sq();
++static int icvt_c();
++static int icvt_d();
++static int icvt_i();
++static int icvt_n();
++static int icvt_o();
++static int icvt_p();
++static int icvt_s();
++static int icvt_u();
++static int (*icvt[])()={	/* ipnx: K&R, see PATCHES.md */
+ 0,	0,	0,	0,	0,	0,	0,	0,	/* ^@ ^A ^B ^C ^D ^E ^F ^G */
+ 0,	0,	0,	0,	0,	0,	0,	0,	/* ^H ^I ^J ^K ^L ^M ^N ^O */
+@@ -88,5 +89,9 @@
+ static const char *fmtp;
+ 
+-int vfscanf(FILE *f, const char *s, va_list args){
++int vfscanf(f, s, args)		/* ipnx: K&R, see PATCHES.md */
++	FILE *f;
++	char *s;
++	va_list args;
++{
+ 	int c, width, type, store;
+ #ifdef sgi
+@@ -139,7 +144,13 @@
+ 	return ncvt;
+ }
+-static int icvt_n(FILE *f, va_list *args, int store, int width, int type){
+-#pragma ref f
+-#pragma ref width
++static int icvt_n(f, args, store, width, type)	/* ipnx: K&R */
++	FILE *f;
++	va_list *args;
++	int store;
++	int width;
++	int type;
++{
++/* #pragma ref f -- ipnx: pcc2 has no #pragma */
++/* #pragma ref width -- ipnx: pcc2 has no #pragma */
+ 	if(store){
+ 		--ncvt;	/* this assignment doesn't count! */
+@@ -166,6 +177,13 @@
+  *	base is the number base -- if 0, C number syntax is used.
+  */
+-static int icvt_fixed(FILE *f, va_list *args,
+-				int store, int width, int type, int unsgned, int base){
++static int icvt_fixed(f, args, store, width, type, unsgned, base)
++	FILE *f;
++	va_list *args;
++	int store;
++	int width;
++	int type;
++	int unsgned;
++	int base;
++{
+ 	unsigned long int num=0;
+ 	int sign=1, ndig=0, dig;
+@@ -245,24 +263,66 @@
+ 	return 1;
+ }
+-static int icvt_d(FILE *f, va_list *args, int store, int width, int type){
++static int icvt_d(f, args, store, width, type)	/* ipnx: K&R */
++	FILE *f;
++	va_list *args;
++	int store;
++	int width;
++	int type;
++{
+ 	return icvt_fixed(f, args, store, width, type, SIGNED, 10);
+ }
+-static int icvt_x(FILE *f, va_list *args, int store, int width, int type){
++static int icvt_x(f, args, store, width, type)	/* ipnx: K&R */
++	FILE *f;
++	va_list *args;
++	int store;
++	int width;
++	int type;
++{
+ 	return icvt_fixed(f, args, store, width, type, UNSIGNED, 16);
+ }
+-static int icvt_o(FILE *f, va_list *args, int store, int width, int type){
++static int icvt_o(f, args, store, width, type)	/* ipnx: K&R */
++	FILE *f;
++	va_list *args;
++	int store;
++	int width;
++	int type;
++{
+ 	return icvt_fixed(f, args, store, width, type, UNSIGNED, 8);
+ }
+-static int icvt_i(FILE *f, va_list *args, int store, int width, int type){
++static int icvt_i(f, args, store, width, type)	/* ipnx: K&R */
++	FILE *f;
++	va_list *args;
++	int store;
++	int width;
++	int type;
++{
+ 	return icvt_fixed(f, args, store, width, type, SIGNED, 0);
+ }
+-static int icvt_u(FILE *f, va_list *args, int store, int width, int type){
++static int icvt_u(f, args, store, width, type)	/* ipnx: K&R */
++	FILE *f;
++	va_list *args;
++	int store;
++	int width;
++	int type;
++{
+ 	return icvt_fixed(f, args, store, width, type, UNSIGNED, 10);
+ }
+-static int icvt_p(FILE *f, va_list *args, int store, int width, int type){
++static int icvt_p(f, args, store, width, type)	/* ipnx: K&R */
++	FILE *f;
++	va_list *args;
++	int store;
++	int width;
++	int type;
++{
+ 	return icvt_fixed(f, args, store, width, type, POINTER, 16);
+ }
+ #define	NBUF	509
+-static int icvt_f(FILE *f, va_list *args, int store, int width, int type){
++static int icvt_f(f, args, store, width, type)	/* ipnx: K&R */
++	FILE *f;
++	va_list *args;
++	int store;
++	int width;
++	int type;
++{
+ 	char buf[NBUF+1];
+ 	char *s=buf;
+@@ -312,6 +372,12 @@
+ 	return 1;
+ }
+-static int icvt_s(FILE *f, va_list *args, int store, int width, int type){
+-#pragma ref type
++static int icvt_s(f, args, store, width, type)	/* ipnx: K&R */
++	FILE *f;
++	va_list *args;
++	int store;
++	int width;
++	int type;
++{
++/* #pragma ref type -- ipnx: pcc2 has no #pragma */
+ 	int c, nn;
+ 	register char *s;
+@@ -339,6 +405,12 @@
+ 	return 1;
+ }
+-static int icvt_c(FILE *f, va_list *args, int store, int width, int type){
+-#pragma ref type
++static int icvt_c(f, args, store, width, type)	/* ipnx: K&R */
++	FILE *f;
++	va_list *args;
++	int store;
++	int width;
++	int type;
++{
++/* #pragma ref type -- ipnx: pcc2 has no #pragma */
+ 	int c;
+ 	register char *s;
+@@ -371,6 +443,12 @@
+ 	return !ok;
+ }
+-static int icvt_sq(FILE *f, va_list *args, int store, int width, int type){
+-#pragma ref type
++static int icvt_sq(f, args, store, width, type)	/* ipnx: K&R */
++	FILE *f;
++	va_list *args;
++	int store;
++	int width;
++	int type;
++{
++/* #pragma ref type -- ipnx: pcc2 has no #pragma */
+ 	int c, nn;
+ 	register char *s;
 ```
 
 ## memmove.c: a 1993 ANSI member, converted to K&R (B2.2d)

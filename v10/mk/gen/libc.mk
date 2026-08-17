@@ -913,8 +913,8 @@ fscanf.o: $(OURS)/libc/stdio/fscanf.c $(INCDIR)/lcc/stdarg.h $(TOOLS)
 vfprintf.o: $(OURS)/libc/stdio/vfprintf.c $(INCDIR)/math.h $(INCDIR)/string.h $(TOOLS)
 	$(COMPILE) -I$(SRC)/libc/stdio $(OURS)/libc/stdio/vfprintf.c
 
-vfscanf.o: $(SRC)/libc/stdio/vfscanf.c $(INCDIR)/ctype.h $(INCDIR)/fcntl.h $(INCDIR)/math.h $(INCDIR)/stdio.h $(INCDIR)/sys/types.h $(INCDIR)/tmpnam.h $(SRC)/libc/stdio/iolib.h $(TOOLS)
-	$(COMPILE) $(SRC)/libc/stdio/vfscanf.c
+vfscanf.o: $(OURS)/libc/stdio/vfscanf.c $(INCDIR)/ctype.h $(INCDIR)/math.h $(TOOLS)
+	$(COMPILE) -I$(SRC)/libc/stdio $(OURS)/libc/stdio/vfscanf.c
 
 vprintf.o: $(OURS)/libc/stdio/vprintf.c $(INCDIR)/lcc/stdarg.h $(TOOLS)
 	$(COMPILE) -I$(SRC)/libc/stdio $(OURS)/libc/stdio/vprintf.c

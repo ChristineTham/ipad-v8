@@ -653,6 +653,21 @@ _ANSI93 = [
        "\tchar *prefix;\n", 1),
       ("static int ocvt_flt(FILE *, va_list *, int, int, int, char);\n",
        "static int ocvt_flt();\n", 1),
+      # `#pragma ref X' -- FOUR LINES, AND THE LAST THING IN THE WAY.
+      #
+      # lcc's idiom for "this parameter is deliberately unused"; it suppresses a
+      # warning and has no semantic effect whatever, which makes it the safest
+      # possible edit in printf's engine.  pcc2 has no #pragma at all, and its
+      # failure is spectacularly misdirected: ccom falls back to reading an
+      # unknown `#' line as `# <number> "<file>"', so the PSEUDO-FILE becomes
+      # `pragma ref precision' and every subsequent error is reported against
+      # line numbers inside it --
+      #	  pragma ref precision:255:function declaration in bad context
+      # -- while the file's own line 255 is a plain `for(; i<width; i++)'.
+      # Chasing those numbers finds nothing; the name was the clue.
+      ("#pragma ref precision\n", "/* #pragma ref precision -- ipnx: pcc2 has no #pragma */\n", 2),
+      ("#pragma ref f\n", "/* #pragma ref f -- ipnx: pcc2 has no #pragma */\n", 1),
+      ("#pragma ref width\n", "/* #pragma ref width -- ipnx: pcc2 has no #pragma */\n", 1),
       # THE DISPATCH TABLE, which is the one place the parameter types are part
       # of a TYPE rather than a declaration: a 256-entry array of function
       # pointers indexed by conversion character.  pcc2 reads the prototype as a
@@ -666,6 +681,40 @@ _ANSI93 = [
        "ocvt_flt(f, args, flags, width, precision, afmt)\n"
        "\tFILE *f;\n\tva_list *args;\n\tint flags;\n\tint width;\n"
        "\tint precision;\n\tchar afmt;\n", 1)]),
+    # vfscanf.c: scanf's engine, and the same shape as vfprintf.c -- eleven
+    # prototypes and eleven definitions sharing one signature, a dispatch table
+    # of function pointers, and FIVE `#pragma ref' lines.  Two differences worth
+    # noting: its definitions put `{' on the SAME line as the parameter list, so
+    # the replacement carries the brace; and icvt_fixed's signature wraps across
+    # two lines.
+    #
+    # PREPARED BUT NOT YET MEASURED.  The run that would have tested this and
+    # vfprintf.c's #pragma fix together was killed by a timeout, and the
+    # simulator it orphaned blocks every further run (tools/norun.sh, working as
+    # designed).  Written down now so the next round tests both engines at once.
+    ("libc/stdio/vfscanf.c",
+     "635049b42af56fc03eca0f65b927b55e08a23376015d5d56e3357645f63b84f3",
+     [("(FILE *f, va_list *args, int store, int width, int type);\n", "();\n", 11),
+      ("(FILE *f, va_list *args, int store, int width, int type){\n",
+       "(f, args, store, width, type)\t/* ipnx: K&R */\n"
+       "\tFILE *f;\n\tva_list *args;\n\tint store;\n\tint width;\n"
+       "\tint type;\n{\n", 11),
+      ("static int (*icvt[])(FILE *, va_list *, int, int, int)={\n",
+       "static int (*icvt[])()={\t/* ipnx: K&R, see PATCHES.md */\n", 1),
+      ("int vfscanf(FILE *f, const char *s, va_list args){\n",
+       "int vfscanf(f, s, args)\t\t/* ipnx: K&R, see PATCHES.md */\n"
+       "\tFILE *f;\n\tchar *s;\n\tva_list args;\n{\n", 1),
+      ("xfilbuf(FILE *p)\n", "xfilbuf(p)\n\tFILE *p;\n", 1),
+      ("static int icvt_fixed(FILE *f, va_list *args,\n"
+       "\t\t\t\tint store, int width, int type, int unsgned, int base){\n",
+       "static int icvt_fixed(f, args, store, width, type, unsgned, base)\n"
+       "\tFILE *f;\n\tva_list *args;\n\tint store;\n\tint width;\n"
+       "\tint type;\n\tint unsgned;\n\tint base;\n{\n", 1),
+      # The five pragmas -- see vfprintf.c above for why they are the whole
+      # difference between "no diagnostic anywhere" and a readable error.
+      ("#pragma ref f\n", "/* #pragma ref f -- ipnx: pcc2 has no #pragma */\n", 1),
+      ("#pragma ref width\n", "/* #pragma ref width -- ipnx: pcc2 has no #pragma */\n", 1),
+      ("#pragma ref type\n", "/* #pragma ref type -- ipnx: pcc2 has no #pragma */\n", 3)]),
     ("libc/gen/memmove.c",
      "8de6bd16b4d961d41eb7330816e04068b4ba391cedd55fdf95b05ab81a2280db",
      [("#include <stddef.h>\n\nextern void *memcpy(void*, void*, size_t);\n\n"

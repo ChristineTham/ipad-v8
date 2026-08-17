@@ -209,7 +209,7 @@ ocvt_c(f, args, flags, width, precision)	/* ipnx: K&R */
 	int width;
 	int precision;
 {
-#pragma ref precision
+/* #pragma ref precision -- ipnx: pcc2 has no #pragma */
 	int i;
 
 	if(!(flags&LEFT)) for(i=1; i<width; i++) putc(' ', f);
@@ -268,9 +268,9 @@ ocvt_n(f, args, flags, width, precision)	/* ipnx: K&R */
 	int width;
 	int precision;
 {
-#pragma ref f
-#pragma ref width
-#pragma ref precision
+/* #pragma ref f -- ipnx: pcc2 has no #pragma */
+/* #pragma ref width -- ipnx: pcc2 has no #pragma */
+/* #pragma ref precision -- ipnx: pcc2 has no #pragma */
 	if(flags&SHORT)
 		*va_arg(*args, short *) = nprint;
 	else if(flags&LONG)
