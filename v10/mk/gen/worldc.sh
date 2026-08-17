@@ -55,6 +55,19 @@ FAILRUN=""
 # ---------------------------------------------------------------- canary ---
 # halt.c is built by stage 1 on this very machine, so if it fails here the
 # flags are wrong and no number below means anything.
+#
+# EVERY EXIT FROM THIS SCRIPT MUST PRINT THE END MARKER, and the first version
+# did not.  v10_run sends a command and then waits for the program's own closing
+# output, so a script that exits without printing `WORLDC-done' leaves the
+# driver blocked for its full 18,000-second timeout -- which is precisely what
+# happened: the dd probe failed, this script exited, and a vax750 sat at 100% CPU
+# for twenty minutes with no console and nothing to reap it.  CLAUDE.md's rule is
+# that a harness must terminate itself and that needing to kill one IS the bug;
+# a guest-side script that can exit silently breaks that rule from the inside.
+#
+# The runaway check further down does not need this, because it lives inside the
+# `sed | while' pipeline and therefore in a SUBSHELL -- its exit ends the loop
+# and the tallies below still run.  Only a top-level exit can strand the driver.
 $CC $CF $UD/halt.c > can.log 2>&1
 if test -s halt.o
 then
@@ -62,6 +75,7 @@ then
 else
 	echo "NO$K"
 	sed -e 5q can.log
+	echo "WORLDC-done"
 	exit 1
 fi
 rm -f halt.o
