@@ -887,7 +887,69 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   the command and its `echo $M+` marker together, so against `telnet` the marker
   is read by telnet and transmitted to the far end — and the script then waits
   forever for a string nobody will print. `v8_run` waits for the program's own
-  closing output and re-syncs with a fresh marker afterwards.
+  closing output and re-syncs with a fresh marker afterwards. **It is also the
+  fix for a corrupted LIST**: a `cat` of two hundred lines under `v8_sh` comes
+  back with the marker's echo spliced through it character by character, so
+  stage 2's first member comparison reported names like `fchmodo.o`,
+  `closec.o` and `fioroead.o` — real output with echo mixed in, which then
+  defeated every count made from the log.
+- **`expect` has three spellings and two of them fail silently, in opposite
+  directions.** Measured on expect 5.45, each variant its own process with an
+  `after` watchdog:
+
+	expect -timeout 15 -- "sim>" {} timeout {}       CORRECT
+	expect { -timeout 15 "sim>" {} timeout {} }      never times out
+	expect -timeout 15 { "sim>" {} timeout {} }      never MATCHES
+
+  The third is the dangerous one and `exp_internal 1` names it in one line:
+  **a braced body following a flag is taken as ONE glob pattern**, braces and
+  action bodies included — `does "death\r\n" match glob pattern " death {set
+  halted 1} timeout {...} "? no`. Expect only re-splits a braced body into
+  pattern/action pairs when that body is the command's *only* argument, which
+  is why `v8_must`/`v10_try` have always worked. Inside the braces the flag is
+  honoured with **two** pattern pairs and ignored with **one**, so the middle
+  form appears to work wherever it was first tried. Both cost real runs: the
+  middle form held two completed stage-1 runs at `sim>` with the guest already
+  halted and the disk already consistent, and "converting to the third form"
+  as the fix made every teardown terminate on time and stop matching `death`,
+  so the halt path fell through to its `^E` fallback on a machine that had
+  halted perfectly. **A run that ends 120 s late looks like a slow machine,
+  not a broken pattern.** Use the flat form; `tools/v10drive.exp` carries the
+  measurements.
+- **A harness must terminate itself; needing to kill one is the bug.** A run
+  that hangs still *owns* the disk image, so the next round cannot start — and
+  overlapping simulators are how images get corrupted here. Both drivers now
+  end every path in a `close`-based reap (`close` hangs up the pty so SIMH's
+  console read returns EOF; `wait -nowait` never blocks) and carry a watchdog
+  built on `after`, which is serviced by `Tcl_DoOneEvent` — the very thing
+  `expect` blocks in — so it fires even while an expect waits for a pattern
+  that will never arrive. **The watchdog must exceed the legitimate worst
+  case**: teardown's own bounded waits total ~740 s, and a watchdog that can
+  fire during a real `sync` is worse than the hang it guards against.
+- **V10's `umount` takes the MOUNT POINT, not the device, and `/usr` must be
+  unmounted or the next boot loses it.** `cmd/umount.c`'s `umountone()` calls
+  `funmount(f)` on exactly the string given and then matches it against
+  mtab's *file* field, so `umount /dev/ra0c` — which is what V8 takes —
+  answers `/dev/ra0c: Invalid argument`. Use `umount -a`, the tape's own
+  idiom: `umountall()` walks mtab backwards, "in reverse order in case of
+  nesting", so no caller has to name anything and root (absent from mtab) is
+  never at risk. **Skipping it is not untidiness.** `/etc/rc` mounts `/usr`
+  from `/dev/ra0c` and V10's superblock records that a filesystem is mounted,
+  so a halt without unmounting leaves the flag set and the *next* boot of that
+  image answers `mount /dev/ra0c on /usr type 0: In use` and carries on into
+  multi-user with the root filesystem's empty `/usr` showing through. Nothing
+  reports an error after that line: it cost a stage-2 run in which `/usr/s1`
+  (stage 1's whole toolchain) and `/usr/bin/ranlib` were invisible, so 255 of
+  261 libc members failed to compile and the run read as a compiler problem.
+- **A component list that appears twice will disagree, silently.**
+  `v10/mk/mkdep.py` emits `tc.order`, `shutdown.order` and `buildtools.ord`;
+  `v10-stage1.exp` also carried `set BUILDTOOLS {ar cmp tail}`. The day `ed`
+  was added to the generator the makefile existed, the source disk carried
+  `ed.c` and `ed.mk`, and stage 1 built ar, cmp and tail — reporting 42/44
+  with `ed edits from a script NO` and no line anywhere saying `ed` had never
+  been built. `v10_order` in `v10drive.exp` reads the generated files instead;
+  column 2 gives each tool's install path, so the copy loop does not restate
+  those either.
 - **Driving V8 over the console: markers, never prompts, and never a literal.** The tty
   echoes typed characters as they arrive and they interleave *into* whatever is
   printing, so a marker lands mid-line (`echC3-CASE-clean`) — which defeats a
@@ -1186,9 +1248,41 @@ the entire `src/` tree that includes the ANSI-prototyped `<libc/libc.h>`,
 which pcc2 cannot parse. Source reaches the machine on a second RA81
 (`tools/v10-srcdisk.sh`), because there is no netfs on V10.
 
-Next: **stage 2** (libc from source, so `ar` finally has a job) and **stage 3**
-(the fixpoint — and the place where V10's missing `-t a/l/c` letters have to be
-faced). Then stage 7, the 780 kernel from `alice.m` via the prebuilt `mkconf`.
+**STAGE 2 BUILDS 237 OF THE 261 libc MEMBERS, AND 147 ARE BYTE-IDENTICAL TO
+BELL LABS'** (2026-08-17, `tools/v10-stage2.sh`, 19/27). The tape's
+`libc/mkfile` turned out to be a complete machine-readable build description —
+all 261 objects carry an explicit `obj: dir/src.c` line, and that set is
+*exactly* the 261 objects in the tape's own `libc.a`, which `mkdep.py`'s
+`libc_from_tape()` now asserts rather than assumes. Member **order** is read
+out of the archive instead of recomputed: V8's recipe uses
+`` ar cr libc.a `lorder *.o | tsort` `` and the V10 golden has neither tool,
+but the tape's archive is Bell Labs' own answer to the ordering question.
+
+The 24 that will not compile are **a finding, not a defect**, and they are not
+random: nine of the ten the mkfile hands to `lcc` are among them, plus the
+ANSI-era stdio family. Every failure is a construct pcc2 cannot parse —
+`int fprintf(FILE *f, const char *fmt, ...)`, `extern void *memcpy(void*,
+void*, size_t)`, `static void swapfunc(char *a, char *b, size_t n, int)`,
+`#include <stdarg.h>`. **So V10's libc has two generations in one tree** and
+the tape's archive is the ANSI one. That leaves stage 2 with no `printf`,
+`sprintf`, `malloc` or `qsort`, so its archive is complete enough to measure
+and not yet a usable library.
+
+Next: **finish stage 2** by running the ten as the tape did. lcc is available
+as V10's own 1995 binaries and the pieces check out — `cmd/lcc/etc/lcc` (the
+driver, compiled from `bowell.c`), `cmd/lcc/gen2/vax-v9/rcc` (the VAX back
+end: `vax/sel.c`, `vax/pseudos.c`), and `cmd/lcc/ph/cpp` (takes `-I`/`-D`) —
+which the driver expects at `/usr/bin/lcc`, `/usr/lib/rcc` and
+`/usr/lib/gcc-cpp`; the ANSI headers are already installed at
+`/usr/include/lcc` by the r70 cpio. There is **no `gcc-cpp` in the tree**
+(only `cmd/gcc/gcc.c`), so lcc's own cpp has to stand in for it, and none of
+this is on the source disk yet. Then **stage 3** (the fixpoint — and the place
+where V10's missing `-t a/l/c` letters have to be faced; V8's
+`docs/build-from-source.md` already settles the theory: `stage 1 == stage 3` is
+the *strong* test and `stage 3 == stage 3b` the *required* one, both on
+**stripped** binaries, since V10's `cc.c` puts `getpid()` into its temp
+filenames exactly as V8's does). Then stage 7, the 780 kernel from `alice.m`
+via the prebuilt `mkconf`.
 Also **submit** — the remaining steps need the Apple account and a
 final name decision, all listed in [docs/app-store.md](docs/app-store.md).
 **Not yet exercised — one thing, and it needs a human at a mouse**: `mux`/`jim`

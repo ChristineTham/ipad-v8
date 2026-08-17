@@ -42,8 +42,23 @@
 # stale in-core state back over the disk) and then quits.  A bailed run still
 # leaves a machine that was not cleanly halted, so it says so.
 
+# USE THE FLAT, UNBRACED `expect'.  The other two spellings each fail
+# silently, in opposite directions -- full measurement in v10drive.exp:
+#
+#	expect -timeout 15 -- "sim>" {} timeout {}      CORRECT
+#	expect { -timeout 15 "sim>" {} timeout {} }     never times out
+#	expect -timeout 15 { "sim>" {} timeout {} }     never MATCHES: a braced
+#	                                                body after a flag is read
+#	                                                as ONE glob pattern
+
 set V8_SEQ 0
 set V8_RUNNING 0        ;# is there a guest that must not simply be killed?
+set V8_DEADLINE_ID ""   ;# the run's watchdog -- see v8_deadline
+
+# How long a whole run may take before the watchdog reaps it.  Generous, so it
+# never cuts a legitimate build short; a harness that knows its own shape
+# should say so with `v8_deadline'.  What it must never be is absent.
+set V8_RUN_SECS 7200
 
 # WHERE THE MEDIA AND THE SIMULATOR ARE, resolved from THIS file's location
 # and normalised to an absolute path -- once, here, rather than in every
@@ -58,6 +73,47 @@ set V8_RUNNING 0        ;# is there a guest that must not simply be killed?
 set V8_MEDIA [file normalize [file join [file dirname [info script]] .. work myv8]]
 set V8_SIMH  [file normalize [file join [file dirname [info script]] .. work opensimh BIN vax780]]
 
+# --------------------------------------------------------------- teardown ---
+
+# THE HARNESS MUST ALWAYS TERMINATE ITSELF.  Identical to v10drive.exp's, and
+# here for the same reason: a run that hangs still OWNS the disk image, so the
+# next round cannot start and the only way out is killing a process by hand.
+# Needing that is the bug -- and overlapping simulators are how images get
+# corrupted here.
+#
+# `close' hangs up the pty, so SIMH's console read returns EOF and scp exits.
+# `wait -nowait' reaps without blocking, because a blocking wait would
+# reintroduce the hang this exists to prevent.
+proc v8_reap {} {
+    global V8_RUNNING
+    set V8_RUNNING 0
+    catch {close}
+    catch {wait -nowait}
+}
+
+# A DEADLINE FOR THE RUN, ENFORCED BY THE EVENT LOOP.  `after' timers are
+# serviced by Tcl_DoOneEvent, which is what `expect' blocks in, so this fires
+# even while an expect waits for a pattern that will never arrive.  Every
+# other bound in this file protects one `expect'; this one protects the whole
+# harness, including the paths nobody thought to bound.
+proc v8_deadline {secs} {
+    global V8_DEADLINE_ID
+    catch {after cancel $V8_DEADLINE_ID}
+    set V8_DEADLINE_ID [after [expr {$secs * 1000}] [list v8_expired $secs]]
+}
+
+proc v8_expired {secs} {
+    global V8_RUNNING
+    puts "\nV8-DEADLINE: ${secs}s elapsed and the run has not finished."
+    puts "V8-DEADLINE: stopping the simulator and giving up the disk image."
+    if {$V8_RUNNING} {
+        puts "V8-DEADLINE: the guest was NOT cleanly halted -- treat this"
+        puts "V8-DEADLINE: image as damaged until a hash says otherwise."
+    }
+    v8_reap
+    exit 3
+}
+
 # ---------------------------------------------------------------- failure ---
 
 # Stop without ever killing a running VAX. ^E reaches scp only because expect
@@ -66,15 +122,18 @@ set V8_SIMH  [file normalize [file join [file dirname [info script]] .. work ope
 proc v8_bail {msg} {
     global V8_RUNNING
     puts "\nV8-BAIL: $msg"
+    # BOUNDED.  These two had no -timeout and so inherited the harness's
+    # global one, which the drivers set as high as 3600 -- turning every
+    # failed assertion into an hour of holding the image.
     if {$V8_RUNNING} {
         send "\005"
-        expect { "sim>" {} timeout {} }
+        expect -timeout 30 -- "sim>" {} timeout {} eof {}
         send "quit\r"
-        expect { eof {} timeout {} }
-        set V8_RUNNING 0
+        expect -timeout 60 eof {} timeout {}
         puts "V8-BAIL: guest stopped at sim> and quit -- NOT cleanly halted,"
         puts "V8-BAIL: so treat this image as damaged until a hash says otherwise."
     }
+    v8_reap
     exit 1
 }
 
@@ -109,7 +168,7 @@ proc v8_boot {img {extra {}} {dtype ""}} {
     #
     # so a scoping bug arrives dressed as a simulator that started and died.
     # boot-newdisk.exp never hit this only because it spawns at top level.
-    global spawn_id V8_RUNNING V8_MEDIA V8_SIMH
+    global spawn_id V8_RUNNING V8_MEDIA V8_SIMH V8_RUN_SECS
     if {$dtype == ""} {
         set dtype [expr {[string match "*rp06*" $img] ? "rp06" : "rp07"}]
     }
@@ -126,6 +185,10 @@ proc v8_boot {img {extra {}} {dtype ""}} {
     }
     spawn $V8_SIMH
     set V8_RUNNING 1
+    # ARMED THE MOMENT THERE IS SOMETHING TO REAP, and not before: from here
+    # on the harness owns a simulator and a disk image, so from here on it
+    # must be unable to hold them for ever.
+    v8_deadline $V8_RUN_SECS
     v8_must "sim>" 60
     foreach c [concat {
         "set noasynch"
@@ -229,6 +292,13 @@ proc v8_run {cmd endpat {t 120}} {
 # marker to wait for.
 proc v8_halt {} {
     global V8_RUNNING
+    # THE TEARDOWN GETS ITS OWN DEADLINE, AND IT MUST EXCEED THE LEGITIMATE
+    # WORST CASE.  A watchdog that can fire while a real `sync' is still
+    # running is worse than the hang it guards against -- reaping mid-sync is
+    # how an image gets left inconsistent.  The bounded waits below cannot add
+    # up to more than a few minutes, so 900 can only be reached by a path that
+    # is genuinely stuck rather than merely slow.
+    v8_deadline 900
     v8_sh "cd /; sync; sync" 120
     send "/etc/halt\r"
     v8_must "Infinite loop" 180
@@ -242,10 +312,13 @@ proc v8_halt {} {
     # every run that halts, on every harness that sources this file, all of it
     # after the work was already done and passing -- which is exactly why it
     # went unnoticed.
-    expect {
-        "sim>"  {}
-        timeout { v8_bail "halted, but never reached sim> to quit" }
-    }
+    expect -timeout 60 -- "sim>" {} \
+                          timeout { v8_bail "halted, but never reached sim> to quit" }
     send "quit\r"
-    expect { eof {} timeout {} }
+    expect -timeout 60 eof {} timeout {}
+    # Unconditional, and the last word.  `quit' is a REQUEST: if SIMH did not
+    # act on it the expect above just times out and returns, and without this
+    # the harness would exit with a simulator still attached to the image.
+    # close() is not a request.
+    v8_reap
 }

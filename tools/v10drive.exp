@@ -37,9 +37,62 @@
 # stdbuf cannot help: the buffering is Tcl's, not stdio's.
 fconfigure stdout -buffering line
 
+# -------------------------------------------------------------------------
+# ONE SPELLING OF `expect' IS CORRECT HERE, AND THE OTHER TWO EACH FAIL
+# SILENTLY IN A DIFFERENT DIRECTION.  Use the flat, unbraced form:
+#
+#	expect -timeout 15 -- "sim>" {} timeout {}                  CORRECT
+#	expect { -timeout 15 "sim>" {} timeout {} }                 never times out
+#	expect -timeout 15 { "sim>" {} timeout {} }                 never MATCHES
+#
+# Measured on expect 5.45 (macOS), each variant its own process with an
+# `after' watchdog so a hang is reported rather than waited on:
+#
+#	expect { -timeout 3 "X" {} timeout {} }              HUNG
+#	expect { -timeout 3 "X" {} timeout {} eof {} }       HUNG
+#	expect -timeout 3 { "X" {} timeout {} }              returned at 3s
+#	expect -timeout 3 -- "death" {...} timeout {...}     MATCHED at 1s
+#	expect -timeout 3 { death {...} timeout {...} }      timed out, NO match
+#
+# The third line is the dangerous one, and `exp_internal 1' says why in one
+# line -- a braced body following a flag is taken as ONE GLOB PATTERN, the
+# whole thing, braces and action bodies included:
+#
+#	expect: does "death\r\n" match glob pattern
+#	  " death {set halted 1} timeout {puts TIMED-OUT} "?  no
+#
+# So it is not a pattern list at all: the timeout fires on schedule and
+# nothing can ever match.  Expect only re-splits a braced body into
+# pattern/action pairs when that body is the command's ONLY argument, which is
+# why v10_must and v10_try -- `expect -timeout $use -- "$pat" {...}' and
+# `expect { -timeout $t -- "$pat" {...} ... }' -- have always worked.
+#
+# WHAT THE MIDDLE FORM COST.  `expect { -timeout 15 "sim>" {} timeout {} }' in
+# v10_halt -- a line whose own comment read "waiting for it is waiting for
+# ever" -- held a completed stage-1 run at sim> for as long as the global
+# timeout allowed, twice, with the guest already halted and the disk already
+# consistent.  The run had done all of its work and could not let go of the
+# image.
+#
+# WHAT THE THIRD FORM COST.  Converting to it as the "fix" made every
+# teardown terminate on time and stop matching `death', so the halt path fell
+# through to its ^E fallback on a machine that had halted perfectly.  A run
+# that ends 120s late looks like a slow machine, not a broken pattern.
+#
+# The watchdog below is the backstop for whatever else is like this; the rule
+# above is how not to need it.
+# -------------------------------------------------------------------------
+
 set timeout 600
 set V10_SEQ 0
 set V10_RUNNING 0       ;# is there a guest that must not simply be killed?
+set V10_DEADLINE_ID ""  ;# the run's watchdog -- see v10_deadline
+
+# How long a whole run may take before the watchdog reaps it.  Generous by
+# default so it never cuts a legitimate build short; a harness that knows its
+# own shape should say so with `v10_deadline'.  What it must never be is
+# absent -- see the comment on v10_deadline.
+set V10_RUN_SECS 5400
 
 # Absolute, resolved from THIS file's location -- never relative to whatever
 # directory a caller happened to be in.  v8drive.exp records what a path bug
@@ -51,21 +104,117 @@ set V10_RUNNING 0       ;# is there a guest that must not simply be killed?
 set V10_MEDIA [file normalize [file join [file dirname [info script]] .. work v10gold]]
 set V10_SIMH  [file normalize [file join [file dirname [info script]] .. work opensimh BIN vax750]]
 set V10_ROM   [file normalize [file join [file dirname [info script]] .. work v10boot uda750]]
+set V10_GEN   [file normalize [file join [file dirname [info script]] .. v10 mk gen]]
+
+# ------------------------------------------------------------------ lists ---
+
+# The component lists, READ rather than restated.
+#
+# v10/mk/mkdep.py already emits tc.order, shutdown.order and buildtools.ord --
+# `name<TAB>dir<TAB>install' per line, one file per group -- and a harness
+# that also writes `set BUILDTOOLS {ar cmp tail}' has made a second source of
+# truth out of a list that had one.
+#
+# IT COST A RUN THE DAY IT WAS WRITTEN.  `ed' was added to mkdep.py's
+# BUILDTOOLS, the makefile was generated, the source disk carried ed.c and
+# ed.mk -- and stage 1 built ar, cmp and tail, because its own Tcl copy of the
+# list had not been touched.  Nothing failed: the run reported 42/44 with `ed
+# edits from a script NO' and no line anywhere saying ed had never been built.
+# A list that appears twice will disagree eventually, and the disagreement is
+# silent by construction.
+# `col' picks the field: 0 the component name, 1 its source directory, 2 the
+# path it installs to (relative, no leading slash).  Column 2 is how a driver
+# copies a staged tool into the running system without restating where each
+# one lives -- which is the same duplication one field over.
+proc v10_order {file {col 0}} {
+    global V10_GEN
+    set path [file join $V10_GEN $file]
+    if {![file exists $path]} {
+        v10_bail "no $path -- run v10/mk/mkdep.py"
+    }
+    set f [open $path]
+    set names {}
+    foreach line [split [read $f] "\n"] {
+        if {$line eq "" || [string index $line 0] eq "#"} continue
+        lappend names [lindex [split $line "\t"] $col]
+    }
+    close $f
+    if {[llength $names] == 0} { v10_bail "$path is empty" }
+    return $names
+}
+
+# --------------------------------------------------------------- teardown ---
+
+# THE HARNESS MUST ALWAYS TERMINATE ITSELF.  This is not tidiness: a run that
+# hangs still OWNS the disk image, so the next round cannot start, and the
+# only way out is killing a process by hand.  Needing that is the bug.
+#
+# It has happened.  On 2026-08-17 a stage-1 run did all of its work, halted
+# the guest cleanly -- `death' and `Infinite loop, PC: 80017019' both in the
+# log -- and then sat at `sim>' owning a vax750 with nothing left to do,
+# while the next round could not begin.
+#
+# `close' hangs up the pty, so SIMH's console read returns EOF and scp exits.
+# `wait -nowait' reaps without blocking, because a blocking wait here would
+# reintroduce exactly the hang this exists to prevent.  Both are catch'd:
+# tearing down a spawn that is already gone is success, not an error.
+proc v10_reap {} {
+    global V10_RUNNING
+    set V10_RUNNING 0
+    catch {close}
+    catch {wait -nowait}
+}
+
+# A DEADLINE FOR THE RUN, ENFORCED BY THE EVENT LOOP.
+#
+# Every other bound in this file is an `-timeout' on one `expect', which
+# protects only the wait it is attached to -- so a hang anywhere without one
+# is unbounded, and there is no way to be sure by reading that none is left.
+# `after' timers are serviced by Tcl_DoOneEvent, which is precisely what
+# `expect' blocks in, so this fires even while an expect is waiting for a
+# pattern that will never arrive.  That makes it a guarantee about the whole
+# harness rather than another local bound: whatever goes wrong and wherever,
+# the run stops and gives up the image.
+#
+# Arm it generously for the work and TIGHTLY for the teardown -- v10_halt
+# re-arms it, because by then the guest is halted and nothing legitimate can
+# take minutes.
+proc v10_deadline {secs} {
+    global V10_DEADLINE_ID
+    catch {after cancel $V10_DEADLINE_ID}
+    set V10_DEADLINE_ID [after [expr {$secs * 1000}] [list v10_expired $secs]]
+}
+
+proc v10_expired {secs} {
+    global V10_RUNNING
+    puts "\nV10-DEADLINE: ${secs}s elapsed and the run has not finished."
+    puts "V10-DEADLINE: stopping the simulator and giving up the disk image."
+    if {$V10_RUNNING} {
+        puts "V10-DEADLINE: the guest was NOT cleanly halted -- treat this"
+        puts "V10-DEADLINE: image as damaged until a hash says otherwise."
+    }
+    v10_reap
+    exit 3
+}
 
 # ---------------------------------------------------------------- failure ---
 
 proc v10_bail {msg} {
     global V10_RUNNING
     puts "\nV10-BAIL: $msg"
+    # A bail is already a failure, so nothing here may wait long enough to
+    # matter.  These two expects had no -timeout and inherited the harness's
+    # global one -- 3600 in the stage drivers -- which turned every failed
+    # assertion into an hour of holding the image.
     if {$V10_RUNNING} {
         send "\005"
-        expect { "sim>" {} timeout {} }
+        expect -timeout 30 -- "sim>" {} timeout {} eof {}
         send "quit\r"
-        expect { eof {} timeout {} }
-        set V10_RUNNING 0
+        expect -timeout 60 eof {} timeout {}
         puts "V10-BAIL: guest stopped at sim> and quit -- NOT cleanly halted,"
         puts "V10-BAIL: so treat this image as damaged until a hash says otherwise."
     }
+    v10_reap
     exit 1
 }
 
@@ -92,7 +241,7 @@ proc v10_boot {img {extra {}} {r5 0}} {
     # scope, so a spawn inside a proc leaves the global one alone and every
     # other proc here then talks to stdin, reads EOF at once, and reports
     # "simulator exited".  A scoping bug arrives dressed as a dead simulator.
-    global spawn_id V10_RUNNING V10_MEDIA V10_SIMH V10_ROM
+    global spawn_id V10_RUNNING V10_MEDIA V10_SIMH V10_ROM V10_RUN_SECS
 
     # Say what is missing while it is still a filename.
     if {![file executable $V10_SIMH]} { puts "\nV10-BAIL: no simulator at $V10_SIMH"; exit 2 }
@@ -102,6 +251,10 @@ proc v10_boot {img {extra {}} {r5 0}} {
 
     spawn $V10_SIMH
     set V10_RUNNING 1
+    # ARMED THE MOMENT THERE IS SOMETHING TO REAP, and not before: from here
+    # on the harness owns a simulator and a disk image, so from here on it
+    # must be unable to hold them for ever.
+    v10_deadline $V10_RUN_SECS
     v10_must "sim>" 60
 
     # `set noasynch' first, on the same rule as V8: this simulator is built
@@ -251,9 +404,66 @@ proc v10_run {cmd endpat {t 120}} {
 # `death' is the output-anchored marker -- the kernel's own last word -- and
 # SIMH then reports the IPL-31 `for (;;)' as `Infinite loop', because the
 # compiler emits it as a branch to itself.
+# UNMOUNTING IS NOT TIDINESS, IT IS WHAT MAKES THE IMAGE REUSABLE.  /etc/rc
+# mounts /usr from /dev/ra0c, and V10's superblock records that a filesystem
+# is mounted.  Halt without unmounting and the flag stays set, so the NEXT
+# boot of that image answers
+#
+#	mount /dev/ra0c on /usr type 0: In use
+#
+# and carries on into multi-user with /usr simply absent -- the root
+# filesystem's empty /usr directory showing through instead.  Nothing reports
+# an error after that line.  It cost a whole stage-2 run: /usr/s1 (stage 1's
+# entire toolchain) and /usr/bin/ranlib were invisible, so 255 of 261 libc
+# members failed to compile and the run read as a compiler problem.
+#
+# The V8 harnesses have always unmounted before v8_halt -- v10-golden.exp and
+# v10-srcdisk.exp both do it explicitly.  v10-stage1.exp did not, and this is
+# the wrong place to leave it to each caller: /usr is mounted by the MACHINE,
+# not by the harness, so the machine's driver unmounts it.
 proc v10_halt {} {
     global V10_RUNNING
+    # THE TEARDOWN GETS ITS OWN DEADLINE, AND IT MUST EXCEED THE LEGITIMATE
+    # WORST CASE -- which is the trap this line was written into first.
+    #
+    # A watchdog that can fire while a real `sync' is still running is worse
+    # than the hang it guards against: reaping mid-sync is exactly how an
+    # image gets left inconsistent.  The bounded waits below add up to three
+    # syncs at 180s, a sleep, a halt at 120s and 135s of closing expects --
+    # about 740s if every one of them runs long.  So 900, which can only be
+    # reached by a path that is genuinely stuck rather than merely slow.
+    #
+    # It is the expects that make teardown quick in practice; this only
+    # catches what they miss.
+    v10_deadline 900
     v10_sh "cd /; sync" 180
+
+    # UNMOUNT EVERYTHING, WITH THE TAPE'S OWN IDIOM.
+    #
+    # `umount -a' walks /etc/mtab backwards -- cmd/umount.c's umountall(),
+    # commented "in reverse order in case of nesting" -- so it needs no list
+    # from the caller and cannot get the order wrong.  Root is not in mtab, so
+    # there is nothing here to unmount out from under the running shell.
+    #
+    # IT TAKES THE MOUNT POINT, NOT THE DEVICE, and that is not guessable from
+    # V8 habits.  umountone() calls `funmount(f)' on exactly the string you
+    # gave it and then matches it against mtab's FILE field, so
+    #
+    #	/etc/umount /dev/ra0c     ->  /dev/ra0c: Invalid argument
+    #	/etc/umount /usr          ->  works
+    #
+    # The first form is what V8's umount(8) takes, it is what this driver
+    # tried first, and it failed on both devices while the halt carried on
+    # reporting success.  `-a' sidesteps the question entirely.
+    #
+    # `cd /' above is what makes any of it possible: a shell sitting in a
+    # directory on the filesystem being unmounted keeps it busy.
+    #
+    # v10_sh, not v10_try: a filesystem that is legitimately busy prints its
+    # own complaint and the marker still comes back.  A failure here must not
+    # stop the halt -- an unmount that did not happen costs the NEXT run its
+    # /usr, while a halt that did not happen costs this one its filesystem.
+    v10_sh "/etc/umount -a" 300
     v10_sh "sync" 180
     # /bin/sleep may not be installed yet on an image early in the bootstrap.
     # v10_sh, not v10_try: a missing sleep prints `not found' and the marker
@@ -262,6 +472,9 @@ proc v10_halt {} {
     # the only defence.
     v10_sh "/bin/sleep 5" 180
     v10_sh "sync" 180
+    # Say what is still mounted, so a busy unmount is visible in the log
+    # rather than only in the next run's failure.
+    v10_sh "cat /etc/mtab" 120
 
     # THERE MAY BE NO /etc/halt, and that must not hang the harness.
     #
@@ -281,22 +494,26 @@ proc v10_halt {} {
     # output-anchored marker, not any data.
     send "/etc/halt\r"
     set halted 0
-    expect {
-        -timeout 120 "death"       { set halted 1 }
-        -timeout 120 "not found"   {}
-        -timeout 120 "cannot"      {}
-        timeout {}
-        eof     { set halted 1 }
-    }
+    expect -timeout 120 -- "death" { set halted 1 } \
+                           "not found" {} \
+                           "cannot" {} \
+                           timeout {} \
+                           eof { set halted 1 }
     if {!$halted} {
         puts "\nV10-HALT: no usable /etc/halt -- stopping at sim> instead."
         puts "V10-HALT: safe here, because V10's boot() does not sync (it calls"
         puts "V10-HALT: death() directly), so the syncs above were the whole flush."
         send "\005"
-        expect { "sim>" {} timeout {} eof {} }
+        # BOUNDED, like every other expect in this proc.  These two had no
+        # -timeout for a while and therefore inherited the HARNESS's global
+        # one -- 3600 in v10-stage1.exp -- which is the same defect the long
+        # comment below describes, sitting ten lines above the comment that
+        # describes it.  `timeout {}' does not mean "briefly".
+        expect -timeout 30 -- "sim>" {} timeout {} eof {}
         set V10_RUNNING 0
         send "quit\r"
-        expect { eof {} timeout {} }
+        expect -timeout 60 eof {} timeout {}
+        v10_reap
         return
     }
     set V10_RUNNING 0       ;# stopped cleanly: quitting now is safe
@@ -314,16 +531,18 @@ proc v10_halt {} {
     # hour with nothing to show for it.  v8drive.exp records the same bug
     # costing four minutes a run; the fix is the same and the cause is the
     # habit of writing `timeout {}' and thinking it means "briefly".
-    expect {
-        -timeout 60 "Infinite loop" {}
-        -timeout 60 "sim>"          {}
-        timeout { puts "\nV10-WARN: halted at death but never reached sim>" }
-    }
+    expect -timeout 60 -- "Infinite loop" {} \
+                          "sim>" {} \
+                          timeout { puts "\nV10-WARN: halted at death but never reached sim>" }
     # `sim>' may already have been consumed with the line above, in which case
     # there is nothing more coming and waiting for it is waiting for ever.
-    expect { -timeout 15 "sim>" {} timeout {} }
+    expect -timeout 15 -- "sim>" {} timeout {}
     send "quit\r"
-    expect { -timeout 60 eof {} timeout {
-        puts "V10-WARN: sent quit but the simulator did not exit"
-    } }
+    expect -timeout 60 eof {} \
+                       timeout { puts "V10-WARN: sent quit but the simulator did not exit" }
+    # Unconditional, and it is the last word.  `quit' is a REQUEST -- if SIMH
+    # did not act on it, the expect above simply times out and returns, and
+    # without this the harness would exit with the simulator still attached
+    # to the image.  close() is not a request.
+    v10_reap
 }

@@ -1,0 +1,42 @@
+#!/usr/bin/env expect
+# The smallest possible V10 run: boot, log in, halt, exit.
+#
+#	expect tools/v10-halt-test.exp <image>
+#
+# Normally run through tools/v10-halt-test.sh, which times it and asserts that
+# no simulator is left behind.  See that file for why this exists.
+log_user 1
+source [file dirname [info script]]/v10drive.exp
+set timeout 900
+
+if {[llength $argv] < 1} {
+    puts "usage: v10-halt-test.exp <image>"
+    exit 2
+}
+
+# WALL-CLOCK STAMPS AT EVERY PHASE.  Without them a run that takes too long
+# says only that, and "the boot is slow" and "the teardown hangs" look
+# identical from the outside -- which is how two runs were spent guessing.
+set T0 [clock seconds]
+proc stamp {what} {
+    global T0
+    puts "\nHALT-TEST @[expr {[clock seconds] - $T0}]s: $what"
+}
+
+stamp "booting"
+v10_boot [lindex $argv 0]
+stamp "booted -- logging in"
+v10_login root
+stamp "logged in"
+v10_sh "PATH=/bin:/etc:/usr/bin; export PATH" 120
+v10_sh "OK=-ok" 120
+# One trivial assertion, so this is a run and not just a boot.
+if {[v10_try "echo HALTTEST\$OK" "HALTTEST-ok" 120]} {
+    stamp "the guest answered"
+} else {
+    stamp "THE GUEST DID NOT ANSWER"
+}
+stamp "starting v10_halt"
+v10_halt
+stamp "v10_halt returned -- exiting on its own, with no kill"
+exit 0

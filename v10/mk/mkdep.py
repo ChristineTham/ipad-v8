@@ -38,6 +38,7 @@ WHAT IS DIFFERENT, AND IT IS SHORTER THAN THE SIMILARITY
 
 import argparse
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -228,11 +229,23 @@ SHUTDOWN = ["halt", "sleep"]
 #	      only an assertion that both runs exited zero, which is the kind
 #	      of check this project has already been caught by.
 #
+#	ed    stage 2 EDITS A COMPILED FILE.  libc's errlst.o is compiled to
+#	      assembly, run through gen/:errfix, and only then assembled -- the
+#	      tape's own recipe, and :errfix is an ed script.  Without ed the
+#	      error table stays in .data instead of shared text, which builds
+#	      and runs and is not what Bell Labs shipped.
+#
 # `tail' is a convenience and is here anyway, because without it a failed
 # build in a guest harness can only be shown with `cat' of a whole log, and
 # the alternative to showing it is halting the machine that holds the only
 # copy.
-BUILDTOOLS = ["ar", "cmp", "tail"]
+#
+# ed is cmd/ed.c, the LOOSE one -- there is also a cmd/ed/ed.c carrying
+# ansi.h and posix.h, and source_for() prefers the loose file.  That is the
+# right one here for a reason and not by luck: the loose ed.c includes only
+# <signal.h> and <setjmp.h> and has no prototype in it, so pcc2 can compile
+# it, while the cmd/ed/ version is the POSIX rewrite.
+BUILDTOOLS = ["ar", "cmp", "tail", "ed"]
 
 # The compiler, from source.  THIS IS WHAT STAGE 1 IS.
 #
@@ -390,6 +403,223 @@ PATCHED = {
 }
 
 
+# ---------------------------------------------------------------- libc ---
+#
+# STAGE 2, and it is deliberately not another entry in a component table:
+# libc is an ARCHIVE, not a program, and almost every step of the tape's
+# recipe for it is a special case.  v8/mk/mkdep.py separates it for the same
+# reason.
+#
+# WHAT IS DIFFERENT HERE IS THE EVIDENCE.  V8's emit_libc() has to
+# RECONSTRUCT the object list by walking crt/ gen/ math/ stdio/ sys/ in the
+# tape's compile order and letting a later directory overwrite an earlier one,
+# because usr/src/libc/Makefile compiles `gen/*.[cs]' with a glob and four
+# basenames appear twice.  V10's mkfile names every object and its source:
+#
+#	OBJ=$L(_assert.o) $L(_cleanup.o) $L(_exit.o) ...      261 of them
+#	...
+#	strcat.o:	gen/strcat.s
+#	asin.o:		math/asin.c
+#
+# All 261 have an explicit source line, and that set is EXACTLY the 261
+# objects in the tape's own libc.a.  So nothing below is inferred: the object
+# list, the sources and the member ORDER are read off artefacts Bell Labs
+# shipped, and any disagreement between them is a hard error rather than a
+# silent preference.
+#
+# MEMBER ORDER COMES FROM THE ARCHIVE, NOT FROM `lorder | tsort'.  V8's
+# recipe reorders with `ar cr libc.a `lorder *.o | tsort`` because its ld
+# walks an archive once and a backward reference never resolves.  V10's ld is
+# the same program -- cmd/ld.c carries the same comment, "you can get away
+# with backward references when there is a table of contents!" -- but the
+# golden has NEITHER lorder NOR tsort; neither is among its 57 prebuilt
+# commands.  It does not need them.  The tape's libc.a is Bell Labs' own
+# answer to the ordering question, so the order is read out of it.  ranlib
+# then writes __.SYMDEF and the order stops being load-bearing anyway; keeping
+# it makes our archive comparable to the tape's member by member, which is
+# what stage 2 is measured by.
+#
+# TEN MEMBERS WERE NOT BUILT BY THE C COMPILER.  The mkfile overrides the
+# default recipe with `lcc' for malloc, memmove, qsort, fgets, fputs, rdwr,
+# scanf, sprintf, vfprintf and vfscanf -- lcc being the ANSI compiler in
+# cmd/lcc, whose headers are the ones r70 installs at /usr/include/lcc.  We
+# emit those ten with $(COMPILE) like the other 251 and let the run say what
+# happens, because the alternative is assuming pcc2's answer instead of
+# measuring it.  The set is derived from the mkfile rather than typed, and it
+# is written into the generated makefile so the artefact carries the fact.
+#
+# There is no prebuilt lcc DRIVER we can use even if we wanted to: cmd/lcc/etc/
+# lcc is compiled from bowell.c and its strings name `/usr/lib/gcc-cpp' and
+# `/usr/lib/rcc'.  The tree has rcc (gen2/vax-v9/rcc) and has NO gcc-cpp
+# anywhere -- only cmd/gcc/gcc.c, source.
+LIBC_DIR = "libc"
+
+
+def libc_from_tape():
+    """The build plan for libc, read off the tape rather than typed.
+
+    Returns (order, objmap, lcc):
+      order   member order of the tape's own libc.a, __.SYMDEF removed
+      objmap  object -> source path, relative to src/libc
+      lcc     the objects whose recipe the mkfile overrides with lcc
+    """
+    d = os.path.join(SRC, LIBC_DIR)
+    mkf = os.path.join(d, "mkfile")
+    arc = os.path.join(d, "libc.a")
+    for p in (mkf, arc):
+        if not os.path.exists(p):
+            sys.exit("mkdep: no %s -- run tools/v10-import.py" % p)
+
+    text = open(mkf).read()
+    m = re.search(r"^OBJ=(.*?)(?=\n[A-Z])", text, re.S | re.M)
+    if not m:
+        sys.exit("mkdep: %s has no OBJ= list" % mkf)
+    objs = re.findall(r"\$L\(([^)]+)\)", m.group(1))
+
+    # object -> source, plus whichever recipe line follows it.  mk's own
+    # syntax: a target line at column 0, its recipe indented with a tab.
+    objmap, lcc, cur = {}, set(), None
+    for line in text.splitlines():
+        r = re.match(r"^([A-Za-z_0-9]+\.o):[ \t]+([^\s:]+)", line)
+        if r:
+            cur, objmap[r.group(1)] = r.group(1), r.group(2)
+            continue
+        if line.startswith("\t"):
+            if cur and "lcc" in line.split():
+                lcc.add(cur)
+            continue
+        cur = None
+
+    order, data, off = [], open(arc, "rb").read(), 8
+    if data[:8] != b"!<arch>\n":
+        sys.exit("mkdep: %s is not an ar archive" % arc)
+    while off + 60 <= len(data):
+        h = data[off:off + 60]
+        if h[58:60] != b"`\n":
+            sys.exit("mkdep: %s: bad member header at byte %d" % (arc, off))
+        name = h[0:16].decode().rstrip()
+        size = int(h[48:58].decode().strip())
+        if name != "__.SYMDEF":
+            order.append(name)
+        off += 60 + size + (size & 1)
+
+    # THE TWO ARTEFACTS MUST AGREE, and a mismatch stops the generator.  A
+    # tarball re-import that changed either one would otherwise produce a
+    # makefile that builds a library nobody shipped, and the difference would
+    # not show up until something failed to link much later.
+    gap = [o for o in objs if o not in objmap]
+    if gap:
+        sys.exit("mkdep: %s lists %s in OBJ with no source line"
+                 % (mkf, " ".join(gap)))
+    if set(order) != set(objs):
+        only_a = sorted(set(order) - set(objs))
+        only_m = sorted(set(objs) - set(order))
+        sys.exit("mkdep: the tape's libc.a and its mkfile disagree -- "
+                 "only in the archive: %s; only in the mkfile: %s"
+                 % (" ".join(only_a) or "none", " ".join(only_m) or "none"))
+    return order, objmap, sorted(lcc)
+
+
+def emit_libc():
+    order, objmap, lcc = libc_from_tape()
+    d = os.path.join(SRC, LIBC_DIR)
+    srcdir = "$(SRC)/" + LIBC_DIR
+
+    def dep(path):
+        path = os.path.normpath(path)
+        if path.startswith(INC + os.sep):
+            return "$(INCDIR)/" + mkgen.rel(path, INC)
+        return srcdir + "/" + mkgen.rel(path, d)
+
+    out = [PREAMBLE % dict(name="libc", cflags="", incs="")]
+    out.append("""\
+# Not in the shared preamble because libc is the only thing that needs it.
+# ranlib writes __.SYMDEF, and cmd/ld.c reads it: with a current one ld makes
+# as many passes as it takes, without one it makes exactly one and warns.
+RANLIB = /usr/bin/ranlib
+
+""")
+    out.append("# The ten the tape built with lcc, not cc -- see mkdep.py:\n")
+    out.append("#   " + " ".join(lcc) + "\n\n")
+    out.append("OBJS = " + " ".join(order) + "\n")
+    out.append("""
+all: libc.a crt0.o mcrt0.o
+
+# The objects alone, so a driver can run `make -k objs' and find out how many
+# of the 261 this compiler can build BEFORE anything depends on all of them.
+# Without it a single member that will not compile takes the whole run down
+# to nothing -- no archive, no comparison, no measurement, four hours gone.
+objs: $(OBJS)
+
+# TWO RULES, AND THE STAMP FILE IS THE REASON.  `ld -x -r' REWRITES each
+# object in place, so doing it inside the libc.a recipe leaves all 261
+# prerequisites newer than the archive the moment the recipe finishes -- the
+# install pass then rebuilds the whole thing a second time and an incremental
+# build never converges.  `stripped' is written after the objects it rewrote,
+# so it is newer than all of them and libc.a is newer than it.
+#
+# The loop is over *.o and not over $(OBJS), which matters after a `make -k'
+# that could not build every member: the strip pass then covers what exists
+# instead of stopping at the first name with no file.
+stripped: $(OBJS)
+	-for i in *.o ; do $(LD) -x -r $$i; mv a.out $$i; done
+	echo stripped > stripped
+
+# `cr' and not `uv': the member order is the tape's, and an update would
+# append anything missing at the end instead.  rm first, because `cr' on an
+# existing archive replaces members rather than starting over.
+libc.a: stripped
+	rm -f libc.a
+	$(AR) cr libc.a $(OBJS)
+	$(RANLIB) libc.a
+
+# gen/:errfix moves the error-message table out of .data and into shared
+# text: errlst.c is compiled to ASSEMBLY, edited, and only then assembled.
+# The filename really does begin with a colon -- a V7 convention for a script
+# that is not a command you would type.
+#
+# -S rather than -c, and the output lands HERE and not on the share: cc.c's
+# setsuf() walks the path and returns the basename, so `cc -S /n/v10/src/...
+# /errlst.c' writes errlst.s into the object directory.  That is what makes
+# the whole out-of-tree build possible and it is worth knowing where it comes
+# from.
+errlst.o: %(src)s/gen/errlst.c $(TOOLS)
+	$(CC) $(CFLAGS) $(INCS) -S %(src)s/gen/errlst.c
+	ed - errlst.s < %(src)s/gen/:errfix
+	$(AS) -o errlst.o errlst.s
+	rm -f errlst.s
+""" % dict(src=srcdir))
+
+    # crt0.o and mcrt0.o are built here but are NOT members: they are the
+    # startup files ld links in front of every program.
+    for obj in order + ["crt0.o", "mcrt0.o"]:
+        if obj == "errlst.o":
+            continue
+        src = objmap.get(obj, "csu/" + obj[:-2] + ".s")
+        path = os.path.join(d, src)
+        deps = [srcdir + "/" + src] + [
+            x for x in sorted(dep(y) for y in mkgen.scan_includes(path, [INC]))
+            if x != srcdir + "/" + src]
+        out.append("\n%s: %s $(TOOLS)\n\t$(COMPILE) %s/%s\n"
+                   % (obj, " ".join(deps), srcdir, src))
+
+    # Into $(TOOLDIR)/lib, never over the libc being compiled against.  The
+    # tape's own install target opens `cp $(DESTDIR)/lib/libc.a liboc.a; cp
+    # libc.a $(DESTDIR)/lib/libc.a' -- it overwrites the running system's.
+    out.append("\ninstall: libc.a crt0.o mcrt0.o\n")
+    out.extend(mkgen.mkdirs_for("$(TOOLDIR)", "lib/libc.a"))
+    out.append("\tcp libc.a $(TOOLDIR)/lib/libc.a\n")
+    # RANLIB AFTER THE COPY.  cp gives the archive a new mtime while __.SYMDEF
+    # keeps the old one, and ld reads that as "table of contents out of date"
+    # -- one sequential pass, a warning naming ranlib, and undefined symbols
+    # in something that linked fine a minute earlier.
+    out.append("\t$(RANLIB) $(TOOLDIR)/lib/libc.a\n")
+    out.append("\tcp crt0.o $(TOOLDIR)/lib/crt0.o\n")
+    out.append("\tcp mcrt0.o $(TOOLDIR)/lib/mcrt0.o\n")
+    out.append("\nclean:\n\t-rm -f $(OBJS) crt0.o mcrt0.o libc.a stripped\n")
+    return "".join(out)
+
+
 def source_for(name, root):
     """Where this command's source is: cmd/<name>.c, or cmd/<name>/<name>.c."""
     loose = os.path.join(root, "cmd", name + ".c")
@@ -495,6 +725,16 @@ def main():
         entries.append((c["name"], c["dir"], c["install"]))
         tcnames.append(c["name"])
 
+    # STAGE 2.  An archive, not a program, so it has its own emitter rather
+    # than a component dict -- see emit_libc().
+    put("libc.mk", emit_libc())
+    entries.append(("libc", LIBC_DIR, "lib/libc.a"))
+    # The member list as DATA, in the tape's own order, so the guest can walk
+    # it from `sh'.  A driver has to answer "which of the 261 are missing?"
+    # and V10 has no wc and no grep -- what it does have is a for loop, and
+    # this is the file it reads.
+    put("libc.ord", "".join(o + "\n" for o in libc_from_tape()[0]))
+
     put("bootpath.order",
         "".join("%s\t%s\t%s\n" % e
                 for e in entries if e[0] in BOOTPATH))
@@ -571,8 +811,11 @@ def main():
     print("generated %d of %d components in %s"
           % (len(entries),
              len(BOOTPATH) + len(FSTOOLS) + len(SHUTDOWN)
-             + len(BUILDTOOLS) + len(TOOLCHAIN_SIMPLE) + len(TOOLCHAIN),
+             + len(BUILDTOOLS) + len(TOOLCHAIN_SIMPLE) + len(TOOLCHAIN) + 1,
              mkgen.rel(GEN, os.getcwd())))
+    order, _, lcc = libc_from_tape()
+    print("  libc       %d members, order read from the tape's libc.a; "
+          "%d built with lcc there" % (len(order), len(lcc)))
     if skipped:
         for name, why in skipped:
             print("  skipped %-10s %s" % (name, why))

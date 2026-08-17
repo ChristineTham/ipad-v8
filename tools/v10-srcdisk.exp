@@ -8,9 +8,12 @@
 # It writes one file and reads no golden: the partition file is attached as
 # rp1 and assembled into an image afterwards, on the host.
 
-set timeout 1200
+# NOTE: set after the source below, not here -- v8drive.exp sets `timeout'
+# itself, so a value assigned first is quietly overwritten.
+
 log_user 1
 source [file dirname [info script]]/v8drive.exp
+set timeout 1200
 
 if {[llength $argv] < 5} {
     puts "usage: v10-srcdisk.exp <v8-image> <tree> <ours> <mk> <blocks>"
@@ -38,12 +41,19 @@ set OBJ /usr/v10obj
 # :yyfix beside the source, y.debug.sv copied by relative name.
 set SRCDIRS {yacc ccom as cpp c2}
 #
-# ar, cmp and tail are here because the golden HAS NONE OF THEM, which was
-# measured rather than assumed: its 57 prebuilt 1995 binaries plus what
-# BOOTPATH builds do not include ar, cmp, tail, grep or wc.  Two of the three
-# are load-bearing -- stage 2 builds an archive and cannot without `ar', and
-# stage 3's whole result is a byte comparison it cannot make without `cmp'.
-set SRCFILES {cc.c ld.c halt.c sleep.c ar.c cmp.c tail.c}
+# ar, cmp, tail and ed are here because the golden HAS NONE OF THEM, which
+# was measured rather than assumed: its 57 prebuilt 1995 binaries plus what
+# BOOTPATH builds do not include ar, cmp, tail, ed, grep or wc.  Three of the
+# four are load-bearing -- stage 2 builds an archive and cannot without `ar';
+# stage 2's errlst.o is compiled to assembly and EDITED by gen/:errfix, which
+# is an ed script; and stage 3's whole result is a byte comparison it cannot
+# make without `cmp'.
+#
+# ed.c, the loose one.  There is also a cmd/ed/ed.c with ansi.h and posix.h --
+# the POSIX rewrite -- and mkdep.py's source_for() prefers the loose file.
+# That is the right one here and not by luck: cmd/ed.c includes <signal.h> and
+# <setjmp.h> and has not one prototype in it, so pcc2 can compile it.
+set SRCFILES {cc.c ld.c halt.c sleep.c ar.c cmp.c tail.c ed.c}
 
 set results {}
 proc note {name ok} { global results; lappend results [list $name $ok] }
@@ -145,10 +155,23 @@ note "ccom vax present"     [v8_try "test -s $M/src/cmd/ccom/vax/local.c && echo
 note "as instrs present"    [v8_try "test -s $M/src/cmd/as/instrs && echo I\$OK" "I-ok" 120]
 note "cpp cpy.y present"    [v8_try "test -s $M/src/cmd/cpp/cpy.y && echo C\$OK" "C-ok" 120]
 note "libc crt0.s present"  [v8_try "test -s $M/src/libc/csu/crt0.s && echo S\$OK" "S-ok" 120]
+# STAGE 2's THREE INPUTS, each of which arrives by a different route and any
+# one of which missing costs a whole run.  The mkfile and the archive come
+# with the libc tree; :errfix is the ed script errlst.o is edited with, and a
+# filename beginning with a colon is exactly the kind of thing a copy skips.
+note "libc mkfile present"  [v8_try "test -s $M/src/libc/mkfile && echo F\$OK" "F-ok" 120]
+note "tape libc.a present"  [v8_try "test -s $M/src/libc/libc.a && echo A\$OK" "A-ok" 120]
+note "libc :errfix present" [v8_try "test -s $M/src/libc/gen/:errfix && echo E\$OK" "E-ok" 120]
 note "our cc.c present"     [v8_try "test -s $M/ours/cmd/cc.c && echo O\$OK" "O-ok" 120]
+note "ed.c present"         [v8_try "test -s $M/src/cmd/ed.c && echo D\$OK" "D-ok" 120]
 note "tc.order"            [v8_try "test -s $M/mk/tc.order && echo T\$OK" "T-ok" 120]
 note "ccom.mk present"      [v8_try "test -s $M/mk/ccom.mk && echo K\$OK" "K-ok" 120]
 note "halt.mk present"      [v8_try "test -s $M/mk/halt.mk && echo H\$OK" "H-ok" 120]
+note "libc.mk present"      [v8_try "test -s $M/mk/libc.mk && echo B\$OK" "B-ok" 120]
+# libc.ord is DATA the guest walks with a for loop -- the 261 member names in
+# the tape's own order.  V10 has no wc and no grep, so this file is how a
+# stage-2 run answers "which members are missing?" at all.
+note "libc.ord present"     [v8_try "test -s $M/mk/libc.ord && echo R\$OK" "R-ok" 120]
 
 v8_sh "ls -l $M $M/src/cmd $M/mk" 600
 v8_sh "df" 120

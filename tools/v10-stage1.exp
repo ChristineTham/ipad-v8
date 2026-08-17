@@ -44,9 +44,12 @@
 # assertion below is on make's own exit status, and the install count is
 # checked separately against what actually landed.
 
-set timeout 3600
 log_user 1
 source [file dirname [info script]]/v10drive.exp
+# AFTER the source, not before.  v10drive.exp sets `timeout' itself, so a
+# harness that raises it first has its value quietly overwritten -- this file
+# asked for 3600 and ran with 600 for as long as the line sat above.
+set timeout 3600
 
 if {[llength $argv] < 2} {
     puts "usage: v10-stage1.exp <v10-image> <src-image>"
@@ -61,22 +64,29 @@ set K   /n/v10/mk
 set T   /usr/s1           ;# where stage 1 installs
 set OBJ /usr/obj
 
-# In dependency order, and the order is the point -- yacc must exist before
-# any grammar can be compiled, and each later pass is built by the ones before
-# it.  This is v10/mk/gen/tc.order.
-set TOOLCHAIN {yacc cpp ccom as c2 ld cc}
+# EVERY LIST HERE IS READ FROM v10/mk/gen, NEVER RESTATED.  They used to be
+# three literal Tcl lists, and the day `ed' was added to the generator this
+# file still said {ar cmp tail}: the makefile existed, the source disk carried
+# it, and stage 1 simply did not build it -- reported as one failed assertion
+# with nothing naming the cause.  See v10_order() in v10drive.exp.
+#
+# tc.order is in DEPENDENCY order and the order is the point: yacc must exist
+# before any grammar can be compiled, and each later pass is built by the ones
+# before it.
+set TOOLCHAIN [v10_order tc.order]
 
 # Built first, and before anything that can fail: V10's kernel does not sync
 # on halt (lsys/md/machdep.c -- boot() calls death() directly), so a machine
 # with no /etc/halt and no /bin/sleep cannot be stopped without risking the
 # filesystem.  The golden shipped without either.
-set SHUTDOWN {halt sleep}
+set SHUTDOWN [v10_order shutdown.order]
 
 # The tools the bootstrap itself needs and the golden does not have.  Built
-# here, in stage 1, because stage 2 cannot make an archive without `ar' and
-# stage 3's entire result is a byte comparison it cannot make without `cmp'.
-# `tail' is so a failed build can be shown without cat'ing a whole log.
-set BUILDTOOLS {ar cmp tail}
+# here, in stage 1, because stage 2 cannot make an archive without `ar', its
+# errlst.o is edited by an ed script, and stage 3's entire result is a byte
+# comparison it cannot make without `cmp'.  `tail' is so a failed build can be
+# shown without cat'ing a whole log.
+set BUILDTOOLS [v10_order buildtools.ord]
 
 set results {}
 proc note {name ok} { global results; lappend results [list $name $ok] }
@@ -228,16 +238,26 @@ note "/bin/sleep runs"     [v10_try "if /bin/sleep 1; then echo SL\$OK; fi" "SL-
 # $(AR) as /bin/ar from inside a makefile, and stage 3's comparison is a
 # /bin/cmp.  A staged copy under /usr/s1 would satisfy neither.
 foreach c $BUILDTOOLS { build $c }
-v10_sh "cp $T/bin/ar /bin/ar; cp $T/bin/cmp /bin/cmp" 300
-v10_sh "cp $T/usr/bin/tail /usr/bin/tail" 300
+# Copied to the path the generator says each one installs to, read out of
+# buildtools.ord's third column rather than written out again here.  A tool
+# that failed to build simply has nothing to copy and cp says so; v10_sh, not
+# v10_try, because the assertions that matter are the four below.
+foreach p [v10_order buildtools.ord 2] { v10_sh "cp $T/$p /$p" 300 }
 # no chmod on this machine; cp carries the mode (see above)
-# Proven by USE, not by `test -s': ar and cmp are what stages 2 and 3 rest on,
-# and a partial a.out that ld wrote before finding an undefined symbol passes
-# any existence check.
+# Proven by USE, not by `test -s': ar, cmp and ed are what stages 2 and 3 rest
+# on, and a partial a.out that ld wrote before finding an undefined symbol
+# passes any existence check.
 note "ar works" \
     [v10_try "cd /tmp; rm -f a.a; if ar cr a.a t.c && ar t a.a; then echo AR\$OK; fi" "AR-ok" 300]
 note "cmp works" \
     [v10_try "cd /tmp; if cmp t.c t.c; then echo CM\$OK; fi" "CM-ok" 300]
+# ed reading a SCRIPT on stdin, which is the only way stage 2 ever uses it:
+# libc's errlst.o rule is `ed - errlst.s < gen/:errfix'.  An `ed' that starts
+# and prompts would pass a `test -s' and hang the build.
+v10_sh "cd /tmp; echo hello > e.txt" 120
+v10_sh "cd /tmp; echo '1s/hello/EDIT/' > e.ed; echo w >> e.ed; echo q >> e.ed" 120
+note "ed edits from a script" \
+    [v10_try "cd /tmp; ed - e.txt < e.ed; cat e.txt" "EDIT" 300]
 
 # ------------------------------------------------------------ the toolchain ---
 foreach c $TOOLCHAIN {
@@ -275,5 +295,7 @@ note "stage-1 cpp/ccom/c2 compile" \
 note "and the program runs" [v10_try "cd /tmp; ./h" "STAGE1 1" 300]
 
 report
+# v10_halt unmounts everything in /etc/mtab with `umount -a' -- the source
+# disk and /usr both -- so nothing has to be named here.
 v10_halt
 exit 0

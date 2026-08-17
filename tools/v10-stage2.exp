@@ -1,0 +1,286 @@
+#!/usr/bin/env expect
+# Stage 2: build the Tenth Edition C library from V10 source, ON V10.
+#
+#	expect tools/v10-stage2.exp <stage1-image> <src-image>
+#
+# Normally run through tools/v10-stage2.sh.
+#
+# WHAT STAGE 2 IS FOR.  Every binary stage 1 produced was linked against the
+# TAPE's libc.a -- Bell Labs' 1995 archive -- because it is the only one that
+# exists when stage 1 runs.  Stage 2 builds the library from source with the
+# stage-1 compiler, so that stage 3 can rebuild the toolchain against it and
+# be the first set of binaries in which every component came from V10 source
+# compiled on V10.  The order is V8's, from docs/build-from-source.md, and
+# libc-before-the-second-toolchain is not arbitrary: rebuilding the compiler
+# first produces binaries that still carry the old library and have to be
+# built a third time once libc exists.
+#
+# WHAT IS BEING MEASURED, AND WHAT IS MERELY ASSERTED.  The tape ships the
+# archive its own mkfile produced -- 261 members, and mkdep.py has already
+# checked that the mkfile's object list and the archive's member list are the
+# same set.  So this run can compare its output against Bell Labs' own, member
+# by member, which is a far stronger check than "it compiled".
+#
+# But byte-identity is NOT the pass criterion, and saying so up front keeps
+# the result honest.  The mkfile hands TEN members to `lcc', the ANSI compiler
+# in cmd/lcc -- malloc, memmove, qsort, fgets, fputs, rdwr, scanf, sprintf,
+# vfprintf, vfscanf -- and we build all 261 with pcc2 because there is no lcc
+# to run: the prebuilt driver (cmd/lcc/etc/lcc, compiled from bowell.c) names
+# /usr/lib/gcc-cpp and /usr/lib/rcc, and while the tree has rcc it has no
+# gcc-cpp anywhere, only cmd/gcc/gcc.c.  Those ten may fail outright, or
+# compile to different bytes.  Either is a RESULT.  What is asserted is that
+# the archive is complete, that its member list and order match the tape's,
+# and that a program links against it and runs.
+#
+# THE ASSEMBLER IS THE TAPE'S, DELIBERATELY.  $(AS) is /bin/ar's neighbour
+# /bin/as -- Bell Labs' 1995 binary -- and not stage 1's own, even though
+# stage 1 built one.  V10's cc has no `-t a' letter, so cc runs a compiled-in
+# /bin/as for all 261 objects whatever $(AS) says; pointing $(AS) at stage 1's
+# would give exactly ONE member (errlst.o, the only rule that names $(AS)) a
+# different assembler from the other 260.  A library assembled by two
+# assemblers is a worse artefact than one assembled by the tape's, and the
+# real fix is the `-t a/l/c' question that belongs to stage 3.
+#
+# $(LD) IS STAGE 1's, and that one matters: the golden's /lib/ld was compiled
+# by the EIGHTH Edition's cc, and the strip pass (`ld -x -r' over every
+# object) is the one place libc's build runs a linker.
+
+log_user 1
+source [file dirname [info script]]/v10drive.exp
+# AFTER the source, not before: v10drive.exp sets `timeout' itself, so a
+# harness that raises it first has its value quietly overwritten.
+set timeout 14400
+# 261 objects, each compiled and then re-emitted by ld, so this run is much
+# longer than stage 1's.  The watchdog still bounds it -- it just has to be
+# told the shape of the work rather than cutting it off mid-build.
+set V10_RUN_SECS 21600
+
+if {[llength $argv] < 2} {
+    puts "usage: v10-stage2.exp <stage1-image> <src-image>"
+    exit 2
+}
+set img [lindex $argv 0]
+set src [lindex $argv 1]
+
+set N   /n/v10            ;# the source disk, mounted
+set S   /n/v10/src
+set K   /n/v10/mk
+set T1  /usr/s1           ;# stage 1: the compiler this stage is built by
+set T   /usr/s2           ;# where stage 2 installs
+set OBJ /usr/obj
+
+# The one macro that cannot go in $A/$B/$C, because its VALUE has spaces in
+# it and those variables are expanded by the shell with word splitting.
+# Quoted here and typed on each make line instead.
+set CCM "'CC=cc -B$T1/lib/ -t02p'"
+
+set results {}
+proc note {name ok} { global results; lappend results [list $name $ok] }
+proc report {} {
+    global results
+    puts "\n===== V10 STAGE 2 RESULTS ====="
+    set failed 0
+    foreach r $results {
+        puts [format "  %-44s %s" [lindex $r 0] [expr {[lindex $r 1] ? "ok" : "NO"}]]
+        if {![lindex $r 1]} { incr failed }
+    }
+    puts "===== [expr {[llength $results] - $failed}]/[llength $results] =====\n"
+    return $failed
+}
+
+# ---------------------------------------------------------------------------
+v10_boot $img [list "set rq1 ra81" "attach rq1 $src"]
+v10_login root
+
+puts "\n===== V10 STAGE 2 (libc, on V10) ====="
+v10_sh "PATH=/bin:/etc:/usr/bin; export PATH" 120
+v10_sh "OK=-ok" 120
+
+# ------------------------------------------------------------- the source ---
+#
+# /n and /n/v10 already exist on a stage-1 machine; mkdir says so and that is
+# not an error.  v10_sh rather than v10_try for exactly that reason.
+v10_sh "mkdir /n; mkdir $N" 120
+note "source disk mounts" \
+    [v10_try "/etc/mount /dev/ra1c $N && echo MT\$OK" "MT-ok" 600]
+note "libc source visible" \
+    [v10_try "test -s $S/libc/csu/crt0.s && echo LC\$OK" "LC-ok" 300]
+note "libc.mk visible" \
+    [v10_try "test -s $K/libc.mk && echo MK\$OK" "MK-ok" 300]
+note "libc.ord visible" \
+    [v10_try "test -s $K/libc.ord && echo OR\$OK" "OR-ok" 300]
+# The oracle.  Everything below compares against it, so its absence has to be
+# a named failure rather than a comparison that silently passes on nothing.
+note "the tape's libc.a visible" \
+    [v10_try "test -s $S/libc/libc.a && echo TA\$OK" "TA-ok" 300]
+# A filename beginning with a colon is the kind of thing a copy skips.
+note ":errfix visible" \
+    [v10_try "test -s $S/libc/gen/:errfix && echo EF\$OK" "EF-ok" 300]
+
+# ---------------------------------------------- is this a stage-1 machine? ---
+#
+# Asserted BEFORE the first object, so a run started from the golden by
+# mistake says so in one line instead of building 261 objects with the wrong
+# compiler and looking like a success.
+foreach p {lib/cpp lib/ccom lib/c2 bin/ld bin/cc} {
+    note "stage 1 present: $p" [v10_try "test -s $T1/$p && echo S1\$OK" "S1-ok" 120]
+}
+# And the four commands stage 1 installed into the running system, each
+# proven by USE.  ar and ed are what this stage cannot proceed without.
+note "ar works" \
+    [v10_try "cd /tmp; rm -f b.a; if ar cr b.a /etc/motd && ar t b.a; then echo AR\$OK; fi" "AR-ok" 300]
+note "cmp works" [v10_try "cd /tmp; if cmp /etc/motd /etc/motd; then echo CM\$OK; fi" "CM-ok" 300]
+v10_sh "cd /tmp; echo hello > e2.txt; echo '1s/hello/EDIT/' > e2.ed; echo w >> e2.ed; echo q >> e2.ed" 120
+note "ed edits from a script" \
+    [v10_try "cd /tmp; ed - e2.txt < e2.ed; cat e2.txt" "EDIT" 300]
+# ranlib is the tape's prebuilt (prebuilt.txt: usr/bin/ranlib, 12288 bytes).
+# Without it ld makes ONE pass over the archive and warns, and a libc whose
+# backward references do not resolve fails much later in something unrelated.
+note "ranlib works" \
+    [v10_try "cd /tmp; if ranlib b.a && ar t b.a; then echo RL\$OK; fi" "RL-ok" 300]
+
+# ---------------------------------------------------------------- the macros ---
+#
+# Shell variables, because CANBSIZ is 256 and the tty discards a longer line
+# silently.  See the header for why AS is the tape's and LD is stage 1's.
+v10_sh "A='SRC=$S OURS=$N/ours INCDIR=/usr/include TOOLDIR=$T DESTDIR=$T'" 120
+v10_sh "B='CCPATH=$T1/bin/cc CPP=$T1/lib/cpp CCOM=$T1/lib/ccom C2=$T1/lib/c2'" 120
+v10_sh "C='AS=/bin/as LD=$T1/bin/ld AR=/bin/ar RANLIB=/usr/bin/ranlib'" 120
+v10_sh "rm -rf $T $OBJ/libc $OBJ/tape; mkdir $T; mkdir $OBJ; mkdir $OBJ/libc" 300
+
+# ------------------------------------------------------------- 261 objects ---
+#
+# `make -k', and the -k is load-bearing.  261 members and one that will not
+# compile takes the whole run down to nothing -- no archive, no comparison,
+# no measurement -- after hours of work that all succeeded.  With -k the run
+# builds everything it can and the NEXT step says exactly what is missing.
+v10_sh "date" 120
+puts "\n--- LIBC-BUILD-START ---"
+v10_sh "cd $OBJ/libc; make -k -f $K/libc.mk \$A \$B \$C $CCM objs > b.log 2>&1; echo done" 14400
+puts "--- LIBC-BUILD-END ---"
+v10_sh "date" 120
+
+# WHICH ONES ARE MISSING.  No wc and no grep on this machine, so the list is
+# walked with a for loop over the generated libc.ord -- the tape's own member
+# order, as data.  An empty `miss' is the pass; a non-empty one is printed in
+# full, here, while the machine still has it.
+v10_sh "cd $OBJ/libc; for f in `cat $K/libc.ord`; do test -f \$f || echo MISS \$f; done > miss" 1800
+set complete [v10_try "cd $OBJ/libc; test -s miss || echo ALL\$OK" "ALL-ok" 300]
+note "all 261 members compiled" $complete
+if {!$complete} {
+    # v10_run, NOT v10_sh, AND THE LIST IS WHY.  v10_sh sends the command and
+    # its `echo $M+' marker together, so the marker's own echo interleaves
+    # character by character into whatever the command prints -- and this
+    # command prints two hundred lines.  The first attempt came back with
+    # names like `fchmodo.o', `closec.o' and `fioroead.o': real output with
+    # single echoed characters spliced through it, which then defeated every
+    # host-side count made from the log.  v10_run waits for the command's own
+    # closing marker before sending anything else.
+    v10_run "cd $OBJ/libc; cat miss; echo MISSEND" "MISSEND" 900
+    # Say WHY, not just which.  b.log holds the compiler's own words and they
+    # are the finding.
+    #
+    # sed, not tail: `tail' is the one thing stage 1 cannot build (cmd/tail.c
+    # is the only file in the tree that includes the ANSI-prototyped
+    # <libc/libc.h>), so a stage-2 run that asks for it gets `tail: not found'
+    # exactly where the diagnosis should have been.  sed is prebuilt and can
+    # do better than tail anyway -- print the lines that NAME the failure
+    # instead of the last N lines whatever they happen to be.
+    v10_run "cd $OBJ/libc; sed -n '/error/p' b.log; echo ERREND" "ERREND" 900
+    v10_run "cd $OBJ/libc; sed -n '/rror/p;/annot/p;/ndefined/p' b.log | sed -n '1,40p'; echo E2END" "E2END" 900
+}
+
+# ------------------------------------------------------------- the archive ---
+if {$complete} {
+    set arch [v10_try \
+        "cd $OBJ/libc; if make -k -f $K/libc.mk \$A \$B \$C $CCM libc.a > a.log 2>&1; then echo AR\$OK; fi" \
+        "AR-ok" 7200]
+    note "libc.a built by the makefile" $arch
+    if {!$arch} { v10_sh "cd $OBJ/libc; tail -30 a.log" 900 }
+} else {
+    # A PARTIAL LIBRARY, BUILT BY HAND AND SAID SO.  make cannot run the
+    # archive rule when a prerequisite failed, so the comparison below would
+    # have nothing to measure -- which would turn a partial result into no
+    # result.  This is not stage 2 passing; it is stage 2 reporting.
+    puts "\n*** INCOMPLETE: archiving what compiled, so the comparison"
+    puts "*** below still has something to measure.  This is NOT a pass.\n"
+    v10_sh "cd $OBJ/libc; for i in *.o ; do $T1/bin/ld -x -r \$i; mv a.out \$i; done" 7200
+    v10_sh "cd $OBJ/libc; echo stripped > stripped" 120
+    note "libc.a built BY HAND from what compiled" \
+        [v10_try "cd $OBJ/libc; rm -f libc.a; if ar cr libc.a *.o && ranlib libc.a; then echo PA\$OK; fi" \
+                 "PA-ok" 3600]
+}
+note "libc.a exists" [v10_try "cd $OBJ/libc; test -s libc.a && echo EX\$OK" "EX-ok" 300]
+
+# -------------------------------------------- against the tape's own archive ---
+#
+# ONE: the member list and its ORDER.  `ar t' both, compare with cmp.  This
+# is the check that catches a truncated OBJS macro -- make's yytext is
+# INMAX = 5000 and our OBJS line is 2299, so there is headroom, but a silent
+# truncation would produce a short archive that ranlib blesses and everything
+# downstream accepts.
+v10_sh "cd $OBJ/libc; ar t libc.a > ours.lst; ar t $S/libc/libc.a > tape.lst" 900
+note "member list and order match the tape" \
+    [v10_try "cd $OBJ/libc; if cmp ours.lst tape.lst; then echo LS\$OK; fi" "LS-ok" 600]
+
+# TWO: the members themselves, byte for byte.  A measurement, not an
+# assertion -- see the header.  The guest prints one DIFF line per member
+# that differs and v10-stage2.sh counts them out of the log, because there is
+# no wc here to count with and arithmetic in this shell is not worth the
+# trouble it would cause.
+v10_sh "mkdir $OBJ/tape" 120
+note "the tape's archive extracts" \
+    [v10_try "cd $OBJ/tape; if ar x $S/libc/libc.a && test -s _exit.o; then echo EX\$OK; fi" "EX-ok" 1800]
+puts "\n--- LIBC-CMP-START ---"
+v10_sh "cd $OBJ/libc; for f in `cat $K/libc.ord`; do cmp -s \$f ../tape/\$f || echo DIFF \$f; done > d.lst" 3600
+# v10_run, for the reason given above the MISS dump: a two-hundred-line `cat'
+# under v10_sh comes back with the marker's echo spliced through it.
+v10_run "cd $OBJ/libc; cat d.lst; echo DIFFEND" "DIFFEND" 1800
+puts "--- LIBC-CMP-END ---"
+
+# ---------------------------------------------------------------- install ---
+note "install" \
+    [v10_try "cd $OBJ/libc; if make -f $K/libc.mk \$A \$B \$C $CCM install > i.log 2>&1; then echo IN\$OK; fi" \
+             "IN-ok" 1800]
+foreach p {lib/libc.a lib/crt0.o lib/mcrt0.o} {
+    note "staged $p" [v10_try "test -s $T/$p && echo ST\$OK" "ST-ok" 120]
+}
+
+# ------------------------------------------------------------ the smoke test ---
+#
+# THE ONE THAT MATTERS: a program built by the stage-1 compiler and linked
+# against the stage-2 library, running.  Everything above could pass on an
+# archive that is well formed and useless.
+#
+# $T/lib/libc.a IS NAMED ON THE LINK LINE, not reached with -l.  V10's cc has
+# no `-t c' letter, so its implicit -lc resolves out of /lib/libc.a -- the
+# TAPE's -- and a stage that had just built its own would silently keep
+# linking against Bell Labs'.  ld takes the first definition it finds, so
+# ours wins and the implicit -lc adds nothing.
+#
+# crt0.o is still /lib/crt0.o for the same missing letter, and that is worth
+# stating rather than glossing: it is V10's own (assembled by V10's as when
+# the golden was built), so nothing here is the Eighth Edition's -- but it is
+# not stage 2's either, and closing that gap is stage 3's job.
+v10_sh "cd /tmp; rm -f s2.c s2" 120
+v10_sh "cd /tmp; echo '#include <stdio.h>' > s2.c" 120
+v10_sh "cd /tmp; echo 'char b\[64\];' >> s2.c" 120
+v10_sh "cd /tmp; echo 'main(){ strcpy(b,\"STAGE2\"); printf(\"%s %d\\n\", b, strlen(b)); return 0; }' >> s2.c" 120
+# The link is also where a stale __.SYMDEF would show itself: cp gives the
+# archive a new mtime while the table of contents keeps the old one, and
+# cmd/ld.c answers that with "table of contents for archive is out of date;
+# rerun ranlib(1)" and ONE sequential pass.  libc.mk's install target runs
+# ranlib after the copy for this reason; assert that it worked.
+set stale [v10_try "cd /tmp; cc -B$T1/lib/ -t02p -o s2 s2.c $T/lib/libc.a" "out of date" 1800]
+note "no stale table of contents" [expr {!$stale}]
+note "links against the stage-2 libc" \
+    [v10_try "cd /tmp; if cc -B$T1/lib/ -t02p -o s2 s2.c $T/lib/libc.a; then echo LK\$OK; fi" "LK-ok" 1800]
+note "and the program runs" [v10_try "cd /tmp; ./s2" "STAGE2 6" 600]
+
+# ---------------------------------------------------------------- what landed ---
+v10_sh "ls -l $T/lib" 600
+v10_sh "df" 120
+
+set failed [report]
+v10_halt
+exit [expr {$failed ? 1 : 0}]
