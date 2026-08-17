@@ -137,6 +137,46 @@ if [[ "$gb" != "$built" || "$gf" != "$failed" || "$ga" != "$arch" ]]; then
     exit 1
 fi
 
+# THE REPORT MUST NOT CONTRADICT ITSELF, and the first run's did -- printed
+# plainly, by this script, without complaint:
+#
+#	every member compiled         26
+#	some member did not            0
+#	members that did not build    42
+#
+# Those cannot all be true: if any member failed, at least one library must
+# have.  The guest-versus-host cross-check above could not see it, because both
+# instruments were reading the same tokens and agreeing perfectly about a number
+# that was wrong.  Two readings agreeing is not the same as two readings being
+# right, and the check that was missing is INTERNAL consistency.
+#
+# (The cause was the shell: the member loop is `while read ... done < objs.lst'
+# and the historical Bourne shell forks for a compound command with an input
+# redirection, so the `echo >> mem.log' survived and the `nf=' variable did not.
+# libsc.sh now keeps that tally in a file.)
+if [[ -n "$gm" && "$gm" != 0 && "$gf" == 0 ]]; then
+    echo "== NO MEASUREMENT: the run contradicts itself =="
+    echo "   $gm members did not build, yet 0 libraries reported a failure."
+    echo "   If any member failed, at least one library must have -- so the"
+    echo "   per-library verdict is not reaching the tally.  A number that"
+    echo "   disagrees with another number from the same run is not a result."
+    grep -oE 'LMEM-(no|short) [A-Za-z_0-9+./-]+' "$LOG" 2>/dev/null | head -20 \
+        | sed -e 's/^/      /'
+    echo "== v10-libs exit $rc =="
+    exit 1
+fi
+# A SHORT ARCHIVE IS A FAILURE EVEN IF EVERY MEMBER COMPILED, because `ar cr'
+# accepts object names that do not exist and ranlib blesses the result.
+if grep -q 'LMEM-short' "$LOG" 2>/dev/null; then
+    echo "== NO MEASUREMENT: an archive is missing members =="
+    grep -oE 'LMEM-short [A-Za-z_0-9+./-]+ [0-9]+ of [0-9]+ members' "$LOG" \
+        | sed -e 's/^/      /' | head -30
+    echo "   An archive of 30 objects out of 33 links until the day something"
+    echo "   needs the other three."
+    echo "== v10-libs exit $rc =="
+    exit 1
+fi
+
 # The manifest is the denominator, and it is read rather than typed -- a
 # component list that appears twice will disagree eventually and silently.
 units=$(grep -vcE '^#' "$ROOT/v10/mk/gen/libs.units" | tr -d ' ')

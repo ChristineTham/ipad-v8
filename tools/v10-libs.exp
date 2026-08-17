@@ -130,8 +130,13 @@ note "ranlib is present" \
 # libc must already be installed, because an archive is only useful beside one.
 # Not used by this run -- `cc -c' never links -- but its absence means the image
 # is not the one this stage is meant to follow.
+#
+# /usr/s2, NOT /usr/s1: stage 1 installs the PASSES and stage 2 installs libc,
+# to its own prefix (v10-stage2.exp:69, `set T /usr/s2').  Looking in stage 1's
+# lib/ reported NO on the first run for a libc that was present all along, one
+# directory over.
 note "stage 2's libc is installed" \
-    [v10_try "test -s $T1/lib/libc.a && echo LI\$OK" "LI-ok" 300]
+    [v10_try "test -s /usr/s2/lib/libc.a && echo LI\$OK" "LI-ok" 300]
 
 # ----------------------------------------------------------------- the build ---
 #
@@ -146,8 +151,21 @@ v10_run "sh $K/libsc.sh $N $OBJ /bin/cc $T1/lib/ $T1/bin/ar /usr/bin/ranlib /bin
 # THE CANARIES ARE ASSERTIONS, NOT COURTESIES.  If the flags are wrong every
 # library fails, and 0/26 reads as a devastating finding about the Tenth Edition
 # rather than as a mistake in this file.
+# THE CANARY IS PROVED BY ITS MARKER, NOT BY ITS LOG, and the first run failed
+# this assertion while the canary had passed perfectly.  `test -s can.log' asks
+# for a NON-EMPTY log -- and a compile that succeeds writes nothing at all, so
+# the empty file is the pass case and this test was exactly inverted.  The
+# script's own `LCANARY-cc-ok' is the evidence; it was in the transcript all
+# along, next to an assertion saying NO.
+# THE CANARY IS PROVED BY A MARKER FILE, NOT BY ITS LOG.  The first run failed
+# this assertion while the canary had passed perfectly: `test -s can.log' asks
+# for a NON-EMPTY log, and a compile that succeeds writes nothing at all -- so
+# the empty file is the pass case and the test was exactly inverted.  libsc.sh
+# now writes can.mark on success, which is true only when it succeeded.
 note "the cc canary compiled -- so the flags are right" \
-    [v10_try "test -s $OBJ/can.log && echo CL\$OK" "CL-ok" 300]
+    [v10_try "test -s $OBJ/can.mark && echo CL\$OK" "CL-ok" 300]
+note "the ar canary worked -- so ar and ranlib are right" \
+    [v10_try "test -s $OBJ/canar.mark && echo CA\$OK" "CA-ok" 300]
 note "the build produced a result file" \
     [v10_try "test -s $OBJ/res.log && echo RS\$OK" "RS-ok" 300]
 

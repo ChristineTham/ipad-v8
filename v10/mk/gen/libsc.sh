@@ -53,6 +53,10 @@ cd $OBJ
 $CC $CF $UD/cmd/halt.c > can.log 2>&1
 if test -s halt.o
 then
+	# A MARKER FILE, because `can.log' is EMPTY when the canary succeeds -- a
+	# compile that works writes nothing -- so a `test -s can.log' assertion is
+	# exactly inverted and failed on the first run while the canary had passed.
+	echo ok > can.mark
 	echo "$K-cc-ok"
 else
 	echo "NO$K"
@@ -62,8 +66,9 @@ else
 	exit 1
 fi
 rm -f halt.o
-if $AR cr can.a can.log && $RL can.a
+if $AR cr can.a can.mark && $RL can.a
 then
+	echo ok > canar.mark
 	echo "$K-ar-ok"
 else
 	echo "NO$K"
@@ -89,8 +94,22 @@ do
 	rm -rf $LD
 	mkdir $LD
 	cd $LD
-	nf=""
-	rm -f m.log
+	# THE FAILURE TALLY IS A FILE, NOT A VARIABLE, AND THAT IS A BUG FIX.
+	# This was `nf=""' with `nf="$nf."' in the failing branch, and the first
+	# run reported 26 of 26 libraries with every member compiled while
+	# TALLYM said 42 members had NOT built -- two numbers from the same
+	# `else' branch, contradicting each other.
+	#
+	# The cause is the shell.  The member loop below is
+	# `while read obj src ... done < objs.lst', and the historical Bourne
+	# shell FORKS for a compound command carrying an input redirection.  So
+	# the `echo >> mem.log' survived (a file) and the `nf=' did not (a
+	# variable in a dead child), and every library came out looking perfect.
+	#
+	# A file is immune to that either way, so this needs no theory about
+	# which shell forks when.  Rule worth keeping: in 1970s sh, never carry a
+	# tally out of a redirected loop in a variable.
+	rm -f m.log nf.cnt
 	# WHERE THIS LIBRARY'S SOURCE COMES FROM.  For most, the courier disk.
 	# For the libplot family it is inside a `.c.a' SOURCE BUNDLE, and `ar x'
 	# is step one of the tape's own recipe:
@@ -202,8 +221,13 @@ do
 		then
 			:
 		else
-			nf="$nf."
+			echo . >> nf.cnt
 			echo "$M-no $name $obj" >> $OBJ/mem.log
+			# TO STDOUT AS WELL, bounded, so the transcript carries
+			# the diagnosis.  The first run left its only record of
+			# 42 failures in a file on a halted machine, which meant
+			# the finding could not be read without another boot.
+			echo "$M-no $name $obj"
 			sed -e 4q m1.log >> m.log
 		fi
 		rm -f m1.log
@@ -243,6 +267,32 @@ do
 		fi
 		;;
 	esac
+	# HOW MANY MEMBERS DID THE ARCHIVE ACTUALLY GET?  The strongest check
+	# here, and the one that would have caught the first run outright: `ar cr'
+	# was handed 42 object names that did not exist and produced an archive
+	# anyway, for all 26 libraries, which ranlib then blessed.  An archive of
+	# 30 objects out of 33 links until the day something needs the other
+	# three, so "an archive appeared" is not the question -- "does it hold
+	# every member" is.
+	#
+	# __.SYMDEF is dropped from the count: ranlib prepends it and `ar t' lists
+	# it, so a raw line count is one too many for every archive and zero for
+	# the `single' kind that has no table of contents at all.
+	want=`sed -n '$=' objs.lst`
+	if test -z "$want"; then want=0; fi
+	case "$kind" in
+	single)
+		have=$want ;;
+	*)
+		$AR t $arch 2>/dev/null | sed -e '/__\.SYMDEF/d' > at.log
+		have=`sed -n '$=' at.log`
+		if test -z "$have"; then have=0; fi ;;
+	esac
+	if test "$have" != "$want"
+	then
+		echo "$M-short $name $have of $want members"
+		echo "$M-short $name" >> $OBJ/mem.log
+	fi
 	if test $built = y -a -s $arch
 	then
 		echo "$A $name"
@@ -257,7 +307,7 @@ do
 	# stricter and more useful statement than "an archive appeared" -- an
 	# archive of 30 objects out of 33 links until the day something needs
 	# the other three.
-	if test -z "$nf"
+	if test ! -f nf.cnt
 	then
 		echo "$P $name"
 		echo "$P $name" >> $OBJ/res.log
