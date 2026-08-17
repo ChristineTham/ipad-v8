@@ -357,11 +357,27 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
 	cc ALONE, EVERY conversion done    260 of 261  <- THE CEILING
 
   `LIBC_LCC` is now **empty**, so there is no per-member compiler choice left to
-  get wrong, and **the ceiling is reached**: the only member that does not
-  build is `setupshares`, ruled out on evidence before any of this began. **Do not
-  reinstate lcc to close them** — it still hits the `bowell.c` defect
-  (`0: unknown flag -undef`), so those members become **empty objects that exit
-  0**. Eight loud failures beat eight silent holes.
+  get wrong. **Do not reinstate lcc to close a member** — it still hits the
+  `bowell.c` defect (`0: unknown flag -undef`), so those members become **empty
+  objects that exit 0**. A loud failure beats a silent hole.
+  - **"THE CEILING IS REACHED, `setupshares` IS THE ONLY FAILURE" WAS WRONG BY
+    ONE, AND THE RUN THAT SAID SO WAS RIGHT.** `atof.o` was missing too, so the
+    measured figure was **259**. The claim survived because the host-side
+    counter in `tools/v10-stage2.sh` dropped the line — see the splice gotcha —
+    while the guest's own `all 261 members compiled: NO` sat four lines above
+    it in the same log. **Stage 3 is what finally reported it**, as `ccom` and
+    `as` failing to link with `Undefined: _atof`, which is what an absent libc
+    member looks like two stages downstream.
+  - **One compile error accounted for three separate stage-2 failures**, two of
+    which were being carried as open questions in their own right:
+    `all 261 members compiled` (the prototype), `member list and order match
+    the tape` (the member is absent from the archive) and `install`
+    (`make install` retries the missing object and dies on the same line). The
+    standing hypothesis that `install` failed on a `-mkdir` V10's make did not
+    honour was **false** — it honours the dash exactly as documented
+    (`*** Error code 1(ignored)`) and install never reached the mkdir. *When
+    several assertions fail together, look for one cause before theorising
+    three.*
 - **THE 1993 MEMBERS ARE ADDRESSED TO A HEADER SET THAT IS NOT INSTALLED, which
   is the two-generations split one layer below stdio.** The eleven `lcc`-only
   members carry `/* Copyright AT&T Bell Laboratories, 1993 */` and want
@@ -1138,6 +1154,42 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   stage 2's first member comparison reported names like `fchmodo.o`,
   `closec.o` and `fioroead.o` — real output with echo mixed in, which then
   defeated every count made from the log.
+- **`v10_run` FIXES THE BODY OF A DUMP AND NOT ITS FIRST LINE, so never anchor
+  a host-side counter at `^`.** The splice above is bounded but not eliminated:
+  `v10_run` sends the command and then reads, so the tty echoes the tail of what
+  was typed *into the first line of output*, every time. `MISS atof.o` arrived as
+
+	MMISS atof.o
+
+  `grep -oE '^MISS ...'` dropped it, stage 2 reported one missing member where
+  there were two, and this file recorded the wrong ceiling for a week.
+  **Match the token unanchored** — but only after making sure the token is not
+  in the *question*: `echo SAME $name` puts `SAME yacc` in the log whatever the
+  answer, so unanchored matching would count every comparison as a match. Both
+  halves are needed and they fix different faults: spell the verdict through a
+  guest variable (`echo $S $name`) so the echo carries no literal token, *then*
+  match unanchored so a splice cannot hide the answer. Same rule as the marker
+  discipline, applied to data instead of markers.
+  **And cross-check the count against something that did not come from the same
+  parse**: the guest's own `all 261 members compiled` assertion had the right
+  answer, four lines above a summary that contradicted it, and nothing in the run
+  compared them. `tools/v10-stage2.sh` now refuses to print a measurement when
+  those two disagree.
+- **A RE-RUN OF AN INCREMENTAL `make` IS NOT A PROBE OF THE BUILD.** V10's `ld`
+  **writes its output file even when symbols are undefined** — it reports them
+  and clears the execute bits — so a failed link still leaves an `a.out` newer
+  than its prerequisites. A diagnostic added to re-run a failing target
+  unfiltered therefore printed
+
+	cp comp /usr/s3/lib/ccom
+	RAW3RC=0
+
+  for a component that had just failed with `Undefined: _atof`: make skipped the
+  link entirely and ran only the install step, whose status is what got printed.
+  Reading the return code alone would have closed the bug as nonexistent, and
+  the probe *installed the broken binary* on its way. A probe that can report
+  success for a failed build is worse than no probe — "it only prints things"
+  is not the same as "it cannot lie".
 - **`expect` has three spellings and two of them fail silently, in opposite
   directions.** Measured on expect 5.45, each variant its own process with an
   `after` watchdog:
