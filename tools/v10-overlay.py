@@ -665,6 +665,11 @@ _ANSI93 = [
       #	  pragma ref precision:255:function declaration in bad context
       # -- while the file's own line 255 is a plain `for(; i<width; i++)'.
       # Chasing those numbers finds nothing; the name was the clue.
+      # The last one, and the #pragma fix is what made it findable: with the
+      # pragmas gone the errors finally carry a REAL line number instead of an
+      # offset into a pseudo-file called `pragma ref precision'.
+      ("	extern char *_dtoa(double, int, int, int*, int*, char **);\n",
+       "	extern char *_dtoa();\t/* ipnx: K&R, see PATCHES.md */\n", 1),
       ("#pragma ref precision\n", "/* #pragma ref precision -- ipnx: pcc2 has no #pragma */\n", 2),
       ("#pragma ref f\n", "/* #pragma ref f -- ipnx: pcc2 has no #pragma */\n", 1),
       ("#pragma ref width\n", "/* #pragma ref width -- ipnx: pcc2 has no #pragma */\n", 1),

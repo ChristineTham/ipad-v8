@@ -1515,10 +1515,12 @@ the spelling moves back eight years.
 +	int precision;
  {
  	return ocvt_flt(f, args, flags, width, precision, 'g');
-@@ -438,5 +519,11 @@
+@@ -438,7 +519,13 @@
  
  static int
 -ocvt_flt(FILE *f, va_list *args, int flags, int width, int precision, char afmt)
+-{
+-	extern char *_dtoa(double, int, int, int*, int*, char **);
 +ocvt_flt(f, args, flags, width, precision, afmt)
 +	FILE *f;
 +	va_list *args;
@@ -1526,8 +1528,10 @@ the spelling moves back eight years.
 +	int width;
 +	int precision;
 +	char afmt;
- {
- 	extern char *_dtoa(double, int, int, int*, int*, char **);
++{
++	extern char *_dtoa();	/* ipnx: K&R, see PATCHES.md */
+ 	int echr;
+ 	char *digits, *edigits;
 ```
 
 ## vfscanf.c: a 1993 ANSI member, converted to K&R (B2.2d)

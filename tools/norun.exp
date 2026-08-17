@@ -54,7 +54,10 @@ proc sim_guard {args} {
     foreach img $args {
         if {$img eq "" || ![file exists $img]} { continue }
         set out {}
-        catch {exec lsof -t -- $img} out
+        # ONLY WRITERS BLOCK -- see norun.sh.  Spotlight's mdworker holds a
+        # freshly-written image for indexing and reads it; a simulator opens its
+        # disks read-write.  Field 4 carries the access mode.
+        catch {exec lsof -- $img | awk {NR>1 && $4 ~ /[uw]/ {print $2}}} out
         set holders {}
         foreach pid [split [string trim $out] "\n"] {
             if {[string is integer -strict $pid]} { lappend holders $pid }

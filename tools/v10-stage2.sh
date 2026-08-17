@@ -72,6 +72,21 @@ rc=${PIPESTATUS[0]}
 # expected and the interesting number is HOW MANY and WHICH.  A hard assertion
 # on "all 261 identical" would be a guess dressed as a check.
 echo
+# A MEASUREMENT OF NOTHING READS AS PERFECTION, so refuse to print one.
+# When the source disk failed to mount, `libc.ord' was unreadable, so the
+# guest's `for f in `cat libc.ord`' loops zero times, `miss' and `d.lst' both
+# come out EMPTY, and this summary computed
+#	byte-identical, our cc   261
+# -- a flawless result from a run that compiled not one object.  Same family as
+# every other trap this stage has hit: a count derived from an empty list.
+if grep -q 'source disk mounts  *NO' "$LOG" 2>/dev/null; then
+    echo "== NO MEASUREMENT: the source disk did not mount =="
+    echo "   Every count below would be computed from an empty member list and"
+    echo "   would read as 261/261.  Fix the mount and re-run."
+    sed -n '/V10 STAGE 2 RESULTS/,$p' "$LOG" | grep 'NO$' | head -6
+    echo "== v10-stage2 exit $rc =="
+    exit 1
+fi
 echo "== stage 2 against the tape's libc.a =="
 # Counted from clean lines only.  The guest prints these under v10_run, so no
 # marker echo is spliced through them -- see the note in v10-stage2.exp.

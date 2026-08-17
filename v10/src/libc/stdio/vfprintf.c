@@ -526,7 +526,7 @@ ocvt_flt(f, args, flags, width, precision, afmt)
 	int precision;
 	char afmt;
 {
-	extern char *_dtoa(double, int, int, int*, int*, char **);
+	extern char *_dtoa();	/* ipnx: K&R, see PATCHES.md */
 	int echr;
 	char *digits, *edigits;
 	int exponent;

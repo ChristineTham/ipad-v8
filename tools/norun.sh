@@ -89,7 +89,21 @@ claim_images() {
     local f holders rc=0
     for f in "$@"; do
         [[ -e "$f" ]] || continue
-        holders=$(lsof -t -- "$f" 2>/dev/null | grep -v "^$$\$")
+        # ONLY WRITERS BLOCK, and this cost a run.  `lsof -t' lists every
+        # process with the file open, and on macOS that includes SPOTLIGHT:
+        #
+        #   SIM-BAIL: v10src.part is open by another process (pid 17623).
+        #   ...mdworker_shared -s mdworker -c MDSImporterWorker
+        #
+        # mdworker had just been handed a freshly-written 64 MB file to index.
+        # It reads; it cannot corrupt anything.  The hazard this guard exists
+        # for is a WRITER -- the `dd' that rewrote an attached image -- and a
+        # running SIMH opens its disks read-write, so filtering on access mode
+        # keeps every real case and drops the indexer.
+        #
+        # Field 4 of lsof's default output is the FD plus its mode: `4u' and
+        # `3w' are read-write and write, `5r' and `txt' are not.
+        holders=$(lsof -- "$f" 2>/dev/null | awk 'NR>1 && $4 ~ /[uw]/ {print $2}' | grep -v "^$$\$")
         if [[ -n "$holders" ]]; then
             echo "norun: $f is open by another process:" >&2
             ps -o pid,etime,command -p $(echo $holders | tr '\n' ' ') 2>/dev/null >&2
