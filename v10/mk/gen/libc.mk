@@ -67,7 +67,7 @@ LIBC = $(V10LIB)/libc.a
 # `cpio -pd'.
 INCDIR = /usr/v10/include
 
-CFLAGS = -O 
+CFLAGS = -O -DV10
 INCS   =  -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) $(INCS) -c
 TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)

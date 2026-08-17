@@ -620,7 +620,35 @@ def emit_libc():
             return "$(INCDIR)/" + mkgen.rel(path, INC)
         return srcdir + "/" + mkgen.rel(path, d)
 
-    out = [PREAMBLE % dict(name="libc", cflags="", incs="")]
+    # -DV10, WHICH THE TAPE'S OWN cc RULE DOES NOT PASS AND ITS lcc RULE DOES.
+    #
+    # `libc/mkfile' line 123 is the default recipe for every C member:
+    #
+    #	cc -O -c $prereq
+    #
+    # no -D and no -I.  Its lcc recipe, line 69, is
+    #
+    #	LCCARGS = -c -N -Istdio -I/usr/include/lcc -I/usr/include/libc \
+    #	          -I/usr/include -DV10
+    #
+    # So `-DV10' IS this tree's answer -- it simply never reached the cc rule,
+    # and that is another face of the unfinished V9-to-V10 port rather than an
+    # oversight we should copy.  Without it:
+    #
+    #   * `stdio/iolib.h' takes its `#else' branch, which is the pANS one, and
+    #     demands <stdlib.h> and <unistd.h> -- NEITHER OF WHICH EXISTS at the
+    #     top level of the r70 include tree.  So the branch cannot be the
+    #     intended one on this machine; it fails as
+    #     `iolib.h: 34: Can't find include file stdlib.h'.
+    #   * every `#ifdef V10' block in the sources is skipped, including the
+    #     ones our own converted members depend on -- sprintf.c's hand-built
+    #     `FILE _strbuf' becomes a call to `sopenw()', which does not exist,
+    #     and fprintf.c loses `#define flags _flag'.
+    #
+    # A MAKEFILE DEVIATION, NOT A SOURCE ONE, and that is the right place for
+    # it: V10 never had these makefiles, so they are ours to get right, and no
+    # line of Bell Labs' source changes.
+    out = [PREAMBLE % dict(name="libc", cflags="-DV10", incs="")]
     out.append("""\
 # Not in the shared preamble because libc is the only thing that needs it.
 # ranlib writes __.SYMDEF, and cmd/ld.c reads it: with a current one ld makes
