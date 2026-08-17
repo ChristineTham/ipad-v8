@@ -153,6 +153,42 @@ hardware terms.
 Sequenced this way, the libc questions below are no longer on the critical path — they
 are what K10 cleans up once there is a machine to clean it up on.
 
+### What the 780 kernel unlocks, and it is more than a kernel
+
+Christine, 2026-08-17: *"Once you have a working V10 kernel and toolchain, you are no
+longer bound by V8 filesystem limitations and can generate a good image spanning full
+capacity. You can then get netfs working so you don't have to copy source."*
+
+Both of those are constraints this project **imposed on itself** to get started, and a
+V10 kernel we configure ourselves removes both. Worth writing down so they are not
+carried forward out of habit:
+
+- [ ] **K11 — a full-capacity filesystem.** Today the V10 disks are built *by V8*, so
+      they must be readable by V8 — and V8's `filsys.h` has only the R and B arms of the
+      superblock union, no N, which caps a filesystem at
+      `MAXSMALL = BITMAP*BITCELL = 961*32 = 30752` blocks. That is why the source disk
+      is 16,384 blocks on a 456 MB RA81. **Once V10 runs its own `mkfs`/`mkbitfs`, V8
+      never has to read the result and the ceiling is gone** — full RP07 or RA81
+      capacity, and the whole 243 MB tree fits with room to spare.
+- [ ] **K12 — netfs on V10, and no more courier disks.** "There is no netfs on V10" was
+      true of *`seki`*, for two reasons that are both ours to change once we generate the
+      config:
+      - `lsys/astro/seki.m` configures `netafs 0` and `netbfs 0` — the filesystem types
+        are compiled in with **zero instances**. We write the 780 config, so we give it
+        instances.
+      - SIMH's `vax750` has no Interlan. **The app's `vax780` does** — this project
+        modelled the NI1010 for it (`libsimh/patches/pdp11_il.c`) and V10 ships
+        `lsys/io/ni1010a.c` for the same card.
+
+      So the 780 kernel plus `netfs/` (the SwiftPM server already in the app) gives V10
+      the same `/n/src` live share V8 has had since the N track — and
+      `tools/v10-srcdisk.sh`, the second RA81, and the whole copy-then-mount dance
+      become scaffolding to retire. It also removes the "never edit `v10/` while a build
+      is running" hazard's *cause* rather than just its warning.
+
+That is the real argument for the 780: not one kernel, but the end of three workarounds
+at once — two simulators, a block ceiling, and source arriving on a disk.
+
 ## B2.2 — a libc we can BUILD (the replan, 2026-08-17)
 
 Christine, closing the stage-2 investigation: *"This is no longer a game of replicating
