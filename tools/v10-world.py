@@ -43,6 +43,13 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "work", "v10", "src")
 CMD = os.path.join(SRC, "cmd")
 R70 = os.path.join(ROOT, "work", "v10", "include")
+# The 5620's include tree, from the v10blit tarball rather than v10src.
+# tools/v10-srcdisk.exp already copies all 21 headers to the source disk and
+# the machine sees them at /usr/jerq/include -- which is why jterm.c's absolute
+# "/usr/jerq/include/jioctl.h" resolves there.  Leaving this out made the
+# survey report dict, dis, view2d and omovie as blocked over files we ship.
+JERQ = os.path.join(ROOT, "work", "v10", "blit", "include")
+JERQ_INC = "/usr/jerq/include"
 OURS = os.path.join(ROOT, "v10", "src")
 GEN = os.path.join(ROOT, "v10", "mk", "gen")
 
@@ -151,13 +158,21 @@ def sources(d):
 
 
 def machine_dirs(d):
-    """VAX-specific subdirectories, which is where several units keep code.
+    """Subdirectories that hold a unit's OWN sources.
 
-    cmd/ccom/vax/ and cmd/adb/vax/ are the pattern; `vax-v9' appears under
-    lcc.  Anything else (mips, sun, 3b) is another machine's and not ours.
+    Three conventions in this tree, and each is here because a unit needs it:
+      vax, vax-v9   the machine's code -- cmd/ccom/vax/, cmd/adb/vax/.
+                    Anything else (mips, sun, 3b, cray, 68v) is another
+                    machine's and is deliberately NOT scanned or copied.
+      common        shared between machines -- cmd/ccom/common/, whose own
+                    makefile says `INCLIST=-I. -I../common'.
+      src           matlab and netnews keep everything under src/.
+
+    Bounded on purpose: a recursive walk would drag in six other
+    architectures' code and make every count meaningless.
     """
     out = []
-    for n in ("vax", "vax-v9"):
+    for n in ("vax", "vax-v9", "common", "src"):
         p = os.path.join(d, n)
         if os.path.isdir(p):
             out.append(p)
@@ -210,6 +225,12 @@ def resolve(header, bracket, unit_dirs, unit_root=None):
             if os.path.exists(os.path.join(R70, rest)):
                 return "r70 (absolute /usr/include)"
             return None
+        # The 5620 tree, which the source disk installs -- see JERQ.
+        if header.startswith(JERQ_INC + "/"):
+            rest = header[len(JERQ_INC) + 1:]
+            if os.path.exists(os.path.join(JERQ, rest)):
+                return "v10blit (absolute %s)" % JERQ_INC
+            return None
         # Any other absolute path is into another tree -- jterm.c's
         # "/usr/jerq/include/jioctl.h" is the known case, and it is in the
         # v10blit tarball rather than v10src, so no include path can help.
@@ -244,6 +265,11 @@ def resolve(header, bracket, unit_dirs, unit_root=None):
     # Our own overlay ships include/ too (shares.h today).
     if os.path.exists(os.path.join(OURS, "include", header)):
         return "ours"
+    # The 5620 headers are on the machine but NOT on cc's default path, so a
+    # unit reaching for <jerq.h> needs the -I spelled out -- same shape as
+    # -I../common, and the return value is the flag to write.
+    if os.path.exists(os.path.join(JERQ, header)):
+        return "-I" + JERQ_INC + " (v10blit)"
     # Only inside a compiler's variant directory: a layout decision, not an
     # absent file.  See VARIANT_DIRS.
     for v in VARIANT_DIRS:
@@ -483,8 +509,23 @@ def report(units, pre):
     print("  -- the set most likely to compile untouched, and where K10 starts")
 
 
+def csources(u):
+    """The unit's .c files, deduplicated, relative to src/."""
+    return sorted(set(os.path.relpath(p, SRC)
+                      for p in u.paths if p.endswith(".c")))
+
+
 def status(u):
-    """One word for where a unit stands, plus the reason."""
+    """One word for where a unit stands, plus the reason.
+
+    `nosrc' exists so a unit whose sources this model does not find can never
+    be reported as passing.  A compile survey that runs `cc -c' over an empty
+    file list succeeds trivially, which is the same shape as the empty objects
+    lcc produced while exiting 0 -- and CLAUDE.md's rule there applies here:
+    an absent failure is not a success.
+    """
+    if not csources(u):
+        return "nosrc", "no .c found under the unit -- not surveyed"
     if u.missing:
         return "blocked", "missing:" + ",".join(u.missing)
     if u.variant:
@@ -522,6 +563,197 @@ def world_txt(units, pre):
     return "\n".join(out) + "\n"
 
 
+def world_cpio(units):
+    """The copy manifest: every file the survey needs, relative to src/cmd.
+
+    Fed to `cpio -p' on its stdin, which is exactly the shape of a generated
+    manifest -- one process for the whole tree instead of 353.  The same
+    argument v8/mk retired 400 individual `cp's with.
+
+    Paths are relative to src/cmd because that is where cpio is run from, and
+    `-d' then creates every subdirectory that appears in the list, so no mkdir
+    loop is needed either.
+    """
+    want = set()
+    for u in units:
+        for p in u.paths:
+            want.add(os.path.relpath(p, CMD))
+    return "\n".join(sorted(want)) + "\n"
+
+
+def world_units(units):
+    """One row per unit: name, directory, then its .c files.
+
+    THREE FIELDS AND A TAIL, WHICH IS ONE KIND OF THING PER ROW.  v8's
+    destdirs.txt held two kinds told apart by a leading tab, and the 1985 shell
+    split on IFS before the marker was ever seen -- 458 files became empty
+    directories.  Here every row is a unit with the same shape, so
+    `while read name dir srcs' is reading what it looks like it is reading and
+    there is no second meaning hiding in the whitespace.
+
+    Units with no .c are omitted rather than emitted empty: a row the guest
+    would turn into `cc -c' with no arguments is a trivial pass.
+    """
+    out = [
+        "# Every surveyed command unit: name, directory under src/cmd, sources.",
+        "#",
+        "# Generated by tools/v10-world.py; check with --check.  Read by the",
+        "# guest as `while read name dir srcs', so the row is three fields and",
+        "# a tail -- see the function comment for why that matters here.",
+        "#",
+        "# A `.' directory means a loose .c directly under cmd/.  A name ending",
+        "# in `/' is a directory unit colliding with a loose .c of the same",
+        "# name -- two generations, not one program.",
+        "#",
+    ]
+    for u in sorted(units, key=lambda x: x.name):
+        srcs = csources(u)
+        if not srcs:
+            continue
+        d = "." if u.kind == "file" else os.path.relpath(u.root, CMD)
+        rel = [os.path.relpath(os.path.join(SRC, s), os.path.join(CMD, d))
+               for s in srcs]
+        out.append("%s %s %s" % (u.name, d, " ".join(sorted(rel))))
+    return "\n".join(out) + "\n"
+
+
+# The survey's guest half.  Generated rather than hand-written because it has
+# to live in v10/mk/gen/ to reach the source disk, and everything in there is
+# generated and --check'd; a hand-edited file among them is one mkdep.py could
+# overwrite without anyone noticing.
+#
+# FIVE THINGS IN HERE ARE SCAR TISSUE, each from a documented failure:
+#   * no grep, no wc, no tail -- the V10 golden has none of them (measured
+#     against prebuilt.txt).  sed does the filtering.
+#   * markers spelled through shell variables, so the tty's echo of the command
+#     carries `$P' and only the RESULT carries the token.  An echoed literal
+#     defeats matching either way round.
+#   * objects are written to $OBJ, never beside the source: the source disk is
+#     a courier and a build that writes to it changes its srcid, so the next
+#     stage would refuse it.
+#   * every .o is removed per unit, so 353 units cost no more space than one.
+#   * A CANARY RUNS FIRST.  If the compiler flags are wrong, all 353 units fail
+#     and that reads like a finding about V10 rather than a mistake in the
+#     harness -- so one file known to build is compiled before the loop, and a
+#     failure there prints NOCANARY and stops.  Same argument as sanity() on
+#     the host side: a measurement taken through a broken instrument must
+#     refuse to print a number.
+WORLDC = r'''#!/bin/sh
+# K10.1: compile every surveyed command unit and say which ones built.
+# GENERATED by tools/v10-world.py -- do not edit here.
+#
+#	sh worldc.sh <srcroot> <objdir> <ccpath> <bprefix>
+#
+# srcroot  the mounted courier disk, e.g. /n/v10
+# objdir   scratch on a WRITABLE filesystem, e.g. /usr/k10obj
+# ccpath   the driver, /bin/cc
+# bprefix  stage 1's passes, e.g. /usr/s1/lib/
+SRC=$1
+OBJ=$2
+CCP=$3
+BP=$4
+UD=$SRC/src/cmd
+JQ=$SRC/jerq
+CF="-O -c"
+CC="$CCP -B$BP -t02p"
+
+P=CBUILT
+Q=CFAILED
+N=CNOSRC
+K=CANARY
+
+rm -rf $OBJ
+mkdir $OBJ
+cd $OBJ
+
+# ---------------------------------------------------------------- canary ---
+# halt.c is built by stage 1 on this very machine, so if it fails here the
+# flags are wrong and no number below means anything.
+$CC $CF $UD/halt.c > can.log 2>&1
+if test -s halt.o
+then
+	echo "$K-ok"
+else
+	echo "NO$K"
+	sed -e 5q can.log
+	exit 1
+fi
+rm -f halt.o
+
+# ------------------------------------------------------------------ loop ---
+sed -e '/^#/d' $SRC/mk/world.units | while read name dir srcs
+do
+	if test -z "$srcs"
+	then
+		echo "$N $name"
+		continue
+	fi
+	SD=$UD/$dir
+	ok=y
+	rm -f u.log
+	for f in $srcs
+	do
+		# BOTH TESTS, because either alone has lied here before.  The
+		# prebuilt lcc exits 0 while writing an EMPTY object, and V10's
+		# ld writes its output file even with symbols undefined -- so a
+		# status of 0 is not proof, and a file existing is not proof.
+		b=`echo $f | sed -e 's|.*/||' -e 's|\.c$|.o|'`
+		rm -f $b
+		$CC $CF -I$SD -I$SD/common -I$SD/vax -I$JQ $SD/$f \
+			>> u.log 2>&1 || ok=n
+		test -s $b || ok=n
+	done
+	if test $ok = y
+	then
+		echo "$P $name" >> $OBJ/res.log
+		echo "$P $name"
+	else
+		echo "$Q $name" >> $OBJ/res.log
+		echo "$Q $name"
+		sed -e 3q u.log
+	fi
+	rm -f *.o
+done
+
+# ---------------------------------------------------------------- tallies ---
+# THE GUEST COUNTS TOO, so the host has something to disagree with.  Stage 2
+# printed a member total that contradicted its own assertion four lines above
+# and nothing compared them; v10-stage2.sh now refuses to report when those
+# two disagree, and this is the same guard one layer earlier.
+#
+# There is no `wc' on this machine -- `sed -n $=' is the line count.  And the
+# labels are spelled through $P/$Q/$N so the tty's echo of these very commands
+# carries `$P' and not the token: a literal in the QUESTION would be counted as
+# an answer, which is how `echo SAME $name' had to be written too.
+# The labels are TALLYB/F/N and NOT the tokens themselves.  A tally printed as
+# `TALLY-CBUILT 356' would be found by an unanchored host-side count of
+# `CBUILT <word>' -- inside its own summary line -- and inflate the total by
+# one per tally.  Anchoring the host pattern is not the fix, because that is
+# what the tty splice defeats; using a different string is.
+sed -e "/^$P /!d" $OBJ/res.log > $OBJ/t.log
+n=`sed -n '$=' $OBJ/t.log`
+if test -z "$n"; then n=0; fi
+echo "TALLYB $n"
+sed -e "/^$Q /!d" $OBJ/res.log > $OBJ/t.log
+n=`sed -n '$=' $OBJ/t.log`
+if test -z "$n"; then n=0; fi
+echo "TALLYF $n"
+sed -e "/^$N /!d" $OBJ/res.log > $OBJ/t.log
+n=`sed -n '$=' $OBJ/t.log`
+if test -z "$n"; then n=0; fi
+echo "TALLYN $n"
+echo "WORLDC-done"
+'''
+
+
+GENERATED = [
+    ("world.txt", lambda u, p: world_txt(u, p)),
+    ("world.cpio", lambda u, p: world_cpio(u)),
+    ("world.units", lambda u, p: world_units(u)),
+    ("worldc.sh", lambda u, p: WORLDC),
+]
+
+
 def main():
     args = sys.argv[1:]
     units = inventory()
@@ -529,22 +761,35 @@ def main():
 
     if "--check" in args or "--write" in args:
         sanity(units)
-        path = os.path.join(GEN, "world.txt")
-        want = world_txt(units, pre)
-        have = read(path)
+        # The 14-character rule is a guard here, not a habit: `toolchain.order'
+        # was truncated to `toolchain.orde' on a guest disk WITH A SUCCESSFUL
+        # EXIT STATUS, which is why mkdep.py's put() refuses long names.  These
+        # files are destined for the same disk.
+        for name, _fn in GENERATED:
+            if len(name) > 14:
+                sys.exit("v10-world: generated name %r is over 14 characters, "
+                         "which a guest filesystem truncates silently" % name)
+        stale = []
+        for name, fn in GENERATED:
+            path = os.path.join(GEN, name)
+            want = fn(units, pre)
+            if "--check" in args:
+                if read(path) != want:
+                    stale.append(name)
+                continue
+            with open(path, "w") as fh:
+                fh.write(want)
         if "--check" in args:
-            if have != want:
+            if stale:
                 sys.stderr.write(
-                    "v10-world: %s is out of date -- run tools/v10-world.py "
-                    "--write\n" % os.path.relpath(path, ROOT))
+                    "v10-world: out of date: %s -- run tools/v10-world.py "
+                    "--write\n" % " ".join(stale))
                 return 1
-            print("v10-world: %s is current (%d units)"
-                  % (os.path.relpath(path, ROOT), len(units)))
+            print("v10-world: v10/mk/gen/world.* are current (%d units)"
+                  % len(units))
             return 0
-        with open(path, "w") as fh:
-            fh.write(want)
         print("v10-world: wrote %s (%d units)"
-              % (os.path.relpath(path, ROOT), len(units)))
+              % (" ".join(n for n, _ in GENERATED), len(units)))
         return 0
 
     if "--unit" in args:

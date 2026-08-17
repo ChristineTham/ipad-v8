@@ -61,10 +61,24 @@ NETFSD="$ROOT/netfs/.build/release/netfsd"
 PIDS=()
 
 # The filesystem goes on partition c, whose offset ra_sizes[] fixes at 30720
-# sectors.  16384 blocks of 4096 is 64 MB -- four times what the source needs,
-# room for the object trees later, and half of MAXSMALL.
+# sectors and whose size it fixes at 249848 -- 31,231 blocks of 4096, so the
+# partition itself is the first ceiling and MAXSMALL (30,752) is barely under
+# it.
+#
+# RAISED FROM 16384 FOR K10.  16,384 blocks is 64 MB, which held stage 1-3's
+# 4.7 MB with room to spare; the world adds 14.4 MB of command sources, and
+# 24,576 blocks (96 MB) keeps the same generous margin rather than discovering
+# the limit in the middle of a two-hour copy.  Still under MAXSMALL, which
+# still matters: V8 MOUNTS this filesystem to populate it, and V8's filsys.h
+# has no N arm of the superblock union, so a filesystem over 30,752 blocks is
+# one the machine writing it cannot read back.  That ceiling is K11's to
+# remove, by having V10 write its own disks; it is not in K10's way.
+#
+# Inodes are the other limit and are fine: mkbitfs gives (size-2)/65 i-list
+# blocks at 64 inodes each, so 24,576 blocks is 24,064 inodes against roughly
+# 3,700 files.
 SRC_OFFSET=30720
-SRC_BLOCKS=16384
+SRC_BLOCKS=24576
 SRC_SECTORS=$(( SRC_BLOCKS * 8 ))
 
 cleanup() {

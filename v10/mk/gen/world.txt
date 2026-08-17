@@ -94,14 +94,14 @@ dd                 file  no   ready    -
 deroff             file  no   ready    -
 descrypt           dir   no   ready    -
 df                 file  no   ready    -
-dict               dir   no   blocked  missing:/usr/jerq/include/jioctl.h
+dict               dir   no   ready    -
 diction            dir   no   ready    -
 diff               dir   yes  ready    -
 diff3              dir   yes  ready    -
 dimpress           dir   no   ready    -
 dired              dir   no   ready    -
 dirname            file  no   ready    -
-dis                file  no   blocked  missing:/usr/jerq/include/jioctl.h
+dis                file  no   ready    -
 dkname             file  no   ready    -
 dkstat             file  no   ready    -
 dmesg              file  yes  ready    -
@@ -122,7 +122,7 @@ error              dir   yes  ready    -
 ether              dir   no   blocked  missing:sys/ioctl.h,sys/order.h
 ex                 dir   no   ready    -
 expand             file  no   ready    -
-expr               dir   no   ready    -
+expr               dir   no   nosrc    no .c found under the unit -- not surveyed
 f2c                dir   no   variant  variant:stddef.h
 f77                dir   no   ready    -
 face               dir   no   ready    -
@@ -134,7 +134,7 @@ file               file  yes  ready    -
 find               file  no   ready    -
 findo              file  no   ready    -
 flcopy             file  no   ready    -
-flex               dir   no   variant  variant:types.h
+flex               dir   no   ready    -
 fmt                file  no   ready    -
 fold               file  no   ready    -
 fsck               file  no   blocked  missing:stat.h
@@ -194,6 +194,7 @@ matlab             dir   no   ready    -
 mc                 file  no   ready    -
 mesg               file  no   ready    -
 mips               file  no   ready    -
+mk                 dir   no   ready    -
 mkbitfs            file  no   ready    -
 mkdir              file  no   ready    -
 mkfs               file  no   ready    -
@@ -218,7 +219,7 @@ nupas              dir   no   ready    -
 oasd++             dir   no   variant  variant:fstream.h,list.h
 od                 file  no   ready    -
 ofsck              file  no   ready    -
-omovie             dir   no   blocked  missing:font.h,jerq.h,suntool/canvas.h,suntool/sunview.h
+omovie             dir   no   blocked  missing:suntool/canvas.h,suntool/sunview.h
 oops               dir   no   ready    -
 ops                dir   no   ready    -
 osh                dir   no   ready    -
@@ -235,6 +236,8 @@ pico               dir   yes  ready    -
 plot               dir   no   ready    -
 poly               dir   no   blocked  missing:poly.h
 post               dir   yes  variant  variant:malloc.h
+post.src           dir   no   ready    -
+postscript         dir   no   ready    -
 pp                 dir   yes  ready    -
 pr                 file  yes  ready    -
 pret               dir   no   ready    -
@@ -336,6 +339,7 @@ und                file  no   ready    -
 unexpand           file  no   ready    -
 uniq               file  no   ready    -
 units              dir   yes  blocked  missing:cdate.h
+upas               dir   no   ready    -
 update             file  no   ready    -
 usgmake            dir   no   ready    -
 uucp               dir   yes  ready    -
@@ -344,7 +348,7 @@ uudiff             dir   no   ready    -
 uuencode           file  no   ready    -
 v7                 file  no   ready    -
 v8                 file  no   ready    -
-view2d             dir   yes  blocked  missing:/usr/jerq/include/jioctl.h,jerq.h
+view2d             dir   yes  ready    -
 vis                file  no   ready    -
 visi               dir   no   ready    -
 vmstat             file  no   ready    -
