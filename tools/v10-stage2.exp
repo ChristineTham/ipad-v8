@@ -152,24 +152,68 @@ note "ranlib works" \
 # stands in for gcc-cpp because the tree has no gcc-cpp at all.
 v10_sh "cp $N/lcc/lcc /usr/bin/lcc" 300
 v10_sh "cp $N/lcc/rcc /usr/lib/rcc" 300
-v10_sh "cp $N/lcc/cpp /usr/lib/gcc-cpp" 300
-foreach p {usr/bin/lcc usr/lib/rcc usr/lib/gcc-cpp} {
+foreach p {usr/bin/lcc usr/lib/rcc} {
     note "lcc installed: /$p" [v10_try "test -s /$p && echo LI\$OK" "LI-ok" 120]
 }
 # The ANSI headers r70 installed, which LCCARGS names.
 note "/usr/include/lcc/stdarg.h present" \
     [v10_try "test -s /usr/include/lcc/stdarg.h && echo LH\$OK" "LH-ok" 120]
-# fputs.c is the smallest of the 24: `fputs(const char *s, FILE *iop)', four
-# lines in, and pcc2 answers ":4:syntax error".  If lcc compiles it, the other
-# 23 are the same question.
-v10_sh "rm -rf /tmp/lt; mkdir /tmp/lt" 120
-set lccworks [v10_try \
-    "cd /tmp/lt; if lcc -c -N -I$S/libc/stdio -I/usr/include/lcc -I/usr/include/libc -I/usr/include -DV10 $S/libc/stdio/fputs.c > l.log 2>&1; then echo LX\$OK; fi" \
-    "LX-ok" 900]
-note "lcc compiles an ANSI libc member" $lccworks
-if {!$lccworks} { v10_run "cd /tmp/lt; cat l.log; echo LOGEND" "LOGEND" 300 }
-note "and it produced an object" \
-    [v10_try "cd /tmp/lt; test -s fputs.o && echo LO\$OK" "LO-ok" 120]
+
+# WHICH cpp CAN STAND IN FOR gcc-cpp?  The driver's cpp line is compiled in --
+# `{"/usr/lib/gcc-cpp", "-undef", "-Dvax", "-DV9", "$1", "$2", "$3", 0}' from
+# bowell.c -- and there is no gcc-cpp in the tree, so something must take that
+# name.  KEEPING V10 AUTHENTIC means leaving the driver alone and choosing the
+# stand-in, rather than rebuilding the driver from a config of ours to dodge a
+# flag: bowell IS the real CSRC machine's configuration.
+#
+# Two candidates, and the difference is `-undef':
+#
+#   /lib/cpp        V10's own, off this tape.  cpp.c's flag switch ends
+#                   `default: pperror("unknown flag %s"); continue;' -- it
+#                   WARNS and carries on -- and it takes -D and -I in exactly
+#                   the form the driver passes.
+#   ph/cpp          lcc's own.  Rejects the flag outright:
+#                   `illegal option -- u', then writes nothing.
+#
+# THE TEST IS AGAINST THE TAPE'S BYTES, NOT AGAINST AN EXIT STATUS.  ph/cpp's
+# failure is silent in every other way: cpp writes an empty file, rcc compiles
+# it, as assembles a valid EMPTY object, and lcc exits 0.  A probe asserting
+# "lcc compiled it" and "an object appeared" passes on nothing -- both of mine
+# did, and stage 2 reported 261 members built while 26 were empty.
+#
+# fputs.o is the right subject twice over: it is one of the members pcc2
+# cannot parse at all, AND it is in the set whose bytes differ from the tape's.
+# So a match here answers the compile question and Christine's which-compiler
+# question in one go.
+v10_sh "L='-N -I$S/libc/stdio -I/usr/include/lcc -I/usr/include/libc -I/usr/include -DV10'" 120
+proc lcctry {which cppsrc} {
+    global S OBJ N
+    v10_sh "cp $cppsrc /usr/lib/gcc-cpp" 300
+    v10_sh "rm -rf /tmp/lt; mkdir /tmp/lt" 120
+    v10_sh "cd /tmp/lt; lcc \$L -c $S/libc/stdio/fputs.c > l.log 2>&1" 900
+    # A real object, measured against the tape's own member -- and the strip
+    # pass first, because every member of that archive went through `ld -x -r'.
+    v10_sh "cd /tmp/lt; /usr/s1/bin/ld -x -r fputs.o > /dev/null 2>&1 && mv a.out fputs.o" 300
+    set m [v10_try "cd /tmp/lt; if cmp fputs.o $OBJ/tape/fputs.o; then echo CPPM\$OK; fi" "CPPM-ok" 300]
+    note "cpp = $which: lcc output MATCHES the tape's fputs.o" $m
+    if {!$m} { v10_run "cd /tmp/lt; cat l.log; echo LOGEND" "LOGEND" 300 }
+    return $m
+}
+# The tape's members have to be extracted before either candidate can be
+# judged, so that step moves ahead of the build.
+v10_sh "rm -rf $OBJ/tape; mkdir $OBJ; mkdir $OBJ/tape" 300
+note "the tape's archive extracts" \
+    [v10_try "cd $OBJ/tape; if ar x $S/libc/libc.a && test -s _exit.o; then echo EX\$OK; fi" "EX-ok" 1800]
+set cppA [lcctry "V10's own /lib/cpp" "/lib/cpp"]
+set cppB [lcctry "lcc's own ph/cpp" "$N/lcc/cpp"]
+# Leave the winner installed for the build below.  If neither matched, prefer
+# V10's own -- it at least preprocesses, where ph/cpp writes nothing.
+if {$cppB && !$cppA} {
+    v10_sh "cp $N/lcc/cpp /usr/lib/gcc-cpp" 300
+} else {
+    v10_sh "cp /lib/cpp /usr/lib/gcc-cpp" 300
+}
+note "some cpp reproduces a tape member with lcc" [expr {$cppA || $cppB}]
 
 # ---------------------------------------------------------------- the macros ---
 #
@@ -178,7 +222,9 @@ note "and it produced an object" \
 v10_sh "A='SRC=$S OURS=$N/ours INCDIR=/usr/include TOOLDIR=$T DESTDIR=$T'" 120
 v10_sh "B='CCPATH=$T1/bin/cc CPP=$T1/lib/cpp CCOM=$T1/lib/ccom C2=$T1/lib/c2'" 120
 v10_sh "C='AS=/bin/as LD=$T1/bin/ld AR=/bin/ar RANLIB=/usr/bin/ranlib'" 120
-v10_sh "rm -rf $T $OBJ/libc $OBJ/tape; mkdir $T; mkdir $OBJ; mkdir $OBJ/libc" 300
+# NOT $OBJ/tape: the tape's members were extracted above for the cpp
+# trial and the comparison below still needs them.
+v10_sh "rm -rf $T $OBJ/libc; mkdir $T; mkdir $OBJ; mkdir $OBJ/libc" 300
 
 # ------------------------------------------------------------- 261 objects ---
 #
@@ -260,9 +306,7 @@ note "member list and order match the tape" \
 # that differs and v10-stage2.sh counts them out of the log, because there is
 # no wc here to count with and arithmetic in this shell is not worth the
 # trouble it would cause.
-v10_sh "mkdir $OBJ/tape" 120
-note "the tape's archive extracts" \
-    [v10_try "cd $OBJ/tape; if ar x $S/libc/libc.a && test -s _exit.o; then echo EX\$OK; fi" "EX-ok" 1800]
+# (the tape's archive was already extracted above, for the cpp trial)
 puts "\n--- LIBC-CMP-START ---"
 v10_sh "cd $OBJ/libc; for f in `cat $K/libc.ord`; do cmp -s \$f ../tape/\$f || echo DIFF \$f; done > d.lst" 3600
 # v10_run, for the reason given above the MISS dump: a two-hundred-line `cat'
@@ -293,6 +337,42 @@ v10_sh "L='-N -I$S/libc/stdio -I/usr/include/lcc -I/usr/include/libc -I/usr/incl
 v10_sh "cd $OBJ/libc; sed -n 's/^DIFF //p' d.lst > d.names" 300
 v10_run "cd $OBJ/lcc; for o in `cat ../libc/d.names`; do s=`sed -n \"s/^\$o //p\" $K/libc.src`; lcc \$L -c $S/libc/\$s > /dev/null 2>&1; $T1/bin/ld -x -r \$o > /dev/null 2>&1 && mv a.out \$o; if cmp -s \$o ../tape/\$o; then echo LCCMATCH \$o; fi; done; echo WHICHEND" \
         "WHICHEND" 7200
+
+# AND THE OTHER VARIABLE: WAS c2 RUN?
+#
+# `-O' is what makes V10's cc invoke c2, the peephole optimiser, and the
+# mkfile's default rule says `cc -O -c'.  But the mkfile has already been shown
+# wrong about which compiler a file needs, so it is worth no more trust about
+# which FLAGS one got: V10 accreted, and a member compiled before somebody
+# added -O to the rule would still be sitting in the archive.
+#
+# One flag, two possibilities, ~110 candidates -- exactly the shape the oracle
+# above is for.  A match names the flags Bell Labs used as surely as it names
+# the compiler.
+# AND THE VARIABLE I HAD BEEN ASSUMING AWAY: WHICH ccom?
+#
+# Stage 1's ccom is built from cmd/ccom/vax/ SOURCE.  The tape's libc.a was
+# built by the shipped BINARY, cmd/ccom/vax/comp -- which is what the golden
+# installed as /lib/ccom.  In a tree that accreted over years those two need
+# not correspond: the source can be newer or older than the binary beside it,
+# and nothing on the tape says which.
+#
+# The tape's own members are the evidence.  They are CLEAN -- no source paths,
+# no .stabs, no temp names, just global symbols, because `ld -x -r' removed
+# everything local -- so a member like abort.o is 24 bytes of text, and a
+# difference there is real code generation and not cosmetics.  If the golden's
+# own compiler reproduces those bytes where stage 1's does not, then the source
+# in cmd/ccom/vax/ is not the compiler that built this archive, and that is
+# worth far more than a member count.
+#
+# `cc' with NO -B is the golden's compiler: /lib/ccom, the tape's comp.
+v10_sh "rm -rf $OBJ/tapecc; mkdir $OBJ/tapecc" 300
+v10_run "cd $OBJ/tapecc; for o in `cat ../libc/d.names`; do s=`sed -n \"s/^\$o //p\" $K/libc.src`; cc -O -I/usr/include -c $S/libc/\$s > /dev/null 2>&1; $T1/bin/ld -x -r \$o > /dev/null 2>&1 && mv a.out \$o; if cmp -s \$o ../tape/\$o; then echo TAPECCMATCH \$o; fi; done; echo TAPECCEND" \
+        "TAPECCEND" 7200
+
+v10_sh "rm -rf $OBJ/noO; mkdir $OBJ/noO" 300
+v10_run "cd $OBJ/noO; for o in `cat ../libc/d.names`; do s=`sed -n \"s/^\$o //p\" $K/libc.src`; cc -B$T1/lib/ -t02p -I/usr/include -c $S/libc/\$s > /dev/null 2>&1; $T1/bin/ld -x -r \$o > /dev/null 2>&1 && mv a.out \$o; if cmp -s \$o ../tape/\$o; then echo NOOMATCH \$o; fi; done; echo NOOEND" \
+        "NOOEND" 7200
 # DID THE LOOP ACTUALLY COMPILE ANYTHING?  It sends lcc's diagnostics to
 # /dev/null, so "no matches" and "lcc produced nothing" look identical from
 # the outside -- and the first is a result about Bell Labs while the second is

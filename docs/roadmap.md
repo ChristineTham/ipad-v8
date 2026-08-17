@@ -830,6 +830,29 @@ to be asked per file again.
         target lines up exactly. That makes this a restoration question, not only a
         retarget question — and if the compiler binary is fetchable it may belong to
         Track B's world sooner than to V11's.
+- [ ] **D-A4** **Reconstruct a VAX back end for the Plan 9 compiler**, then port V10's
+      source to it (Christine, 2026-08-17). This is the route that keeps V11 on the VAX
+      *and* gets the standard compiler, rather than trading one for the other — and it
+      is plausible work rather than a wish, because a Plan 9 back end is a small,
+      well-bounded thing and the references are all in hand:
+      - **Plan 9 back ends are deliberately tiny.** Thompson's
+        [Plan 9 C Compilers](https://9p.io/sys/doc/compiler.html) splits each compiler
+        into a shared front end plus a per-architecture code generator, which is why the
+        suite carries seven of them; writing an eighth is the intended way to add a
+        machine.
+      - **VAX code generation is already answered twice over, in source we own.** V8's
+        `ccom` (`usr/src/cmd/pcc2/`) and V10's own `cmd/ccom/vax/` are complete,
+        working, *readable* VAX code generators — `gencode.c`, `genaux.c`, `genmore.c`,
+        `local.c` — and `libc/sys/*.s` plus `cmd/as/instrs` fix the instruction
+        encodings and calling convention exactly. So the machine description does not
+        have to be rediscovered; it has to be re-expressed.
+      - `lcc`'s own VAX back end (`gen3/gen.c`, `gen2/vax/`) is a third reference, and a
+        closer structural analogue since lcc also separates front end from generator.
+      - Order matters: **back end first, then the port.** A converted tree with no
+        compiler to check it against is unverifiable, whereas a back end can be tested
+        against V10's existing binaries the moment it emits anything.
+      - The recovered VAX compiler binary from D-A1, if fetchable, is the oracle for
+        this: something to compare output against rather than something to depend on.
 - [ ] **D-A2** Inventory what conversion actually costs: how many of V10's ~283 command
       units and 261 libc members are K&R, and how many already are not. `tools/`
       already has the scanner shape for this (`v10-syscalls.py`, `v10-proto.py`).

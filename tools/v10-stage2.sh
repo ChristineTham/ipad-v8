@@ -72,14 +72,33 @@ total=$(grep -c . "$ROOT/v10/mk/gen/libc.ord")
 # So identical = total - diff, and `miss' is a breakdown of diff, not a
 # separate column to subtract.
 lccm=$(tr -d '\r' < "$LOG" | grep -oE '^LCCMATCH [A-Za-z_0-9]+\.o$' | sort -u | grep -c . || true)
-: "${lccm:=0}"
+noom=$(tr -d '\r' < "$LOG" | grep -oE '^NOOMATCH [A-Za-z_0-9]+\.o$' | sort -u | grep -c . || true)
+tcm=$(tr -d '\r' < "$LOG" | grep -oE '^TAPECCMATCH [A-Za-z_0-9]+\.o$' | sort -u | grep -c . || true)
+: "${lccm:=0}" "${noom:=0}" "${tcm:=0}"
 echo "   members expected                 $total"
 echo "   byte-identical, our cc           $(( total - diff ))"
 echo "   byte-identical, lcc instead      $lccm"
-echo "   ACCOUNTED FOR                    $(( total - diff + lccm ))"
-echo "   still unexplained                $(( diff - lccm ))"
+echo "   byte-identical, cc WITHOUT -O    $noom"
+echo "   byte-identical, the TAPE's ccom  $tcm"
+echo "   ACCOUNTED FOR                    $(( total - diff + lccm + noom + tcm ))"
+echo "   still unexplained                $(( diff - lccm - noom - tcm ))"
 echo "     of which: did not compile      $miss"
 echo "     of which: compiled, differ     $(( diff - miss ))"
+if (( tcm )); then
+    echo
+    echo "   members the TAPE's OWN ccom reproduces but stage 1's does not:"
+    tr -d '\r' < "$LOG" | grep -hoE '^TAPECCMATCH [A-Za-z_0-9]+\.o$' | sed 's/^TAPECCMATCH /     /' \
+        | sort -u | tr '\n' ' '
+    echo
+    echo "   -> cmd/ccom/vax/ SOURCE is not the compiler that built this archive."
+fi
+if (( noom )); then
+    echo
+    echo "   members whose bytes are cc WITHOUT -O:"
+    tr -d '\r' < "$LOG" | grep -hoE '^NOOMATCH [A-Za-z_0-9]+\.o$' | sed 's/^NOOMATCH /     /' \
+        | sort -u | tr '\n' ' '
+    echo
+fi
 if (( lccm )); then
     echo
     echo "   members whose bytes are LCC's, not cc's:"

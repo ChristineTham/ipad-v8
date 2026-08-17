@@ -254,6 +254,45 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   prototypes, no `void *`, no `stdarg` — so **pcc2 can build the driver from
   source**, which is the honest fix rather than patching a binary's string
   table.
+- **THE TAPE'S `libc.a` IS NOT A BUILD PRODUCT, SO IT IS NOT AN ORACLE FOR BYTES.**
+  Christine's reading, and the archive's own `ar` headers prove it outright — a clean
+  build dates every member within minutes of itself, and this one spans **4.1 years
+  across 27 distinct days**:
+
+	1989-06   199 members      <- one build
+	1989-08 … 1993-07   62 members, in ones and twos across 26 more days
+
+  So it is a June 1989 archive with four years of piecemeal `ar r` on top: someone's
+  working tree, not a system that was built. Exactly the reading CLAUDE.md already
+  applies to the 46 prebuilt command binaries — *"what survived is whatever was last
+  compiled in place"* — and it applies here too.
+  **The consequence is measured, not inferred:**
+
+	C members from June 1989   105, of which 90 differ from ours   (86%)
+	C members recompiled later  59, of which 19 differ             (32%)
+
+  The members we CANNOT reproduce are the **old** ones. Our compiler is stage 1's,
+  built from the tape's *1995* `cmd/ccom/vax/` source, so it resembles the late
+  compiler and not the 1989 one — **and the 1989 compiler is not on the tape**. All 97
+  assembly members match (`as` is stable across the whole span); the differences are
+  entirely in C compiled by a compiler that no longer exists.
+  - **Therefore a byte-perfect `libc.a` is impossible, and chasing one is chasing a
+    ghost.** Ruled out by measurement, not by giving up: neither stage 1's `ccom`, nor
+    the tape's own prebuilt `comp`, nor `cc` without `-O`, nor `lcc` reproduces those 90
+    — because none of them is the compiler that did.
+  - **What the archive IS still good for**: a per-member witness. `atof.o` (dated
+    1991-12-19) matches `lcc` and nothing else, which is how we know the tree really
+    was mid-migration between compilers.
+  - So the goal becomes the best archive we can build **from a single compiler**, and
+    the tape's own mixture is evidence of an unfinished port rather than a design to
+    reproduce. See `tools/v10-stage2.sh`, which reports the breakdown every run.
+- **Six members cannot be built by anything: `<shares.h>` is not on the tape.**
+  `getshares.c`, `getshput.c`, `openshares.c`, `putshares.c`, `setupshares.c` and
+  `setlimits.c` include it and `find` says it does not exist anywhere in the 25,682
+  files. Their objects are in `libc.a` (June 1989), so it existed once. This is not an
+  ANSI problem and was briefly misfiled as one — the compiler error is
+  `syntax error; found 'share' expecting ';'`, i.e. an undeclared type, and the missing
+  header is the cause.
 - **V10 MUST STAY AUTHENTIC. This outranks convenience, tidiness and our own
   taste** (Christine, 2026-08-17). V10 is a restoration: the artefact is worth
   something because it is what Bell Labs left, not because it is what we would
