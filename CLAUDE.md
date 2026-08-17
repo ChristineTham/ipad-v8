@@ -353,14 +353,24 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
 	cc + lcc, the tape's mixture     246 of 261
 	lcc alone                        202 of 261
 	cc + lcc, with the repairs       260 of 261
-	cc ALONE, one compiler           249 of 261    <- current stage 2
+	cc alone, after B2.2b/c          249 of 261
+	cc ALONE, after B2.2d's first 3  252 of 261    <- current stage 2
 
   `LIBC_LCC` is now **empty**, so there is no per-member compiler choice left to
-  get wrong. Twelve remain: eleven genuinely ANSI (`_dtoa` `_fconv` `fgets`
-  `fputs` `malloc` `memmove` `qsort` `rdwr` `strtod` `vfprintf` `vfscanf`) and
-  `setupshares`. **Do not reinstate lcc to close the eleven** — it still hits
-  the `bowell.c` defect (`0: unknown flag -undef`), so those members become
-  **empty objects that exit 0**. Eleven loud failures beat eleven silent holes.
+  get wrong. Nine remain: eight genuinely ANSI (`_dtoa` `_fconv` `malloc`
+  `qsort` `rdwr` `strtod` `vfprintf` `vfscanf`) and `setupshares`. **Do not
+  reinstate lcc to close them** — it still hits the `bowell.c` defect
+  (`0: unknown flag -undef`), so those members become **empty objects that exit
+  0**. Eight loud failures beat eight silent holes.
+- **THE 1993 MEMBERS ARE ADDRESSED TO A HEADER SET THAT IS NOT INSTALLED, which
+  is the two-generations split one layer below stdio.** The eleven `lcc`-only
+  members carry `/* Copyright AT&T Bell Laboratories, 1993 */` and want
+  `<stddef.h>`, `<stdlib.h>` and `size_t` — and r70's `/usr/include` has none of
+  the three at top level; they exist only under `include/lcc/` and
+  `include/CC/`. So these are not files with a prototype to strip, they are
+  files written in a different C. Converting one means `void *` → `char *` and
+  `size_t` → `unsigned int`, which changes no generated code (same widths on a
+  VAX, and it is how V8's own libc declares these functions).
 - **`-DV10` IS MISSING FROM THE TAPE'S OWN `cc` RULE, AND EVERYTHING DOWNSTREAM
   LOOKS LIKE A DIFFERENT BUG.** `libc/mkfile` line 123 is the default C recipe —
   `cc -O -c $prereq`, no `-D`, no `-I` — while line 69 gives lcc
@@ -1501,14 +1511,15 @@ void*, size_t)`, `static void swapfunc(char *a, char *b, size_t n, int)`,
 `#include <stdarg.h>`. **So V10's libc has two generations in one tree** and
 the tape's archive is the ANSI one.
 
-**ONE COMPILER NOW BUILDS 249 OF THE 261, WHICH IS MORE THAN THE TAPE'S OWN
-MIXTURE MANAGED** (2026-08-17, 27/39; `LIBC_LCC` is empty). All three
-configurations were run, not inferred:
+**ONE COMPILER NOW BUILDS 252 OF THE 261, WHICH IS MORE THAN THE TAPE'S OWN
+MIXTURE MANAGED** (2026-08-17, 27/39; `LIBC_LCC` is empty). Every
+configuration was run, not inferred:
 
 	                                built   byte-identical to the tape
 	cc + lcc, the tape's mixture      246        150
 	cc + lcc, with the 14 repairs     260        150
-	cc ALONE, one compiler            249        148
+	cc alone, after B2.2b/c           249        148
+	cc ALONE, after B2.2d's first 3   252        147
 
 Fifteen members could be built by nothing, and they had **three** causes, not
 the two recorded here for a week:
@@ -1527,12 +1538,20 @@ the two recorded here for a week:
   find it than `cc` could. *A failure under compiler X is not evidence that
   compiler Y would succeed.*
 
-Twelve remain, and they are named rather than counted: `_dtoa` `_fconv` `fgets`
-`fputs` `malloc` `memmove` `qsort` `rdwr` `strtod` `vfprintf` `vfscanf` —
-genuinely ANSI, and the hard ones, since `vfprintf.c` is printf's whole engine —
-plus `setupshares`, which stays unbuilt on evidence grounds.
+Nine remain, and they are named rather than counted: `_dtoa` `_fconv` `malloc`
+`qsort` `rdwr` `strtod` `vfprintf` `vfscanf` — genuinely ANSI, and the hard
+ones, since `vfprintf.c` is printf's whole engine — plus `setupshares`, which
+stays unbuilt on evidence grounds. B2.2d's first three (`fgets`, `fputs`,
+`memmove`) are done and measured.
 
-Next: **B2.2d, the eleven**, as overlay conversions beside the printf family.
+**A byte-identical count going DOWN is not necessarily a regression.** 150 → 148
+→ 147 across these rounds, while the number that *build* went 246 → 249 → 252.
+Each converted member leaves the tape's own bytes behind by construction — the
+tape's `fgets.o` was compiled by `lcc` from ANSI source and ours is `cc` from
+K&R source, so it *must* differ. Read the two numbers together or neither means
+anything.
+
+Next: **the remaining eight**, as overlay conversions beside these.
 Not by reinstating lcc: it still hits the documented `bowell.c` defect
 (`0: unknown flag -undef`), so a member routed to it can be an **empty object
 that exits 0** — eleven silent holes in `libc.a` against eleven loud failures,
