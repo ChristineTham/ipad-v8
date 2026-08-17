@@ -18,6 +18,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/tools/v10clone.sh"
 source "$ROOT/tools/norun.sh"
+source "$ROOT/tools/srcid.sh"
 
 GOLD="${1:-ipnx-v10-ra81.img.stage1.s2}"
 SRC="${2:-$ROOT/work/v10gold/ipnx-v10-src.img}"
@@ -34,6 +35,11 @@ LOG="$ROOT/work/v10-stage3.log"
 no_overlap "$SRC" "$ROOT/work/v10gold/$GOLD" || exit 1
 
 python3 "$ROOT/v10/mk/mkdep.py" --check || { echo "regenerate the makefiles first"; exit 1; }
+
+# AND IS THE DISK CARRYING THEM?  --check above proves the repo's generated
+# makefiles are current; it says nothing about the copies on the source disk,
+# which is what the guest actually reads.  Both questions have to be asked.
+srcid_check "$SRC" || exit 1
 
 IMG=$(v10_clone "$GOLD" s3) || exit 1
 SRCIMG=$(v10_clone "$SRC" s3src) || exit 1

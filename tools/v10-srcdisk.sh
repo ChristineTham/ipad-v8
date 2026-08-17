@@ -46,6 +46,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/tools/v8clone.sh"
 source "$ROOT/tools/norun.sh"
+source "$ROOT/tools/srcid.sh"
 
 # THIS SCRIPT IS THE WRITER IN THE 2026-08-17 OVERLAP, so the guard belongs
 # here most of all: it ends by zeroing and rebuilding
@@ -119,5 +120,10 @@ dd if="$ROOT/work/myv8/v10src.part" of="$OUT" bs=512 seek=$SRC_OFFSET conv=notru
 printf '   src   at sector %6d  (%s)\n' $SRC_OFFSET "$(du -h "$ROOT/work/myv8/v10src.part" | cut -f1)"
 printf '   image %s\n' "$(du -h "$OUT" | cut -f1)"
 echo "   sha256 $(shasum -a 256 "$OUT" | cut -c1-16)"
+# THE STAMP, so a later stage can tell whether this image carries the build
+# description that is in the repo NOW.  See tools/srcid.sh -- the guest reads its
+# makefiles and our overlay off this disk, so regenerating them in the repo is
+# invisible to it and a stale disk produces a clean, wrong run.
+srcid_write "$OUT"
 echo "== v10-srcdisk exit $rc =="
 exit "$rc"
