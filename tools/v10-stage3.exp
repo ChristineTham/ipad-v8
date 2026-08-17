@@ -1,0 +1,201 @@
+#!/usr/bin/env expect
+# Stage 3: THE FIXPOINT.  Rebuild the toolchain against stage 2's libc, then
+# rebuild it AGAIN with itself, and compare.
+#
+#	expect tools/v10-stage3.exp <stage2-image> <src-image>
+#
+# Normally run through tools/v10-stage3.sh.
+#
+# WHY A FIXPOINT AT ALL.  Stage 1's compiler was built by V8's cc and linked
+# against the TAPE's libc.a; stage 2 built a libc with stage 1's compiler.  So
+# no binary yet exists whose compiler AND library both came from V10 source
+# compiled on V10 -- stage 3 is the first, and stage 3b proves stage 3 is a
+# fixpoint rather than merely another generation.
+#
+# TWO COMPARISONS, AND ONLY ONE OF THEM IS REQUIRED.  V8's
+# docs/build-from-source.md settles the theory and it carries over unchanged:
+#
+#	stage 3 == stage 3b     REQUIRED.  A compiler that does not reproduce
+#	                        itself is not a fixpoint, and every later stage
+#	                        would inherit whichever generation it happened
+#	                        to be built by.
+#	stage 1 == stage 3      STRONG, and NOT required.  It says the V8-built
+#	                        compiler and the V10-built one agree -- a lovely
+#	                        result, and its failure is a finding rather than
+#	                        a defect, because stage 1 linked the tape's libc
+#	                        and stage 3 links ours, and ours is measurably
+#	                        not byte-identical to the tape's (148 of 261).
+#	                        EXPECT THIS ONE TO FAIL, and record why.
+#
+# COMPARE STRIPPED BINARIES, NEVER RAW ONES.  V10's cmd/cc.c puts getpid() into
+# its temporary filenames exactly as V8's does, and those names reach the
+# object's .stabs records -- so two runs of the same compiler over the same
+# source differ in bytes that describe nothing.  `ld -x -r' is what stage 2
+# already uses for every libc member; the same pass makes these comparable.
+#
+# THE ONE THING THIS HARNESS CANNOT ASSUME IS THE SEAL.  On V8, S5 extended
+# cc.c to take `-t02palc' -- a, l and c selecting as, ld and crt0.o+libc.a from
+# the -B prefix -- so one flag stops a build reaching into the running system.
+# V10's cc.c has only `0', `2' and `p' (CLAUDE.md, measured), and an unknown -t
+# letter is SILENTLY IGNORED rather than rejected.  So `-t02palc' against V10's
+# own driver quietly uses /bin/as, /bin/ld and /lib/libc.a -- the RUNNING
+# system's -- and a stage 3 built that way is not sealed at all while looking
+# exactly as though it were.
+#
+# Two ways out, and this harness asserts which one is in force rather than
+# hoping:
+#   (a) install stage 2 over the system first, so "the running system" IS what
+#       we mean to link against; or
+#   (b) port S5's -t extension into v10/src/cmd/cc.c, which the overlay already
+#       patches for other reasons.
+# (a) is what runs here, because it needs no new patch and because stage 3's
+# question is about the COMPILER reproducing itself, not about where ld lives.
+# The assertion below proves /lib/libc.a is stage 2's before anything is built.
+
+log_user 1
+source [file dirname [info script]]/v10drive.exp
+# AFTER the source: v10drive.exp sets `timeout' itself.
+set timeout 14400
+set V10_RUN_SECS 21600
+
+if {[llength $argv] < 2} {
+    puts "usage: v10-stage3.exp <stage2-image> <src-image>"
+    exit 2
+}
+set img [lindex $argv 0]
+set src [lindex $argv 1]
+
+set N   /n/v10
+set S   /n/v10/src
+set K   /n/v10/mk
+set T2  /usr/s2               ;# stage 2: the libc this stage links
+set T3  /usr/s3               ;# what this stage builds
+set T3B /usr/s3b              ;# and what stage 3 then builds with itself
+set OBJ /usr/obj
+set INC /usr/include
+
+set CCM3  "'CC=cc -B$T2/lib/ -t02p'"   ;# stage 3 is built BY stage 1/2's passes
+set CCM3B "'CC=cc -B$T3/lib/ -t02p'"   ;# stage 3b is built BY stage 3
+
+set results {}
+proc note {name ok} { global results; lappend results [list $name $ok] }
+proc report {} {
+    global results
+    puts "\n===== V10 STAGE 3 RESULTS ====="
+    set failed 0
+    foreach r $results {
+        puts [format "  %-52s %s" [lindex $r 0] [expr {[lindex $r 1] ? "ok" : "NO"}]]
+        if {![lindex $r 1]} { incr failed }
+    }
+    puts "===== [expr {[llength $results] - $failed}]/[llength $results] =====\n"
+    return $failed
+}
+
+# ---------------------------------------------------------------------------
+v10_boot $img [list "set rq1 ra81" "attach rq1 $src"]
+v10_login root
+
+puts "\n===== V10 STAGE 3 (the fixpoint) ====="
+v10_sh "PATH=/bin:/etc:/usr/bin; export PATH" 120
+v10_sh "OK=-ok" 120
+
+v10_sh "mkdir /n; mkdir $N" 120
+note "source disk mounts" \
+    [v10_try "/etc/mount /dev/ra1c $N && echo MT\$OK" "MT-ok" 600]
+
+# ------------------------------------------- is this a stage-2 machine? ---
+#
+# Asserted before anything is built, for the same reason stage 2 asserts it is
+# on a stage-1 machine: a run started from the wrong image builds a full
+# toolchain with the wrong library and looks like a success.
+note "stage 2 present: lib/libc.a" \
+    [v10_try "test -s $T2/lib/libc.a && echo S2\$OK" "S2-ok" 300]
+note "stage 2 present: lib/crt0.o" \
+    [v10_try "test -s $T2/lib/crt0.o && echo S2\$OK" "S2-ok" 300]
+
+# ------------------------------------------------------------- THE SEAL ---
+#
+# See the header.  V10's cc has no `-t a/l/c', so `-B' cannot redirect as, ld or
+# libc.a -- the driver uses compiled-in paths.  Stage 2's library is therefore
+# installed OVER the system's before stage 3 is built, and that is asserted by
+# BYTES rather than by the copy having exited 0.
+v10_sh "cp /lib/libc.a /lib/libc.a.tape" 900
+v10_sh "cp $T2/lib/libc.a /lib/libc.a; ranlib /lib/libc.a" 1800
+v10_sh "cp $T2/lib/crt0.o /lib/crt0.o" 300
+note "/lib/libc.a IS stage 2's (compared, not assumed)" \
+    [v10_try "if cmp $T2/lib/libc.a /lib/libc.a; then echo SL\$OK; fi" "SL-ok" 900]
+note "the tape's libc.a is kept for comparison" \
+    [v10_try "test -s /lib/libc.a.tape && echo TP\$OK" "TP-ok" 120]
+
+# ------------------------------------------------------ 1. build stage 3 ---
+#
+# The same seven components stage 1 built, from the same generated order file --
+# v10_order reads tc.order rather than restating the list, because a component
+# list that appears twice will disagree silently (CLAUDE.md; it cost a run when
+# `ed' was added to one copy and not the other).
+set TC [v10_order tc.order]
+v10_sh "rm -rf $T3; mkdir $T3; mkdir $T3/bin; mkdir $T3/lib" 300
+foreach c $TC {
+    set name [lindex $c 0]
+    set dir  [lindex $c 1]
+    set inst [lindex $c 2]
+    v10_sh "rm -rf $OBJ/s3-$name; mkdir $OBJ/s3-$name" 300
+    set ok [v10_try \
+        "cd $OBJ/s3-$name; if make -f $K/$name.mk SRC=$S OURS=$N/ours INCDIR=$INC TOOLDIR=$T3 DESTDIR=$T3 $CCM3 install > b.log 2>&1; then echo B3\$OK; fi" \
+        "B3-ok" 3600]
+    note "stage 3 built $name" $ok
+    if {!$ok} { v10_run "cd $OBJ/s3-$name; sed -e '/^cc /d' -e '/^as /d' b.log | sed -n '1,60p'; echo E3END" "E3END" 900 }
+}
+
+# ----------------------------------------------------- 2. build stage 3b ---
+#
+# By stage 3's own passes.  This is the comparison that matters.
+set TC3B $TC
+v10_sh "rm -rf $T3B; mkdir $T3B; mkdir $T3B/bin; mkdir $T3B/lib" 300
+foreach c $TC3B {
+    set name [lindex $c 0]
+    v10_sh "rm -rf $OBJ/s3b-$name; mkdir $OBJ/s3b-$name" 300
+    set ok [v10_try \
+        "cd $OBJ/s3b-$name; if make -f $K/$name.mk SRC=$S OURS=$N/ours INCDIR=$INC TOOLDIR=$T3B DESTDIR=$T3B $CCM3B install > b.log 2>&1; then echo BB\$OK; fi" \
+        "BB-ok" 3600]
+    note "stage 3b built $name (by stage 3)" $ok
+    if {!$ok} { v10_run "cd $OBJ/s3b-$name; sed -e '/^cc /d' -e '/^as /d' b.log | sed -n '1,60p'; echo EBEND" "EBEND" 900 }
+}
+
+# ------------------------------------------------------- 3. THE FIXPOINT ---
+#
+# STRIPPED, both sides, and with `ld -x -r' rather than a `strip' that this
+# machine does not have.  getpid() reaches the .stabs records through cc.c's
+# temp filenames, so raw binaries from two runs of the SAME compiler differ.
+v10_sh "rm -rf $OBJ/cmp3; mkdir $OBJ/cmp3" 300
+foreach c $TC {
+    set name [lindex $c 0]
+    set inst [lindex $c 2]
+    v10_sh "cd $OBJ/cmp3; rm -f a.out $name.3 $name.3b" 300
+    v10_sh "cd $OBJ/cmp3; $T3/bin/ld -x -r $T3/$inst && mv a.out $name.3" 900
+    v10_sh "cd $OBJ/cmp3; $T3/bin/ld -x -r $T3B/$inst && mv a.out $name.3b" 900
+    note "FIXPOINT: stage 3 $name == stage 3b $name" \
+        [v10_try "cd $OBJ/cmp3; if cmp $name.3 $name.3b; then echo FX\$OK; fi" "FX-ok" 900]
+}
+
+# ------------------------------------ 4. the strong test, which may fail ---
+#
+# stage 1 == stage 3.  NOT required -- see the header.  Stage 1's binaries were
+# linked against the TAPE's libc.a and stage 3's against ours, and ours is
+# measurably not the tape's (148 of 261 members byte-identical), so a difference
+# here is expected and is a RESULT.  It is measured anyway because the members
+# that DO match make some binaries comparable, and which ones is worth knowing.
+v10_sh "cd $OBJ/cmp3; rm -f s1.o" 300
+foreach c $TC {
+    set name [lindex $c 0]
+    set inst [lindex $c 2]
+    v10_sh "cd $OBJ/cmp3; rm -f a.out $name.1" 300
+    v10_sh "cd $OBJ/cmp3; if test -s /usr/s1/$inst; then $T3/bin/ld -x -r /usr/s1/$inst && mv a.out $name.1; fi" 900
+    # v10_run, not v10_try: this one is EXPECTED to differ, so its output is the
+    # measurement and must not be read through a marker that only says yes/no.
+    v10_run "cd $OBJ/cmp3; if test -s $name.1; then if cmp $name.1 $name.3; then echo SAME $name; else echo DIFF $name; fi; else echo NOS1 $name; fi; echo S1END" "S1END" 900
+}
+
+report
+v10_halt
+exit 0
