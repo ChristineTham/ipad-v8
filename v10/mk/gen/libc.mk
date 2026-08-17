@@ -89,10 +89,10 @@ LCC     = lcc
 LCCPATH = /usr/bin/lcc
 LCCARGS = -N -I$(SRC)/libc/stdio -I$(INCDIR)/lcc -I$(INCDIR)/libc -I$(INCDIR) -DV10
 
-# The 11 members compiled by $(LCC), because pcc2 cannot parse them.
+# The 0 members compiled by $(LCC), because pcc2 cannot parse them.
 # Measured by tools/v10-stage2.sh, NOT read from the mkfile -- which
 # names only ten and is wrong about fifteen.  See mkdep.py.
-#   _dtoa.o _fconv.o fgets.o fputs.o malloc.o memmove.o qsort.o rdwr.o strtod.o vfprintf.o vfscanf.o
+#   
 
 OBJS = _assert.o _cleanup.o _exit.o _printnum.o abort.o abs.o access.o acct.o alarm.o asin.o atan.o atexit.o atof.o atoi.o atol.o biasclock.o calloc.o cerror.o chdir.o chmod.o chown.o chroot.o chrtab.o close.o closedir.o clrerr.o creat.o crypt.o ctime.o cttyname.o ctype.o data.o dialout.o dirread.o doprint.o dup.o ecvt.o erf.o errlst.o execl.o execle.o execv.o execve.o execvp.o exit.o exp.o fabs.o fchmod.o fchown.o fdopen.o fgetc.o fgets.o filbuf.o fioclose.o fioflush.o fiogetc.o fioinit.o fiofillbuf.o fioputc.o fiordline.o fioread.o fioseek.o fioundo.o fioprint.o fiowrite.o fiotie.o floor.o fmount.o funmount.o flsbuf.o fmod.o fopen.o fork.o fprintf.o fputc.o fputs.o freopen.o frexp.o fseek.o fstab.o fstat.o ftell.o ftw.o galloc.o gamma.o gcd.o gcvt.o getchar.o getenv.o getgid.o getgrent.o getgrgid.o getfields.o getflags.o getgroups.o getgrnam.o getlog.o getlogin.o getopt.o getpass.o getpid.o getpwent.o getpwnam.o getpwuid.o getshares.o getshput.o getuid.o getw.o getwd.o huff.o hypot.o ioctl.o iread.o isatty.o jterm.o besj0.o besj1.o besjn.o kill.o l3tol.o lcm.o ldexp.o linedis.o link.o label.o limits.o log.o lseek.o lstat.o ltol3.o malloc.o max.o mcount.o memccpy.o memchr.o memcmp.o memcpy.o memmove.o memset.o min.o mkdir.o mknod.o mktemp.o modf.o mon.o nametty.o nap.o nice.o nlist.o onexit.o open.o opendir.o openshares.o pdirread.o perror.o pipe.o popen.o pow.o pow10.o print.o printf.o prof.o putchar.o puts.o putshares.o putw.o qsort.o rand.o rdwr.o read.o readdir.o readlink.o reboot.o regcomp.o regerror.o regexec.o regsub.o rew.o rmdir.o sbrk.o scanf.o seekdir.o select.o setbuf.o setgid.o setgroups.o setjmp.o setlimits.o setpgrp.o setruid.o setuid.o setupgroups.o setupshares.o sgn.o signal.o sin.o sinh.o sleep.o sprintf.o sqrt.o stat.o stime.o strcat.o strchr.o strcmp.o strcpy.o strcspn.o strdup.o strlen.o strncat.o strncmp.o strncpy.o strout.o strpbrk.o strrchr.o strspn.o strtok.o stuff.o swab.o swapon.o symlink.o sync.o syscall.o system.o tan.o tanh.o telldir.o time.o timec.o times.o timezone.o tmpnam.o tolower.o toupper.o ttyname.o udiv.o umask.o uname.o ungetc.o unlink.o urem.o utime.o vadvise.o vlimit.o vtimes.o wait.o wait3.o write.o strtol.o strtoul.o llseek.o LL.o _dtoa.o _fconv.o snprintf.o strtod.o fscanf.o vfprintf.o vfscanf.o vprintf.o sscanf.o
 
@@ -292,8 +292,8 @@ fdopen.o: $(SRC)/libc/stdio/fdopen.c $(INCDIR)/errno.h $(INCDIR)/stdio.h $(INCDI
 fgetc.o: $(SRC)/libc/stdio/fgetc.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(TOOLS)
 	$(COMPILE) $(SRC)/libc/stdio/fgetc.c
 
-fgets.o: $(SRC)/libc/stdio/fgets.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(LCCPATH)
-	$(LCC) $(LCCARGS) -c $(SRC)/libc/stdio/fgets.c
+fgets.o: $(SRC)/libc/stdio/fgets.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(TOOLS)
+	$(COMPILE) $(SRC)/libc/stdio/fgets.c
 
 filbuf.o: $(SRC)/libc/stdio/filbuf.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(TOOLS)
 	$(COMPILE) $(SRC)/libc/stdio/filbuf.c
@@ -364,8 +364,8 @@ fprintf.o: $(OURS)/libc/stdio/fprintf.c $(INCDIR)/lcc/stdarg.h $(TOOLS)
 fputc.o: $(SRC)/libc/stdio/fputc.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(TOOLS)
 	$(COMPILE) $(SRC)/libc/stdio/fputc.c
 
-fputs.o: $(SRC)/libc/stdio/fputs.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(LCCPATH)
-	$(LCC) $(LCCARGS) -c $(SRC)/libc/stdio/fputs.c
+fputs.o: $(SRC)/libc/stdio/fputs.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(TOOLS)
+	$(COMPILE) $(SRC)/libc/stdio/fputs.c
 
 freopen.o: $(SRC)/libc/stdio/freopen.c $(INCDIR)/errno.h $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(TOOLS)
 	$(COMPILE) $(SRC)/libc/stdio/freopen.c
@@ -529,8 +529,8 @@ lstat.o: $(SRC)/libc/sys/lstat.s $(TOOLS)
 ltol3.o: $(SRC)/libc/gen/ltol3.c $(TOOLS)
 	$(COMPILE) $(SRC)/libc/gen/ltol3.c
 
-malloc.o: $(SRC)/libc/gen/malloc.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(LCCPATH)
-	$(LCC) $(LCCARGS) -c $(SRC)/libc/gen/malloc.c
+malloc.o: $(SRC)/libc/gen/malloc.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(TOOLS)
+	$(COMPILE) $(SRC)/libc/gen/malloc.c
 
 max.o: $(SRC)/libc/gen/max.c $(TOOLS)
 	$(COMPILE) $(SRC)/libc/gen/max.c
@@ -550,8 +550,8 @@ memcmp.o: $(SRC)/libc/gen/memcmp.s $(TOOLS)
 memcpy.o: $(SRC)/libc/gen/memcpy.s $(TOOLS)
 	$(COMPILE) $(SRC)/libc/gen/memcpy.s
 
-memmove.o: $(SRC)/libc/gen/memmove.c $(LCCPATH)
-	$(LCC) $(LCCARGS) -c $(SRC)/libc/gen/memmove.c
+memmove.o: $(SRC)/libc/gen/memmove.c $(TOOLS)
+	$(COMPILE) $(SRC)/libc/gen/memmove.c
 
 memset.o: $(SRC)/libc/gen/memset.s $(TOOLS)
 	$(COMPILE) $(SRC)/libc/gen/memset.s
@@ -637,14 +637,14 @@ putshares.o: $(SRC)/libc/gen/putshares.c $(INCDIR)/libc.h $(TOOLS)
 putw.o: $(SRC)/libc/stdio/putw.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(TOOLS)
 	$(COMPILE) $(SRC)/libc/stdio/putw.c
 
-qsort.o: $(SRC)/libc/gen/qsort.c $(LCCPATH)
-	$(LCC) $(LCCARGS) -c $(SRC)/libc/gen/qsort.c
+qsort.o: $(SRC)/libc/gen/qsort.c $(TOOLS)
+	$(COMPILE) $(SRC)/libc/gen/qsort.c
 
 rand.o: $(SRC)/libc/gen/rand.c $(TOOLS)
 	$(COMPILE) $(SRC)/libc/gen/rand.c
 
-rdwr.o: $(SRC)/libc/stdio/rdwr.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(LCCPATH)
-	$(LCC) $(LCCARGS) -c $(SRC)/libc/stdio/rdwr.c
+rdwr.o: $(SRC)/libc/stdio/rdwr.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(TOOLS)
+	$(COMPILE) $(SRC)/libc/stdio/rdwr.c
 
 read.o: $(SRC)/libc/sys/read.s $(TOOLS)
 	$(COMPILE) $(SRC)/libc/sys/read.s
@@ -895,26 +895,26 @@ llseek.o: $(SRC)/libc/sys/llseek.s $(TOOLS)
 LL.o: $(SRC)/libc/gen/LL.c $(INCDIR)/signal.h $(INCDIR)/sys/param.h $(INCDIR)/sys/types.h $(TOOLS)
 	$(COMPILE) $(SRC)/libc/gen/LL.c
 
-_dtoa.o: $(SRC)/libc/stdio/_dtoa.c $(INCDIR)/errno.h $(INCDIR)/math.h $(INCDIR)/string.h $(SRC)/libc/stdio/fconv.h $(LCCPATH)
-	$(LCC) $(LCCARGS) -c $(SRC)/libc/stdio/_dtoa.c
+_dtoa.o: $(SRC)/libc/stdio/_dtoa.c $(INCDIR)/errno.h $(INCDIR)/math.h $(INCDIR)/string.h $(SRC)/libc/stdio/fconv.h $(TOOLS)
+	$(COMPILE) $(SRC)/libc/stdio/_dtoa.c
 
-_fconv.o: $(SRC)/libc/stdio/_fconv.c $(INCDIR)/errno.h $(INCDIR)/math.h $(INCDIR)/stdio.h $(INCDIR)/string.h $(INCDIR)/tmpnam.h $(SRC)/libc/stdio/fconv.h $(LCCPATH)
-	$(LCC) $(LCCARGS) -c $(SRC)/libc/stdio/_fconv.c
+_fconv.o: $(SRC)/libc/stdio/_fconv.c $(INCDIR)/errno.h $(INCDIR)/math.h $(INCDIR)/stdio.h $(INCDIR)/string.h $(INCDIR)/tmpnam.h $(SRC)/libc/stdio/fconv.h $(TOOLS)
+	$(COMPILE) $(SRC)/libc/stdio/_fconv.c
 
 snprintf.o: $(OURS)/libc/stdio/snprintf.c $(INCDIR)/lcc/stdarg.h $(TOOLS)
 	$(COMPILE) -I$(SRC)/libc/stdio $(OURS)/libc/stdio/snprintf.c
 
-strtod.o: $(SRC)/libc/stdio/strtod.c $(INCDIR)/errno.h $(INCDIR)/math.h $(INCDIR)/string.h $(SRC)/libc/stdio/fconv.h $(LCCPATH)
-	$(LCC) $(LCCARGS) -c $(SRC)/libc/stdio/strtod.c
+strtod.o: $(SRC)/libc/stdio/strtod.c $(INCDIR)/errno.h $(INCDIR)/math.h $(INCDIR)/string.h $(SRC)/libc/stdio/fconv.h $(TOOLS)
+	$(COMPILE) $(SRC)/libc/stdio/strtod.c
 
 fscanf.o: $(OURS)/libc/stdio/fscanf.c $(INCDIR)/lcc/stdarg.h $(TOOLS)
 	$(COMPILE) -I$(SRC)/libc/stdio $(OURS)/libc/stdio/fscanf.c
 
-vfprintf.o: $(SRC)/libc/stdio/vfprintf.c $(INCDIR)/fcntl.h $(INCDIR)/math.h $(INCDIR)/stdio.h $(INCDIR)/string.h $(INCDIR)/sys/types.h $(INCDIR)/tmpnam.h $(SRC)/libc/stdio/iolib.h $(LCCPATH)
-	$(LCC) $(LCCARGS) -c $(SRC)/libc/stdio/vfprintf.c
+vfprintf.o: $(SRC)/libc/stdio/vfprintf.c $(INCDIR)/fcntl.h $(INCDIR)/math.h $(INCDIR)/stdio.h $(INCDIR)/string.h $(INCDIR)/sys/types.h $(INCDIR)/tmpnam.h $(SRC)/libc/stdio/iolib.h $(TOOLS)
+	$(COMPILE) $(SRC)/libc/stdio/vfprintf.c
 
-vfscanf.o: $(SRC)/libc/stdio/vfscanf.c $(INCDIR)/ctype.h $(INCDIR)/fcntl.h $(INCDIR)/math.h $(INCDIR)/stdio.h $(INCDIR)/sys/types.h $(INCDIR)/tmpnam.h $(SRC)/libc/stdio/iolib.h $(LCCPATH)
-	$(LCC) $(LCCARGS) -c $(SRC)/libc/stdio/vfscanf.c
+vfscanf.o: $(SRC)/libc/stdio/vfscanf.c $(INCDIR)/ctype.h $(INCDIR)/fcntl.h $(INCDIR)/math.h $(INCDIR)/stdio.h $(INCDIR)/sys/types.h $(INCDIR)/tmpnam.h $(SRC)/libc/stdio/iolib.h $(TOOLS)
+	$(COMPILE) $(SRC)/libc/stdio/vfscanf.c
 
 vprintf.o: $(OURS)/libc/stdio/vprintf.c $(INCDIR)/lcc/stdarg.h $(TOOLS)
 	$(COMPILE) -I$(SRC)/libc/stdio $(OURS)/libc/stdio/vprintf.c

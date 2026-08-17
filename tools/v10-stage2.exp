@@ -307,18 +307,29 @@ v10_sh "cd $OBJ/libc; rm -f *.o *.a *.lst miss d.lst b.log" 600
 # builds everything it can and the NEXT step says exactly what is missing.
 # ---------------------------------- IS THE OBJECT DIRECTORY ACTUALLY EMPTY? ---
 #
-# ASSERTED, because a run that skipped the build measured the PREVIOUS run and
-# said nothing.  On 2026-08-17 stage 2 reported 151 members byte-identical to
-# the tape out of a `make' that ran for TEN SECONDS -- 07:45:21 to 07:45:31 by
-# the guest's own date stamps, for 261 compiles on a simulated VAX-750.  Every
-# object the comparison found was already on the disk, so the whole
-# measurement was of an earlier run's work, and the only trace was two
-# timestamps ten seconds apart in a five-thousand-line log.
+# ASSERTED, so that a fast build can be BELIEVED.
 #
-# `rm -rf' ran and reported nothing; that is not the same as the directory
-# being empty, and the difference is the entire finding.  So it is checked, and
-# checked HERE, between the clean and the build, where the answer can still
-# stop the run from producing a number nobody should trust.
+# THE GUEST'S OWN CLOCK SAYS THIS BUILD TAKES TEN SECONDS, and that reading was
+# taken for proof that make had skipped it -- "261 compiles on a simulated
+# VAX-750 cannot happen in ten seconds, so the objects must already have been
+# there".  **That inference was wrong and is withdrawn.**  Measured against the
+# HOST clock, an entire stage-2 run -- boot, 260 compiles, archive, ranlib, 261
+# `cmp's, four whole-library compiler trials, install, link, halt -- takes
+# about SEVENTY SECONDS.  A real VAX-750 was half a MIPS; open-simh on an
+# M-series Mac is two orders of magnitude quicker, so a tenth of a second per
+# small C file is exactly right.  The guest's clock simply under-reports (its
+# resolution is one second and its calibration is not what this stage measures).
+#
+# And 150 members came out BYTE-IDENTICAL to Bell Labs' 1989 archive, which is
+# not a thing a skipped build can do.  That was the evidence available all
+# along.
+#
+# So the assertion stays -- not because the build is suspected of being skipped,
+# but because it is the ONE cheap check that separates "impossibly fast" from
+# "measuring the last run", and without it a fast run cannot be trusted either
+# way.  `rm -rf' running and printing nothing is not the same as the directory
+# being empty.  It is checked HERE, between the clean and the build, where the
+# answer can still stop the run before it produces a number.
 #
 # `ls | sed -n '$='` would count, but V10's ls prints nothing for an empty
 # directory and `test -z` on a command substitution is the shorter question.

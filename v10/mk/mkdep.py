@@ -490,20 +490,37 @@ LIBC_OURS = [
     "scanf.o", "fscanf.o", "sscanf.o",
 ]
 
-LIBC_LCC = [
-    # the ten the tape's mkfile already hands to lcc, less the three the
-    # overlay now builds (scanf.o, sprintf.o -- and see B2.2c)
-    "fgets.o", "fputs.o", "malloc.o", "memmove.o", "qsort.o",
-    "vfprintf.o", "vfscanf.o", "rdwr.o",
-    # rdwr.o was left on cc for one run, on the strength of a measurement
-    # that said pcc2 compiled it.  It does not: the next run reported it as
-    # the ONE remaining failure.  The tape's mkfile routes it to lcc and the
-    # tape was right -- when the measurement and the mkfile disagree, re-run
-    # the measurement before believing it.
-    # the measured remainder -- eleven genuine ANSI files, and this is now the
-    # whole of the second compiler's job.
-    "_dtoa.o", "_fconv.o", "strtod.o",
-]
+# EMPTY, AND THAT IS THE POINT: V10's libc is built by ONE compiler.
+#
+# Christine, 2026-08-17: "preferably from a single compiler rather than a
+# mixture."  This is the line that makes it true by construction rather than by
+# intention -- there is no per-member compiler choice left to get wrong,
+# because there is no second compiler.
+#
+# THE ELEVEN THAT USED TO BE HERE HAD TO GO ANYWAY, because lcc does not work.
+# CLAUDE.md records why: the prebuilt `cmd/lcc/etc/lcc' is compiled from
+# `bowell.c', whose cpp line passes `-undef', and lcc's own `ph/cpp' rejects it:
+#
+#	0: unknown flag -undef
+#	0: unknown flag -nostdinc
+#
+# cpp then writes nothing, rcc compiles the empty file, as assembles a valid
+# EMPTY object, and **lcc exits 0**.  So every member routed to lcc was an
+# empty .o that no test could distinguish from a real one by existence alone --
+# which is exactly why the count of "members that did not compile" kept looking
+# better than the library was.  Keeping the list would have meant keeping
+# eleven holes in libc.a.
+#
+# WHAT THIS COSTS is measured by the run that follows, not assumed: pcc2 has to
+# manage eleven genuinely ANSI files -- fgets, fputs, malloc, memmove, qsort,
+# rdwr, vfprintf, vfscanf, _dtoa, _fconv, strtod -- and any it cannot are named
+# in the MISS list rather than silently handed to a compiler that would have
+# produced nothing.  A member that fails loudly is strictly better than a
+# member that succeeds emptily.
+#
+# If a file here genuinely needs converting, it becomes an overlay entry in
+# LIBC_OURS beside the printf family, not a second compiler.
+LIBC_LCC = []
 
 # SEVEN MEMBERS LEFT THIS LIST WITHOUT BEING CONVERTED, and the reason is the
 # same for all of them: THEY NEVER HAD A LANGUAGE PROBLEM.  Each is pure K&R
