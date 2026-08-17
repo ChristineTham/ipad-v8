@@ -1190,6 +1190,49 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   answer, four lines above a summary that contradicted it, and nothing in the run
   compared them. `tools/v10-stage2.sh` now refuses to print a measurement when
   those two disagree.
+- **A FULL V10 FILESYSTEM HANGS INSTEAD OF FAILING, SO NO GUEST-SIDE PROBE CAN
+  GUARD AGAINST IT.** `lsys/fs/alloc.c` prints `file system full` and then
+  **sleeps**, waiting for space that is not coming — so the process blocks in
+  the kernel rather than getting an error, and every guest-side check breaks the
+  same way: a `dd` or `cat` probe blocks in the identical `alloc()` sleep as the
+  thing it is meant to protect, and a count-consecutive-failures detector never
+  counts because nothing fails. It presents as a simulator at 100% CPU with a
+  kernel message every few seconds and a run that neither progresses nor dies.
+  **`tools/v10-free.py` is the answer** — it reads the superblock out of the
+  image file host-side, before the boot, on the same argument `tools/v8fs.py`
+  was written from. Two traps in writing it: **`s_tfree` is a hint, not the
+  truth** (`alloc.c` assigns `fp->s_tfree = 0` on failure under Bell Labs' own
+  commented-out *"but it would be wrong FIX"*), so count the **bitmap**; and a
+  struct offset computed from a header is a guess until something confirms it,
+  so the tool refuses to answer unless `struct filsys` computes to exactly one
+  4096-byte block, `s_fsmnt` is printable, and the popcount matches `s_tfree`.
+  - **What filled it was an unbounded log, not a full image, and I blamed the
+    image twice.** A compile whose output went to `>> u.log` with no limit wrote
+    the same `Can't find include file config.h` until 120 MB was gone — while
+    `/usr` had **111.8 MB free** the whole time, measured. The transcript showed
+    the message three times only because the *display* was `sed -e 3q`. The fix
+    is structural: pipe the compiler through `sed -e 40q`, so the pipe closes
+    and it gets EPIPE. No counting, no truncation, and a faster loop cannot
+    outrun it. Keep the exit status by having the subshell `echo "CCST=$?"`
+    through the same pipe — a pipeline's status is `sed`'s and 1985 `sh` has no
+    `PIPESTATUS`.
+- **A GUEST-SIDE SCRIPT THAT EXITS WITHOUT ITS END MARKER STRANDS THE DRIVER.**
+  `v10_run` sends a command and waits for the program's own closing output, so a
+  script that `exit`s early — a failed probe, a missing tool — leaves the driver
+  blocked for its whole timeout with a simulator running and no console to reach
+  it. "A harness must terminate itself; needing to kill one is the bug" has to
+  hold *inside* the guest too: every top-level exit prints the marker. An exit
+  inside a `sed | while` pipeline is safe, because it ends only the subshell and
+  the tallies still run.
+- **`bash tools/norun.sh` IS NOT A CHECK — it is a library to source.** Running
+  it defines two functions and exits 0 silently, which reads exactly like a
+  pass. Use `source tools/norun.sh; no_other_sims` (or just let the harness's
+  own `no_overlap` do it — every one of them already calls it). This wasted two
+  launches while the real guards were working perfectly: `v10-srcdisk.sh`
+  refused with *"norun: a simulator is already running"* and `v10-compile.sh`
+  refused on a stale srcid, and both refusals were misread because a 42/42 was
+  read out of the *previous* run's log file. **When a harness reports success,
+  check that the log you are reading was written by the run you just made.**
 - **A RE-RUN OF AN INCREMENTAL `make` IS NOT A PROBE OF THE BUILD.** V10's `ld`
   **writes its output file even when symbols are undefined** — it reports them
   and clears the execute bits — so a failed link still leaves an `a.out` newer
@@ -1753,8 +1796,42 @@ and they were read as the current state and reported as the next step. They are
 resolved in place now. A plan with two answers to the same question gets read at
 the wrong one.
 
-Next: **K10** — recompile the world on it, which is where the libc questions and
-the 283 commands become work done *inside* V10. Then the two workarounds a 780
+**K10.1 — THE WORLD COMPILES, 241 OF 356, AND THAT IS A FLOOR** (2026-08-18,
+`bash tools/v10-compile.sh`, [docs/v10-log/2026-08-18.md](docs/v10-log/2026-08-18.md)).
+V10's own compiler — stage 1's passes, `cc -B/usr/s1/lib/ -t02p` — over every
+command unit under `cmd/`, compile only: no libraries, no linking, no install,
+because compiling needs only the compiler and the headers and so a failure is a
+**language or header fact** rather than a missing `-l`.
+
+**The controls are what make 241 a floor rather than an answer.** `as`, `cc`,
+`ld`, `mv` and `cpp` all appear in the failing list and stage 1 builds every one
+of them on that machine — so a failure in this survey is not evidence that V10
+cannot compile the file. Three causes, all measured: the survey uses generic
+flags where each unit's makefile has its own (`as.h:217 unknown size`); it never
+runs `yacc`, so eight units want a `y.tab.h` that was never generated; and it
+read only the tape until `worldc.sh` was taught to prefer `v10/src/`.
+**That last fix is worth stating as a number: our five one-line corrections are
+worth three commands** (238 → 241, with `mv`, `fsck` and `cc` crossing over).
+
+What *is* a fact about the tape: 23 `syntax error` plus 7 `expected a NAME in
+list` and 7 `expected , or ;` — the same ANSI-versus-K&R wall libc hit, now in
+the commands; 11 `stdlib.h` and 3 `stddef.h`, the variant-header decision
+already made once for libc needing to extend; 5 `n_un undefined` clustering on
+exactly the five programs that read object files (`ld nm prof prof.old ranlib`),
+which is `a.out.h` skew; and 3 units naming `/usr/jerq/include/jioctl.h` by
+**absolute** path, which no `-I` can satisfy — the `jterm.o` finding again.
+
+`tools/v10-world.py` predicts this host-side in a second and was **optimistic
+three times, always in the flattering direction** (348 → 332 → 318 of 356), each
+caught by a control and never by review: a missing `re.M` meant an include was
+found only in a file whose first character began one; then the cross-unit search
+ran *before* the system path, so `ccom`'s `#include "stdio.h"` resolved to
+`cmd/lcc/include/sparc_sun/stdio.h` — a **Sun** header. `sanity()` now refuses to
+print a measurement taken through a scan that read implausibly little.
+
+Next: **K10.2** — the libraries (17 `lib*` trees plus `ipc/libipc` and
+`ipc/libin`; `-lm` 41 uses, `-lipc` 35, `-ll` 28), then link and install, which
+is where the 283 commands become work done *inside* V10. Then the two workarounds a 780
 kernel retires: K11's full-capacity filesystem (V8's `filsys.h` caps a
 filesystem at 30,752 blocks and V8 no longer has to read the result) and K12's
 netfs (`ipnx780.m` already carries `netafs 4`/`netbfs 4` and the app's `vax780`
