@@ -186,6 +186,19 @@ v10_run "cd $K; echo KSIZE; ls -l $M.u; echo KSIZEEND" "KSIZEEND" 600
 note "the kernel file exists" \
     [v10_try "cd $K; test -s $M.u && echo KE\$OK" "KE-ok" 120]
 
+# ------------------------------------------------- install it as /unix ------
+#
+# THE IMAGE THIS RUN LEAVES IS MEANT TO BE BOOTED ON A 780, so the kernel goes
+# where the boot block looks.  That makes the clone unbootable on the 750 it was
+# just built on, which is correct and not a loss: the 750 was scaffolding, and
+# the clone is disposable by design (tools/v10clone.sh).
+#
+# `cp', not `mv': /unix is what the boot block loads and the build output stays
+# in $K for comparison.
+v10_sh "cp $K/$M.u /unix" 900
+note "installed as /unix" [v10_try "test -s /unix && echo UX\$OK" "UX-ok" 120]
+v10_sh "ls -l /unix" 120
+
 report
 v10_halt
 exit 0

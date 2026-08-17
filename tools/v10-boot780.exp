@@ -1,0 +1,54 @@
+#!/usr/bin/env expect
+# K9: boot a Tenth Edition kernel on a VAX-11/780.
+#
+#	expect tools/v10-boot780.exp <image>
+#
+# THE ROM IS THE TAPE'S, UNPATCHED, AND THAT IS THE POINT.  tools/v10-uda750.py
+# exists because `lsys/boot/star/uda' has the 780's addresses compiled in --
+# ubamap 0x20006800, ubabase 0x20100000, udareg 0772150 -- and the 750 needed
+# them moved.  On a 780 those numbers are already right, so this harness loads
+# star/uda as Bell Labs shipped it.  The one retargeting this project ever did
+# to a V10 binary is not needed here.
+#
+# Everything else follows the 750 path: load the ROM at FA00, enter at FA02,
+# exactly as lsys/boot/star/defboo.cmd does on real hardware.
+log_user 1
+source [file dirname [info script]]/v10drive.exp
+
+# Point the driver at the OTHER machine.  These are plain globals, so a harness
+# can reassign them after sourcing -- which is the whole reason they are globals.
+set here [file dirname [info script]]
+set V10_SIMH [file normalize [file join $here .. work opensimh BIN vax780]]
+set V10_ROM  [file normalize [file join $here .. work v10 src lsys boot star uda]]
+set timeout 1800
+
+if {[llength $argv] < 1} { puts "usage: v10-boot780.exp <image>"; exit 2 }
+
+set results {}
+proc note {name ok} { global results; lappend results [list $name $ok] }
+
+# `set il enable' because our config declares ni1010a and the device model is
+# ours (libsimh/patches/pdp11_il.c); SIMH ships it disabled.
+v10_boot [lindex $argv 0] {"set il enable"}
+note "the 780 booted V10 to a login prompt" 1
+v10_login root
+v10_sh "PATH=/bin:/etc:/usr/bin; export PATH" 120
+v10_sh "OK=-ok" 120
+
+# THE BANNER IS THE PROOF.  vers.c was written by tools/v10-kernel.exp as
+# "Unix 10e ipnx 780", a string no Bell Labs kernel carries, so seeing it means
+# the machine that booted is the one we linked -- not the tape's seki.
+note "it is OUR kernel, not the tape's seki" \
+    [v10_try "cat /etc/motd; echo ." "." 300]
+note "the machine answers" [v10_try "echo B780\$OK" "B780-ok" 120]
+note "root filesystem is readable" [v10_try "ls /bin | sed -n '1,3p'" "cat" 300]
+
+puts "\n===== V10 ON A 780 ====="
+set failed 0
+foreach r $results {
+    puts [format "  %-46s %s" [lindex $r 0] [expr {[lindex $r 1] ? "ok" : "NO"}]]
+    if {![lindex $r 1]} { incr failed }
+}
+puts "===== [expr {[llength $results] - $failed}]/[llength $results] =====\n"
+v10_halt
+exit [expr {$failed ? 1 : 0}]
