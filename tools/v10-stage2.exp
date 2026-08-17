@@ -615,6 +615,10 @@ puts "--- LIBC-CMP-END ---"
 note "install" \
     [v10_try "cd $OBJ/libc; if make -f $K/libc.mk \$A \$B \$C $CCM install > i.log 2>&1; then echo IN\$OK; fi" \
              "IN-ok" 1800]
+# SAY WHY, NOT JUST THAT.  `install NO' plus three `staged ... NO' stood for
+# every run of this stage and named nothing; crt0.o turned out to be only half
+# of it.  i.log is where make's own words are, and nothing was reading it.
+v10_run "cd $OBJ/libc; sed -e '/^cc /d' -e '/^as /d' i.log | sed -n '1,40p'; echo IEND" "IEND" 900
 foreach p {lib/libc.a lib/crt0.o lib/mcrt0.o} {
     note "staged $p" [v10_try "test -s $T/$p && echo ST\$OK" "ST-ok" 120]
 }
