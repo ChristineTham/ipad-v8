@@ -775,10 +775,11 @@ Sockets and vnodes do, and are refused; programs do not. Track D is the *editori
 track (what belongs in the edition); Track C is the *mechanism* (how anything gets
 built). The games are chosen here and built there.
 
-**DECISION CHANGED 2026-08-17: the language is ANSI C and the compiler is Plan 9's.**
+**DECISION CHANGED 2026-08-17: the language is ANSI C and there is ONE compiler.**
 This line used to refuse "a wholesale ANSI libc" alongside sockets and vnodes. It is
-reversed on Christine's direction, and B2's measurements are why the reversal is the
-easier reading rather than a concession:
+reversed on Christine's direction — but the *mess stays in V10*, which is a restoration
+and must stay authentic; standardising is V11's job, not V10's. B2's measurements are
+why the reversal is the easier reading rather than a concession:
 
 - V10 **was never built from scratch**. It accreted, and the tape shows it: the
   `libc/mkfile` that produced the shipped `libc.a` names `cc` for members that only
@@ -794,14 +795,41 @@ V11 therefore converts the tree to ANSI C throughout and compiles it with the Pl
 compiler, so there is **one** language and **one** compiler and the question never has
 to be asked per file again.
 
-- [ ] **D-A1** Settle the target. Plan 9's compilers are per-architecture (`8c`, `vc`,
-      `kc`, `5c`, …) and **none of them targets the VAX** — Plan 9 never had a VAX back
-      end. So either V11 retargets off the VAX (which is the [v12 wish](#ipnx-v12--a-wish-and-deliberately-not-a-track)
-      arriving early) or a VAX back end is written. Decide this before any conversion:
-      it changes what "the Plan 9 compiler" means. Note that `lcc`'s `gen2/vax-v9/rcc`
-      *is* a working ANSI VAX compiler already on the tape, which makes it the obvious
-      bridge while the target is undecided — but it is not the Plan 9 compiler and must
-      not be mistaken for it.
+- [ ] **D-A1** Settle the compiler. **Plan 9 DID target the VAX-11/750 — the same
+      machine we emulate** — and an earlier version of this item said the opposite.
+      From the Plan 9 wiki's [Other hardware](https://9p.io/wiki/plan9/Other_hardware/index.html)
+      page, verbatim:
+
+      > Vax 750 - The earliest file server port. The compiler binary was recently found
+      > but the source appears to have been lost in the mists of time.
+
+      The *released* editions dropped the target, which is why neither Ken Thompson's
+      [Plan 9 C Compilers](https://9p.io/sys/doc/compiler.html) (`v` MIPS, `k` SPARC,
+      `8` i386, `2` 68020/68040, `x` AT&T 3210, `9` i960, `z` Hobbit) nor
+      [The Various Ports](https://9p.io/sys/doc/port.html) lists it. **Two primary
+      sources agreeing on a negative did not make it true**: absence from the released
+      suite is not absence from history. Recorded because the reasoning was sound and
+      the conclusion was wrong.
+
+      What that changes, and what it does not:
+      - **Provenance, not existence, is now the constraint.** A recovered *binary* with
+        no source cannot be the standard compiler of an edition built from source —
+        that is the entire argument of stages 1–3. It would be a fine **oracle**,
+        exactly as V10's prebuilt `ccom` and `as` are.
+      - **Open, and worth answering before choosing:** does that binary survive
+        anywhere fetchable, what does it accept, and does a 1980s Plan 9 VAX compiler
+        even have a C dialect V11 would want?
+      - Until then the only ANSI VAX compiler we actually hold is `lcc`, which **is**
+        buildable from source: front end `cmd/lcc/c/` (18 sources matching `gen3`'s
+        objects), VAX back end `gen3/gen.c` + `gen2/vax/`, preprocessor `cmd/lcc/ph/`.
+      - There is still **no Plan 9 compiler in the V10 tarball** — no `1c`/`2c`/`5c`/
+        `8c`/`vc`/`kc`/`qc` by directory or grep; its Plan 9 lineage is `cmd/u9fs` (9P)
+        and `cmd/mk`.
+      - The symmetry is worth keeping in view: Plan 9's first file server ran on a
+        VAX-11/750 and ipnx's V10 runs on an emulated VAX-11/750, so the *hardware*
+        target lines up exactly. That makes this a restoration question, not only a
+        retarget question — and if the compiler binary is fetchable it may belong to
+        Track B's world sooner than to V11's.
 - [ ] **D-A2** Inventory what conversion actually costs: how many of V10's ~283 command
       units and 261 libc members are K&R, and how many already are not. `tools/`
       already has the scanner shape for this (`v10-syscalls.py`, `v10-proto.py`).

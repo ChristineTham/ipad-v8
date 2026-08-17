@@ -254,13 +254,60 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   prototypes, no `void *`, no `stdarg` — so **pcc2 can build the driver from
   source**, which is the honest fix rather than patching a binary's string
   table.
-- **V11 is ANSI C throughout, compiled by the Plan 9 compiler** (decision 2026-08-17,
-  reversing the earlier "a wholesale ANSI libc is refused" — see Track D in
-  [docs/roadmap.md](docs/roadmap.md)). The point is to end the per-file compiler
-  question above: one language, one compiler. The open item is the target, because
-  **Plan 9 never had a VAX back end**, so V11 either leaves the VAX or grows one;
-  `lcc`'s `gen2/vax-v9/rcc` is the bridge in the meantime and is not the Plan 9
-  compiler.
+- **V10 MUST STAY AUTHENTIC. This outranks convenience, tidiness and our own
+  taste** (Christine, 2026-08-17). V10 is a restoration: the artefact is worth
+  something because it is what Bell Labs left, not because it is what we would
+  have written. Three working rules follow, and they decide real questions:
+  - **The tape is the specification, including where it is untidy.** Its mixed
+    per-file cc/lcc toolchain, its two generations of stdio, its makefiles that
+    name the wrong compiler — all of that is restored, not corrected.
+  - **A deviation is allowed only when the tape cannot run as-is, and then it is
+    a NAMED patch with a stated reason** — `v10/src/` plus `v10/src/PATCHES.md`,
+    never an edit in place, so `v10/MANIFEST` keeps meaning what it says. `mv.c`
+    and `fsck.c` are the model: one line each, both recorded.
+  - **Where the tape's own artefacts can settle a question, they do.** Member
+    order comes out of `libc.a` rather than from `lorder | tsort`; and when our
+    bytes differ from the tape's, the tape's bytes are the authority — which is
+    what makes the which-compiler oracle in `tools/v10-stage2.sh` an
+    authenticity test and not a curiosity.
+
+  Tidying belongs to V11, which is a new edition and may do as it likes.
+- **THE MESS STAYS IN V10; V11 STANDARDISES THE COMPILER** (decision 2026-08-17,
+  Christine, superseding the same day's "V11 uses the Plan 9 compiler" — see Track D
+  in [docs/roadmap.md](docs/roadmap.md)). V10 is a *restoration*, and its mixed
+  per-file cc/lcc toolchain is part of what is being restored — so the build follows
+  the tape wherever it leads and does not tidy it. `v10/mk/mkdep.py`'s `LIBC_LCC` is
+  that policy made explicit: a measured list of which members need which compiler,
+  carried as data. **V11** is where there is one language and one compiler, so the
+  per-file question is ended rather than managed. Which compiler is V11's decision,
+  not V10's.
+- **PLAN 9 DID TARGET THE VAX-11/750 — and it is the same machine we emulate.** From
+  the Plan 9 wiki's [Other hardware](https://9p.io/wiki/plan9/Other_hardware/index.html)
+  page, verbatim:
+
+	Vax 750 - The earliest file server port.  The compiler binary was
+	recently found but the source appears to have been lost in the mists
+	of time.
+
+  **This corrects a claim that stood in this file and in the roadmap**: "Plan 9 never
+  had a VAX back end" is false. The *released* editions dropped it, which is why
+  neither [Plan 9 C Compilers](https://9p.io/sys/doc/compiler.html) (`v` MIPS, `k`
+  SPARC, `8` i386, `2` 68020, `x` AT&T 3210, `9` i960, `z` Hobbit) nor
+  [The Various Ports](https://9p.io/sys/doc/port.html) mentions it — absence from the
+  released suite is not absence from history, and two primary sources agreeing on a
+  negative did not make it true. Christine had the fact; the papers did not.
+  - **The constraint that survives is provenance, not existence.** A recovered
+    *binary* with no source cannot be the standard compiler of an edition this project
+    builds from source — that is the whole argument of stages 1–3. It can be an
+    excellent **oracle**, exactly as V10's own prebuilt `ccom` and `as` are.
+  - So the open questions are now concrete: does that binary survive anywhere
+    fetchable, and what does it accept? Until then, `lcc` remains the only ANSI VAX
+    compiler we actually hold, and it **is** buildable from source — front end
+    `cmd/lcc/c/` (18 sources matching `gen3`'s objects), VAX back end `gen3/gen.c` plus
+    `gen2/vax/`, preprocessor `cmd/lcc/ph/`.
+  - There is still **no Plan 9 C compiler in the V10 tarball** (no `1c`/`2c`/`5c`/`8c`/
+    `vc`/`kc`/`qc`, by directory and by grep); the Plan 9 lineage on the tape is
+    `cmd/u9fs` (9P) and `cmd/mk`.
 - Free app, self-contained, no ads/IAP — required by the 2017 non-commercial covenant;
   **"UNIX" must not appear in the app name** (Open Group trademark) — the app is
   **ipnx** ("iPad is not Unix"; the name itself carries no mark). Binding rules:
