@@ -1907,9 +1907,53 @@ ran *before* the system path, so `ccom`'s `#include "stdio.h"` resolved to
 `cmd/lcc/include/sparc_sun/stdio.h` — a **Sun** header. `sanity()` now refuses to
 print a measurement taken through a scan that read implausibly little.
 
-Next: **K10.2** — the libraries (17 `lib*` trees plus `ipc/libipc` and
-`ipc/libin`; `-lm` 41 uses, `-lipc` 35, `-ll` 28), then link and install, which
-is where the 283 commands become work done *inside* V10. Then the two workarounds a 780
+**K10.2 — THE LIBRARIES ARE BUILT: 499 of 500 members, 25 of 26 libraries
+complete** (2026-08-18, `bash tools/v10-libs.sh`, exit 0 with every assertion
+passing). Nineteen libraries: `libc`, which stage 2 built, and eighteen more
+whose 500 members are compiled with stage 1's passes, archived in **the tape's
+own member order**, `ranlib`'d and installed to `/usr/lib` under every `-l` name
+each answers to. `tools/v10-libs.py` predicts host-side which members can
+resolve every header and the run measures what the compiler accepts, exactly as
+K10.1's pair does.
+
+**The demand table is misleading and `-lm` is why.** It is the most requested
+flag in the whole command tree — 51 uses — and libm is a **dummy**, in Bell
+Labs' own words: *"libm is now a dummy for those who still want to say -lm"*,
+one object holding `int ________ = 0;`. The mathematics moved into libc, which
+stage 2 already built (`asin atan exp floor fmod gamma besjn log pow pow10 sin
+sinh sqrt` are all in `libc/mkfile`'s OBJ list). And **thirteen `-l` flags name
+libraries that exist nowhere in the tarball** — `-lbsd` 13, `-lport` 7,
+`-lether`/`-lmodel`/`-lgc`/`-ld` 4 each, plus `-lresolv`, `-ltroff`, `-layout`,
+`-lcoexpr`, `-large`, `-lsocket`, `-lpost` — the fingerprint of makefiles
+written for other machines. So **a makefile's `-l` list is no more a statement
+about V10 than its `CC` line is.**
+
+Two per-library facts were worth 149 members between them, and neither is
+guessable: **`-DKR_headers`** decides 146 (libF77's 113 and libI77's 33), because
+`libI77/Version.c` says *"23 July 1992: switch to ANSI prototypes unless
+KR_headers is #defined"* — without it pcc2 cannot parse them; and **`-I../h`**
+decides libipc's 9 and libin's, `ipc/h` being a sibling directory that is not a
+library and so was in no manifest. `libF77/mkfile` names `CC = lcc` where
+`libI77`'s names `cc`, so we compile both with `cc` and the tape's own K&R
+switch — lcc is unusable here (`bowell.c`'s `-undef` makes it emit empty objects
+and exit 0).
+
+Five faults, four of them mine and one a discovery, took the number 458 → 496 →
+499. All are recorded in
+[docs/v10-log/2026-08-18.md](docs/v10-log/2026-08-18.md); the durable ones are
+gotchas above (`ar` bundles source; a tally cannot leave a redirected loop; the
+golden has no `find`). The discovery: **`JMUX` is defined by no header on the
+tape** — four `jioctl.h` survive and all four call that request `JMPX` at
+`(JTYPE|3)`, while `lib5620/openpl.c` and `32ld.c` use `JMUX`. One alias in
+`v10/src/include/jioctl.h`, with four pieces of evidence in `PATCHES.md`,
+including that `lib5620`'s and `libblit`'s `openpl.c` are the same file differing
+in three places (`/usr/jerq/` vs `/usr/blit/`, `32ld` vs `68ld`, and that
+identifier) — the 5620-versus-Blit naming trap in a pair of *libraries*.
+
+Next: **K10.3** — link and install, which is where the 283 commands become work
+done *inside* V10. K10.1's own follow-ups are still open and cheap: run `yacc`
+for the eight units needing `y.tab.h`, and extend the variant-header decision
+past libc's three. Then the two workarounds a 780
 kernel retires: K11's full-capacity filesystem (V8's `filsys.h` caps a
 filesystem at 30,752 blocks and V8 no longer has to read the result) and K12's
 netfs (`ipnx780.m` already carries `netafs 4`/`netbfs 4` and the app's `vax780`
