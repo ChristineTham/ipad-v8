@@ -68,6 +68,13 @@ set K   /n/v10/mk
 set T1  /usr/s1           ;# stage 1: the compiler this stage is built by
 set T   /usr/s2           ;# where stage 2 installs
 set OBJ /usr/obj
+# THE HEADER DIRECTORY THIS RUN ACTUALLY USES.  libc.mk defaults INCDIR to
+# /usr/v10/include; the macro line below overrides it to /usr/include, because
+# that is where the r70 cpio put the headers on a golden.  Both spellings were
+# live in this file at once and the cp that used the wrong one failed silently
+# -- so the value is named ONCE, here, and $A quotes it rather than repeating
+# the literal.
+set INC /usr/include
 
 # The one macro that cannot go in $A/$B/$C, because its VALUE has spaces in
 # it and those variables are expanded by the shell with word splitting.
@@ -150,12 +157,23 @@ note "jioctl.h installed where jterm.c names it" \
 # "/usr/include/shares.h" and "/usr/include/sys/lnode.h" under FILES.  So this
 # needs no makefile change at all: $(INCS) already names that directory, and
 # the six sources are pristine and unaltered.
-v10_sh "cp $N/ours/include/shares.h /usr/v10/include/shares.h" 300
-v10_sh "cp $N/ours/include/sys/lnode.h /usr/v10/include/sys/lnode.h" 300
+#
+# $INC, NOT A LITERAL, and that is the bug this line already had once.  It was
+# written as /usr/v10/include -- libc.mk's own default for INCDIR -- while THIS
+# HARNESS OVERRIDES INCDIR TO /usr/include on the macro line below.  So the cp
+# answered
+#
+#	cp: /usr/v10/include/shares.h: No such file or directory
+#
+# the headers never arrived, and all six share members failed exactly as they
+# had before, with two `NO' lines the only sign that anything had been
+# attempted.  One value, named once, used everywhere it is needed.
+v10_sh "cp $N/ours/include/shares.h $INC/shares.h" 300
+v10_sh "cp $N/ours/include/sys/lnode.h $INC/sys/lnode.h" 300
 note "shares.h installed" \
-    [v10_try "test -s /usr/v10/include/shares.h && echo SH\$OK" "SH-ok" 300]
+    [v10_try "test -s $INC/shares.h && echo SH\$OK" "SH-ok" 300]
 note "sys/lnode.h installed" \
-    [v10_try "test -s /usr/v10/include/sys/lnode.h && echo LN\$OK" "LN-ok" 300]
+    [v10_try "test -s $INC/sys/lnode.h && echo LN\$OK" "LN-ok" 300]
 # PROVEN BY USE, not by existence -- a header that is present and wrong compiles
 # nothing.  putshares.c is the member whose object gave us MAXUID and
 # sizeof(Share), so if the reconstruction is right this is the one that must
@@ -163,7 +181,7 @@ note "sys/lnode.h installed" \
 # named line instead of six MISSes among many.
 v10_sh "rm -rf /tmp/sh; mkdir /tmp/sh" 120
 note "the reconstructed headers compile putshares.c" \
-    [v10_try "cd /tmp/sh; if cc -B$T1/lib/ -t02p -I/usr/v10/include -c $S/libc/gen/putshares.c; then echo PS\$OK; fi" \
+    [v10_try "cd /tmp/sh; if cc -B$T1/lib/ -t02p -I$INC -c $S/libc/gen/putshares.c; then echo PS\$OK; fi" \
              "PS-ok" 900]
 
 # ---------------------------------------------- is this a stage-1 machine? ---
@@ -268,12 +286,18 @@ note "some cpp reproduces a tape member with lcc" [expr {$cppA || $cppB}]
 #
 # Shell variables, because CANBSIZ is 256 and the tty discards a longer line
 # silently.  See the header for why AS is the tape's and LD is stage 1's.
-v10_sh "A='SRC=$S OURS=$N/ours INCDIR=/usr/include TOOLDIR=$T DESTDIR=$T'" 120
+v10_sh "A='SRC=$S OURS=$N/ours INCDIR=$INC TOOLDIR=$T DESTDIR=$T'" 120
 v10_sh "B='CCPATH=$T1/bin/cc CPP=$T1/lib/cpp CCOM=$T1/lib/ccom C2=$T1/lib/c2'" 120
 v10_sh "C='AS=/bin/as LD=$T1/bin/ld AR=/bin/ar RANLIB=/usr/bin/ranlib'" 120
 # NOT $OBJ/tape: the tape's members were extracted above for the cpp
 # trial and the comparison below still needs them.
 v10_sh "rm -rf $T $OBJ/libc; mkdir $T; mkdir $OBJ; mkdir $OBJ/libc" 300
+# TWICE, AND BY GLOB THE SECOND TIME.  `rm -rf' above reported nothing and the
+# directory was not empty -- whether because the recursive remove did not do
+# what it says or because something recreated the contents, the run that
+# followed measured objects it had not built.  A second pass by glob inside the
+# directory costs one command and does not depend on -r working.
+v10_sh "cd $OBJ/libc; rm -f *.o *.a *.lst miss d.lst b.log" 600
 
 # ------------------------------------------------------------- 261 objects ---
 #
@@ -281,6 +305,31 @@ v10_sh "rm -rf $T $OBJ/libc; mkdir $T; mkdir $OBJ; mkdir $OBJ/libc" 300
 # compile takes the whole run down to nothing -- no archive, no comparison,
 # no measurement -- after hours of work that all succeeded.  With -k the run
 # builds everything it can and the NEXT step says exactly what is missing.
+# ---------------------------------- IS THE OBJECT DIRECTORY ACTUALLY EMPTY? ---
+#
+# ASSERTED, because a run that skipped the build measured the PREVIOUS run and
+# said nothing.  On 2026-08-17 stage 2 reported 151 members byte-identical to
+# the tape out of a `make' that ran for TEN SECONDS -- 07:45:21 to 07:45:31 by
+# the guest's own date stamps, for 261 compiles on a simulated VAX-750.  Every
+# object the comparison found was already on the disk, so the whole
+# measurement was of an earlier run's work, and the only trace was two
+# timestamps ten seconds apart in a five-thousand-line log.
+#
+# `rm -rf' ran and reported nothing; that is not the same as the directory
+# being empty, and the difference is the entire finding.  So it is checked, and
+# checked HERE, between the clean and the build, where the answer can still
+# stop the run from producing a number nobody should trust.
+#
+# `ls | sed -n '$='` would count, but V10's ls prints nothing for an empty
+# directory and `test -z` on a command substitution is the shorter question.
+v10_sh "cd $OBJ/libc; L=`ls | sed -n '1,3p'`" 300
+note "the object directory starts EMPTY" \
+    [v10_try "cd $OBJ/libc; if test -z \"\$L\"; then echo EM\$OK; fi" "EM-ok" 300]
+# And say what was there, if anything -- an assertion that fails without
+# naming what it found sends the next person back to the same guess.
+v10_run "cd $OBJ/libc; echo LEFTOVER; ls | sed -n '1,20p'; echo LEFTOVEREND" \
+        "LEFTOVEREND" 600
+
 v10_sh "date" 120
 puts "\n--- LIBC-BUILD-START ---"
 v10_sh "cd $OBJ/libc; make -k -f $K/libc.mk \$A \$B \$C $CCM objs > b.log 2>&1; echo done" 14400
@@ -313,8 +362,24 @@ if {!$complete} {
     # exactly where the diagnosis should have been.  sed is prebuilt and can
     # do better than tail anyway -- print the lines that NAME the failure
     # instead of the last N lines whatever they happen to be.
-    v10_run "cd $OBJ/libc; sed -n '/error/p' b.log; echo ERREND" "ERREND" 900
-    v10_run "cd $OBJ/libc; sed -n '/rror/p;/annot/p;/ndefined/p' b.log | sed -n '1,40p'; echo E2END" "E2END" 900
+    # DELETE THE COMMANDS, KEEP WHAT IS LEFT -- the opposite of matching on
+    # `error', and the reason is that the old filter matched FILENAMES.
+    # `/error/p' over b.log returned
+    #
+    #	cc ... -c /n/v10/src/libc/sys/cerror.s
+    #	cc ... -c /n/v10/src/libc/gen/perror.c
+    #	cc ... -c /n/v10/src/libc/gen/regerror.c
+    #
+    # three echoed compile lines for cerror, perror and regerror, and not one
+    # diagnostic -- so a run whose build had genuinely failed printed a tidy
+    # three-line "error" report naming three members that were fine.  make's
+    # own summary line was in the same output and easy to miss.
+    #
+    # A compile line always begins with the compiler's name, and nothing else
+    # in b.log does, so deleting those leaves exactly the diagnostics.
+    v10_run "cd $OBJ/libc; sed -e '/^cc /d' -e '/^lcc /d' -e '/^as /d' b.log | sed -n '1,60p'; echo ERREND" "ERREND" 900
+    # And make's own last word, which says whether it gave up.
+    v10_run "cd $OBJ/libc; sed -n '/not remade/p;/Don.t know/p;/Must be a separator/p' b.log; echo E2END" "E2END" 900
 }
 
 # ------------------------------------------------------------- the archive ---
