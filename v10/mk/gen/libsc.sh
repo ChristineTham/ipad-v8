@@ -113,9 +113,18 @@ do
 		then
 			FROM=$LD
 		else
+			# BOTH VERDICTS, or the tallies do not add up.  This
+			# branch used to print only `$Z' and `continue', so a
+			# library that failed here was counted in neither
+			# TALLYB nor TALLYF -- and v10-libs.sh compares those
+			# against the manifest.  A hole in the accounting reads
+			# as a transcript that lost data, which is the one thing
+			# the cross-check exists to distinguish.
 			echo "$Z $name"
 			echo "$Z $name" >> $OBJ/res.log
-			echo "could not extract $bndl"
+			echo "$Q $name"
+			echo "$Q $name" >> $OBJ/res.log
+			echo "could not extract $bndl -- ar x failed"
 			continue
 		fi
 	fi
@@ -147,7 +156,7 @@ do
 		# assembler.
 		case "$src" in
 		*.s)
-			( $AS -o $obj $S 2>&1 ; echo "CCST=$?" ) | sed -e 40q > m1.log
+			( $AS $S -o $obj 2>&1 ; echo "CCST=$?" ) | sed -e 40q > m1.log
 			;;
 		*)
 			# Output bounded by a PIPE, which is a bug fix and not
@@ -183,7 +192,14 @@ do
 	built=n
 	case "$kind" in
 	single)
-		one=`sed -e 1q -e 's/ .*//' objs.lst`
+		# ORDER MATTERS AND THE OBVIOUS ORDER IS WRONG.  sed runs its
+		# commands in sequence per line and `q' AUTO-PRINTS before
+		# quitting, so `-e 1q -e "s/ .*//"' emits the whole line
+		# `dbm.o dbm.c' and the substitution never runs -- then
+		# `test -s "dbm.o dbm.c"' fails and libdbm and libsdb both
+		# report as unbuildable for no reason at all.  Substitute
+		# first, quit second.
+		one=`sed -e 's/ .*//' -e 1q objs.lst`
 		if test -s "$one"
 		then
 			cp $one $arch && built=y

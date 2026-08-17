@@ -572,6 +572,22 @@ def survey(rel, d):
         if got and kind == "sources":
             u["members"] = [c[:-2] + ".o" for c in got if c.endswith(".c")]
             u["from"] = "%s (ar x, per the recipe)" % bundle
+            # TWO LIBRARIES HAVE BOTH A BUNDLE AND AN ORACLE -- libpen and
+            # libtr -- so they have two candidate member ORDERS, and V10's
+            # authenticity rule settles which wins: member order comes out of
+            # the tape's own archive, the way stage 2 reads libc's rather than
+            # recomputing it with `lorder | tsort'.  Measured 2026-08-18, the
+            # two agree exactly for both (30 and 21 members, same sequence), so
+            # this changes nothing today; it is here because a re-import that
+            # made them disagree would otherwise silently take the bundle's,
+            # and V8-lineage ld makes ONE sequential pass when __.SYMDEF is
+            # absent or stale, so order is not merely cosmetic.
+            if oracle:
+                if list(oracle[1]) != u["members"]:
+                    u["members"] = list(oracle[1])
+                    u["from"] = ("%s for source, %s FOR ORDER (they disagree; "
+                                 "the tape's archive is the authority)"
+                                 % (bundle, oracle[0]))
         else:
             u["members"], u["from"] = [], "bundle %s unreadable" % bundle
     elif oracle:
@@ -1098,9 +1114,18 @@ do
 		then
 			FROM=$LD
 		else
+			# BOTH VERDICTS, or the tallies do not add up.  This
+			# branch used to print only `$Z' and `continue', so a
+			# library that failed here was counted in neither
+			# TALLYB nor TALLYF -- and v10-libs.sh compares those
+			# against the manifest.  A hole in the accounting reads
+			# as a transcript that lost data, which is the one thing
+			# the cross-check exists to distinguish.
 			echo "$Z $name"
 			echo "$Z $name" >> $OBJ/res.log
-			echo "could not extract $bndl"
+			echo "$Q $name"
+			echo "$Q $name" >> $OBJ/res.log
+			echo "could not extract $bndl -- ar x failed"
 			continue
 		fi
 	fi
@@ -1132,7 +1157,7 @@ do
 		# assembler.
 		case "$src" in
 		*.s)
-			( $AS -o $obj $S 2>&1 ; echo "CCST=$?" ) | sed -e 40q > m1.log
+			( $AS $S -o $obj 2>&1 ; echo "CCST=$?" ) | sed -e 40q > m1.log
 			;;
 		*)
 			# Output bounded by a PIPE, which is a bug fix and not
@@ -1168,7 +1193,14 @@ do
 	built=n
 	case "$kind" in
 	single)
-		one=`sed -e 1q -e 's/ .*//' objs.lst`
+		# ORDER MATTERS AND THE OBVIOUS ORDER IS WRONG.  sed runs its
+		# commands in sequence per line and `q' AUTO-PRINTS before
+		# quitting, so `-e 1q -e "s/ .*//"' emits the whole line
+		# `dbm.o dbm.c' and the substitution never runs -- then
+		# `test -s "dbm.o dbm.c"' fails and libdbm and libsdb both
+		# report as unbuildable for no reason at all.  Substitute
+		# first, quit second.
+		one=`sed -e 's/ .*//' -e 1q objs.lst`
 		if test -s "$one"
 		then
 			cp $one $arch && built=y
