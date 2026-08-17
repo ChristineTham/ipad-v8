@@ -1018,6 +1018,21 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   because the new script wanted a file that run's stage 1 had not been told to install.
   During a run, `docs/`, `CLAUDE.md` and brand-new files are safe; `v8/**` and the
   `tools/*.sh|*.exp` that bash is still reading are not.
+- **V10 IS THE OPPOSITE, AND THAT IS THE TRAP: its source disk is a BUILD
+  ARTEFACT, so regenerating a makefile changes nothing the guest sees.** There is
+  no netfs on V10, so `tools/v10-srcdisk.sh` *copies* `v10/mk/gen/` and
+  `v10/src/` onto an RA81 and every stage reads them from there as `/n/v10/mk`
+  and `/n/v10/ours`. Run `v10/mk/mkdep.py`, commit, and start a stage: it boots,
+  compiles, asserts and reports — **against the previous generation of the build
+  description, with no symptom.** `libc.ord` went from 261 names to 260 and three
+  assertions kept failing on a build that was already correct. Host and guest
+  then disagreed about the member list, so the summary mixed a 260-member total
+  with a difference count read off a 261-member walk and printed a
+  byte-identical figure that was true of neither. Same shape as the app's *"it is
+  in the golden, it will arrive on Reset" is not shipping it*, and the same
+  answer: `tools/srcid.sh` stamps `<image>.id` at build time and both stages
+  refuse a disagreeing one. `mkdep.py --check` is **not** this check — it proves
+  the repo's generated files are current and says nothing about the disk's.
 - **A generated list read by 1985 shell must hold exactly one kind of thing.**
   `v8/mk/gen/destdirs.txt` briefly held both the directories stage 8 copies and
   the 458 exact installed paths `mkcarry.py` needs, told apart by a leading tab

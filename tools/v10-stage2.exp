@@ -516,7 +516,14 @@ note "libc.a exists" [v10_try "cd $OBJ/libc; test -s libc.a && echo EX\$OK" "EX-
 # still asserts "our archive holds exactly the tape's members in exactly the
 # tape's order"; it just states the one deliberate exclusion once, in the
 # generator, instead of failing here forever because of it.
-v10_sh "cd $OBJ/libc; ar t libc.a > ours.lst; ar t $S/libc/libc.a > tape.lst" 900
+#
+# `__.SYMDEF' IS DROPPED, because ranlib prepends it and `ar t' lists it.  The
+# old comparison was ours.lst against tape.lst and both archives carry one, so
+# it cancelled out and nobody had to know.  Comparing against the generated order
+# file is stricter -- which is the point -- and the first thing it found was
+#	ours.lst /n/v10/mk/libc.ord differ: char 2
+# `__.SYMDEF' against `_assert.o', identical in their first character.
+v10_sh "cd $OBJ/libc; ar t libc.a | sed -e '/__.SYMDEF/d' > ours.lst; ar t $S/libc/libc.a > tape.lst" 900
 note "member list+order = tape less [llength [v10_order libc.drop]] dropped" \
     [v10_try "cd $OBJ/libc; if cmp ours.lst $K/libc.ord; then echo LS\$OK; fi" "LS-ok" 600]
 
