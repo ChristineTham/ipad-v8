@@ -405,7 +405,14 @@ v10_sh "date" 120
 # full, here, while the machine still has it.
 v10_sh "cd $OBJ/libc; for f in `cat $K/libc.ord`; do test -f \$f || echo MISS \$f; done > miss" 1800
 set complete [v10_try "cd $OBJ/libc; test -s miss || echo ALL\$OK" "ALL-ok" 300]
-note "all 261 members compiled" $complete
+# THE COUNT IS READ, NOT TYPED, and it is 260 rather than 261 on purpose.
+# `all 261 members compiled' could never pass -- setupshares.o has no header on
+# any machine we have -- and a check that can never pass is not a check, it is
+# camouflage: it sat at NO permanently, stopped being read, and a SECOND missing
+# member (atof.o) hid behind it for a week while this stage reported the ceiling
+# as reached.  libc.ord now carries the 260 we build and LIBC_DROP names the
+# exclusion, so this asks a question that has a yes.
+note "all [llength [v10_order libc.ord]] members compiled" $complete
 if {!$complete} {
     # v10_run, NOT v10_sh, AND THE LIST IS WHY.  v10_sh sends the command and
     # its `echo $M+' marker together, so the marker's own echo interleaves
@@ -501,9 +508,17 @@ note "libc.a exists" [v10_try "cd $OBJ/libc; test -s libc.a && echo EX\$OK" "EX-
 # INMAX = 5000 and our OBJS line is 2299, so there is headroom, but a silent
 # truncation would produce a short archive that ranlib blesses and everything
 # downstream accepts.
+#
+# COMPARED AGAINST libc.ord, NOT AGAINST `ar t' ON THE TAPE, and the tape is
+# still the authority.  libc.ord IS the tape's member order -- mkdep.py reads it
+# out of Bell Labs' own archive and refuses to run unless that member set and
+# the mkfile's object list agree -- less the one name in LIBC_DROP.  So this
+# still asserts "our archive holds exactly the tape's members in exactly the
+# tape's order"; it just states the one deliberate exclusion once, in the
+# generator, instead of failing here forever because of it.
 v10_sh "cd $OBJ/libc; ar t libc.a > ours.lst; ar t $S/libc/libc.a > tape.lst" 900
-note "member list and order match the tape" \
-    [v10_try "cd $OBJ/libc; if cmp ours.lst tape.lst; then echo LS\$OK; fi" "LS-ok" 600]
+note "member list+order = tape less [llength [v10_order libc.drop]] dropped" \
+    [v10_try "cd $OBJ/libc; if cmp ours.lst $K/libc.ord; then echo LS\$OK; fi" "LS-ok" 600]
 
 # TWO: the members themselves, byte for byte.  A measurement, not an
 # assertion -- see the header.  The guest prints one DIFF line per member

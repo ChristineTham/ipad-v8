@@ -190,7 +190,6 @@ setpgrp.o
 setruid.o
 setuid.o
 setupgroups.o
-setupshares.o
 sgn.o
 signal.o
 sin.o

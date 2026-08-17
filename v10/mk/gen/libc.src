@@ -190,7 +190,6 @@ setpgrp.o sys/setpgrp.s
 setruid.o sys/setruid.s
 setuid.o sys/setuid.s
 setupgroups.o gen/setupgroups.c
-setupshares.o gen/setupshares.c
 sgn.o gen/sgn.c
 signal.o sys/signal.s
 sin.o math/sin.c

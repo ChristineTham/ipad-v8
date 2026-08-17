@@ -562,6 +562,39 @@ LIBC_LCC = []
 #	                              no evidence supports building, and the
 #	                              ceiling is therefore 260.
 
+# MEMBERS WE DELIBERATELY DO NOT BUILD -- a named deviation, per CLAUDE.md's
+# authenticity rule: the tape cannot run as-is here, so the departure is
+# recorded rather than improvised.
+#
+# WHY THIS IS A LIST AND NOT THREE FAILING ASSERTIONS.  setupshares.o could
+# never be built by anything, so three of stage 2's checks could never pass:
+#
+#	all 261 members compiled      NO      <- one member has no header
+#	member list and order ...     NO      <- so the archive has 260
+#	install                       NO      <- so `make install' retries it
+#
+# AND A CHECK THAT CAN NEVER PASS IS NOT A CHECK, IT IS CAMOUFLAGE.  `all 261
+# members compiled: NO' was permanently NO, so it stopped being read -- which is
+# precisely how a SECOND missing member (atof.o) sat behind it for a week while
+# stage 2 reported the ceiling as reached.  Naming the exclusion turns all three
+# back into questions that have an answer.
+#
+# The grounds, and they are the tape's own rather than our convenience:
+#   * <sys/share.h>'s `struct sh_consts' is printed in no manual page and
+#     referenced in neither kernel tree, so the header is not reconstructible
+#     the way <shares.h> and <sys/lnode.h> were -- and L_GETCOSTS has the KERNEL
+#     write through that pointer, so a guessed size corrupts the caller's stack.
+#   * nothing in the system we build calls it.  The Share scheduler came out of
+#     cmd/login.c on Christine's decision, 2026-08-17: "if Bell labs wants it
+#     out, let's take it out."  cron.c, at/atrun.c and asd++/dkinstall.c still
+#     reference it and are K10's business.
+#
+# So 260 is the whole library rather than a shortfall.  libc.ord and libc.src
+# carry the 260; the tape's full 261 is still asserted against the archive by
+# libc_from_tape() below, so the linkage to Bell Labs' own member list is not
+# weakened by dropping one from what we compile.
+LIBC_DROP = ["setupshares.o"]
+
 
 def libc_from_tape():
     """The build plan for libc, read off the tape rather than typed.
@@ -628,8 +661,27 @@ def libc_from_tape():
     return order, objmap, sorted(lcc)
 
 
+def libc_built():
+    """The members we compile: the tape's order, less LIBC_DROP.
+
+    ONE function, so `libc.ord', `libc.src' and OBJS cannot disagree.  A
+    component list that appears twice will disagree eventually and the
+    disagreement is silent -- that is already written up in v10drive.exp, where
+    an out-of-date Tcl copy of BUILDTOOLS made stage 1 skip `ed' and report
+    42/44 with no line naming the cause.
+    """
+    order, objmap, _lcc = libc_from_tape()
+    stray = [o for o in LIBC_DROP if o not in order]
+    if stray:
+        sys.exit("mkdep: LIBC_DROP names %s, which is not a libc member -- a "
+                 "typo here silently drops nothing and builds everything"
+                 % " ".join(stray))
+    keep = [o for o in order if o not in LIBC_DROP]
+    return keep, objmap
+
+
 def emit_libc():
-    order, objmap, _mkfile_lcc = libc_from_tape()
+    order, objmap = libc_built()
     lcc = LIBC_LCC
     lccset = set(lcc) - set(LIBC_OURS)
     oursset = set(LIBC_OURS)
@@ -718,6 +770,15 @@ LCCARGS = -N -I$(SRC)/libc/stdio -I$(INCDIR)/lcc -I$(INCDIR)/libc -I$(INCDIR) -D
     out.append("# Measured by tools/v10-stage2.sh, NOT read from the mkfile -- which\n"
                "# names only ten and is wrong about fifteen.  See mkdep.py.\n")
     out.append("#   " + " ".join(sorted(lcc)) + "\n\n")
+    if LIBC_DROP:
+        out.append("# The tape's libc.a has %d members; this builds %d.  NOT built, "
+                   "by name:\n#   %s\n"
+                   % (len(order) + len(LIBC_DROP), len(order),
+                      " ".join(LIBC_DROP)))
+        out.append("# A named exclusion, not an omission -- see LIBC_DROP in "
+                   "v10/mk/mkdep.py for the\n"
+                   "# grounds.  <sys/share.h> is reconstructible from nothing, and "
+                   "nothing we build\n# calls it.\n\n")
     out.append("OBJS = " + " ".join(order) + "\n")
     out.append("""
 all: libc.a crt0.o mcrt0.o
@@ -948,7 +1009,14 @@ def main():
     # it from `sh'.  A driver has to answer "which of the 261 are missing?"
     # and V10 has no wc and no grep -- what it does have is a for loop, and
     # this is the file it reads.
-    put("libc.ord", "".join(o + "\n" for o in libc_from_tape()[0]))
+    # THE 260 WE BUILD, not the tape's 261: setupshares.o is a named exclusion
+    # (LIBC_DROP), so a driver walking this file asks "did everything I build
+    # compile?" -- a question with a yes -- instead of "did all 261 compile?",
+    # which could only ever answer no.  See LIBC_DROP for why that mattered.
+    put("libc.ord", "".join(o + "\n" for o in libc_built()[0]))
+    # And the exclusions themselves, as data, so the harness and the wrapper
+    # both read them rather than restating "setupshares" in Tcl and in bash.
+    put("libc.drop", "".join(o + "\n" for o in LIBC_DROP))
     # object -> source, as DATA, so the guest can compile one member by name
     # without a makefile.  `sed -n "s/^$o //p" libc.src' is the whole lookup.
     #
@@ -957,7 +1025,7 @@ def main():
     # Recompile it with lcc, strip it the way the tape does, and compare
     # again -- a match names the compiler, and a set of such matches turns
     # "V10 was never built from scratch" from a warning into a map.
-    _order, _objmap, _ = libc_from_tape()
+    _order, _objmap = libc_built()
     put("libc.src", "".join("%s %s\n" % (o, _objmap[o]) for o in _order))
 
     put("bootpath.order",
@@ -1039,8 +1107,12 @@ def main():
              + len(BUILDTOOLS) + len(TOOLCHAIN_SIMPLE) + len(TOOLCHAIN) + 1,
              mkgen.rel(GEN, os.getcwd())))
     order, _, lcc = libc_from_tape()
-    print("  libc       %d members, order read from the tape's libc.a; "
-          "%d built with lcc there" % (len(order), len(lcc)))
+    built, _ = libc_built()
+    print("  libc       %d members on the tape, %d built here (order read from "
+          "the tape's libc.a); %d built with lcc there"
+          % (len(order), len(built), len(lcc)))
+    if LIBC_DROP:
+        print("  libc       NOT built, by name: %s" % " ".join(LIBC_DROP))
     if skipped:
         for name, why in skipped:
             print("  skipped %-10s %s" % (name, why))

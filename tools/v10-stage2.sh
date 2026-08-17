@@ -128,14 +128,25 @@ tcm=$(tr -d '\r' < "$LOG" | grep -oE 'TAPECCMATCH [A-Za-z_0-9]+\.o' | sort -u | 
 #
 # This is the same guard as the empty-member-list one below it, generalised: a
 # count is only trustworthy when something else in the run agrees with it.
-if grep -q 'all 261 members compiled  *NO' "$LOG" 2>/dev/null && (( miss == 0 )); then
+# `[0-9]*' and not `261': the count in that assertion is generated from
+# libc.ord now, so hard-coding it here would silently disable this guard the
+# moment LIBC_DROP changes -- a guard that stops matching is worse than no guard,
+# because it still looks present.
+if grep -qE 'all [0-9]+ members compiled  *NO' "$LOG" 2>/dev/null && (( miss == 0 )); then
     echo "== NO MEASUREMENT: the guest says a member is missing and the host found none =="
-    echo "   The guest asserted 'all 261 members compiled: NO' while this script"
+    echo "   The guest asserted 'all N members compiled: NO' while this script"
     echo "   counted 0 MISS lines, so the parse below is wrong and every number"
     echo "   derived from it would be too.  Look for a spliced line in $LOG:"
     tr -d '\r' < "$LOG" | grep -n 'MISS' | head -8
     echo "== v10-stage2 exit $rc =="
     exit 1
+fi
+drop=$(grep -c . "$ROOT/v10/mk/gen/libc.drop" 2>/dev/null || true)
+: "${drop:=0}"
+echo "   members on the tape              $(( total + drop ))"
+if (( drop )); then
+    echo "   NOT built, by name               $(tr '\n' ' ' < "$ROOT/v10/mk/gen/libc.drop")"
+    echo "                                    (a named exclusion -- LIBC_DROP in mkdep.py)"
 fi
 echo "   members expected                 $total"
 echo "   byte-identical, our cc           $(( total - diff ))"
