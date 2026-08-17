@@ -630,6 +630,42 @@ _ANSI93 = [
       ("strtod(CONST char *s00, char **se)\n",
        "strtod(s00, se)\t\t/* ipnx: K&R, see PATCHES.md */\n"
        "\tCONST char *s00;\n\tchar **se;\n", 1)]),
+    # vfprintf.c: printf's ENGINE, 556 lines -- and far more tractable than its
+    # reputation, because it is REGULAR.  Fourteen conversion routines share one
+    # signature to the character, so two edits with a count of 14 do most of the
+    # work and the occurrence check proves the count rather than trusting it.
+    # Only ocvt_fixed and ocvt_flt differ, and the body is untouched throughout.
+    ("libc/stdio/vfprintf.c",
+     "917adc4a529c72891f59c86d9f47e4db786d6b06b0be8094b799968f78f59d5f",
+     [("(FILE *, va_list *, int, int, int);\n", "();\n", 14),
+      ("(FILE *f, va_list *args, int flags, int width, int precision)\n",
+       "(f, args, flags, width, precision)\t/* ipnx: K&R */\n"
+       "\tFILE *f;\n\tva_list *args;\n\tint flags;\n\tint width;\n"
+       "\tint precision;\n", 14),
+      ("vfprintf(FILE *f, const char *s, va_list args)\n",
+       "vfprintf(f, s, args)\t\t/* ipnx: K&R, see PATCHES.md */\n"
+       "\tFILE *f;\n\tchar *s;\n\tva_list args;\n", 1),
+      ("ocvt_fixed(FILE *f, va_list *args, int flags, int width, int precision,\n"
+       "	int radix, int sgned, char alphabet[], char *prefix)\n",
+       "ocvt_fixed(f, args, flags, width, precision, radix, sgned, alphabet, prefix)\n"
+       "\tFILE *f;\n\tva_list *args;\n\tint flags;\n\tint width;\n"
+       "\tint precision;\n\tint radix;\n\tint sgned;\n\tchar alphabet[];\n"
+       "\tchar *prefix;\n", 1),
+      ("static int ocvt_flt(FILE *, va_list *, int, int, int, char);\n",
+       "static int ocvt_flt();\n", 1),
+      # THE DISPATCH TABLE, which is the one place the parameter types are part
+      # of a TYPE rather than a declaration: a 256-entry array of function
+      # pointers indexed by conversion character.  pcc2 reads the prototype as a
+      # second declaration of the array's element --
+      #	  "112:syntax error / saw STRUCT" then "121:redeclaration of ocvt_E"
+      # -- so the pointer loses its parameter list like every other declaration
+      # here.  The 256 entries below it are untouched.
+      ("static int(*ocvt[])(FILE *, va_list *, int, int, int) = {\n",
+       "static int (*ocvt[])() = {\t/* ipnx: K&R, see PATCHES.md */\n", 1),
+      ("ocvt_flt(FILE *f, va_list *args, int flags, int width, int precision, char afmt)\n",
+       "ocvt_flt(f, args, flags, width, precision, afmt)\n"
+       "\tFILE *f;\n\tva_list *args;\n\tint flags;\n\tint width;\n"
+       "\tint precision;\n\tchar afmt;\n", 1)]),
     ("libc/gen/memmove.c",
      "8de6bd16b4d961d41eb7330816e04068b4ba391cedd55fdf95b05ab81a2280db",
      [("#include <stddef.h>\n\nextern void *memcpy(void*, void*, size_t);\n\n"

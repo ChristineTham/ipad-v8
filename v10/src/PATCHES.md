@@ -1244,6 +1244,280 @@ the spelling moves back eight years.
  	int bb2, bb5, bbe, bd2, bd5, bbbits, bs2, c, dsign,
 ```
 
+## vfprintf.c: a 1993 ANSI member, converted to K&R (B2.2d)
+
+`libc/stdio/vfprintf.c`, sha256 `917adc4a529c7289`
+
+One of the eleven members that only `lcc` could build, and `lcc` cannot be
+trusted to: the prebuilt driver hits the `bowell.c` defect
+(`0: unknown flag -undef`) and emits **empty objects while exiting 0**, so
+routing a member to it buys a silent hole in `libc.a` rather than a member.
+
+These carry `/* Copyright AT&T Bell Laboratories, 1993 */` and are addressed to
+a header set that is not installed: r70's `/usr/include` has no `stddef.h`, no
+`stdlib.h`, and defines `size_t` nowhere. That is the same two-generations split
+as the stdio family, one layer down -- not a prototype to strip but a different
+C to translate out of.
+
+`void *` becomes `char *` and `size_t` becomes `unsigned int`. Both pairs are
+the same width on a VAX, `char *` is K&R's generic pointer, and it is how V8's
+own libc declares these functions -- so the generated code is unchanged and only
+the spelling moves back eight years.
+```diff
+--- tarball/libc/stdio/vfprintf.c
++++ ours/libc/stdio/vfprintf.c
+@@ -95,20 +95,20 @@
+ };
+ 
+-static int ocvt_E(FILE *, va_list *, int, int, int);
+-static int ocvt_G(FILE *, va_list *, int, int, int);
+-static int ocvt_X(FILE *, va_list *, int, int, int);
+-static int ocvt_c(FILE *, va_list *, int, int, int);
+-static int ocvt_d(FILE *, va_list *, int, int, int);
+-static int ocvt_e(FILE *, va_list *, int, int, int);
+-static int ocvt_f(FILE *, va_list *, int, int, int);
+-static int ocvt_g(FILE *, va_list *, int, int, int);
+-static int ocvt_n(FILE *, va_list *, int, int, int);
+-static int ocvt_o(FILE *, va_list *, int, int, int);
+-static int ocvt_p(FILE *, va_list *, int, int, int);
+-static int ocvt_s(FILE *, va_list *, int, int, int);
+-static int ocvt_u(FILE *, va_list *, int, int, int);
+-static int ocvt_x(FILE *, va_list *, int, int, int);
+-
+-static int(*ocvt[])(FILE *, va_list *, int, int, int) = {
++static int ocvt_E();
++static int ocvt_G();
++static int ocvt_X();
++static int ocvt_c();
++static int ocvt_d();
++static int ocvt_e();
++static int ocvt_f();
++static int ocvt_g();
++static int ocvt_n();
++static int ocvt_o();
++static int ocvt_p();
++static int ocvt_s();
++static int ocvt_u();
++static int ocvt_x();
++
++static int (*ocvt[])() = {	/* ipnx: K&R, see PATCHES.md */
+ 0,	0,	0,	0,	0,	0,	0,	0,	/* ^@ ^A ^B ^C ^D ^E ^F ^G */
+ 0,	0,	0,	0,	0,	0,	0,	0,	/* ^H ^I ^J ^K ^L ^M ^N ^O */
+@@ -149,5 +149,8 @@
+ 
+ int
+-vfprintf(FILE *f, const char *s, va_list args)
++vfprintf(f, s, args)		/* ipnx: K&R, see PATCHES.md */
++	FILE *f;
++	char *s;
++	va_list args;
+ {
+ 	int flags, width, precision;
+@@ -200,5 +203,10 @@
+ 
+ static int
+-ocvt_c(FILE *f, va_list *args, int flags, int width, int precision)
++ocvt_c(f, args, flags, width, precision)	/* ipnx: K&R */
++	FILE *f;
++	va_list *args;
++	int flags;
++	int width;
++	int precision;
+ {
+ #pragma ref precision
+@@ -212,5 +220,10 @@
+ 
+ static int
+-ocvt_s(FILE *f, va_list *args, int flags, int width, int precision)
++ocvt_s(f, args, flags, width, precision)	/* ipnx: K&R */
++	FILE *f;
++	va_list *args;
++	int flags;
++	int width;
++	int precision;
+ {
+ 	int i, n = 0;
+@@ -249,5 +262,10 @@
+ 
+ static int
+-ocvt_n(FILE *f, va_list *args, int flags, int width, int precision)
++ocvt_n(f, args, flags, width, precision)	/* ipnx: K&R */
++	FILE *f;
++	va_list *args;
++	int flags;
++	int width;
++	int precision;
+ {
+ #pragma ref f
+@@ -274,6 +292,14 @@
+  */
+ static int
+-ocvt_fixed(FILE *f, va_list *args, int flags, int width, int precision,
+-	int radix, int sgned, char alphabet[], char *prefix)
++ocvt_fixed(f, args, flags, width, precision, radix, sgned, alphabet, prefix)
++	FILE *f;
++	va_list *args;
++	int flags;
++	int width;
++	int precision;
++	int radix;
++	int sgned;
++	char alphabet[];
++	char *prefix;
+ {
+ 	char digits[128];	/* no reasonable machine will ever overflow this */
+@@ -369,5 +395,10 @@
+ 
+ static int
+-ocvt_X(FILE *f, va_list *args, int flags, int width, int precision)
++ocvt_X(f, args, flags, width, precision)	/* ipnx: K&R */
++	FILE *f;
++	va_list *args;
++	int flags;
++	int width;
++	int precision;
+ {
+ 	return ocvt_fixed(f, args, flags, width, precision, 16, 0, "0123456789ABCDEF", "0X");
+@@ -375,5 +406,10 @@
+ 
+ static int
+-ocvt_d(FILE *f, va_list *args, int flags, int width, int precision)
++ocvt_d(f, args, flags, width, precision)	/* ipnx: K&R */
++	FILE *f;
++	va_list *args;
++	int flags;
++	int width;
++	int precision;
+ {
+ 	return ocvt_fixed(f, args, flags, width, precision, 10, 1, "0123456789", "");
+@@ -381,5 +417,10 @@
+ 
+ static int
+-ocvt_o(FILE *f, va_list *args, int flags, int width, int precision)
++ocvt_o(f, args, flags, width, precision)	/* ipnx: K&R */
++	FILE *f;
++	va_list *args;
++	int flags;
++	int width;
++	int precision;
+ {
+ 	return ocvt_fixed(f, args, flags, width, precision, 8, 0, "01234567", "0");
+@@ -387,5 +428,10 @@
+ 
+ static int
+-ocvt_p(FILE *f, va_list *args, int flags, int width, int precision)
++ocvt_p(f, args, flags, width, precision)	/* ipnx: K&R */
++	FILE *f;
++	va_list *args;
++	int flags;
++	int width;
++	int precision;
+ {
+ 	return ocvt_fixed(f, args, flags|PTR|ALT, width, precision, 16, 0,
+@@ -394,5 +440,10 @@
+ 
+ static int
+-ocvt_u(FILE *f, va_list *args, int flags, int width, int precision)
++ocvt_u(f, args, flags, width, precision)	/* ipnx: K&R */
++	FILE *f;
++	va_list *args;
++	int flags;
++	int width;
++	int precision;
+ {
+ 	return ocvt_fixed(f, args, flags, width, precision, 10, 0, "0123456789", "");
+@@ -400,13 +451,23 @@
+ 
+ static int
+-ocvt_x(FILE *f, va_list *args, int flags, int width, int precision)
++ocvt_x(f, args, flags, width, precision)	/* ipnx: K&R */
++	FILE *f;
++	va_list *args;
++	int flags;
++	int width;
++	int precision;
+ {
+ 	return ocvt_fixed(f, args, flags, width, precision, 16, 0, "0123456789abcdef", "0x");
+ }
+ 
+-static int ocvt_flt(FILE *, va_list *, int, int, int, char);
+-
+-static int
+-ocvt_E(FILE *f, va_list *args, int flags, int width, int precision)
++static int ocvt_flt();
++
++static int
++ocvt_E(f, args, flags, width, precision)	/* ipnx: K&R */
++	FILE *f;
++	va_list *args;
++	int flags;
++	int width;
++	int precision;
+ {
+ 	return ocvt_flt(f, args, flags, width, precision, 'E');
+@@ -414,5 +475,10 @@
+ 
+ static int
+-ocvt_G(FILE *f, va_list *args, int flags, int width, int precision)
++ocvt_G(f, args, flags, width, precision)	/* ipnx: K&R */
++	FILE *f;
++	va_list *args;
++	int flags;
++	int width;
++	int precision;
+ {
+ 	return ocvt_flt(f, args, flags, width, precision, 'G');
+@@ -420,5 +486,10 @@
+ 
+ static int
+-ocvt_e(FILE *f, va_list *args, int flags, int width, int precision)
++ocvt_e(f, args, flags, width, precision)	/* ipnx: K&R */
++	FILE *f;
++	va_list *args;
++	int flags;
++	int width;
++	int precision;
+ {
+ 	return ocvt_flt(f, args, flags, width, precision, 'e');
+@@ -426,5 +497,10 @@
+ 
+ static int
+-ocvt_f(FILE *f, va_list *args, int flags, int width, int precision)
++ocvt_f(f, args, flags, width, precision)	/* ipnx: K&R */
++	FILE *f;
++	va_list *args;
++	int flags;
++	int width;
++	int precision;
+ {
+ 	return ocvt_flt(f, args, flags, width, precision, 'f');
+@@ -432,5 +508,10 @@
+ 
+ static int
+-ocvt_g(FILE *f, va_list *args, int flags, int width, int precision)
++ocvt_g(f, args, flags, width, precision)	/* ipnx: K&R */
++	FILE *f;
++	va_list *args;
++	int flags;
++	int width;
++	int precision;
+ {
+ 	return ocvt_flt(f, args, flags, width, precision, 'g');
+@@ -438,5 +519,11 @@
+ 
+ static int
+-ocvt_flt(FILE *f, va_list *args, int flags, int width, int precision, char afmt)
++ocvt_flt(f, args, flags, width, precision, afmt)
++	FILE *f;
++	va_list *args;
++	int flags;
++	int width;
++	int precision;
++	char afmt;
+ {
+ 	extern char *_dtoa(double, int, int, int*, int*, char **);
+```
+
 ## memmove.c: a 1993 ANSI member, converted to K&R (B2.2d)
 
 `libc/gen/memmove.c`, sha256 `8de6bd16b4d961d4`

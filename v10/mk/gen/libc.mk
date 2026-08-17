@@ -910,8 +910,8 @@ strtod.o: $(OURS)/libc/stdio/strtod.c $(INCDIR)/errno.h $(INCDIR)/math.h $(INCDI
 fscanf.o: $(OURS)/libc/stdio/fscanf.c $(INCDIR)/lcc/stdarg.h $(TOOLS)
 	$(COMPILE) -I$(SRC)/libc/stdio $(OURS)/libc/stdio/fscanf.c
 
-vfprintf.o: $(SRC)/libc/stdio/vfprintf.c $(INCDIR)/fcntl.h $(INCDIR)/math.h $(INCDIR)/stdio.h $(INCDIR)/string.h $(INCDIR)/sys/types.h $(INCDIR)/tmpnam.h $(SRC)/libc/stdio/iolib.h $(TOOLS)
-	$(COMPILE) $(SRC)/libc/stdio/vfprintf.c
+vfprintf.o: $(OURS)/libc/stdio/vfprintf.c $(INCDIR)/math.h $(INCDIR)/string.h $(TOOLS)
+	$(COMPILE) -I$(SRC)/libc/stdio $(OURS)/libc/stdio/vfprintf.c
 
 vfscanf.o: $(SRC)/libc/stdio/vfscanf.c $(INCDIR)/ctype.h $(INCDIR)/fcntl.h $(INCDIR)/math.h $(INCDIR)/stdio.h $(INCDIR)/sys/types.h $(INCDIR)/tmpnam.h $(SRC)/libc/stdio/iolib.h $(TOOLS)
 	$(COMPILE) $(SRC)/libc/stdio/vfscanf.c
