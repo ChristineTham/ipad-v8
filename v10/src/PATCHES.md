@@ -11,6 +11,19 @@ being silently re-patched.
 
 **Reconstructed: upstream has no such file.** `include/sys/lnode.h`
 
+**WHAT "SHARES" MEANS HERE, because the name misleads.** Not network shares and
+nothing to do with files: this is the **fair-share CPU scheduler**. `share(5)`
+calls it *"Share Scheduling on Unix"* and describes a *"per-user long term
+scheduler"* that weighs *"the history of a user's usage of the resources of the
+machine"*; `l_shares` is *"allocated shares"*, `l_usage` *"decaying accumulated
+costs"*. `/etc/shares` is indexed by uid and holds *"the uid, scheduling group
+and allocated shares for each user"*, and `setupshares(3)` reads a user's
+allocation at login, decays their usage to the current time, and installs it in
+the kernel through `limits(2)`. Users form a tree of scheduling groups, each
+taking a proportion of its parent's CPU. `limits(2)`'s own `.TH` line reads
+`SHARE-deprecated`, so Bell Labs were retiring it by 1995 -- which is of a piece
+with its headers being the ones the 1997 reconstruction lost.
+
 Six libc members include `<shares.h>`, which includes `<sys/lnode.h>`, and
 **neither file is anywhere in the 25,682**. Their objects are in the tape's
 `libc.a`, so both existed; what survived is a source tree with two headers
@@ -1773,6 +1786,39 @@ the spelling moves back eight years.
 +	register char *pat;	/* ipnx: pcc2 has no const */
  	pat=++fmtp;
  	if(*fmtp=='^') fmtp++;
+```
+
+## login.c: a 1993 ANSI member, converted to K&R (B2.2d)
+
+`cmd/login.c`, sha256 `2ff67de146be9809`
+
+One of the eleven members that only `lcc` could build, and `lcc` cannot be
+trusted to: the prebuilt driver hits the `bowell.c` defect
+(`0: unknown flag -undef`) and emits **empty objects while exiting 0**, so
+routing a member to it buys a silent hole in `libc.a` rather than a member.
+
+These carry `/* Copyright AT&T Bell Laboratories, 1993 */` and are addressed to
+a header set that is not installed: r70's `/usr/include` has no `stddef.h`, no
+`stdlib.h`, and defines `size_t` nowhere. That is the same two-generations split
+as the stdio family, one layer down -- not a prototype to strip but a different
+C to translate out of.
+
+`void *` becomes `char *` and `size_t` becomes `unsigned int`. Both pairs are
+the same width on a VAX, `char *` is K&R's generic pointer, and it is how V8's
+own libc declares these functions -- so the generated code is unchanged and only
+the spelling moves back eight years.
+```diff
+--- tarball/cmd/login.c
++++ ours/cmd/login.c
+@@ -154,6 +154,6 @@
+ 	}
+ 	setlogname(utmp.ut_name);
+-	if(setupshares(pwd->pw_uid, printf))
+-		goto loop;
++	/* ipnx: the Share scheduler is out -- see PATCHES.md.
++	 * was: if(setupshares(pwd->pw_uid, printf)) goto loop; */
+ 	if (cmd) {		/* remote exec */
+ 		i = strlen(utmp.ut_name);
 ```
 
 ## memmove.c: a 1993 ANSI member, converted to K&R (B2.2d)

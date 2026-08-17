@@ -120,10 +120,22 @@ note "stage 2 present: lib/crt0.o" \
 # installed OVER the system's before stage 3 is built, and that is asserted by
 # BYTES rather than by the copy having exited 0.
 v10_sh "cp /lib/libc.a /lib/libc.a.tape" 900
-v10_sh "cp $T2/lib/libc.a /lib/libc.a; ranlib /lib/libc.a" 1800
-v10_sh "cp $T2/lib/crt0.o /lib/crt0.o" 300
-note "/lib/libc.a IS stage 2's (compared, not assumed)" \
+# CMP BEFORE ranlib, AND THAT ORDER IS THE WHOLE POINT.  This assertion was
+# written as copy-then-ranlib-then-cmp, which CANNOT PASS: ranlib rewrites
+# __.SYMDEF in the destination, so the two files differ by construction and the
+# check reported a failure it had caused itself.  Same family as every other
+# trap this project has hit -- a comparison whose two sides are not the same
+# question.
+#
+# And ranlib is not optional: `cp' gives the archive a new mtime while its table
+# of contents keeps the old one, which V8's and V10's ld both read as "out of
+# date" and answer with a single sequential pass (CLAUDE.md).  So the order is
+# copy, PROVE, then ranlib.
+v10_sh "cp $T2/lib/libc.a /lib/libc.a" 1800
+note "/lib/libc.a IS stage 2's (compared before ranlib)" \
     [v10_try "if cmp $T2/lib/libc.a /lib/libc.a; then echo SL\$OK; fi" "SL-ok" 900]
+v10_sh "ranlib /lib/libc.a" 900
+v10_sh "cp $T2/lib/crt0.o /lib/crt0.o" 300
 note "the tape's libc.a is kept for comparison" \
     [v10_try "test -s /lib/libc.a.tape && echo TP\$OK" "TP-ok" 120]
 

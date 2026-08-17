@@ -734,6 +734,36 @@ _ANSI93 = [
       ("#pragma ref f\n", "/* #pragma ref f -- ipnx: pcc2 has no #pragma */\n", 1),
       ("#pragma ref width\n", "/* #pragma ref width -- ipnx: pcc2 has no #pragma */\n", 1),
       ("#pragma ref type\n", "/* #pragma ref type -- ipnx: pcc2 has no #pragma */\n", 3)]),
+    # login.c: the fair-share scheduler comes OUT.
+    #
+    # Christine, 2026-08-17: "if Bell labs wants it out, let's take it out."  And
+    # they did want it out -- limits(2)'s own .TH line reads SHARE-deprecated.
+    #
+    # WHAT IT WAS FOR, which is why removing it is not a loss.  The Share
+    # scheduler is the University of Sydney's (Kay and Lauder), and it exists so
+    # that on a shared departmental machine undergraduates cannot swamp it and no
+    # single user can hog it.  Christine, whose alma mater it is: "These are
+    # probably not relevant concerns for today."  A single-user emulator on an
+    # iPad has no undergraduates to ration.
+    #
+    # WHY REMOVAL BEATS THE STUB THIS FILE ALMOST GOT.  A stub returning 0 would
+    # have been a function that lies -- claiming shares were installed when no
+    # Share scheduler exists.  Deleting the call states the same fact without
+    # inventing a symbol, and it drops the LAST reason libc needs setupshares.o,
+    # the one member of 261 that no evidence supports building at all.  So the
+    # ceiling stops being a shortfall: 260 of 261 is the whole library, because
+    # nothing in the system we build calls the 261st.
+    #
+    # setlogname() above it stays -- that is utmp, not shares.
+    #
+    # STILL TO DO IN K10: cron.c, at/atrun.c and asd++/dkinstall.c call it too.
+    # They are outside the boot path, so they are not this patch's business, but
+    # they will need the same decision when the world is built.
+    ("cmd/login.c",
+     "2ff67de146be9809639191167c558ad925a48d2f330334e135640cd6e5f7a7f2",
+     [("\tif(setupshares(pwd->pw_uid, printf))\n\t\tgoto loop;\n",
+       "\t/* ipnx: the Share scheduler is out -- see PATCHES.md.\n"
+       "\t * was: if(setupshares(pwd->pw_uid, printf)) goto loop; */\n", 1)]),
     ("libc/gen/memmove.c",
      "8de6bd16b4d961d41eb7330816e04068b4ba391cedd55fdf95b05ab81a2280db",
      [("#include <stddef.h>\n\nextern void *memcpy(void*, void*, size_t);\n\n"
