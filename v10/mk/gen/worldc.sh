@@ -34,29 +34,23 @@ cd $OBJ
 # for a reason that had nothing to do with the Tenth Edition.  A wrong image is
 # as fatal as wrong flags and was not being checked.
 #
-# 20 MB, which is far more than the survey's peak (objects are removed per
-# unit, so the peak is one unit's worth) and therefore a fair proxy for "this
-# filesystem has room to work".  There is no `df' to ask, so the probe is to
-# write and see.  dd's status alone is not enough -- it can write short -- so
-# its log is also searched for the kernel's own complaint.
-if dd if=/dev/zero of=$OBJ/space.chk bs=1024 count=20480 > dd.log 2>&1
-then
-	sed -e '/full/!d' dd.log > f.log
-	n=`sed -n '$=' f.log`
-	if test -z "$n"
-	then
-		echo "$SP-ok"
-	else
-		echo "NO$SP"
-		sed -e 3q dd.log
-		exit 1
-	fi
-else
-	echo "NO$SP"
-	sed -e 3q dd.log
-	exit 1
-fi
-rm -f $OBJ/space.chk
+# AND THE FIRST VERSION OF THIS PROBE USED `dd', WHICH THIS MACHINE DOES NOT
+# HAVE.  `dd: not found' -- the golden is missing it exactly as it is missing
+# ar, cmp, tail, grep and wc, which is why mkdep.py builds `v10dd' as an FSTOOL.
+# The probe failed SAFE (it reported no room rather than passing) but its
+# diagnosis was wrong, and a synthetic probe built on tools this machine may not
+# have is the wrong design however carefully it is written.
+#
+# So there is no synthetic probe.  The detector is the SURVEY ITSELF: a full
+# filesystem makes every remaining unit fail, and twenty consecutive failures is
+# something no real distribution of defects produces when 315 of 353 units are
+# predicted to compile.  It costs nothing, needs no tool at all, and catches
+# every systemic cause rather than just this one -- a full disk, a lost mount, a
+# vanished compiler.
+#
+# Counted with a string and `case' because 1985 sh has no $(( )) and `expr' is
+# no more guaranteed present here than dd was.
+FAILRUN=""
 
 # ---------------------------------------------------------------- canary ---
 # halt.c is built by stage 1 on this very machine, so if it fails here the
@@ -107,12 +101,24 @@ do
 	then
 		echo "$P $name" >> $OBJ/res.log
 		echo "$P $name"
+		FAILRUN=""
 	else
 		echo "$Q $name" >> $OBJ/res.log
 		echo "$Q $name"
 		sed -e 3q u.log
+		FAILRUN="$FAILRUN."
 	fi
 	rm -f *.o
+	# Twenty in a row is systemic, not twenty defects.  See the comment above
+	# the loop: this replaces a synthetic space probe that needed `dd'.
+	case "$FAILRUN" in
+	....................*)
+		echo "NO$SP"
+		echo "twenty consecutive units failed -- something systemic"
+		sed -e 3q u.log
+		exit 1
+		;;
+	esac
 done
 
 # ---------------------------------------------------------------- tallies ---
