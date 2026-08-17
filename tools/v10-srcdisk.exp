@@ -186,6 +186,30 @@ foreach f {lcc rcc cpp} {
     note "lcc: $f" [v8_try "test -s $M/lcc/$f && echo LC\$OK" "LC-ok" 120]
 }
 
+# ------------------------------------------------------- the 5620 headers ---
+#
+# THE ONE libc MEMBER THAT NEEDS A FILE FROM A DIFFERENT TARBALL.  libc's
+# `gen/jterm.c' opens
+#
+#	#include "/usr/jerq/include/jioctl.h"
+#
+# an ABSOLUTE path into the 5620's include tree, which the v10src tarball does
+# not contain -- it is in v10blit, at blit/include/.  So jterm.o failed for two
+# runs and was written down as an lcc member on the strength of that failure,
+# which was wrong twice over: the file is pure K&R with no ANSI construct in
+# it, and lcc could no more find a missing header than cc could.  A missing
+# FILE, like <shares.h>, and not a language problem.
+#
+# The whole directory goes, not just jioctl.h: it is 22 small headers, the
+# jerq userland will want them, and picking one file would have to be revisited
+# the first time anything else in libc or cmd reaches for blit.h or layer.h.
+v8_sh "mkdir $M/jerq" 60
+note "jerq: the 5620 include tree" \
+    [v8_try "cd /n/v10/blit/include; find . -print | cpio -pd $M/jerq && echo JQ\$OK" \
+            "JQ-ok" 600]
+note "jerq: jioctl.h, which jterm.c names by absolute path" \
+    [v8_try "test -s $M/jerq/jioctl.h && echo JI\$OK" "JI-ok" 120]
+
 # Our overlay and our makefiles.  Both are small and both are what makes the
 # build ours rather than a re-run of 1995.
 # THE WHOLE OVERLAY, not just cmd/.  It used to be `cd /n/v10ours/cmd', which

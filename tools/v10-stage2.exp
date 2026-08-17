@@ -117,6 +117,55 @@ note "the tape's libc.a visible" \
 note ":errfix visible" \
     [v10_try "test -s $S/libc/gen/:errfix && echo EF\$OK" "EF-ok" 300]
 
+# --------------------------------------------- /usr/jerq/include, for jterm ---
+#
+# libc's `gen/jterm.c' includes "/usr/jerq/include/jioctl.h" -- an ABSOLUTE
+# path, so no -I can help and the file has to BE there.  It comes from the
+# v10blit tarball rather than v10src, which is why jterm.o failed for two runs
+# and got written down as an lcc member; it is pure K&R and lcc could not find
+# a missing header either.
+#
+# INSTALLED, not copied into an object directory, because an absolute include
+# names a system location and this is a system location.  Stage 8 will place it
+# from the same source when it lays out the disk; doing it here keeps stage 2
+# self-contained and costs 22 small files.
+#
+# `mkdir' makes ONE level on V10 (CLAUDE.md; it cost a whole run once), so both
+# levels are named.  v10_sh, not v10_try: on a re-run they exist already and
+# mkdir saying so is not a failure.
+v10_sh "mkdir /usr/jerq; mkdir /usr/jerq/include" 120
+v10_sh "cp $N/jerq/*.h /usr/jerq/include" 600
+note "jioctl.h installed where jterm.c names it" \
+    [v10_try "test -s /usr/jerq/include/jioctl.h && echo JQ\$OK" "JQ-ok" 300]
+
+# ------------------------------------ shares.h and sys/lnode.h, reconstructed ---
+#
+# Six libc members include <shares.h>, which includes <sys/lnode.h>, and
+# NEITHER FILE IS ON THE TAPE -- though their objects are in the tape's libc.a,
+# so both existed.  Both are reconstructed in our overlay from `lnode(5)', which
+# prints the header verbatim, with every offset and size confirmed against Bell
+# Labs' own 1989 objects (v10/src/PATCHES.md carries the disassembly).
+#
+# INSTALLED INTO $INCDIR, which is where shares(5) says they belong --
+# "/usr/include/shares.h" and "/usr/include/sys/lnode.h" under FILES.  So this
+# needs no makefile change at all: $(INCS) already names that directory, and
+# the six sources are pristine and unaltered.
+v10_sh "cp $N/ours/include/shares.h /usr/v10/include/shares.h" 300
+v10_sh "cp $N/ours/include/sys/lnode.h /usr/v10/include/sys/lnode.h" 300
+note "shares.h installed" \
+    [v10_try "test -s /usr/v10/include/shares.h && echo SH\$OK" "SH-ok" 300]
+note "sys/lnode.h installed" \
+    [v10_try "test -s /usr/v10/include/sys/lnode.h && echo LN\$OK" "LN-ok" 300]
+# PROVEN BY USE, not by existence -- a header that is present and wrong compiles
+# nothing.  putshares.c is the member whose object gave us MAXUID and
+# sizeof(Share), so if the reconstruction is right this is the one that must
+# build.  Compiled here, in isolation, BEFORE the 261 -- so a bad header is one
+# named line instead of six MISSes among many.
+v10_sh "rm -rf /tmp/sh; mkdir /tmp/sh" 120
+note "the reconstructed headers compile putshares.c" \
+    [v10_try "cd /tmp/sh; if cc -B$T1/lib/ -t02p -I/usr/v10/include -c $S/libc/gen/putshares.c; then echo PS\$OK; fi" \
+             "PS-ok" 900]
+
 # ---------------------------------------------- is this a stage-1 machine? ---
 #
 # Asserted BEFORE the first object, so a run started from the golden by

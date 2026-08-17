@@ -481,24 +481,56 @@ LIBC_DIR = "libc"
 # An object here must NOT also be in LIBC_LCC: the point of converting it is
 # that it no longer needs the second compiler, and the generator checks.
 LIBC_OURS = [
-    "printf.o",
+    # THE printf/scanf FAMILY, all eight (B2.2c).  Each is the tape's source
+    # with an old-style parameter list and the `<stdarg.h>` line its two
+    # working siblings already carry -- see v10/src/PATCHES.md, and note that
+    # these eight compiled under NEITHER compiler before, so this is not a
+    # transfer from lcc to cc but a repair.
+    "printf.o", "fprintf.o", "sprintf.o", "snprintf.o", "vprintf.o",
+    "scanf.o", "fscanf.o", "sscanf.o",
 ]
 
 LIBC_LCC = [
-    # the ten the tape's mkfile already hands to lcc
+    # the ten the tape's mkfile already hands to lcc, less the three the
+    # overlay now builds (scanf.o, sprintf.o -- and see B2.2c)
     "fgets.o", "fputs.o", "malloc.o", "memmove.o", "qsort.o",
-    "scanf.o", "sprintf.o", "vfprintf.o", "vfscanf.o", "rdwr.o",
+    "vfprintf.o", "vfscanf.o", "rdwr.o",
     # rdwr.o was left on cc for one run, on the strength of a measurement
     # that said pcc2 compiled it.  It does not: the next run reported it as
     # the ONE remaining failure.  The tape's mkfile routes it to lcc and the
     # tape was right -- when the measurement and the mkfile disagree, re-run
     # the measurement before believing it.
-    # fifteen more, measured
-    "_dtoa.o", "_fconv.o", "fprintf.o", "fscanf.o", "getshares.o",
-    "getshput.o", "jterm.o", "openshares.o", "putshares.o",
-    "setlimits.o", "setupshares.o", "snprintf.o", "sscanf.o", "strtod.o",
-    "vprintf.o",
+    # the measured remainder -- eleven genuine ANSI files, and this is now the
+    # whole of the second compiler's job.
+    "_dtoa.o", "_fconv.o", "strtod.o",
 ]
+
+# SEVEN MEMBERS LEFT THIS LIST WITHOUT BEING CONVERTED, and the reason is the
+# same for all of them: THEY NEVER HAD A LANGUAGE PROBLEM.  Each is pure K&R
+# and each failed on a header that is not on the tape, so lcc could no more
+# compile it than cc could -- listing them as lcc's said otherwise for two
+# runs and hid the real cause.
+#
+#	jterm.o                       #include "/usr/jerq/include/jioctl.h"
+#	                              -- an absolute path into the 5620 tree,
+#	                              which is in the v10blit tarball rather
+#	                              than v10src.  Installed at
+#	                              /usr/jerq/include by tools/v10-stage2.exp.
+#	getshares.o  getshput.o       #include <shares.h>, which no longer
+#	openshares.o putshares.o      exists.  Reconstructed from lnode(5) --
+#	setlimits.o                   which prints the header verbatim -- with
+#	                              every offset checked against Bell Labs'
+#	                              own 1989 objects.  v10/src/PATCHES.md.
+#	setupshares.o                 the SAME reconstruction is not enough: it
+#	                              also needs <sys/share.h>, whose `struct
+#	                              sh_consts' is documented nowhere and
+#	                              referenced nowhere in either kernel tree.
+#	                              LEFT UNBUILT ON PURPOSE.  L_GETCOSTS has
+#	                              the kernel write through that pointer, so
+#	                              a guessed size overwrites the caller's
+#	                              stack.  It is the one member of 261 that
+#	                              no evidence supports building, and the
+#	                              ceiling is therefore 260.
 
 
 def libc_from_tape():
@@ -688,6 +720,27 @@ errlst.o: %(src)s/gen/errlst.c $(TOOLS)
             # it whenever a pass it never runs changes.
             out.append("\n%s: %s $(LCCPATH)\n\t$(LCC) $(LCCARGS) -c %s/%s\n"
                        % (obj, " ".join(deps), srcdir, src))
+        elif obj in oursset:
+            # AN OVERLAY SOURCE NEEDS ITS ORIGINAL'S NEIGHBOURHOOD ON THE
+            # INCLUDE PATH, and this is the whole reason the first attempt at
+            # B2.2c built nothing.
+            #
+            # `#include "iolib.h"' is a QUOTED include, so cpp looks in the
+            # directory of the INCLUDING FILE first -- which for a pristine
+            # member is $(SRC)/libc/stdio/, where iolib.h lives.  Our copy sits
+            # in $(OURS)/libc/stdio/ instead, and $(INCS) is only
+            # `-I$(INCDIR)', so from there iolib.h is nowhere: cpp fails, no
+            # object appears, and `make -k' moves on.  The member then shows up
+            # in the MISS list with NO compiler error line anywhere -- which
+            # reads exactly like make never running the rule at all.
+            #
+            # So the rule adds -I on the directory the original occupies.  It
+            # is per-rule and not global on purpose: $(INCS) is shared by all
+            # 261 members, and $(SRC)/libc/stdio also holds a `stdio.h'-adjacent
+            # private header set that has no business shadowing the system's.
+            out.append("\n%s: %s $(TOOLS)\n\t$(COMPILE) -I%s %s/%s\n"
+                       % (obj, " ".join(deps),
+                          srcdir + "/" + os.path.dirname(src), here, src))
         else:
             out.append("\n%s: %s $(TOOLS)\n\t$(COMPILE) %s/%s\n"
                        % (obj, " ".join(deps), here, src))
