@@ -134,6 +134,25 @@ MACRO_REF = re.compile(r'\$\{([A-Za-z_][A-Za-z_0-9]*)\}'
                        r'|\$([A-Za-z_][A-Za-z_0-9]*)')
 ARLINE = re.compile(r'^\t[ \t]*ar[ \t]+[a-zA-Z]+[ \t]+([A-Za-z_0-9./+-]+\.a)[ \t]+(.*)$')
 CCMACRO = re.compile(r'^CC[ \t]*=[ \t]*(\S+)')
+CFMACRO = re.compile(r'^(CFLAGS|LCCARGS)[ \t]*=[ \t]*(.*)$')
+# THE TAPE'S OWN -D FLAGS ARE LOAD-BEARING, AND ONE OF THEM DECIDES 146 OF THE
+# 500 MEMBERS.  libI77/mkfile passes `-DKR_headers' and libI77/Version.c says why
+# in as many words:
+#
+#	23 July 1992: switch to ANSI prototypes unless KR_headers is #defined
+#
+# So without it libF77 and libI77 emit ANSI prototypes, which pcc2 cannot parse,
+# and 29% of this stage fails for a reason that is entirely our flags rather than
+# anything about the Tenth Edition.  That is K10.1's third finding -- "flags are
+# generic, not per-unit" -- arriving with a much bigger bill.
+#
+# Two more matter: libtermlib's `-DCM_N -DCM_GT -DCM_B -DCM_D' are termcap
+# capability switches, and libipc and libin both set `INCS=-I. -I../h', a SIBLING
+# include directory holding the defs.h and ipc.h they include.  libipc is 30 of
+# the command tree's asks, the second highest.
+#
+# -O and -g are NOT carried: optimisation is this build's decision, not the
+# tape's, and every stage here compiles -O.
 # `cp X Y', `mv X Y' and `ln X Y' inside an install rule.  ln matters: it is how
 # libtermlib gives one archive two names, and dropping it loses a whole -l flag.
 INSTALL_CP = re.compile(r'^\t[ \t]*-?(cp|mv|ln)[ \t]+(\S+)[ \t]+(\S+)[ \t]*$')
@@ -257,16 +276,19 @@ def parse_build(path):
     """
     text = read(path)
     if not text:
-        return None, [], None, [], None
+        return None, [], None, [], None, ""
     lines = continued(text)
 
-    macros, cc = {}, None
+    macros, cc, cflags = {}, None, ""
     for line in lines:
         if line.startswith("\t"):
             continue
         m = CCMACRO.match(line)
         if m:
             cc = m.group(1)
+        m = CFMACRO.match(line)
+        if m and not cflags:
+            cflags = m.group(2)
         m = MACRO.match(line)
         if m:
             macros[m.group(1)] = m.group(2)
@@ -363,7 +385,12 @@ def parse_build(path):
                 archive, members = archive or m.group(1), objs
                 break
 
-    return archive, members, cc, installs, bundle
+    # EXPANDED, because the flag that matters is one indirection away.  libipc
+    # and libin both write `CFLAGS=-g $INCS' with `INCS=-I. -I../h' on another
+    # line -- so reading CFLAGS literally finds no include path at all, and
+    # libipc is 30 of the command tree's asks.
+    cflags = " ".join(expand(cflags.split(), macros))
+    return archive, members, cc, installs, bundle, cflags
 
 
 def ar_members(path):
@@ -511,9 +538,10 @@ def survey(rel, d):
             build = p
             break
     u["build"] = os.path.basename(build) if build else None
-    archive, members, cc, installs, bundle = parse_build(build) if build else (
-        None, [], None, [], None)
+    (archive, members, cc, installs, bundle,
+     cflags) = parse_build(build) if build else (None, [], None, [], None, "")
     u["bundle"] = bundle
+    u["cflags"] = cflags
     u["archive"] = archive
     u["cc"] = cc
     u["installs"] = installs
@@ -927,6 +955,71 @@ def libs_units(libs, dem):
     return "\n".join(out) + "\n"
 
 
+# WHERE WE ADD A FLAG THE TAPE DOES NOT, AND WHY IT IS NOT A DEVIATION.
+# libF77/mkfile says `CC = lcc' and passes no -DKR_headers, because lcc is ANSI
+# and does not need it.  We cannot use lcc: CLAUDE.md records that the prebuilt
+# driver is compiled from bowell.c, whose cpp line passes `-undef', which ph/cpp
+# rejects -- so lcc writes an EMPTY object and exits 0.  A loud failure beats a
+# silent hole, and LIBC_LCC is empty for exactly this reason.
+#
+# So libF77 is compiled by cc, and `KR_headers' is THE TAPE'S OWN SWITCH for a
+# K&R compiler -- libI77/Version.c: "switch to ANSI prototypes unless KR_headers
+# is #defined".  Using it is taking the option the source ships, not patching the
+# source.  And it belongs in OUR build description rather than in v10/src/,
+# exactly as CLAUDE.md already argues for the `-DV10' that libc/mkfile's cc rule
+# omits: "V10 never had these makefiles".
+CFLAGS_ADD = {
+    "libF77": ["-DKR_headers"],
+}
+
+
+def libs_cf(libs, _dem):
+    """Per-library -D flags: `name flag...', one line each.
+
+    -O and -g are dropped: optimisation is this build's decision and every stage
+    here compiles -O.  Only the -D flags are the tape's statement about its own
+    source.
+    """
+    out = ["# name -Dflag...  -- the tape's own CFLAGS, less -O/-g"]
+    for u in libs:
+        if u["done"]:
+            continue
+        flags = [w for w in u.get("cflags", "").split() if w.startswith("-D")]
+        flags += [f for f in CFLAGS_ADD.get(u["name"], []) if f not in flags]
+        if flags:
+            out.append("%s %s" % (u["name"], " ".join(flags)))
+    return "\n".join(out) + "\n"
+
+
+def libs_inc(libs, _dem):
+    """Extra include directories, RELATIVE to the library directory.
+
+    Same shape as world.incs, and for the same reason: the guest builds
+    `-I$SD/$x' from it, so a path here is a statement about layout rather than a
+    string the guest has to rewrite.  `-I.' is dropped -- the guest always passes
+    the source directory -- so in practice this file is libipc and libin's
+    `-I../h', a SIBLING directory holding the defs.h and ipc.h they include.
+    libipc is 30 of the command tree's asks, the second highest, so missing this
+    would have failed the most-wanted real library in the set.
+    """
+    out = ["# name reldir...  -- extra -I, relative to the library directory"]
+    for u in libs:
+        if u["done"]:
+            continue
+        dirs = []
+        for w in u.get("cflags", "").split():
+            if not w.startswith("-I"):
+                continue
+            rel = w[2:]
+            if rel in (".", "") or rel.startswith("$"):
+                continue
+            if rel not in dirs:
+                dirs.append(rel)
+        if dirs:
+            out.append("%s %s" % (u["name"], " ".join(dirs)))
+    return "\n".join(out) + "\n"
+
+
 def libs_orcl(libs, _dem):
     """Libraries whose archive Bell Labs shipped, and where it is.
 
@@ -1107,6 +1200,29 @@ do
 	# 30 objects against 6 loose .c files because the other 24 are in
 	# tr.c.a.  The headers are in there too (hp.h, ram.h, jcom.h, jplot.h),
 	# which is why -I. suffices after extraction.
+	# THE TAPE'S OWN FLAGS FOR THIS LIBRARY, and one of them decides 146 of
+	# the 500 members.  libI77/mkfile passes `-DKR_headers' and
+	# libI77/Version.c says why outright: "23 July 1992: switch to ANSI
+	# prototypes unless KR_headers is #defined".  Without it libF77 and
+	# libI77 emit ANSI prototypes that pcc2 cannot parse, and 29% of this
+	# stage fails on OUR flags rather than on anything about the Tenth
+	# Edition -- K10.1's "flags are generic, not per-unit" with a much
+	# bigger bill.  libtermlib's four -DCM_* are termcap capability
+	# switches.
+	XD=""
+	for x in `sed -e "/^$name /!d" -e "s/^$name //" $SRC/mk/libs.cf`
+	do
+		XD="$XD $x"
+	done
+	# Extra include directories, relative to the library dir -- same shape as
+	# world.incs.  In practice this is libipc's and libin's `-I../h', a
+	# SIBLING directory holding the defs.h and ipc.h they include; libipc is
+	# 30 of the command tree's asks, the second highest.
+	XI=""
+	for x in `sed -e "/^$name /!d" -e "s/^$name //" $SRC/mk/libs.inc`
+	do
+		XI="$XI -I$SD/$x"
+	done
 	FROM=$SD
 	if test "$bndl" != "-"
 	then
@@ -1168,7 +1284,7 @@ do
 			# EPIPE.  The status rides through the pipe as its own
 			# line because a pipeline's status is sed's and 1985 sh
 			# has no PIPESTATUS.
-			( $CC $CF -I$FROM -I$SD $S 2>&1
+			( $CC $CF $XD -I$FROM -I$SD $XI $S 2>&1
 			  echo "CCST=$?" ) | sed -e 40q > m1.log
 			;;
 		esac
@@ -1299,6 +1415,8 @@ GENERATED = [
     ("libs.units", libs_units),
     ("libs.objs", libs_objs),
     ("libs.orcl", libs_orcl),
+    ("libs.cf", libs_cf),
+    ("libs.inc", libs_inc),
     ("libs.cpio", libs_cpio),
     ("libsc.sh", lambda libs, dem: LIBSC),
 ]

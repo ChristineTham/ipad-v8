@@ -106,6 +106,29 @@ do
 	# 30 objects against 6 loose .c files because the other 24 are in
 	# tr.c.a.  The headers are in there too (hp.h, ram.h, jcom.h, jplot.h),
 	# which is why -I. suffices after extraction.
+	# THE TAPE'S OWN FLAGS FOR THIS LIBRARY, and one of them decides 146 of
+	# the 500 members.  libI77/mkfile passes `-DKR_headers' and
+	# libI77/Version.c says why outright: "23 July 1992: switch to ANSI
+	# prototypes unless KR_headers is #defined".  Without it libF77 and
+	# libI77 emit ANSI prototypes that pcc2 cannot parse, and 29% of this
+	# stage fails on OUR flags rather than on anything about the Tenth
+	# Edition -- K10.1's "flags are generic, not per-unit" with a much
+	# bigger bill.  libtermlib's four -DCM_* are termcap capability
+	# switches.
+	XD=""
+	for x in `sed -e "/^$name /!d" -e "s/^$name //" $SRC/mk/libs.cf`
+	do
+		XD="$XD $x"
+	done
+	# Extra include directories, relative to the library dir -- same shape as
+	# world.incs.  In practice this is libipc's and libin's `-I../h', a
+	# SIBLING directory holding the defs.h and ipc.h they include; libipc is
+	# 30 of the command tree's asks, the second highest.
+	XI=""
+	for x in `sed -e "/^$name /!d" -e "s/^$name //" $SRC/mk/libs.inc`
+	do
+		XI="$XI -I$SD/$x"
+	done
 	FROM=$SD
 	if test "$bndl" != "-"
 	then
@@ -167,7 +190,7 @@ do
 			# EPIPE.  The status rides through the pipe as its own
 			# line because a pipeline's status is sed's and 1985 sh
 			# has no PIPESTATUS.
-			( $CC $CF -I$FROM -I$SD $S 2>&1
+			( $CC $CF $XD -I$FROM -I$SD $XI $S 2>&1
 			  echo "CCST=$?" ) | sed -e 40q > m1.log
 			;;
 		esac

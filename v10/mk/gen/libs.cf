@@ -1,0 +1,4 @@
+# name -Dflag...  -- the tape's own CFLAGS, less -O/-g
+libF77 -DSkip_f2c_Undefs -DKR_headers
+libI77 -DSkip_f2c_Undefs -DKR_headers
+libtermlib -DCM_N -DCM_GT -DCM_B -DCM_D

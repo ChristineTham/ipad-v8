@@ -85,8 +85,21 @@ v10_sh "OK=-ok" 120
 # because V10's mkdir makes one level at a time, and `mkdir /n/v10' failing
 # silently once cost 26 assertions with nothing naming the cause.
 v10_sh "mkdir /n; mkdir $N" 120
+# AND /usr/lib, WHICH IS WHERE EVERY ONE OF THESE LIBRARIES INSTALLS.  The
+# tape's makefiles all say `cp libX.a /usr/lib', and the V10 golden's own
+# /usr/lib is not something to assume: v10/mk/gen/prebuilt.txt lists exactly one
+# thing under it (`usr/lib/dag'), and that file describes the TARBALL rather than
+# the image.  V10's mkdir makes one level at a time, so this is the same shape as
+# `mkdir /n/v10' failing -- which once left the source disk with no mount point
+# and 26 assertions failing with nothing naming the cause.  An existing directory
+# just makes mkdir complain, which costs nothing.
+v10_sh "mkdir /usr/lib" 120
 note "courier disk mounts" \
     [v10_try "/etc/mount /dev/ra1c $N && echo MT\$OK" "MT-ok" 600]
+# Proved rather than assumed, because if it is missing every install fails and
+# six assertions read as a library problem instead of a missing directory.
+note "/usr/lib exists for the installs" \
+    [v10_try "test -d /usr/lib && echo UL\$OK" "UL-ok" 300]
 note "the libraries are on it" \
     [v10_try "test -s $N/src/libF77/pow_dd.c && echo LS\$OK" "LS-ok" 300]
 # THE SOURCE BUNDLES MUST BE THERE TOO, and they are easy to lose: they are
