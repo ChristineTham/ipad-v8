@@ -793,7 +793,19 @@ do
 		# pipeline's status is sed's and 1985 sh has no PIPESTATUS.
 		b=`echo $f | sed -e 's|.*/||' -e 's|\.c$|.o|'`
 		rm -f $b
-		( $CC $CF -I$SD -I$SD/common -I$SD/vax $XI -I$JQ $SD/$f 2>&1
+		# OUR OVERLAY WINS WHERE WE HAVE ONE, because the build we are
+		# measuring is v10/src + the tape, not the tape alone.  Reading
+		# only $UD made this survey report `mv' as failing on
+		# `ROOTINO undefined' -- the exact one-line defect
+		# v10/src/cmd/mv.c was written to patch and PATCHES.md records --
+		# and the same for fsck, login, cc and mkbitfs.  A measurement
+		# that ignores the corrections measures a tree nobody builds.
+		S=$SD/$f
+		if test -f $SRC/ours/cmd/$dir/$f
+		then
+			S=$SRC/ours/cmd/$dir/$f
+		fi
+		( $CC $CF -I$SD -I$SD/common -I$SD/vax $XI -I$JQ $S 2>&1
 		  echo "CCST=$?" ) | sed -e 40q > u1.log
 		st=`sed -e '/^CCST=/!d' -e 's/CCST=//' -e 1q u1.log`
 		if test "$st" != 0
