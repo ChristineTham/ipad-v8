@@ -687,13 +687,24 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   note the driver is `ni1010a` where V8's is `ill`, so grepping the generated
   config for `il` finds nothing and reads as "no card". Source therefore reaches
   V10 on a **disk** (`tools/v10-srcdisk.sh`), not a share.
-- **The V10 golden has no `ar`, `cmp`, `tail`, `grep` or `wc`** — measured against
-  `v10/mk/gen/prebuilt.txt` plus the boot path, not discovered one at a time. Two
-  are load-bearing for the bootstrap: stage 2 *is* an archive (`AR = /bin/ar` names
-  a file that is not there) and stage 3 *is* a byte comparison. They are built in
-  stage 1 as `BUILDTOOLS`. `/n` was missing too, and cost a whole run: `mkdir`
-  makes one level, so `mkdir /n/v10` failed, the source disk had no mount point,
-  and 26 assertions failed with nothing naming the cause.
+- **The V10 golden has no `ar`, `cmp`, `tail`, `grep`, `wc`, `dd` or `find`** —
+  measured against `v10/mk/gen/prebuilt.txt` plus the boot path, not discovered
+  one at a time. Two are load-bearing for the bootstrap: stage 2 *is* an archive
+  (`AR = /bin/ar` names a file that is not there) and stage 3 *is* a byte
+  comparison. They are built in stage 1 as `BUILDTOOLS`. `/n` was missing too,
+  and cost a whole run: `mkdir` makes one level, so `mkdir /n/v10` failed, the
+  source disk had no mount point, and 26 assertions failed with nothing naming
+  the cause.
+  - **The V8 idioms do not transfer, and that is how `find` was found.** K10.2
+    copied the 5620 include tree with `find . -print | cpio -pd`, which is
+    exactly what `tools/v10-srcdisk.exp` does — on **V8**. On V10 it answers
+    `find: not found`, cpio then reads nothing, and the failure surfaces as
+    `cannot write in </usr/jerq/include>` with *three* assertions saying NO about
+    a tree that was never copied. When a guest-side copy fails, check the tool
+    exists on **that** edition before reading the error.
+  - `dd` cost a run the same way (K10.1's space probe), so the general rule is
+    worth more than the list: **on V10, assume a tool is absent until the boot
+    path or `prebuilt.txt` says otherwise.**
 - **`echo MAKE$OK` in a makefile prints `MAKEK`.** make's `$` takes a *single*
   character unparenthesised, so `$OK` is `$(O)` then `K`, and `$(O)` is empty —
   make working exactly as specified, reported by a test as make being broken. Pass

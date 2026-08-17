@@ -114,13 +114,41 @@ note "/usr/lib exists for the installs" \
 #
 # TWO paths, because the tape uses both spellings for the same tree -- a grep
 # for one finds three of the four callers and misses libblit entirely.
-v10_sh "mkdir /usr/jerq; mkdir /usr/blit" 120
+# `cp', NOT `find | cpio', BECAUSE THE GOLDEN HAS NO find.  The first attempt
+# wrote `find . -print | cpio -pd ...' -- the idiom the V8 srcdisk builder uses --
+# and got
+#
+#	find: not found
+#	cannot write in </usr/jerq/include>
+#
+# so cpio read nothing and created nothing, and the three assertions below all
+# said NO while the real cause was one missing tool.  `find' joins ar, cmp, tail,
+# grep, wc and dd on the list of things this machine does not have; stage 1 builds
+# the first two because the bootstrap needs them, and nothing has needed find.
+#
+# The tree is FLAT -- 21 files, no subdirectories -- so `cp *' is not a shortcut
+# around a missing tool, it is the right command for the shape of the data.
+# Both levels of mkdir spelled out, because V10's mkdir makes one at a time.
+v10_sh "mkdir /usr/jerq; mkdir /usr/jerq/include" 120
+v10_sh "mkdir /usr/blit; mkdir /usr/blit/include" 120
 note "the 5620 include tree installs at /usr/jerq/include" \
-    [v10_try "cd $N/jerq; find . -print | cpio -pd /usr/jerq/include && echo JQ\$OK" \
-             "JQ-ok" 900]
+    [v10_try "cd $N/jerq; cp * /usr/jerq/include && echo JQ\$OK" "JQ-ok" 900]
 note "and at /usr/blit/include, which libblit names" \
-    [v10_try "cd $N/jerq; find . -print | cpio -pd /usr/blit/include && echo JB\$OK" \
-             "JB-ok" 900]
+    [v10_try "cd $N/jerq; cp * /usr/blit/include && echo JB\$OK" "JB-ok" 900]
+# OUR jioctl.h GOES OVER THE TARBALL'S AT THE 5620 PATH, and nowhere else.
+# `libplot/lib5620/openpl.c' uses JMUX, which NOTHING in either tarball defines:
+# four jioctl.h survive and all four call that request JMPX at (JTYPE|3).  The
+# 5620's own header is one of the things the tape did not keep.  See PATCHES.md
+# for the four pieces of evidence that they are one ioctl -- the strongest being
+# that lib5620's and libblit's openpl.c are the same file differing in three
+# places (the header path, a `32ld'/`68ld' comment, and this identifier), and
+# that both set a variable named `mpx' one line later.
+#
+# /usr/blit/include keeps the tarball's header unaltered, because libblit is the
+# 68000 Blit and already says JMPX.  Only the 5620 path gets the alias.
+note "our jioctl.h installs at the 5620 path" \
+    [v10_try "cp $N/ours/include/jioctl.h /usr/jerq/include/jioctl.h && echo JO\$OK" \
+             "JO-ok" 300]
 note "jioctl.h is reachable by its absolute path" \
     [v10_try "test -s /usr/jerq/include/jioctl.h -a -s /usr/blit/include/jioctl.h && echo JI\$OK" \
              "JI-ok" 300]
@@ -155,12 +183,18 @@ note "ranlib is present" \
 # Not used by this run -- `cc -c' never links -- but its absence means the image
 # is not the one this stage is meant to follow.
 #
-# /usr/s2, NOT /usr/s1: stage 1 installs the PASSES and stage 2 installs libc,
-# to its own prefix (v10-stage2.exp:69, `set T /usr/s2').  Looking in stage 1's
-# lib/ reported NO on the first run for a libc that was present all along, one
-# directory over.
-note "stage 2's libc is installed" \
-    [v10_try "test -s /usr/s2/lib/libc.a && echo LI\$OK" "LI-ok" 300]
+# THE TAPE'S libc, NOT STAGE 2's, AND THAT IS THIS RUN'S DELIBERATE CHOICE.
+# Two wrong versions of this assertion have now been written: /usr/s1/lib/libc.a
+# (stage 1 installs the PASSES, not libc) and /usr/s2/lib/libc.a (stage 2's
+# prefix -- but stage 2's output is on the .stage1.s2 image, and this run uses
+# .stage1 because compiling needs room and not libraries).
+#
+# `cc -c' never links, so no libc is required here at all.  What IS worth
+# asserting is that a libc exists for the LINK stage to come, and the golden's
+# own /lib/libc.a is the tape's, which is where V10's cc resolves its implicit
+# -lc (there is no `-t c' letter -- see CLAUDE.md).
+note "a libc exists for the link stage to come" \
+    [v10_try "test -s /lib/libc.a && echo LI\$OK" "LI-ok" 300]
 
 # ----------------------------------------------------------------- the build ---
 #
