@@ -292,8 +292,8 @@ fdopen.o: $(SRC)/libc/stdio/fdopen.c $(INCDIR)/errno.h $(INCDIR)/stdio.h $(INCDI
 fgetc.o: $(SRC)/libc/stdio/fgetc.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(TOOLS)
 	$(COMPILE) $(SRC)/libc/stdio/fgetc.c
 
-fgets.o: $(SRC)/libc/stdio/fgets.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(TOOLS)
-	$(COMPILE) $(SRC)/libc/stdio/fgets.c
+fgets.o: $(OURS)/libc/stdio/fgets.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(TOOLS)
+	$(COMPILE) -I$(SRC)/libc/stdio $(OURS)/libc/stdio/fgets.c
 
 filbuf.o: $(SRC)/libc/stdio/filbuf.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(TOOLS)
 	$(COMPILE) $(SRC)/libc/stdio/filbuf.c
@@ -364,8 +364,8 @@ fprintf.o: $(OURS)/libc/stdio/fprintf.c $(INCDIR)/lcc/stdarg.h $(TOOLS)
 fputc.o: $(SRC)/libc/stdio/fputc.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(TOOLS)
 	$(COMPILE) $(SRC)/libc/stdio/fputc.c
 
-fputs.o: $(SRC)/libc/stdio/fputs.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(TOOLS)
-	$(COMPILE) $(SRC)/libc/stdio/fputs.c
+fputs.o: $(OURS)/libc/stdio/fputs.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(TOOLS)
+	$(COMPILE) -I$(SRC)/libc/stdio $(OURS)/libc/stdio/fputs.c
 
 freopen.o: $(SRC)/libc/stdio/freopen.c $(INCDIR)/errno.h $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(TOOLS)
 	$(COMPILE) $(SRC)/libc/stdio/freopen.c
@@ -550,8 +550,8 @@ memcmp.o: $(SRC)/libc/gen/memcmp.s $(TOOLS)
 memcpy.o: $(SRC)/libc/gen/memcpy.s $(TOOLS)
 	$(COMPILE) $(SRC)/libc/gen/memcpy.s
 
-memmove.o: $(SRC)/libc/gen/memmove.c $(TOOLS)
-	$(COMPILE) $(SRC)/libc/gen/memmove.c
+memmove.o: $(OURS)/libc/gen/memmove.c $(TOOLS)
+	$(COMPILE) -I$(SRC)/libc/gen $(OURS)/libc/gen/memmove.c
 
 memset.o: $(SRC)/libc/gen/memset.s $(TOOLS)
 	$(COMPILE) $(SRC)/libc/gen/memset.s

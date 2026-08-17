@@ -598,6 +598,114 @@ arrives.
  
 ```
 
+## fgets.c: a 1993 ANSI member, converted to K&R (B2.2d)
+
+`libc/stdio/fgets.c`, sha256 `11a0f4ee411e523d`
+
+One of the eleven members that only `lcc` could build, and `lcc` cannot be
+trusted to: the prebuilt driver hits the `bowell.c` defect
+(`0: unknown flag -undef`) and emits **empty objects while exiting 0**, so
+routing a member to it buys a silent hole in `libc.a` rather than a member.
+
+These carry `/* Copyright AT&T Bell Laboratories, 1993 */` and are addressed to
+a header set that is not installed: r70's `/usr/include` has no `stddef.h`, no
+`stdlib.h`, and defines `size_t` nowhere. That is the same two-generations split
+as the stdio family, one layer down -- not a prototype to strip but a different
+C to translate out of.
+
+`void *` becomes `char *` and `size_t` becomes `unsigned int`. Both pairs are
+the same width on a VAX, `char *` is K&R's generic pointer, and it is how V8's
+own libc declares these functions -- so the generated code is unchanged and only
+the spelling moves back eight years.
+```diff
+--- tarball/libc/stdio/fgets.c
++++ ours/libc/stdio/fgets.c
+@@ -3,5 +3,8 @@
+ 
+ char *
+-fgets(char *ptr, int n, FILE *iop)
++fgets(ptr, n, iop)		/* ipnx: K&R, see PATCHES.md */
++	char *ptr;
++	int n;
++	FILE *iop;
+ {
+ 	int l = 0;
+```
+
+## fputs.c: a 1993 ANSI member, converted to K&R (B2.2d)
+
+`libc/stdio/fputs.c`, sha256 `243edc4ccaef7b68`
+
+One of the eleven members that only `lcc` could build, and `lcc` cannot be
+trusted to: the prebuilt driver hits the `bowell.c` defect
+(`0: unknown flag -undef`) and emits **empty objects while exiting 0**, so
+routing a member to it buys a silent hole in `libc.a` rather than a member.
+
+These carry `/* Copyright AT&T Bell Laboratories, 1993 */` and are addressed to
+a header set that is not installed: r70's `/usr/include` has no `stddef.h`, no
+`stdlib.h`, and defines `size_t` nowhere. That is the same two-generations split
+as the stdio family, one layer down -- not a prototype to strip but a different
+C to translate out of.
+
+`void *` becomes `char *` and `size_t` becomes `unsigned int`. Both pairs are
+the same width on a VAX, `char *` is K&R's generic pointer, and it is how V8's
+own libc declares these functions -- so the generated code is unchanged and only
+the spelling moves back eight years.
+```diff
+--- tarball/libc/stdio/fputs.c
++++ ours/libc/stdio/fputs.c
+@@ -2,5 +2,7 @@
+ #include	<stdio.h>
+ 
+-fputs(const char *s, FILE *iop)
++fputs(s, iop)			/* ipnx: K&R, see PATCHES.md */
++	char *s;
++	FILE *iop;
+ {
+ 	unsigned char *e, *t;
+```
+
+## memmove.c: a 1993 ANSI member, converted to K&R (B2.2d)
+
+`libc/gen/memmove.c`, sha256 `8de6bd16b4d961d4`
+
+One of the eleven members that only `lcc` could build, and `lcc` cannot be
+trusted to: the prebuilt driver hits the `bowell.c` defect
+(`0: unknown flag -undef`) and emits **empty objects while exiting 0**, so
+routing a member to it buys a silent hole in `libc.a` rather than a member.
+
+These carry `/* Copyright AT&T Bell Laboratories, 1993 */` and are addressed to
+a header set that is not installed: r70's `/usr/include` has no `stddef.h`, no
+`stdlib.h`, and defines `size_t` nowhere. That is the same two-generations split
+as the stdio family, one layer down -- not a prototype to strip but a different
+C to translate out of.
+
+`void *` becomes `char *` and `size_t` becomes `unsigned int`. Both pairs are
+the same width on a VAX, `char *` is K&R's generic pointer, and it is how V8's
+own libc declares these functions -- so the generated code is unchanged and only
+the spelling moves back eight years.
+```diff
+--- tarball/libc/gen/memmove.c
++++ ours/libc/gen/memmove.c
+@@ -1,9 +1,12 @@
+ /* Copyright AT&T Bell Laboratories, 1993 */
+-#include <stddef.h>
++/* ipnx: r70 has no <stddef.h> and defines size_t nowhere -- PATCHES.md */
+ 
+-extern void *memcpy(void*, void*, size_t);
++extern char *memcpy();
+ 
+-void *
+-memmove(void *to, void *from, register size_t n)
++char *
++memmove(to, from, n)		/* ipnx: K&R, see PATCHES.md */
++	char *to;
++	char *from;
++	register unsigned int n;
+ {
+ 	register char *out = to;
+```
+
 ## fprintf.c: an ANSI definition pcc2 cannot parse (B2.2c)
 
 `libc/stdio/fprintf.c`, sha256 `c8124cdf9b073d82`

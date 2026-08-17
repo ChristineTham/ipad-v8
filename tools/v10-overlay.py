@@ -384,6 +384,69 @@ _FAMILY = [
 # not the varargs machinery -- and it still fails, because `va_list' in the
 # parameter list is undeclared exactly as `va_list args;' is in the others.
 # One line's difference; the same two edits.
+# --------------------------------------------------------------------------
+# THE 1993 ANSI MEMBERS (B2.2d).  A different batch from the printf family and
+# a different reason: these carry `/* Copyright AT&T Bell Laboratories, 1993 */'
+# and were written against a header set that IS NOT IN /usr/include.  r70's top
+# level has no `stddef.h', no `stdlib.h', and defines `size_t' nowhere at all --
+# those live only under `include/lcc/' and `include/CC/'.  So they are not
+# merely prototyped, they are addressed to a different C.
+#
+# Three of the eleven are small enough to convert mechanically and are done
+# here.  The other eight -- _dtoa, _fconv, malloc, qsort, rdwr, strtod,
+# vfprintf, vfscanf -- are real work and are left named rather than half-done;
+# vfprintf.c alone is printf's whole engine.
+#
+# `void *' BECOMES `char *' AND `size_t' BECOMES `unsigned int', which is not a
+# liberty: both pairs are the same width on the VAX, `char *' is K&R's spelling
+# of a generic pointer, and it is how V8's own libc declares these very
+# functions.  Nothing about the generated code changes.
+_ANSI93 = [
+    ("libc/stdio/fgets.c",
+     "11a0f4ee411e523d65d2cd8eb2d09b44bf527e46bdc933154b3de6379c117555",
+     [("char *\nfgets(char *ptr, int n, FILE *iop)\n{\n",
+       "char *\nfgets(ptr, n, iop)\t\t/* ipnx: K&R, see PATCHES.md */\n"
+       "\tchar *ptr;\n\tint n;\n\tFILE *iop;\n{\n", 1)]),
+    ("libc/stdio/fputs.c",
+     "243edc4ccaef7b68b5a382d3f020a2d4e2ed4c12da3eca8cb300245fcefbfb6e",
+     [("fputs(const char *s, FILE *iop)\n{\n",
+       "fputs(s, iop)\t\t\t/* ipnx: K&R, see PATCHES.md */\n"
+       "\tchar *s;\n\tFILE *iop;\n{\n", 1)]),
+    ("libc/gen/memmove.c",
+     "8de6bd16b4d961d41eb7330816e04068b4ba391cedd55fdf95b05ab81a2280db",
+     [("#include <stddef.h>\n\nextern void *memcpy(void*, void*, size_t);\n\n"
+       "void *\nmemmove(void *to, void *from, register size_t n)\n{\n",
+       "/* ipnx: r70 has no <stddef.h> and defines size_t nowhere -- PATCHES.md */\n\n"
+       "extern char *memcpy();\n\n"
+       "char *\nmemmove(to, from, n)\t\t/* ipnx: K&R, see PATCHES.md */\n"
+       "\tchar *to;\n\tchar *from;\n\tregister unsigned int n;\n{\n", 1)]),
+]
+
+for _p, _sha, _edits in _ANSI93:
+    _name = os.path.basename(_p)
+    EDITS.append(dict(
+        path=_p,
+        sha=_sha,
+        title="%s: a 1993 ANSI member, converted to K&R (B2.2d)" % _name,
+        why="""\
+One of the eleven members that only `lcc` could build, and `lcc` cannot be
+trusted to: the prebuilt driver hits the `bowell.c` defect
+(`0: unknown flag -undef`) and emits **empty objects while exiting 0**, so
+routing a member to it buys a silent hole in `libc.a` rather than a member.
+
+These carry `/* Copyright AT&T Bell Laboratories, 1993 */` and are addressed to
+a header set that is not installed: r70's `/usr/include` has no `stddef.h`, no
+`stdlib.h`, and defines `size_t` nowhere. That is the same two-generations split
+as the stdio family, one layer down -- not a prototype to strip but a different
+C to translate out of.
+
+`void *` becomes `char *` and `size_t` becomes `unsigned int`. Both pairs are
+the same width on a VAX, `char *` is K&R's generic pointer, and it is how V8's
+own libc declares these functions -- so the generated code is unchanged and only
+the spelling moves back eight years.""",
+        edits=_edits,
+    ))
+
 for _p, _sha, _ansi, _knr in _FAMILY:
     _name = os.path.basename(_p)
     EDITS.append(dict(

@@ -488,6 +488,12 @@ LIBC_OURS = [
     # transfer from lcc to cc but a repair.
     "printf.o", "fprintf.o", "sprintf.o", "snprintf.o", "vprintf.o",
     "scanf.o", "fscanf.o", "sscanf.o",
+    # THE 1993 ANSI MEMBERS, three of eleven (B2.2d).  A different batch and a
+    # different reason: these are addressed to a header set r70 does not have --
+    # no stddef.h, no stdlib.h, size_t defined nowhere at top level.  The other
+    # eight (_dtoa _fconv malloc qsort rdwr strtod vfprintf vfscanf) are real
+    # work and stay named in the MISS list until they are done properly.
+    "fgets.o", "fputs.o", "memmove.o",
 ]
 
 # EMPTY, AND THAT IS THE POINT: V10's libc is built by ONE compiler.
