@@ -198,10 +198,17 @@ note "the tape's libc.a is kept for comparison" \
 # ------------------------------------------------------ 1. build stage 3 ---
 #
 # The same seven components stage 1 built, from the same generated order file --
-# v10_order reads tc.order rather than restating the list, because a component
-# list that appears twice will disagree silently (CLAUDE.md; it cost a run when
-# `ed' was added to one copy and not the other).
-set TC [v10_order tc.order]
+# read rather than restated, because a component list that appears twice will
+# disagree silently (CLAUDE.md; it cost a run when `ed' was added to one copy
+# and not the other).
+#
+# v10_ROWS, NOT v10_order.  This loop wants all three fields, and v10_order
+# returns ONE COLUMN: `lindex "yacc" 1' is "" rather than an error, so `$inst'
+# was empty for every component and the strip step ran `ld -x -r /usr/s3/'
+# against a directory.  See v10_rows in v10drive.exp -- it checks the column
+# count and bails, because a blank field here reports as `bad magic number' and
+# then as seven fixpoint differences that were never measured.
+set TC [v10_rows tc.order 3]
 v10_sh "rm -rf $T3; mkdir $T3; mkdir $T3/bin; mkdir $T3/lib" 300
 foreach c $TC {
     set name [lindex $c 0]
@@ -263,6 +270,14 @@ foreach c $TC {
     v10_sh "cd $OBJ/cmp3; rm -f a.out $name.3 $name.3b" 300
     v10_sh "cd $OBJ/cmp3; $T3/bin/ld -x -r $T3/$inst && mv a.out $name.3" 900
     v10_sh "cd $OBJ/cmp3; $T3/bin/ld -x -r $T3B/$inst && mv a.out $name.3b" 900
+    # THE STRIP HAS TO BE ASSERTED SEPARATELY, because `cmp' on a file that does
+    # not exist answers `yacc.3: No such file or directory' and reports as a
+    # DIFFERENCE.  So a fixpoint that never compared anything reads exactly like
+    # a compiler that does not reproduce itself -- which is how an empty $inst
+    # produced seven confident NOs from zero comparisons.  Two assertions, so
+    # the log always says which of the two things failed.
+    note "stripped both generations of $name" \
+        [v10_try "if test -s $OBJ/cmp3/$name.3 && test -s $OBJ/cmp3/$name.3b; then echo SX\$OK; fi" "SX-ok" 300]
     note "FIXPOINT: stage 3 $name == stage 3b $name" \
         [v10_try "cd $OBJ/cmp3; if cmp $name.3 $name.3b; then echo FX\$OK; fi" "FX-ok" 900]
 }

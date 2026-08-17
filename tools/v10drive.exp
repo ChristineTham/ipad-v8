@@ -148,6 +148,53 @@ proc v10_order {file {col 0}} {
     return $names
 }
 
+# v10_rows <file> <ncol>  --  the WHOLE table, one Tcl list per line.
+#
+# v10_order returns ONE COLUMN as a flat list, and a caller that wants rows
+# cannot tell: destructuring a flat list of names with `lindex $c 0/1/2' yields
+# the name and then TWO EMPTY STRINGS, because "yacc" is a one-element list and
+# an out-of-range lindex is "" rather than an error.
+#
+# THAT COST THE WHOLE POINT OF A STAGE-3 RUN.  `set TC [v10_order tc.order]'
+# then `set inst [lindex $c 2]' made every install path empty, so the strip step
+# ran
+#
+#	/usr/s3/bin/ld -x -r /usr/s3/          ->  ld:/usr/s3/: bad magic number
+#
+# -- ld handed a DIRECTORY -- and the fixpoint compared files that were never
+# created (`yacc.3: No such file or directory'), reporting 7 differences where
+# it had made zero comparisons.  The strong test reported `no stage-1 binary'
+# for all seven for the same reason: `test -s /usr/s1/'.  Fourteen build
+# assertions passed in the same run, because those use only the name.
+#
+# `bad magic number' reads as a corrupt binary and `NO' reads as a difference.
+# Neither says "a field was blank", which is why the count is checked here and
+# a short row BAILS: the generator writes three columns, so a row with two is a
+# malformed table and not something to paper over with an empty string.
+proc v10_rows {file ncol} {
+    global V10_GEN
+    set path [file join $V10_GEN $file]
+    if {![file exists $path]} {
+        v10_bail "no $path -- run v10/mk/mkdep.py"
+    }
+    set f [open $path]
+    set rows {}
+    set n 0
+    foreach line [split [read $f] "\n"] {
+        incr n
+        if {$line eq "" || [string index $line 0] eq "#"} continue
+        set row [split $line "\t"]
+        if {[llength $row] != $ncol} {
+            close $f
+            v10_bail "$path:$n has [llength $row] columns, expected $ncol: \"$line\""
+        }
+        lappend rows $row
+    }
+    close $f
+    if {[llength $rows] == 0} { v10_bail "$path is empty" }
+    return $rows
+}
+
 # --------------------------------------------------------------- teardown ---
 
 # THE HARNESS MUST ALWAYS TERMINATE ITSELF.  This is not tidiness: a run that
