@@ -165,14 +165,24 @@ if [[ -n "$gm" && "$gm" != 0 && "$gf" == 0 ]]; then
     echo "== v10-libs exit $rc =="
     exit 1
 fi
-# A SHORT ARCHIVE IS A FAILURE EVEN IF EVERY MEMBER COMPILED, because `ar cr'
-# accepts object names that do not exist and ranlib blesses the result.
-if grep -q 'LMEM-short' "$LOG" 2>/dev/null; then
-    echo "== NO MEASUREMENT: an archive is missing members =="
-    grep -oE 'LMEM-short [A-Za-z_0-9+./-]+ [0-9]+ of [0-9]+ members' "$LOG" \
-        | sed -e 's/^/      /' | head -30
-    echo "   An archive of 30 objects out of 33 links until the day something"
-    echo "   needs the other three."
+# A SHORT ARCHIVE IS A FINDING, NOT NECESSARILY A BROKEN INSTRUMENT -- and the
+# distinction is the whole point.  If members genuinely fail to compile, the
+# archive is SUPPOSED to come out short, and refusing to report would hide the
+# very thing this run exists to measure.  What must never pass is the
+# INCONSISTENT case: a library whose archive is short while it also reported that
+# every member compiled.  That is the shape of the first run's fault, and it is
+# what the check below looks for.
+shortlibs=$(grep -oE 'LMEM-short [A-Za-z_0-9+./-]+' "$LOG" 2>/dev/null \
+            | awk '{print $2}' | sort -u)
+bad=""
+for l in $shortlibs; do
+    if grep -qE "LBUILT $l\\b" "$LOG" 2>/dev/null; then bad="$bad $l"; fi
+done
+if [[ -n "$bad" ]]; then
+    echo "== NO MEASUREMENT: a library is both complete and short =="
+    echo "   these reported every member compiled AND a short archive:$bad"
+    echo "   ar cr accepts object names that do not exist and ranlib blesses"
+    echo "   the result, so the per-library verdict is not reaching the tally."
     echo "== v10-libs exit $rc =="
     exit 1
 fi
@@ -190,6 +200,26 @@ printf "   archive built and ranlib'd  %4s\n" "$arch"
 printf "   archive NOT built           %4s\n" "$noarch"
 printf "   members in the manifest     %4s\n" "$members"
 printf "   members that did not build  %4s\n" "${gm:-?}"
+
+# THE FINDINGS THEMSELVES, because a count with no names is not actionable and
+# the first run's only record of 42 failures was a file on a halted machine.
+if [[ -n "$gm" && "$gm" != 0 ]]; then
+    echo
+    echo "   the members that did not build, by library:"
+    grep -oE 'LMEM-no [A-Za-z_0-9+./-]+ [A-Za-z_0-9+./-]+' "$LOG" \
+        | awk '{print $2}' | sort | uniq -c | sort -rn | sed -e 's/^/     /'
+    echo
+    echo "   why (first diagnostic per failing library):"
+    grep -E "^\\\"?[A-Za-z_0-9./]+\\\"?:[0-9]+:" "$LOG" 2>/dev/null \
+        | sed -e 's/^/     /' | sort -u | head -20
+fi
+if [[ -n "$shortlibs" ]]; then
+    echo
+    echo "   archives short of their manifest (a consequence of the above, not"
+    echo "   a separate fault -- ar cr archives whatever it can open):"
+    grep -oE 'LMEM-short [A-Za-z_0-9+./-]+ [0-9]+ of [0-9]+ members' "$LOG" \
+        | sort -u | sed -e 's/^/     /' | head -30
+fi
 
 # ------------------------------------------------- host prediction vs machine ---
 pred=$(mktemp); got=$(mktemp)
