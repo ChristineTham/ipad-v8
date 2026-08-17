@@ -97,9 +97,26 @@ import { APP, AUTHOR, REPO } from '../lib/site';
 
       <h2>Where it is going</h2>
       <p>
-        Eighth Edition is the rehearsal. Tenth Edition survives as source only and has never been
-        booted by anyone; the plan is to cross-build it inside the running Eighth, which is how a
-        1989 system would have been built in the first place. If it lands, it is a first.
+        Eighth Edition is the rehearsal. Tenth Edition has never been booted by anyone; it is
+        being built inside the running Eighth, which is how a 1989 system would have been built
+        in the first place. If it lands, it is a first.
+      </p>
+      <p>
+        And it will be a <em>reconstruction</em>, which is worth saying plainly rather than
+        discovering later. There was never a pure Tenth Edition to restore: it was not built and
+        shipped, it was hand-built on each machine by upgrading the Ninth in place. The surviving
+        tape is one machine&rsquo;s working tree caught mid-upgrade, and it says so in its own
+        timestamps &mdash; the C library&rsquo;s 261 pieces are dated across four years and
+        twenty-seven separate days, most of them from a single 1989 build, the rest recompiled in
+        ones and twos until 1993. The oldest pieces are the Ninth Edition&rsquo;s, compiled by a
+        compiler that is not on the tape and is now lost. Two different C compilers are needed to
+        build what survives, because the changeover between them was never finished.
+      </p>
+      <p>
+        So ipnx&rsquo;s Tenth Edition cannot correspond to a real Tenth Edition machine &mdash; no
+        two of those corresponded to each other either. What it can be is faithful to this tree,
+        built from Bell Labs&rsquo; own source by Bell Labs&rsquo; own compiler, with every
+        departure written down.
       </p>
       <p>
         After that: a ports tree for bringing software back to a machine from 1985, and an

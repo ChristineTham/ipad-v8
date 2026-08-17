@@ -12,6 +12,38 @@ under SIMH, targeted at an emulated VAX, and ultimately shipped in the app as
 
 ## Ground truth
 
+- **THERE WAS NEVER A PURE V10 DISTRIBUTION, SO OUR V10 IS A RECONSTRUCTION — AND SO
+  WAS EVERY REAL ONE.** This is the most important thing on this page and it was
+  established on 2026-08-17, from the tape's own artefacts. V10 was not built and
+  shipped; it was **hand-built on each machine by upgrading V9 in place**, one piece at
+  a time, and the tarball is one such machine's working tree caught mid-migration
+  rather than a release. The consequence is not a caveat, it is a definition: an ipnx
+  V10 cannot "correspond to" a real V10 machine, because no two real V10 machines
+  corresponded to each other either. What we can be faithful to is *this tree*.
+
+  The evidence, all of it re-derivable:
+
+  | | |
+  |---|---|
+  | `libc.a` member dates span **4.1 years** | 1989-06 → 1993-07, across **27 distinct days**. 199 of 261 members from one June 1989 build; the other 62 recompiled in ones and twos over the next four years. A clean build dates every member within minutes of itself. |
+  | The old members are **V9's** | 86% of the June 1989 C members differ from anything we can build; only 32% of the later ones do. Our compiler is built from the tape's *1995* `ccom` source, so it resembles the late compiler — and the 1989 one is not on the tape. |
+  | The tooling straddles both editions | lcc's back end is `cmd/lcc/gen2/`**`vax-v9`**`/rcc`; the prebuilt lcc driver (`bowell.c`) passes **`-DV9`**; libc's `mkfile` passes **`-DV10`**. |
+  | `stdio/iolib.h` has no branch for a V10 VAX | It covers *V10 without stdarg*, *pANS with stdarg* and *SGI*. Under the mkfile's own `-DV10`, `va_list` is declared only on an SGI — so the nine `printf`/`scanf` members compile under **neither** compiler. |
+  | Neither compiler can build libc alone | Measured over all 261: `cc` fails 15, `lcc` fails 59. The tree needs both *because it was left half-converted*. |
+  | `<shares.h>` is on no machine we have | Six members include it; it is in none of the 25,682 files, though their objects sit in `libc.a`. It existed once, on the machine that compiled them. |
+  | Two kernel trees, 131 differing shared files | `sys/` and `lsys/` — see below. Consistent with a tree being migrated, not a tree being released. |
+
+  **What follows from it, practically:**
+  - **`libc.a` is a witness, not an oracle for bytes.** Byte-identity with it is
+    unreachable in principle for the 1989 members, and chasing it is chasing a ghost.
+    It is still excellent per-member evidence: `atof.o` (1991-12-19) matches `lcc` and
+    nothing else, which is how the migration was detected at all.
+  - **The right target is a coherent V10 built from the source we have**, measured
+    against the tape wherever the tape can speak, with every deviation named. The
+    ceiling from source is **255 of 261** libc members.
+  - **Authenticity still means the tape**, not tidiness — but it means being faithful
+    to *a working machine in mid-upgrade*, which is a different and more honest thing
+    than pretending a release existed. See CLAUDE.md's authenticity rule.
 - **Nobody has ever booted V10.** Warren Toomey's
   [2017 call for volunteers](https://www.tuhs.org/pipermail/tuhs/2017-April/011079.html)
   is still unanswered. There is **no boot media**, and that is what B3 has to make.
@@ -38,8 +70,14 @@ under SIMH, targeted at an emulated VAX, and ultimately shipped in the app as
 - The source is also **remarkably complete**: full VAX kernel (six machine
   families), structurally complete libc, 378 commands, the whole 5620 stack (`v10blit` =
   `/usr/jerq` with `mux`, `32ld`, **`sam` + `samterm`**), and docs.
-- **V9 is not part of this track.** The surviving V9 is a Sun-3 port with no VAX kernel
-  code; it contributes nothing to a VAX lineage.
+- **V9 is not part of this track — but it is part of this TAPE, and that is new.** The
+  surviving V9 is a Sun-3 port with no VAX kernel code, so it still contributes nothing
+  we can *build* from. What changed on 2026-08-17 is that V9 turns out to be causally
+  central anyway: the tarball is a V9 machine part-way through becoming a V10 one, so
+  roughly two hundred of `libc.a`'s members are V9 objects and the V9 VAX compiler that
+  made them is lost. **We are not skipping V9; we are standing on top of it without a
+  copy of it.** Anything unreproducible in this tree should be checked against that
+  reading first.
 
 ### Why the binaries went unnoticed
 
@@ -50,6 +88,144 @@ that describe it say "source", and nothing before this project had a V8 to try
 them on. The lesson is narrow and worth keeping: **the archive was never
 audited by file type**, and one pass over the magic numbers answered a question
 the plan had assumed for nine years.
+
+## THE PRIORITY: a toolchain that can build a 780 kernel (2026-08-17)
+
+Christine, setting the focus after the stage-2 investigation: *"a toolchain that will
+enable us to generate a proper V10 kernel targeting VAX 11/780 that we can use to
+recompile the rest of the sources."*
+
+**This goes ahead of finishing libc, and the reason is structural: a kernel does not
+link against libc.** It is built from its own sources with `cc`, `as` and `ld`, and
+`crt0.o`/`libc.a` are userland concerns. So every one of the fifteen libc members we
+cannot yet build — the `printf` family, the `shares` family — blocks *nothing* on this
+path. The libc work below (B2.2) is real and still wanted; it is not a prerequisite and
+should stop being treated as one.
+
+**And the target is the 11/780, not the 750 we boot today.** That is the strategic
+choice, not a detail:
+
+- The app already ships a **vax780** (`libsimh/`), with our NI1010 device model, the
+  idle patches, and a proven RP06/RP07 disk path. A V10/780 kernel runs on the machine
+  ipnx *already has*, so V8 and V10 become one simulator instead of two.
+- V10's own 780 support is complete and named `star` — `lsys/md/machstar.c`,
+  `consstar.c`, `nexstar.c`, `ubastar.c`, `lsys/ml/trapstar.s` — and
+  `lsys/astro/alice.m` is a real CSRC 780 configuration (`ms780`, `dw780`, `mba`).
+- `lsys/io/hp.c` is the Massbus RP driver, i.e. **the same disks V8 uses here**, so the
+  disk half of the machine is already proven end to end by Track A and the S track.
+- The 750 was only ever the shortest road to *a* booting kernel (`seki` + MSCP), and it
+  did its job: it proved the golden, stage 1 and stage 2. It is scaffolding.
+
+Then the payoff Christine names: **a booting 780 kernel is the machine that recompiles
+everything else**, which is stage 9's chroot argument arriving early and on real
+hardware terms.
+
+### The work
+
+- [ ] **K5 — settle `sys/` vs `lsys/` before compiling anything.** 756 files against
+      763, 522 shared of which **131 differ**, and different machine-config sets (10
+      against 17). `alice.m` lives in `lsys/astro/`, which is evidence but not proof.
+      Decide it, record why, and never compile from both.
+- [ ] **K6 — run the prebuilt `mkconf`** (`lsys/lib/mkconf`, 37,932 B) on `alice.m` to
+      generate the kernel makefile, exactly as V8's `config`(8) does for its own tree.
+      It is a 1995 V10 binary, so it runs on the machine we already have — same status
+      as `ccom` and `as`.
+- [ ] **K7 — compile the 780 kernel with the STAGE 1 toolchain**, on V10, and let the
+      failures name themselves. This is the first real test of stage 1 against something
+      other than itself: ~750 files of K&R C and VAX assembler, none of it ANSI, so the
+      `iolib.h`/`lcc` class of problem should not appear at all.
+
+      **THE KERNEL IS NOT REFACTORED** (Christine, 2026-08-17) — refactoring libc is
+      enough. It is compiled as it stands, which the evidence says should work: the
+      kernel is K&R throughout and `cc` is a K&R compiler, so there is nothing to
+      convert and no second compiler to reach for. If a kernel file *does* fail, treat
+      it as `mv.c` and `fsck.c` were treated — a one-line named patch with the reason
+      recorded — and not as licence to start a conversion.
+- [ ] **K8 — a bootable 780 disk**: RP07 image, V10 root filesystem, `hpboot`-equivalent
+      boot block from `lsys/boot/star/`, and the 780's own console protocol rather than
+      the retargeted `uda750` ROM this project wrote for the 750.
+- [ ] **K9 — boot it under the app's own `vax780`**, not the desktop build, which is
+      what makes V10 shippable rather than merely demonstrable.
+- [ ] **K10 — recompile the world on it.** At that point the mixed-compiler libc, the
+      283 commands and the fixpoint all become work done *inside* V10 rather than
+      against it.
+
+Sequenced this way, the libc questions below are no longer on the critical path — they
+are what K10 cleans up once there is a machine to clean it up on.
+
+## B2.2 — a libc we can BUILD (the replan, 2026-08-17)
+
+Christine, closing the stage-2 investigation: *"This is no longer a game of replicating
+a config, we need to generate a new config that we can build from."*
+
+That is the right reading of everything above. The tape's `libc.a` is a four-year
+accretion whose oldest 199 members were compiled by a V9 compiler nobody has, so
+reproducing it is impossible and aiming at it is aiming at a ghost. The target is a
+**coherent libc that one compiler builds from source we hold** — and the tape becomes a
+witness we consult, not a specification we chase.
+
+### The compiler is `cc`, V10's own pcc2
+
+Measured over all 261 members, not chosen by preference:
+
+| | builds | fails |
+|---|---|---|
+| `cc` alone | **246** | 9 `printf` family + 6 `shares` |
+| `lcc` alone | 202 | ~50 K&R members + the same 15 |
+| `cc` + `lcc` | 246 | the same 15 |
+
+Four reasons it is `cc`:
+
+1. **It is already closest** — 246 against 202, so the refactoring bill is ~20 files
+   rather than ~50.
+2. **It is what the rest of the edition uses.** The kernel and all ~283 commands are
+   K&R compiled by `cc`. Standardising libc on `lcc` would give the *edition* two
+   compilers again, which is the disease and not the cure.
+3. **It is fully buildable from source, on V10, today** — stage 1 does exactly that
+   (`yacc cpp ccom as c2 ld cc`, 45/46). `lcc` is buildable too (front end
+   `cmd/lcc/c/`, back end `gen3/gen.c`) but needs an ANSI compiler to bootstrap
+   itself, i.e. the prebuilt `rcc` we cannot rebuild.
+4. **Stage 3's fixpoint only means something with one compiler.** "The toolchain
+   reproduces itself" is not a statement you can make about a mixture.
+
+So the direction of conversion is **ANSI → K&R**, which is the opposite of V11's and
+correct for exactly that reason: V10 keeps the 1989 language, V11 changes it.
+
+### The work, in dependency order
+
+- [ ] **B2.2a — fix `stdio/iolib.h`.** It has branches for *V10 without stdarg*, *pANS
+      with stdarg* and *SGI*, and none for a V10 VAX, so nine members fail under both
+      compilers. r70 ships `varargs.h`, which is the K&R spelling; the V10 branch needs
+      it. One named patch in `v10/src/`, `mv.c`/`fsck.c` model. **Unblocks 9.**
+- [ ] **B2.2b — reconstruct `<shares.h>`.** Six members include it and it is in none of
+      the 25,682 files, but it is recoverable rather than lost: the six `.c` files name
+      every field they touch, their compiled objects are in `libc.a` to check offsets
+      against, and V10's share scheduler is in the kernel tree — so the struct can be
+      derived and verified. **Unblocks 6, and takes the ceiling to 261.**
+- [ ] **B2.2c — K&R the remaining ANSI members** (~20, listed in `mkdep.py`'s
+      `LIBC_LCC`). Mechanical and reviewable: prototypes → old-style definitions,
+      `void *` → `char *`, `size_t` → `int`, `<stdarg.h>`/`va_list` →
+      `<varargs.h>`/`va_list`, `const` dropped. Behaviour is unchanged; only the
+      spelling moves back. Each file a named patch.
+- [ ] **B2.2d — delete `LIBC_LCC` and the second compiler** from the generated
+      makefile, so `libc.mk` uses `$(COMPILE)` for all 261 and there is one compiler in
+      the build by construction rather than by policy.
+- [ ] **B2.2e — re-measure, and keep the witness.** Assert 261/261 build with `cc`
+      alone and that the archive links and runs a program; report byte-identity with the
+      tape as information, never as a pass condition. Expect it to *fall* as members are
+      refactored, and that is correct: we are no longer trying to match a V9 artefact.
+- [ ] **B2.2f — then stage 3**, on **stripped** binaries (V10's `cc.c` puts `getpid()`
+      into its temp filenames exactly as V8's does), with `stage 3 == stage 3b` as the
+      required test and `stage 1 == stage 3` as the interesting one.
+
+### What this costs, stated plainly
+
+The result is **not** the archive Bell Labs shipped, and it cannot be. It is a libc
+built from Bell Labs' source by Bell Labs' compiler, coherent in a way the original
+never was, with every departure from the tape named in `v10/src/PATCHES.md`. That is
+the honest form of this restoration — and it is worth saying that the alternative, a
+mixture that reproduces 150 members of a V9/V10 hybrid and cannot build 15 at all, is
+less faithful, not more: it reproduces an accident.
 
 ## Source inventory
 

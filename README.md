@@ -162,8 +162,27 @@ not exist.
 So V8 is now hosting a working Tenth Edition toolchain, and what remains is the userland,
 the kernel and a boot block. A world first if it lands:
 [docs/v10-restoration.md](docs/v10-restoration.md), lab notebook in
-[docs/v10-log/](docs/v10-log/). V9 is deliberately skipped — what survives of it is a
-Sun-3 port with no VAX kernel.
+[docs/v10-log/](docs/v10-log/).
+
+**And there was never a pure Tenth Edition to restore.** This is the track's most
+important finding (2026-08-17), and it came out of the tape's own `ar` headers rather than
+from any history: V10 was not built and shipped, it was **hand-built on each machine by
+upgrading V9 in place**. The tarball is one machine's working tree caught mid-migration,
+not a release. `libc.a`'s 261 members are dated across **4.1 years and 27 separate days**
+— 199 from a single June 1989 build, the rest recompiled in ones and twos until 1993 —
+and it is the *old* members we cannot reproduce, because they are V9's and the V9 VAX
+compiler is not on the tape. The tooling says the same thing out loud: lcc's back end is
+`gen2/vax-v9`, its driver defines `-DV9`, libc's makefile defines `-DV10`, and `iolib.h`
+has branches for *V10 without stdarg*, *pANS* and *SGI* but none for a V10 VAX — so nine
+`printf` members compile under neither of the tree's two compilers. Neither compiler can
+build libc alone: `cc` fails 15 of 261, `lcc` fails 59, because the port was left
+half-done.
+
+So **ipnx's V10 is a reconstruction, and labelled as one.** It cannot correspond to a real
+V10 machine, because no two real V10 machines corresponded to each other either — each was
+its own hand-upgrade. What it can be faithful to is *this tree*, with every deviation
+named. V9 is still skipped as a build target — what survives of it is a Sun-3 port with no
+VAX kernel — but we now stand on top of it without a copy of it.
 
 ### ipnx-v11 — the edition that never was · *speculative*
 
