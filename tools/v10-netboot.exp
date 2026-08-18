@@ -121,6 +121,48 @@ v10_sh "cp $OBJ/nafsmnt /etc/nafsmnt" 600
 note "/etc/nafsmnt installed" \
     [v10_try "test -s /etc/nafsmnt && echo NI\$OK" "NI-ok" 300]
 
+# ------------------------------- the tools that BUILD a disk -----------------
+#
+# A V10 that is to populate a filesystem has to be able to WALK one, and the
+# golden cannot: `find', `chmod', `ls', `cpio', `grep' and `wc' are all absent
+# from it -- measured against v10/mk/gen/prebuilt.txt, not discovered one at a
+# time.  `find . -print | cpio -pd' is the idiom every copy in this project uses,
+# and on the V10 golden it answers `find: not found', which cost K10.2 a run:
+# it presented as `cannot write in </usr/jerq/include>' with three assertions
+# failing about a tree that had never been copied.
+#
+# INSTALL PATHS COME FROM bootpath.order's THIRD COLUMN, never from here.  That
+# column is v10-where.py's answer, derived from V10's own manual and V8's
+# measurements -- `find' is /usr/bin/find and `chmod' is /bin/chmod, and a
+# harness that guessed would put a tool where nothing looks for it.  Stage 1's
+# yacc cost a whole run to exactly that mistake (`/usr/s1/bin/yacc' against the
+# real `/usr/s1/usr/bin/yacc'), which is why tc.order's column is read and not
+# retyped.
+set DISKTOOLS {find chmod ls cpio grep wc}
+set toolrows {}
+foreach r [v10_rows bootpath.order 3] {
+    if {[lsearch -exact $DISKTOOLS [lindex $r 0]] >= 0} { lappend toolrows $r }
+}
+note "every disk tool has a row in bootpath.order" \
+    [expr {[llength $toolrows] == [llength $DISKTOOLS]}]
+
+set alltools 1
+foreach r $toolrows {
+    set t    [lindex $r 0]
+    set dest [lindex $r 2]
+    v10_sh "rm -rf $OBJ/$t; mkdir $OBJ/$t" 300
+    set ok [v10_try "cd $OBJ/$t; make -f $N/mk/$t.mk \$A \$B \$C > m.log 2>&1 && echo TB\$OK" \
+            "TB-ok" 1800]
+    note "$t builds" $ok
+    if {!$ok} { v10_sh "sed -e 8q $OBJ/$t/m.log" 300; set alltools 0; continue }
+    # `cp' to the path the table names, and the DIRECTORY may not exist -- V10's
+    # mkdir makes one level, and /usr/bin does exist on the golden while a deeper
+    # one might not.
+    v10_sh "cp $OBJ/$t/$t /$dest" 600
+    note "$t installed at /$dest" \
+        [v10_try "test -s /$dest && echo TI\$OK" "TI-ok" 300]
+}
+
 # ------------------------------------------------------------- /etc/rc -------
 #
 # GUARDED ON THE DEVICE NODE, exactly as V8's rc is, so a kernel or a machine
@@ -195,6 +237,16 @@ if {$m2} {
 } else {
     note "our own patched istread is readable over the share" 0
 }
+
+# THE TOOLS, EXERCISED RATHER THAN LISTED.  `test -s /usr/bin/find' says a file
+# is there; it does not say find can walk a tree, and on V10 `ls X && echo OK'
+# does not even say that much because cmd/ls.c perrors and then exit(0)s.  So
+# find is asked for something whose answer is known, and the answer is matched.
+note "find walks a tree (the golden had no find at all)" \
+    [v10_try "cd /etc; find . -print | grep rc" "./rc" 900]
+note "and the find|cpio idiom copies (the one every phase uses)" \
+    [v10_try "rm -rf /tmp/ct; mkdir /tmp/ct; cd /etc; find . -print | cpio -pd /tmp/ct > /dev/null 2>&1; test -s /tmp/ct/rc && echo CI\$OK" \
+        "CI-ok" 900]
 
 v10_sh "cd /; sync" 300
 if {$m1 || $m2} { v10_sh "/etc/nafsmnt -u /n/tree; /etc/nafsmnt -u /n/ours" 600 }

@@ -2445,6 +2445,16 @@ working tree. **`tools/v10-srcdisk.sh` is no longer on the path for reading
 source.** This is B0.6 for the Tenth Edition, and it is on the way to Edition 10 in
 the app rather than beside it.
 
+**K13.1 — AND IT CAN BUILD A DISK** (same harness, **33/33**). The golden has no
+`find`, `chmod`, `ls`, `cpio`, `grep` or `wc`, so a V10 that is to populate a
+filesystem cannot walk one. All six are in `mkdep.py`'s `BOOTPATH` now and the
+provisioning harness installs them at the paths `bootpath.order`'s third column
+names — `/usr/bin/find`, `/bin/chmod`, `/bin/ls`, `/usr/bin/cpio`, `/bin/grep`,
+`/usr/bin/wc` — and then **exercises** them: `find` walks `/etc` and
+`find . -print | cpio -pd` copies a file. `cpio` appearing in both `FSTOOL_SRC` and
+`BOOTPATH` is deliberate, not a duplicated list: the first builds `v10cpio` for the
+*Eighth* Edition host that makes V10 media, the second is `/bin/cpio` on the Tenth.
+
 **Superseded, kept for the measurements: K12.1 at 21/24.**
 V10 autoconfigured the Interlan, brought IP up on it with the tape's own
 `dipconfig`, pushed the TCP line discipline onto `/dev/ip6` with `tcpconfig`, put

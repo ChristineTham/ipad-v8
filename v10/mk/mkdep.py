@@ -151,7 +151,22 @@ WHERE = mkgen.load_where(V10ED)
 # left where they were compiled.  There is no oracle for this list.
 BOOTPATH = ["init", "getty", "login", "mount", "umount", "mkfs", "fsck",
             "icheck", "sync", "date", "stty", "cat", "cp", "mv", "rm",
-            "mkdir", "echo"]
+            "mkdir", "echo",
+            # THE TOOLS THAT BUILD A DISK, added for rung 10 -- a V10 that can
+            # populate a filesystem needs to be able to WALK one, and the golden
+            # cannot: `find', `chmod', `ls', `cpio', `grep', `wc' and `sort' are
+            # all absent from it (measured against prebuilt.txt, not discovered
+            # one at a time).  `find . -print | cpio -pd' is the idiom every
+            # copy in this project uses, and on V10 it answers `find: not found'
+            # -- which cost K10.2 a run, presenting as `cannot write in
+            # </usr/jerq/include>' with three assertions failing about a tree
+            # that had never been copied.
+            #
+            # `cpio' is here as well as in FSTOOL_SRC and that is not a
+            # duplicate: FSTOOLS builds `v10cpio' to run on the EIGHTH Edition
+            # host, prefixed exactly so the two cannot be confused, while this
+            # one is /bin/cpio on the Tenth Edition machine.
+            "find", "chmod", "ls", "cpio", "grep", "wc"]
 
 # The subset that MAKES a Tenth Edition filesystem, ported to run on the
 # Eighth Edition host.  Built from V10 source and nothing else: V8 has files
