@@ -21,9 +21,23 @@
 # work/opensimh/BIN/vax780, not assumed.
 #
 # KEPT FROM alice, unchanged:
-#	root regfs ra 0100	UDA50/RA81, 0100 = the BITFS bit.  This is
-#				exactly what tools/v10-golden.sh already writes,
-#				so the disk half needs nothing new.
+# CHANGED from alice's `root regfs ra 0100' to 0107, and K14's panic is the
+# reason.  0100 octal is 64 = BITFS|unit 0|partition 0, which is partition `a';
+# 0107 is the same disk's partition `h', the WHOLE DRIVE.  A disk built by V10
+# itself is one 111,384-block filesystem -- that is what K11 exists for, so that a
+# Tenth Edition disk need not be cut into Eighth Edition sized pieces -- and
+# rooting on `a' makes the kernel read a superblock claiming 435 MB out of a
+# partition far too small to hold it:
+#
+#	unix
+#	mem = 6062080
+#	panic: iinit mount
+#
+# The boot block is unaffected either way: `a' and `h' both begin at sector 0, so
+# lsys/boot/star/uda.s finds block 0, the superblock and /unix identically.  Only
+# the KERNEL's mount cares about the partition's length.
+#
+#	root regfs ra 0107	UDA50/RA81, 0100 = the BITFS bit, 7 = partition h.
 #	ms780 0/1		= SIMH MCTL0, MCTL1
 #	ni1010a 0		= SIMH IL, this project's own device model
 #				(libsimh/patches/pdp11_il.c).  Present but
@@ -68,7 +82,7 @@
 # V8 kernel since 1985 with nothing to talk to; this is the line that gives
 # V10 the same live /n/src share, and retires the courier disk.
 
-root	regfs	ra	0100
+root	regfs	ra	0107
 swap	ra	01	20480
 dump	uddump	0x1001	10240	20480
 

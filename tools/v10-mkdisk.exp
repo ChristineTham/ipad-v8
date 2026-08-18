@@ -184,13 +184,27 @@ v10_halt
 # root is `ra 0'.  Nothing of the builder is attached: if this reaches a login
 # prompt, it did so out of a filesystem V10 made and filled.
 if {$mounted} {
-    v10_boot $blank {}
-    note "boot 2: THE DISK V10 BUILT reaches a login prompt" 1
+    # REAP WHATEVER HAPPENS.  v10_boot bails on its own if the machine never
+    # reaches a prompt, and on this path that bail left a simulator sitting at
+    # `sim>' for THIRTY MINUTES -- long enough for tools/norun.sh to refuse the
+    # next run, which is correct and is also the symptom.  "A harness must
+    # terminate itself; needing to kill one is the bug" applies here: the boot of
+    # an untested disk is the one place a bail is EXPECTED, so it is the one place
+    # that must not depend on the bail path being tidy.
+    set booted 0
+    if {![catch {v10_boot $blank {}}]} {
+        set booted 1
+        note "boot 2: THE DISK V10 BUILT reaches a login prompt" 1
     v10_login root
     v10_sh "PATH=/bin:/etc:/usr/bin; export PATH" 120
     v10_sh "OK=-ok" 120
-    v10_sh "cd /; sync" 300
-    v10_halt
+        v10_sh "cd /; sync" 300
+        v10_halt
+    }
+    if {!$booted} {
+        note "boot 2: THE DISK V10 BUILT reaches a login prompt" 0
+        v10_reap
+    }
 } else {
     note "boot 2: THE DISK V10 BUILT reaches a login prompt" 0
 }
