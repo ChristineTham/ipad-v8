@@ -2628,6 +2628,14 @@ two-filesystem layout; and editing `v10-mkdisk.sh` mid-run made bash resume insi
 a word and **silently skip the host-side verification** while the guest still
 reported 14/14.
 
+**K14's two blemishes are fixed and verified** (same harness, 14/14, exit 0):
+`/lib` is back on root where the golden keeps it, and the copied `/etc/mtab` is
+truncated so the new disk no longer boots believing the builder's mounts. Both were
+confirmed by their **effects** — root free 826 → 664 and `/usr` free 30115 → 30278,
+the same 162/163 blocks moving in opposite directions, which is `/lib`'s 631,774
+bytes; and boot 2's `cat /etc/mtab` and `umount -a` both print nothing where they
+previously printed three stale entries and three errors.
+
 **Rung 8 is answered, and the answer is that the terminal half cannot be built**
 (2026-08-19, host-side, no simulator). `muxterm`'s own makefile names `3cc`/`3as`/
 `3ld`/`3nm`; `src/man/man9/3cc.9` documents all eight of those tools as the DMD-5620
@@ -2690,9 +2698,6 @@ short-return branch it guards is reachable on a larger transfer.
   `il_dib.vec + 4`, which is why the config names only the base.
 
 Next, in order of what is blocked by what:
-- **`/lib` back on root** (task, harness comment records it): the golden keeps
-  `/lib` on root and the boot path is 2.1 MB against 4.8 MB usable, so the split
-  K14 used is a deviation chosen while a miscounted figure made root look full.
 - **What to copy** for a shippable `v10.disk` — K10.3's 203 commands, K10.2's 26
   libraries, stage 1's toolchain — then the Swift work to carry a second machine
   beside V8 (two committed images with identity stamps, two working copies under
