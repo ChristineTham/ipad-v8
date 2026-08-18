@@ -271,12 +271,38 @@ hardware terms.
       `tools/v10-boot780.sh` is new and is the wrapper this harness never had: it was
       being run by hand, so the clone rule was whoever typed it. It writes `/etc/motd`,
       and booting rewrites the superblock, so it must have its own copy.
-- [ ] **K10 — recompile the world on it.** At that point the mixed-compiler libc, the
-      283 commands and the fixpoint all become work done *inside* V10 rather than
-      against it.
+- [x] **K10 — recompile the world on it.** Done in three measured stages, all
+      inside V10, with V10's own compiler
+      ([docs/v10-log/2026-08-18.md](v10-log/2026-08-18.md)):
+
+	K10.1  bash tools/v10-compile.sh    247 of 358 units compile     20/20
+	K10.2  bash tools/v10-libs.sh       500 of 500 library members   24/24
+	K10.3  bash tools/v10-link.sh       200 linked and installed     34/35
+
+      K10.1 compiles only — no libraries, no linking — so a failure there is a
+      **language or header** fact. K10.3 links against K10.2's archives and
+      installs into a **staged root** at `/usr/w10`, never over the machine's own
+      `/bin` and `/etc`: the 46 prebuilt binaries stay available as the oracle,
+      a bad `/etc/init` cannot make the disk unbootable, and K11 gets the tree it
+      wants to copy in.
+
+      Three things K10 measured that change what the phase *means*:
+      **a `cmd/` directory is not necessarily a command** — 71 units carry more
+      than one `main()`, `cmd/worm` alone holding 22 programs; **`gets` was
+      deleted from libc by Bell Labs in 1988**, in the tape's own words, so the
+      two commands that will not link over it are the tape working as intended;
+      and **one generic recipe has a limit** — `cmd/sh` fails on a `profile.c`
+      that is not in its own `$OFILES`, which is K10.4's work.
 
 Sequenced this way, the libc questions below are no longer on the critical path — they
 are what K10 cleans up once there is a machine to clean it up on.
+
+- [ ] **K10.4 — read each unit's own object list.** `worldc.sh` compiles every
+      `.c` it finds, and a unit's directory holds files its build does not use.
+      Parsing `OFILES`/`OBJS`/`OBJECTS` where a unit has one would close `sh`
+      and probably several more; it also changes the basis of the measurement, so
+      the new number is not directly comparable to 247/200 and must be reported
+      as its own reading.
 
 ### What the 780 kernel unlocks, and it is more than a kernel
 

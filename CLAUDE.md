@@ -687,9 +687,13 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   note the driver is `ni1010a` where V8's is `ill`, so grepping the generated
   config for `il` finds nothing and reads as "no card". Source therefore reaches
   V10 on a **disk** (`tools/v10-srcdisk.sh`), not a share.
-- **The V10 golden has no `ar`, `cmp`, `tail`, `grep`, `wc`, `dd` or `find`** —
-  measured against `v10/mk/gen/prebuilt.txt` plus the boot path, not discovered
-  one at a time. Two are load-bearing for the bootstrap: stage 2 *is* an archive
+- **The V10 golden has no `ar`, `cmp`, `tail`, `grep`, `wc`, `dd`, `find` or
+  `sort`** — measured against `v10/mk/gen/prebuilt.txt` plus the boot path, not
+  discovered one at a time. (`sort` cost K10.3 a run: `sed … | sort -u >
+  /tmp/dests` answered `sort: not found`, the staged root was never created, and
+  eleven assertions said NO about a tree that did not exist while the link half
+  had worked perfectly. The dedup was not even needed — `mkdir` on an existing
+  directory prints `File exists` and a loop can ignore it.) Two are load-bearing for the bootstrap: stage 2 *is* an archive
   (`AR = /bin/ar` names a file that is not there) and stage 3 *is* a byte
   comparison. They are built in stage 1 as `BUILDTOOLS`. `/n` was missing too,
   and cost a whole run: `mkdir` makes one level, so `mkdir /n/v10` failed, the
@@ -705,6 +709,125 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   - `dd` cost a run the same way (K10.1's space probe), so the general rule is
     worth more than the list: **on V10, assume a tool is absent until the boot
     path or `prebuilt.txt` says otherwise.**
+  - **And a tool that is present may still be missing its DATA.** The golden has
+    prebuilt `lex` at `/usr/bin/lex` and no `/usr/lib/lex` at all, so it answers
+    `(Error) Lex driver missing, file /usr/lib/lex/ncform`. `ncform` is on the
+    tape beside the lex source (`cmd/lex/ncform`), so it installs exactly as a
+    header does — but until it does, every lex unit fails and the failure reads
+    as a grammar the tape cannot process. `test -s /usr/bin/lex` is not
+    "lex works".
+- **A HOST-SIDE MODEL OF `/usr/include` IS WORTH NOTHING UNLESS THE HARNESS
+  INSTALLS WHAT IT MODELS, and this ran in the flattering direction for a whole
+  phase.** `tools/v10-world.py` has always resolved `<stdlib.h>`, `<float.h>`
+  and `<stdarg.h>`: stage 2 chose which of r70's four copies of each pcc2 can
+  read and recorded the evidence. But **only `tools/v10-stage2.exp` performed the
+  copies**, on the `.s2` image chain, and `tools/v10-compile.sh` runs on a
+  `.stage1` clone that has none of them. So K10.1 surveyed one machine and
+  compiled on another, and fourteen units failed:
+
+	2500 awk ed eqn grap idiff join map pic sort zero   stdlib.h
+	cb ed sum                                          stddef.h
+
+  Eleven of those name a decision *already made*. They went into K10.1's
+  write-up as header facts about the tape. Same shape as the app's *"it is in
+  the golden, it will arrive on Reset" is not shipping it*, and the same answer:
+  the list lives once, in the generated `v10/mk/gen/inc.extra`, `v10_inc_extra`
+  in `tools/v10drive.exp` applies it in every harness, and `v10-world.py
+  --check` refuses when it disagrees with the copies stage 2 makes.
+  - **The mechanical test reproduces all three of stage 2's choices, including
+    the one no regex should have caught.** `installable()` rejects a variant
+    carrying `extern "C"`, `void *`, `const`, a prototype, an anonymous struct
+    — or **an ANSI `U` suffix**, which is why `lcc/stdarg.h` is wrong: it is
+    pure `#define`s and parses perfectly, but its macro says
+    `_littleendian_va_arg(list, mode, 3U)` and pcc2 lexes `3U` as 3 followed by
+    the identifier `U`. The header compiles; the *expansion* fails hundreds of
+    lines away. `CC/stdarg.h` is the one installed, and this table said lcc's
+    for a week.
+  - Extending past libc's three closes 11 unit-mentions and the rest are a
+    finding, not a shortfall: **`malloc.h`, `memory.h` and `sysent.h` exist only
+    as C++** (`extern "C" {` — they are cfront's) and **`locale.h` only as ANSI
+    prototypes**. Those need converting like the printf family; they are not a
+    layout question.
+- **`gets` WAS DELETED FROM libc BY BELL LABS, ON PURPOSE, IN 1988 — so a
+  command that will not link over `_gets` is the tape working as intended.**
+  K10.3's `clear` and `dired` compile and then fail on `Undefined: _gets`, which
+  reads as a hole in the libc we built. It is not. There is **no**
+  `libc/stdio/gets.c`; there is `libc/stdio/gets.c-1`, and it opens:
+
+	/* @(#)gets.c	4.1 (Berkeley) 12/21/80 */
+	/*
+	 * Deleted from libc.a by td, 88.11.07
+	 * gets is an unacceptable security hole.
+	 */
+
+  `gets.o` is absent from Bell Labs' own `libc.a`, and so are `gtty.o` and
+  `stty.o` — **eleven years before C99 deprecated `gets` and twenty-three before
+  the standard removed it**. Those commands could not have linked on the tape's
+  own machine either. Restoring it would undo a documented security decision,
+  which the authenticity rule settles: the tape is the specification, including
+  where it is inconvenient.
+  - **The `-1` suffix means two different things in the same tree, and only one
+    of them is a decision.** `libc/gen/rand.c-1` and `libc/math/hypot.c-1` sit
+    beside a live `rand.c` and `hypot.c` and are ordinary superseded copies —
+    both `rand.o` and `hypot.o` are in the archive. `gets.c-1` has no live
+    counterpart and carries the note. **Read the file, not the suffix.**
+- **A `cmd/` DIRECTORY IS NOT NECESSARILY A COMMAND: 71 of the 358 units carry
+  more than one `main()`.** `cmd/worm` has 22 programs in it, `cmd/qsnap` 17,
+  `cmd/uucp` 11, and `cmd/compact` is the small clear case — `compact.c` and
+  `uncompact.c`, two programs with no shared code. This changes what "the 283
+  commands" means and it changes what a link survey can do: linking a unit's
+  objects together fails on `multiply defined _main`, and the obvious repair is
+  worse than the skip — pairing each `main` with *all* the unit's other objects
+  would give `cmd/awk` a `maketab` carrying the whole of awk, because `ld` pulls
+  in every `.o` it is named. Which objects belong to which program is in each
+  unit's own makefile, which is exactly why the boot path has generated
+  makefiles. `world.link` names all 71 and builds none of them.
+- **yacc is at `/usr/s1/usr/bin/yacc`, not `/usr/s1/bin/yacc`, and the path
+  belongs in `tc.order` rather than in a harness.** `yacc.mk` installs to
+  `$(TOOLDIR)/usr/bin/yacc` and stage 1 sets `TOOLDIR=/usr/s1`. Written out by
+  hand in `v10-compile.exp` it failed for all fifty generator rows —
+  `/usr/s1/bin/yacc: not found` — and turned 241 compiled units into 232, which
+  reads as a regression and was a typo. `tc.order`'s third column is the install
+  path *and* is what stage 1 installs from, so read it: a component list that
+  appears twice will disagree.
+- **A GENERATOR STEP IS PART OF THE BUILD, AND A SURVEY THAT SKIPS IT REPORTS
+  ITS OWN OMISSION AS A FACT ABOUT THE TAPE.** `v10-world.py`'s `csources()`
+  takes `.c` files, so nine units were reported `blocked: missing:y.tab.h` — a
+  header **yacc writes** — and `expr` and `ipa` were not surveyed at all,
+  because their only source is a grammar. Four things to get right, all of which
+  were got wrong first:
+  - **Four suffixes, not two.** `cmd/ratfor`'s grammar is **`r.g`** and
+    `cmd/ipa`'s lexer is **`ipa_trans.lex`**; a scan for `*.y` and `*.l` finds
+    neither, and ratfor's makefile says `yacc -d r.g` in as many words.
+  - **`-d` is the tape's own flag** — sixteen makefiles write `yacc -d` outright
+    and four more write `$YFLAGS` over `YFLAGS = -d`. It is also what makes
+    `y.tab.h` exist.
+  - **A recipe is a BLOCK, not a line.** `cmd/ccom` runs `yacc` and then
+    `sed`s `y.tab.c` into `cgram.c` on the next line; `cmd/2500` edits it with
+    `ed`. Judged a line at a time both look like a plain yacc call, and the
+    survey would compile a generated source the tape never compiles. A *rename*
+    (`cmd/cpp`'s `mv y.tab.c cpy.c`) is not a transform, and the first version of
+    the test could not tell the two apart.
+  - **The object is the generator's natural output, not a name we invent.**
+    `cmd/config`'s `OBJS` names `y.tab.o` and `lex.yy.o` outright, and deriving
+    from the grammar gave `config.y` and `config.l` the *same* object.
+  - And **a unit with its own generated makefile already has this described,
+    correctly**: `ccom.mk` and `cpp.mk` carry the tape's recipe including the
+    `sed`, so `world.gen` skips those units rather than emitting a weaker generic
+    row. That also removed the row this survey had no business emitting —
+    `cmd/ccom/common/sty.y`, a grammar named in no object list in ccom's
+    makefile.
+- **`v10-srcdisk.sh` STAMPED A CURRENT srcid ON A FAILED RUN**, which defeats the
+  one guard that exists for the source disk being a copy. It assembled the image
+  and called `srcid_write` unconditionally and only then exited with the guest's
+  status — so a run that bailed left a possibly-truncated disk claiming to carry
+  the current `v10/mk/gen` and `v10/src`, and `srcid_check` would pass it. The
+  fix is *not* to delete the stamp: a **missing** `.id` is deliberately only a
+  warning. It is to skip the assemble entirely on failure, leaving the previous
+  image and stamp to be judged on their own merits. Found when SLiRP answered
+  `attach il nat:` with `Sockets: bind error 13 - Permission denied` several
+  hundred times and the guest quit at `sim>` — transient, and a retry worked, but
+  the hole was not transient.
 - **`echo MAKE$OK` in a makefile prints `MAKEK`.** make's `$` takes a *single*
   character unparenthesised, so `$OK` is `$(O)` then `K`, and `$(O)` is empty —
   make working exactly as specified, reported by a test as make being broken. Pass
@@ -739,6 +862,12 @@ at the old flat `v8/` is moved on first launch, never abandoned.
     compile that *succeeds* writes nothing: `test -s can.log` reported the canary
     as failed while `LCANARY-cc-ok` sat in the same transcript. Assert a marker
     the success path writes, never the absence or presence of diagnostics.
+    **This was in `v10-compile.exp` too, and it is why K10.1 HAD NEVER EXITED
+    0**: `test -s $OBJ/can.log` as *"the canary compiled"* is true only when the
+    canary **failed**, so the run reported 6/7 on a pass in which 241 units
+    compiled — which no wrong set of flags can do. A permanently-failing
+    assertion stops being read, which is how `atof` hid in stage 2; the same
+    mechanism, one harness over.
   - And the meta-lesson, since the guest/host cross-check was in place and blind
     to all of it: **two readings agreeing is not two readings being right.** Both
     instruments were counting the same tokens. What was missing was an *internal*
@@ -1138,6 +1267,19 @@ at the old flat `v8/` is moved on first launch, never abandoned.
     flag** (`libtermlib` builds `termcap.a`, installs it as `libtermcap.a`, and
     hard-links `libtermlib.a` to that; `libcurses` calls its archive **`crlib`**;
     `libl` builds `libl.a` beside a prebuilt `libln.a`).
+  - **AND `libln.a` IS `libl.a` UNDER THAT SECOND NAME — the tape's own archive
+    proves it member for member.** `cmd/pret` and `cmd/struct` link `-lln`, and
+    libl's makefile builds and installs only `libl.a`, so `-lln` was being
+    reported as a flag nothing in the tarball provides. Reading the prebuilt
+    archive answers it: `allprint.o main.o reject.o yyless.o yywrap.o`, which is
+    exactly what the makefile puts in `libl.a`. So this is the `libtermlib`
+    pattern again — one build, two `-l` names — and it is a *system-layout*
+    question the tape settles, not a library we lack. `ALSO_ANSWERS` in
+    `tools/v10-libs.py` records it and `sanity()` **compares the two member
+    lists** rather than trusting the claim, because a drifted prebuilt would put
+    different code behind a `-l` flag and `ld` would find it anyway. Our build
+    is installed under the second name; the prebuilt archive stays an oracle and
+    is never copied.
 - **Patching guest sources: replace whole functions, and rehearse on the host.**
   `streamio.c`'s `stread()` and `istread()` share whole lines verbatim, so
   context-anchored `ed` edits landed in the wrong one and the kernel failed to compile
@@ -1311,6 +1453,15 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   refused on a stale srcid, and both refusals were misread because a 42/42 was
   read out of the *previous* run's log file. **When a harness reports success,
   check that the log you are reading was written by the run you just made.**
+  - **AND THE SAME MISTAKE FITS INSIDE A WAIT CONDITION**, where it is worse
+    because it corrupts the schedule rather than one reading. Waiting for a
+    background run with `until grep -q "v10-compile exit" work/compile-run.log`
+    returns **immediately** when that file still holds the previous run's
+    output — so the next command read a complete, consistent, forty-minute-old
+    report of a run that had not started, while the real one was nine assertions
+    into a source-disk rebuild. Wait on something the invocation itself created,
+    or truncate the log before starting; never on a predicate a stale file can
+    satisfy.
 - **A RE-RUN OF AN INCREMENTAL `make` IS NOT A PROBE OF THE BUILD.** V10's `ld`
   **writes its output file even when symbols are undefined** — it reports them
   and clears the execute bits — so a failed link still leaves an `a.out` newer
@@ -1874,6 +2025,17 @@ and they were read as the current state and reported as the next step. They are
 resolved in place now. A plan with two answers to the same question gets read at
 the wrong one.
 
+**K10.1 — THE WORLD COMPILES, 247 OF 358, AND K10.1 EXITS 0 FOR THE FIRST TIME**
+(2026-08-18, `bash tools/v10-compile.sh`, **20/20**). The 241 below was measured
+through a machine that did not have the headers the survey said it had, a survey
+that never ran yacc, and an assertion that was inverted. All three are fixed and
+each is written up in [docs/v10-log/2026-08-18.md](docs/v10-log/2026-08-18.md);
+the short form is that **six of the fourteen units that "failed on the tape's
+headers" were failing on a decision stage 2 had already made and nobody had
+installed**, and that the yacc/lex step the survey skipped is step one of the
+build for fifty-one units. The 241 paragraph below is kept because its *controls*
+argument is what made the number honest, and it still holds at 247.
+
 **K10.1 — THE WORLD COMPILES, 241 OF 356, AND THAT IS A FLOOR** (2026-08-18,
 `bash tools/v10-compile.sh`, [docs/v10-log/2026-08-18.md](docs/v10-log/2026-08-18.md)).
 V10's own compiler — stage 1's passes, `cc -B/usr/s1/lib/ -t02p` — over every
@@ -1949,10 +2111,42 @@ including that `lib5620`'s and `libblit`'s `openpl.c` are the same file differin
 in three places (`/usr/jerq/` vs `/usr/blit/`, `32ld` vs `68ld`, and that
 identifier) — the 5620-versus-Blit naming trap in a pair of *libraries*.
 
-Next: **K10.3** — link and install, which is where the 283 commands become work
-done *inside* V10. K10.1's own follow-ups are still open and cheap: run `yacc`
-for the eight units needing `y.tab.h`, and extend the variant-header decision
-past libc's three. Then the two workarounds a 780
+**K10.3 — THE WORLD LINKS AND INSTALLS: 200 commands, built and placed by V10**
+(2026-08-18, `bash tools/v10-link.sh`, **35/35, exit 0**). Of 358 units, 247
+compile, **200 of those link**, and all 200 install — into a **staged root** at
+`/usr/w10`, never over the machine's own `/bin` and `/etc`. That is a decision
+with three reasons and the first two settle it: the 46 prebuilt binaries are the
+**oracle** and installing over them destroys the comparison on the only machine
+that has both; and V10's `ld` writes its output even when symbols are undefined,
+so a bad `/etc/init` is an unbootable disk — v8's stage 8 built empty
+*directories* named `/bin/sh` and `/etc/init`, and that disk walked 4,507 files
+and then stopped dead after autoconfig with the CPU idle. K11 wants a tree to
+copy in, which is exactly what this produces.
+
+`worldc.sh` takes an optional DESTDIR, so **one script does K10.1 and K10.3** and
+the compile numbers in both come from the same lines — which is how the 5620
+header drift was caught: 247 against 244 between two runs of the same code, and
+the difference had to be the machine.
+
+What the 23 link failures are, and none of them is "our libc is short":
+
+	_gets           clear dired    DELETED FROM libc BY BELL LABS IN 1988
+	_N_BADMAG etc.  size file      a.out.h skew, the n_un family again
+	_ipcpath        settod         the makefile does not say -lipc
+	_stdscr         plot           nor -lcurses
+	-lbsd -lfb      u9fs pico      libraries that exist nowhere on the tape
+
+Twenty-four more units have **no row in `world.link` at all**, which is a
+statement rather than a shortfall: 71 units carry more than one `main()` and are
+subsystems rather than programs (see the gotcha), and `ed/` and `sort/` are the
+tape's second generation of each.
+
+Next: **K10.4** — read each unit's own object list instead of every `.c`.
+`cmd/sh` is the case that shows why: it fails on a `profile.c` that is **not in
+its own `$OFILES`** and is the one source in that directory with no `.o` beside
+it, so the survey compiles a file the tape never compiles and fails the unit on
+it. That is the limit of one generic recipe over 358 units. Then the two
+workarounds a 780
 kernel retires: K11's full-capacity filesystem (V8's `filsys.h` caps a
 filesystem at 30,752 blocks and V8 no longer has to read the result) and K12's
 netfs (`ipnx780.m` already carries `netafs 4`/`netbfs 4` and the app's `vax780`

@@ -10,10 +10,8 @@
 #
 awk yacc awk.g.y y.tab.o -d
 awk lex awk.lx.l lex.yy.o 
-ccom yacc common/sty.y y.tab.o -d
 config lex config.l lex.yy.o 
 config yacc config.y y.tab.o -d
-cpp yacc cpy.y y.tab.o -d
 dag yacc parsedag.y y.tab.o -d
 dict lex oedread.l lex.yy.o 
 diction lex rewrite.l lex.yy.o 
@@ -62,7 +60,9 @@ xref lex xrefa.l lex.yy.o
 #
 # SKIPPED 2500       yacc gram.y -- passes the output through ed -- needs its own recipe
 # SKIPPED 2500       lex lex.l -- redirects its output -- needs its own recipe
-# SKIPPED ccom       yacc common/cgram.y -- passes the output through sed -- needs its own recipe
+# SKIPPED ccom       yacc common/cgram.y -- v10/mk/gen/ccom.mk describes this properly
+# SKIPPED ccom       yacc common/sty.y -- v10/mk/gen/ccom.mk describes this properly
+# SKIPPED cpp        yacc cpy.y -- v10/mk/gen/cpp.mk describes this properly
 # SKIPPED docgen     lex trans.l -- a second lex source; otrans.l already writes lex.yy.o
 # SKIPPED gcc        yacc parse.y -- a second yacc source; cexp.y already writes y.tab.o
 # SKIPPED style      lex nwords.l -- a second lex source; end.l already writes lex.yy.o

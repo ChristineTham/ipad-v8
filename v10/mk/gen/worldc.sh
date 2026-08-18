@@ -276,12 +276,18 @@ do
 		( $CC $CF -I. -I$SD -I$SD/common -I$SD/vax $XI -I$JQ $S 2>&1
 		  echo "CCST=$?" ) | sed -e 40q > u1.log
 		st=`sed -e '/^CCST=/!d' -e 's/CCST=//' -e 1q u1.log`
-		if test "$st" != 0
+		if test "$st" != 0 -o ! -s $b
 		then
 			ok=n
+			# ONLY THE FAILURES GO IN u.log, because the display is
+			# `sed -e 3q u.log' and a unit with many sources fills
+			# those three lines with `CCST=0' from the ones that
+			# WORKED -- so cmd/sh reported CFAILED followed by three
+			# zeroes and the actual error was never shown.  A
+			# diagnostic that prints the successes is worse than
+			# none: it looks like an answer.
+			sed -e 6q u1.log >> u.log
 		fi
-		test -s $b || ok=n
-		sed -e 6q u1.log >> u.log
 		rm -f u1.log
 	done
 	if test $ok = y
@@ -347,6 +353,18 @@ do
 					if cp $name $DEST$DD/$name
 					then
 						echo "$I $name" >> $OBJ/res.log
+						# ECHOED AS WELL AS LOGGED, and
+						# the omission cost a run: the
+						# host counts from the
+						# TRANSCRIPT and the guest from
+						# res.log, so writing the
+						# success only to the file made
+						# them disagree 200 to 0 and
+						# v10-link.sh refused to report
+						# a run that had installed all
+						# 200.  The guard was right and
+						# the instrument was wrong.
+						echo "$I $name"
 					else
 						echo "$IN $name $DEST$DD" \
 						    >> $OBJ/res.log

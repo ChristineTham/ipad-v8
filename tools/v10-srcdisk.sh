@@ -120,6 +120,38 @@ expect "$ROOT/tools/v10-srcdisk.exp" "$IMG" "$TPORT" "$OPORT" "$MPORT" "$SRC_BLO
 rc=${PIPESTATUS[0]}
 
 OUT="$GOLD/ipnx-v10-src.img"
+
+# A FAILED RUN MUST NOT LEAVE A CURRENT STAMP ON AN INCOMPLETE IMAGE, and this
+# script did exactly that until 2026-08-18: it assembled and called srcid_write
+# unconditionally and only then exited with the guest's status.  So a run that
+# bailed -- that day, SLiRP answering `attach il nat:' with `Sockets: bind error
+# 13 - Permission denied' hundreds of times, after which the guest quit at sim>
+# without halting -- produced a possibly-truncated source disk carrying a stamp
+# that says it holds the current v10/mk/gen and v10/src.  srcid_check would then
+# PASS it, and the next stage would compile a partial tree and report failures
+# that read as findings about the tape.
+#
+# Deleting the stamp is not the fix: a MISSING .id is deliberately only a warning
+# (see tools/srcid.sh), so it would not stop anything.  Not writing the image at
+# all is the fix.  The previous image and its stamp stay, and are then judged on
+# their own merits -- current, and usable; or stale, and refused.
+#
+# This is the same argument as the assemble-time claim_images below: the value of
+# a guard is what it refuses, and a guard that cannot fire is not a guard.
+if [[ "$rc" != 0 ]]; then
+    echo
+    echo "== NOT assembling $OUT =="
+    echo "   The guest run failed (exit $rc), so what it copied cannot be"
+    echo "   trusted -- CLAUDE.md's rule is that a machine which did not halt"
+    echo "   cleanly has a damaged disk, and this one is a build product, so"
+    echo "   there is nothing to recover and nothing to lose."
+    echo "   The existing source disk and its .id stamp are left untouched:"
+    echo "   a later stage will use it if it is current and refuse it if not."
+    echo "   Read work/v10-srcdisk.log, fix the cause, and run this again."
+    echo "== v10-srcdisk exit $rc =="
+    exit "$rc"
+fi
+
 echo
 echo "== assembling $OUT =="
 # CHECKED AGAIN, HERE, and not only at the top.  The run above takes minutes,

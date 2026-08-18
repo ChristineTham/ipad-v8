@@ -76,7 +76,7 @@ config             dir   no   ready    -
 coreid             file  no   ready    -
 cp                 dir   no   ready    -
 cpio               file  yes  ready    -
-cpp                dir   no   ready    -
+cpp                dir   no   blocked  missing:y.tab.h
 cref               dir   no   ready    -
 cron               file  yes  ready    -
 ct                 dir   yes  ready    -

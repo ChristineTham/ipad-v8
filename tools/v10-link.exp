@@ -100,10 +100,25 @@ note "the survey script is on it" \
     [v10_try "test -s $K/worldc.sh && echo WC\$OK" "WC-ok" 300]
 note "stage 1's ccom is installed" \
     [v10_try "test -s $T1/lib/ccom && echo S1\$OK" "S1-ok" 300]
-note "yacc is installed (stage 1 built it)" \
-    [v10_try "test -s $T1/bin/yacc && echo YA\$OK" "YA-ok" 300]
+# The path from tc.order, never written out here: yacc.mk installs to
+# $(TOOLDIR)/usr/bin/yacc and stage 1 sets TOOLDIR=/usr/s1, so it is
+# /usr/s1/usr/bin/yacc.  Guessing /usr/s1/bin/yacc cost K10.1 a whole run.
+set YACCP ""
+foreach r [v10_rows tc.order 3] {
+    if {[lindex $r 0] eq "yacc"} { set YACCP "$T1/[lindex $r 2]" }
+}
+if {$YACCP eq ""} { v10_bail "tc.order has no yacc row -- run v10/mk/mkdep.py" }
+note "yacc is installed at the path tc.order gives" \
+    [v10_try "test -s $YACCP && echo YA\$OK" "YA-ok" 300]
 note "lex is present (the golden's prebuilt 1995 binary)" \
     [v10_try "test -s /usr/bin/lex && echo LX\$OK" "LX-ok" 300]
+# lex's driver skeleton, which the golden has no /usr/lib/lex for at all.  The
+# tape ships ncform beside the lex source; without it lex answers `(Error) Lex
+# driver missing' and every lex row fails as though the grammar were at fault.
+v10_sh "mkdir /usr/lib/lex" 300
+v10_sh "cp $N/src/cmd/lex/ncform /usr/lib/lex/ncform" 300
+note "lex's driver skeleton is installed" \
+    [v10_try "test -s /usr/lib/lex/ncform && echo NC\$OK" "NC-ok" 300]
 
 # ---------------------------------------- K10.2's libraries, which this needs ---
 #
@@ -129,6 +144,13 @@ note "libl.a and liby.a are there (lex and yacc runtimes)" \
 # One proc, one generated list -- see v10_inc_extra in tools/v10drive.exp for why
 # this is not a block of copies written out in each harness.
 v10_inc_extra $K $N/ours
+
+# The 5620 headers, at the absolute paths three units and four libraries name.
+# See v10_jerq_inc: this is the same drift inc.extra fixed, one directory over,
+# and it is worth three units (dict, dis, mc).
+v10_jerq_inc $N
+note "the 5620 include tree is installed" \
+    [v10_try "test -s /usr/jerq/include/jioctl.h && echo JQ\$OK" "JQ-ok" 300]
 foreach h {stdlib float stdarg stddef limits u shares} {
     note "$h.h installed at /usr/include" \
         [v10_try "test -s /usr/include/$h.h && echo H\$OK" "H-ok" 300]
@@ -143,7 +165,14 @@ foreach h {stdlib float stdarg stddef limits u shares} {
 # rather than from a list typed here -- a second copy of that list would be a
 # second thing to get wrong.
 v10_sh "rm -rf $W; mkdir $W" 300
-v10_run "sed -e '/^#/d' -e 's/^\[^ \]* //' -e 's/ .*//' $K/world.link | sort -u > /tmp/dests ; echo DL\$OK" "DL-ok" 600
+# NO `sort -u', BECAUSE THE V10 GOLDEN HAS NO sort.  It answered `sort: not
+# found', /tmp/dests came out empty, the mkdir walk below made nothing, and every
+# one of the 281 installs failed -- eleven assertions saying NO about a tree that
+# was never created, while the LINK half had worked perfectly (200 of 247).  The
+# dedup was never needed: `mkdir' on a directory that exists prints `File exists'
+# and the loop ignores it, so the duplicates cost a few hundred failed mkdirs and
+# nothing else.  Add sort to the list with ar, cmp, tail, grep, wc, dd and find.
+v10_run "sed -e '/^#/d' -e 's/^\[^ \]* //' -e 's/ .*//' $K/world.link > /tmp/dests ; echo DL\$OK" "DL-ok" 600
 note "the destination list is not empty" \
     [v10_try "test -s /tmp/dests && echo DE\$OK" "DE-ok" 300]
 # `mkdir -p' does not exist here, so each path is made a level at a time by
@@ -164,7 +193,7 @@ foreach d {bin etc lib usr/bin usr/lib usr/games} {
 # WITH the command and then wait forever for a string the script had consumed.
 #
 # The seventh argument is what makes this K10.3 rather than K10.1.
-v10_run "sh $K/worldc.sh $N $OBJ /bin/cc $T1/lib/ $T1/bin/yacc /usr/bin/lex $W" \
+v10_run "sh $K/worldc.sh $N $OBJ /bin/cc $T1/lib/ $YACCP /usr/bin/lex $W" \
     "WORLDC-done" 18000
 
 # THE CANARY IS AN ASSERTION, NOT A COURTESY.  If the flags are wrong every unit
@@ -191,8 +220,28 @@ note "hoc installed (-lm resolved)" \
     [v10_try "test -s $W/usr/bin/hoc && echo B2\$OK" "B2-ok" 300]
 note "ratfor installed (yacc ran, -ly resolved)" \
     [v10_try "test -s $W/usr/bin/ratfor && echo B3\$OK" "B3-ok" 300]
-note "sh installed (the one whose absence is an unbootable disk)" \
-    [v10_try "test -s $W/bin/sh && echo B4\$OK" "B4-ok" 300]
+# `sh' IS A NAMED EXCLUSION AND NOT AN ASSERTION, because the survey cannot
+# deliver it by design and an assertion that cannot pass stops being read -- which
+# is how a missing libc member hid for a week behind stage 2's permanently-NO
+# line.  cmd/sh fails on
+#
+#	"cmd/sh/profile.c":18: illegal pointer/integer combination, op =
+#
+# and `profile.c' IS NOT IN THE SHELL'S BUILD: sh's mkfile lists 24 objects in
+# $OFILES and profile.o is not among them, and it is the one source in that
+# directory with no .o beside it while the other 24 all have one.  So this survey
+# compiles a file the tape never compiles and fails the unit on it.  That is the
+# general limit of one generic recipe over 358 units, and closing it means reading
+# each unit's own object list -- mkdep.py's job.  v10-link.sh prints it as a
+# finding.
+#
+# What IS asserted instead is that the staged tree holds the bulk of the world,
+# which a count can answer and which no single name can: v8's stage 8 reported 400
+# files carried while /bin/sh and /etc/init were empty directories.
+# `ls | sed -n $=' is the line count -- there is no wc on this machine.
+note "the staged tree holds the bulk of the world" \
+    [v10_try "test `ls $W/usr/bin | sed -n '\$='` -gt 120 && echo B4\$OK" \
+        "B4-ok" 600]
 
 set failed [report]
 v10_halt

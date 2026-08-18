@@ -6,11 +6,37 @@
 # The gates below are in the order they can fail cheaply: the generated lists
 # first (host-side, instant), then the source disk's stamp, then room, then the
 # no-overlap check, and only then a boot.
-set -euo pipefail
+# -uo pipefail, and deliberately NOT -e, which is what the sibling drivers use.
+# With -e this script DIED SILENTLY between the tally and the report: `grep -oE'
+# exits 1 when it matches nothing, pipefail makes the whole c10() pipeline fail,
+# and -e then killed the run -- so a completed 200-of-247 link printed no summary
+# at all because CINSTALL happened to appear zero times.  Same family as the
+# release script's `... | grep -q' failing on SIGPIPE and printing "hardened
+# runtime is NOT enabled" under a line saying it was: a counter that cannot count
+# to zero is not a counter.  c10() now floors at 0 as well.
+set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 source "$ROOT/tools/norun.sh"
 source "$ROOT/tools/v10clone.sh"
+source "$ROOT/tools/srcid.sh"
+
+# A GUARD THAT CANNOT RUN MUST NOT REPORT ITS OWN SUBJECT AS THE FAULT.  This
+# script was missing the srcid.sh source, so `srcid_check' was not a function and
+# bash answered `command not found' -- nonzero -- and the `|| { ...; exit 1; }'
+# below then announced "the source disk is stale" about a disk that had been
+# rebuilt four minutes earlier.  The same shape as `... | grep -q' failing on
+# SIGPIPE under pipefail and printing "hardened runtime is NOT enabled" under a
+# line saying it was.  So the functions this script depends on are checked for
+# EXISTENCE first, by name, and a missing one says so.
+for fn in srcid_check no_overlap v10_clone; do
+    declare -F "$fn" >/dev/null || {
+        echo "v10-link: $fn is not defined -- a tools/*.sh source line is"
+        echo "   missing, so the guard that uses it would fail and be read as"
+        echo "   its subject failing.  Fix the sourcing, not the disk."
+        exit 2
+    }
+done
 
 # K10.2'S OUTPUT IMAGE, NOT STAGE 1'S, AND THAT IS THE WHOLE PRECONDITION.  This
 # run links, so it needs /usr/lib carrying the 26 archives K10.2 built and
@@ -82,7 +108,8 @@ rc=${PIPESTATUS[0]}
 # into it.  The tokens are safe unanchored because worldc.sh spells them through
 # shell variables ($P/$Q/$L/$I), so the echo of the command carries `$L' and only
 # the answer carries CLINKED.
-c10() { grep -oE "$1 [A-Za-z_0-9+./-]+" "$LOG" 2>/dev/null | wc -l | tr -d ' '; }
+# `|| true' so a token that appears ZERO times counts as 0 rather than failing.
+c10() { { grep -oE "$1 [A-Za-z_0-9+./-]+" "$LOG" 2>/dev/null || true; } | wc -l | tr -d ' '; }
 built=$(c10 CBUILT); failed=$(c10 CFAILED)
 linked=$(c10 CLINKED); nolink=$(c10 CNOLINK)
 inst=$(c10 CINSTALL); noinst=$(c10 CNOINST)
@@ -206,6 +233,28 @@ echo "      -- 71 of them carry more than one main(): a cmd/ directory is not"
 echo "         necessarily a command.  cmd/worm has 22 programs in it, qsnap 17,"
 echo "         uucp 11.  Which objects belong to which program is in each unit's"
 echo "         own makefile, so they are named rather than guessed at."
+
+# ------------------------------------------- one generic recipe, and its limit ---
+#
+# A UNIT'S DIRECTORY HOLDS FILES ITS BUILD DOES NOT USE, and this survey compiles
+# every .c it finds -- so one such file fails the whole unit.  `sh' is the case
+# that matters: it dies on
+#
+#	"cmd/sh/profile.c":18: illegal pointer/integer combination, op =
+#
+# and profile.c is not in sh's $OFILES.  The tape says so twice: the macro lists
+# 24 objects without it, and it is the ONE source in that directory with no .o
+# beside it while the other 24 all have one -- these are developers' working
+# directories, so what was compiled in place is evidence of what the build uses.
+# Closing this means reading each unit's own object list, which is mkdep.py's
+# job and not a generic recipe's.
+if ! grep -qE 'CLINKED sh$' "$LOG" 2>/dev/null; then
+    echo
+    echo "   sh did NOT build, and it is the generic recipe's limit rather than"
+    echo "   a fact about the tape: cmd/sh/profile.c is not in sh's \$OFILES and"
+    echo "   is the one source there with no .o beside it.  The golden's own"
+    echo "   prebuilt /bin/sh is unaffected -- this run installs nothing over it."
+fi
 
 # ---------------------------------------------- the oracle, where there is one ---
 #

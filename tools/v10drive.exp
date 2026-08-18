@@ -173,6 +173,38 @@ proc v10_inc_extra {mk ours} {
     v10_run "sed -e '/^#/d' $mk/inc.extra | while read h w f ; do case \$w in r70) cp /usr/include/\$f /usr/include/\$h ;; *) cp $ours/\$f /usr/include/\$h ;; esac ; done ; echo IXDONE" "IXDONE" 900
 }
 
+# v10_jerq_inc <courier-root>  --  install the 5620 include tree where the
+# sources name it, by ABSOLUTE path.
+#
+# THE SECOND INSTANCE OF THE SAME DRIFT AS v10_inc_extra, one directory over.
+# Three command units and four libraries write
+#
+#	#include "/usr/jerq/include/jioctl.h"
+#	#include "/usr/blit/include/jioctl.h"		(libblit)
+#
+# -- an absolute path into the 5620 tree, which no -I can satisfy.  The headers
+# are in the v10blit tarball and v10-srcdisk.exp puts all 21 on the courier disk,
+# and tools/v10-world.py's resolver has always counted them as reachable for
+# exactly that reason.  But only tools/v10-libs.exp performed the install, so
+# K10.1 -- on a .stage1 clone -- had three units (dict, dis, mc) fail on a header
+# the survey said was present, while K10.3 on K10.2's output image compiled all
+# three.  That three-unit difference between two runs of the SAME script is what
+# surfaced it: 247 against 244, and the compile half of both is the same lines of
+# worldc.sh, so a difference had to be the machine.
+#
+# `cp *' and not `find | cpio': the tree is flat (21 files) and V10 HAS NO find.
+proc v10_jerq_inc {n} {
+    v10_sh "mkdir /usr/jerq; mkdir /usr/jerq/include" 120
+    v10_sh "mkdir /usr/blit; mkdir /usr/blit/include" 120
+    v10_sh "cd $n/jerq; cp * /usr/jerq/include" 900
+    v10_sh "cd $n/jerq; cp * /usr/blit/include" 900
+    # Our own overlay's jioctl.h wins: it adds `#define JMUX JMPX', an alias no
+    # header on the tape defines while lib5620/openpl.c uses it.  See
+    # v10/src/PATCHES.md.
+    v10_sh "cp $n/ours/include/jioctl.h /usr/jerq/include/jioctl.h" 300
+    v10_sh "cp $n/ours/include/jioctl.h /usr/blit/include/jioctl.h" 300
+}
+
 proc v10_order {file {col 0}} {
     global V10_GEN
     set path [file join $V10_GEN $file]

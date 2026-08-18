@@ -91,15 +91,37 @@ note "the generator table is on it" \
     [v10_try "test -s $K/world.gen && echo WG\$OK" "WG-ok" 300]
 note "the extra-header table is on it" \
     [v10_try "test -s $K/inc.extra && echo IX\$OK" "IX-ok" 300]
-# yacc is stage 1's -- it is in tc.order and stage 1 builds it on this machine.
-# lex is the GOLDEN'S PREBUILT one: there is no lex pass in stage 1 and
-# prebuilt.txt records a linked 1995 binary at usr/bin/lex.  Both are asserted
-# here rather than discovered inside the loop, because a missing generator makes
-# fifty units fail on `not found' and that reads as a language finding.
-note "yacc is installed (stage 1 built it)" \
-    [v10_try "test -s $T1/bin/yacc && echo YA\$OK" "YA-ok" 300]
+# THE PATH COMES FROM tc.order, NOT FROM A GUESS, and the guess was wrong:
+# yacc.mk installs to $(TOOLDIR)/usr/bin/yacc and stage 1 sets TOOLDIR=/usr/s1,
+# so it is /usr/s1/usr/bin/yacc and not /usr/s1/bin/yacc.  Written out by hand it
+# failed for all fifty generator rows -- `/usr/s1/bin/yacc: not found' -- and
+# turned 241 compiled units into 232.  tc.order's third column is the install
+# path and stage 1 installs from that same file, so reading it here is the
+# tc.order rule applied: a component list that appears twice will disagree.
+set YACCP ""
+foreach r [v10_rows tc.order 3] {
+    if {[lindex $r 0] eq "yacc"} { set YACCP "$T1/[lindex $r 2]" }
+}
+if {$YACCP eq ""} { v10_bail "tc.order has no yacc row -- run v10/mk/mkdep.py" }
+note "yacc is installed at the path tc.order gives" \
+    [v10_try "test -s $YACCP && echo YA\$OK" "YA-ok" 300]
+# lex is the GOLDEN'S PREBUILT one, and that is faithful rather than a shortcut:
+# stage 1 does not build lex (it is not in tc.order), and B1 established that
+# V10's own 1995 binaries run on this machine and are the tape's own tools.  Its
+# SKELETON is a different matter -- lex answers
+#
+#	(Error) Lex driver missing, file /usr/lib/lex/ncform
+#
+# and the golden has no /usr/lib/lex at all.  ncform is on the tape, beside the
+# lex source, so this installs the tape's own data file exactly as the headers
+# above install the tape's own headers.  Without it every lex row fails and the
+# failure reads as a grammar the tape cannot process.
 note "lex is present (the golden's prebuilt 1995 binary)" \
     [v10_try "test -s /usr/bin/lex && echo LX\$OK" "LX-ok" 300]
+v10_sh "mkdir /usr/lib/lex" 300
+v10_sh "cp $N/src/cmd/lex/ncform /usr/lib/lex/ncform" 300
+note "lex's driver skeleton is installed" \
+    [v10_try "test -s /usr/lib/lex/ncform && echo NC\$OK" "NC-ok" 300]
 # Stage 1's passes are what this compiles with, so their absence must be a
 # named failure and not a canary that merely looks like a compiler bug.
 note "stage 1's ccom is installed" \
@@ -131,6 +153,13 @@ note "stage 1's ccom is installed" \
 # against, and v10-world.py --check refuses if it disagrees with what stage 2
 # copies.  Nothing here decides anything; it applies what is recorded.
 v10_inc_extra $K $N/ours
+
+# The 5620 headers, at the absolute paths three units and four libraries name.
+# See v10_jerq_inc: this is the same drift inc.extra fixed, one directory over,
+# and it is worth three units (dict, dis, mc).
+v10_jerq_inc $N
+note "the 5620 include tree is installed" \
+    [v10_try "test -s /usr/jerq/include/jioctl.h && echo JQ\$OK" "JQ-ok" 300]
 foreach h {stdlib float stdarg stddef limits u shares} {
     note "$h.h installed at /usr/include" \
         [v10_try "test -s /usr/include/$h.h && echo H\$OK" "H-ok" 300]
@@ -138,7 +167,7 @@ foreach h {stdlib float stdarg stddef limits u shares} {
 note "sys/lnode.h installed (shares.h includes it)" \
     [v10_try "test -s /usr/include/sys/lnode.h && echo LN\$OK" "LN-ok" 300]
 
-v10_run "sh $K/worldc.sh $N $OBJ /bin/cc $T1/lib/ $T1/bin/yacc /usr/bin/lex" "WORLDC-done" 18000
+v10_run "sh $K/worldc.sh $N $OBJ /bin/cc $T1/lib/ $YACCP /usr/bin/lex" "WORLDC-done" 18000
 
 # THE CANARY IS AN ASSERTION, NOT A COURTESY.  If the flags are wrong every
 # unit fails, and 0/353 reads as a devastating finding about the Tenth Edition

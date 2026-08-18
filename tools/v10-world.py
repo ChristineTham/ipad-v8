@@ -229,6 +229,21 @@ VARIANT_DIRS = ["lcc", "CC", "olcc", "oCC", "libc"]
 # cmd/ipa's lexer is `ipa_trans.lex'.  A scan looking for *.y and *.l finds
 # neither, and ratfor's makefile says `yacc -d r.g' in as many words.
 GEN_SUF = (".y", ".l", ".g", ".lex")
+
+# Files the generators need that are not source and have no suffix at all, so
+# neither sources() nor the copy manifest would carry them.
+#
+# lex's DRIVER SKELETON.  lex emits `#include "ncform"'-worth of table-driven
+# machinery by copying /usr/lib/lex/ncform, and the golden has no /usr/lib/lex at
+# all -- so every lex row failed with
+#
+#	(Error) Lex driver missing, file /usr/lib/lex/ncform
+#
+# and the harness's install of it failed one line earlier with `No such file or
+# directory', because world.cpio carries only .c/.h/.s and grammars.  Two
+# failures, one cause, and the second was invisible behind the first.  yacc needs
+# no equivalent here: its skeleton is already on the golden.
+GEN_DATA = ["lex/ncform"]
 BUILD_FILES = ["mkfile", "makefile", "Makefile"]
 MACRO_DEF = re.compile(r'^([A-Za-z_][A-Za-z_0-9]*)[ \t]*=[ \t]*(.*)$')
 MACRO_USE = re.compile(r'\$\{([A-Za-z_][A-Za-z_0-9]*)\}'
@@ -415,6 +430,22 @@ def generators(u):
         # eqn.o') only matter to a LINK, and this survey does not link.
         obj = "y.tab.o" if tool == "yacc" else "lex.yy.o"
         note = post + " -- needs its own recipe" if post else "-"
+        # A UNIT WITH A GENERATED MAKEFILE ALREADY HAS ITS GENERATOR STEP
+        # DESCRIBED, correctly, and by something stronger than this.  ccom, cpp
+        # and yacc are in tc.order and are built by stages 1 to 3 from
+        # v10/mk/gen/<name>.mk, which carries the tape's own recipe -- ccom.mk
+        # runs yacc and then seds y.tab.c into cgram.c, cpp.mk renames it to
+        # cpy.c.  A generic row here is strictly weaker and, for those two,
+        # simply wrong.
+        #
+        # It also removes the one row this survey had no business emitting:
+        # cmd/ccom/common/sty.y, a grammar named in NO object list in ccom's
+        # makefile.  Its row turned a unit that had compiled cleanly for two
+        # phases into a failure -- 241 units became 232 -- which is a harness
+        # artefact dressed as a regression.  The row is reported as skipped and
+        # not dropped, because a silent drop is how a unit goes missing.
+        if os.path.exists(os.path.join(GEN, u.name + ".mk")):
+            note = "v10/mk/gen/%s.mk describes this properly" % u.name
         out.append((tool, os.path.relpath(p, u.root), flags, obj, note))
     rows = sorted(out, key=lambda r: r[1])
     # A second grammar in one unit writes over the first's y.tab.c.  Only two
@@ -805,6 +836,27 @@ def sanity(units):
         if why:
             problems.append("INSTALLED_EXTRA installs %s as <%s> and it carries "
                             "%s -- pcc2 cannot read it" % (src, h, why))
+    # THE OBJECT NAME IS A BASENAME, so two sources of the same name in two of a
+    # unit's directories compile to ONE object and the second silently overwrites
+    # the first.  Today that is cmd/ccom alone -- memcpy.c, printx.c and reader.c
+    # exist in both common/ and vax/ -- and ccom has a generated makefile that
+    # names each explicitly, so nothing is measured wrongly.  The guard is here
+    # for the day that stops being true: a silent overwrite would show up as a
+    # unit that compiles and a program that behaves oddly, with nothing in
+    # between to read.
+    for u in units:
+        if os.path.exists(os.path.join(GEN, u.name + ".mk")):
+            continue                       # its own makefile names each source
+        seen = {}
+        for rel in csources(u):
+            seen.setdefault(os.path.basename(rel), []).append(rel)
+        for b, where in sorted(seen.items()):
+            if len(where) > 1:
+                problems.append("%s has %d sources called %s (%s) and no "
+                                "generated makefile -- they would compile to one "
+                                "object, silently"
+                                % (u.name, len(where), b, ", ".join(where)))
+
     # And it must agree with the copies stage 2 actually performs.  This table
     # said `lcc/stdarg.h' while the machine had CC's for a week; both parse, so
     # nothing failed and nothing said so.  Only the headers stage 2 touches are
@@ -987,6 +1039,15 @@ def world_cpio(units):
     for u in units:
         for p in u.paths:
             want.add(os.path.relpath(p, CMD))
+    # The generators' data files -- see GEN_DATA.  Added by name and checked to
+    # exist, because a manifest naming a file the tape does not have makes cpio
+    # fail for the whole set rather than for that one entry.
+    for rel in GEN_DATA:
+        if os.path.exists(os.path.join(CMD, rel)):
+            want.add(rel)
+        else:
+            sys.exit("v10-world: GEN_DATA names cmd/%s, which the tape does not "
+                     "have -- cpio would fail for the whole manifest" % rel)
     return "\n".join(sorted(want)) + "\n"
 
 
@@ -1544,12 +1605,18 @@ do
 		( $CC $CF -I. -I$SD -I$SD/common -I$SD/vax $XI -I$JQ $S 2>&1
 		  echo "CCST=$?" ) | sed -e 40q > u1.log
 		st=`sed -e '/^CCST=/!d' -e 's/CCST=//' -e 1q u1.log`
-		if test "$st" != 0
+		if test "$st" != 0 -o ! -s $b
 		then
 			ok=n
+			# ONLY THE FAILURES GO IN u.log, because the display is
+			# `sed -e 3q u.log' and a unit with many sources fills
+			# those three lines with `CCST=0' from the ones that
+			# WORKED -- so cmd/sh reported CFAILED followed by three
+			# zeroes and the actual error was never shown.  A
+			# diagnostic that prints the successes is worse than
+			# none: it looks like an answer.
+			sed -e 6q u1.log >> u.log
 		fi
-		test -s $b || ok=n
-		sed -e 6q u1.log >> u.log
 		rm -f u1.log
 	done
 	if test $ok = y
@@ -1615,6 +1682,18 @@ do
 					if cp $name $DEST$DD/$name
 					then
 						echo "$I $name" >> $OBJ/res.log
+						# ECHOED AS WELL AS LOGGED, and
+						# the omission cost a run: the
+						# host counts from the
+						# TRANSCRIPT and the guest from
+						# res.log, so writing the
+						# success only to the file made
+						# them disagree 200 to 0 and
+						# v10-link.sh refused to report
+						# a run that had installed all
+						# 200.  The guard was right and
+						# the instrument was wrong.
+						echo "$I $name"
 					else
 						echo "$IN $name $DEST$DD" \
 						    >> $OBJ/res.log
