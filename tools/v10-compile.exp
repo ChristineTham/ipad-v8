@@ -87,6 +87,19 @@ note "the unit list is on it" \
     [v10_try "test -s $K/world.units && echo WU\$OK" "WU-ok" 300]
 note "the survey script is on it" \
     [v10_try "test -s $K/worldc.sh && echo WC\$OK" "WC-ok" 300]
+note "the generator table is on it" \
+    [v10_try "test -s $K/world.gen && echo WG\$OK" "WG-ok" 300]
+note "the extra-header table is on it" \
+    [v10_try "test -s $K/inc.extra && echo IX\$OK" "IX-ok" 300]
+# yacc is stage 1's -- it is in tc.order and stage 1 builds it on this machine.
+# lex is the GOLDEN'S PREBUILT one: there is no lex pass in stage 1 and
+# prebuilt.txt records a linked 1995 binary at usr/bin/lex.  Both are asserted
+# here rather than discovered inside the loop, because a missing generator makes
+# fifty units fail on `not found' and that reads as a language finding.
+note "yacc is installed (stage 1 built it)" \
+    [v10_try "test -s $T1/bin/yacc && echo YA\$OK" "YA-ok" 300]
+note "lex is present (the golden's prebuilt 1995 binary)" \
+    [v10_try "test -s /usr/bin/lex && echo LX\$OK" "LX-ok" 300]
 # Stage 1's passes are what this compiles with, so their absence must be a
 # named failure and not a canary that merely looks like a compiler bug.
 note "stage 1's ccom is installed" \
@@ -99,14 +112,45 @@ note "stage 1's ccom is installed" \
 # afterwards, which is what a command that takes the tty needs.  v10_sh would
 # send the marker along WITH the command and then wait forever for a string the
 # script had already consumed.
-v10_run "sh $K/worldc.sh $N $OBJ /bin/cc $T1/lib/" "WORLDC-done" 18000
+# ------------------------------------------ the headers stage 2 already chose ---
+#
+# THE SURVEY AND THIS MACHINE DISAGREED ABOUT /usr/include, AND THE SURVEY WAS
+# THE OPTIMISTIC ONE.  v10-world.py has always resolved stdlib.h, float.h and
+# stdarg.h -- stage 2 chose which of r70's four copies of each pcc2 can read,
+# and recorded the evidence -- but the copies were performed by
+# tools/v10-stage2.exp on the .s2 image chain, and this harness runs on a
+# .stage1 clone that has none of them.  So K10.1 surveyed one machine and
+# compiled on another, and fourteen units failed with
+#
+#	2500 awk ed eqn grap idiff join map pic sort zero   stdlib.h
+#	cb ed sum                                          stddef.h
+#
+# which went into the write-up as header facts about the tape.  Eleven of them
+# name a decision that was already made.  v10/mk/gen/inc.extra is now the one
+# place that list lives, generated from the same table the survey resolves
+# against, and v10-world.py --check refuses if it disagrees with what stage 2
+# copies.  Nothing here decides anything; it applies what is recorded.
+v10_inc_extra $K $N/ours
+foreach h {stdlib float stdarg stddef limits u shares} {
+    note "$h.h installed at /usr/include" \
+        [v10_try "test -s /usr/include/$h.h && echo H\$OK" "H-ok" 300]
+}
+note "sys/lnode.h installed (shares.h includes it)" \
+    [v10_try "test -s /usr/include/sys/lnode.h && echo LN\$OK" "LN-ok" 300]
+
+v10_run "sh $K/worldc.sh $N $OBJ /bin/cc $T1/lib/ $T1/bin/yacc /usr/bin/lex" "WORLDC-done" 18000
 
 # THE CANARY IS AN ASSERTION, NOT A COURTESY.  If the flags are wrong every
 # unit fails, and 0/353 reads as a devastating finding about the Tenth Edition
 # rather than as a mistake in this file.  halt.c is built by stage 1 on this
 # very machine, so it must compile here.
+# INVERTED FOR A WHOLE PHASE: this was `test -s $OBJ/can.log', and a compile
+# that succeeds writes nothing, so it asserted that the canary had FAILED.  It
+# is why K10.1 reported 6/7 and exited 1 on a run where 241 units compiled --
+# which no wrong set of flags can do.  worldc.sh writes can.mark on the success
+# path now, which is the same fix v10-libs.sh needed for the same reason.
 note "the canary compiled -- so the flags are right" \
-    [v10_try "test -s $OBJ/can.log && echo CL\$OK" "CL-ok" 300]
+    [v10_try "test -s $OBJ/can.mark && echo CL\$OK" "CL-ok" 300]
 note "the survey produced a result file" \
     [v10_try "test -s $OBJ/res.log && echo RS\$OK" "RS-ok" 300]
 

@@ -1,0 +1,199 @@
+#!/usr/bin/env expect
+# K10.3: LINK and INSTALL the Tenth Edition's world, inside V10.
+#
+#	expect tools/v10-link.exp <image> <src-image>
+#
+# WHAT THIS ADDS TO K10.1, AND WHY IT IS A SECOND RUN RATHER THAN A BIGGER ONE.
+# K10.1 compiles only -- `cc -c', no libraries, no linking -- because compiling
+# needs nothing but the compiler and the headers, so a failure there is a
+# LANGUAGE or HEADER fact about the tape.  That property is worth keeping, and
+# folding a link into the same run would destroy it: a unit that failed would no
+# longer say which half failed.  So the compile survey stays as it is and this
+# run does compile-then-link-then-install, on a machine that has the libraries.
+#
+# ONE SCRIPT DOES BOTH, WHICH IS THE POINT.  v10/mk/gen/worldc.sh takes an
+# optional seventh argument, a DESTDIR; without it, it is K10.1 exactly, and with
+# it each unit that compiles is linked and installed.  So the compile numbers in
+# these two runs are produced by the same lines, and a difference between them is
+# a fault in one of the runs rather than a finding -- the same argument
+# v10-boot780.sh makes for one harness driving two simulators.
+#
+# THE INSTALL IS STAGED, AND THAT IS A DECISION.  Everything lands under a
+# DESTDIR ($W below), never over the machine's own /bin and /etc.  Three reasons,
+# and the first two are the load-bearing ones:
+#
+#   * THE 46 PREBUILT BINARIES ARE THE ORACLE.  CLAUDE.md's rule is to use them
+#     to check what we build and never to skip building it.  Installing over
+#     /bin/sh and /bin/ls destroys the comparison on the only machine that has
+#     both, and it cannot be undone within a run.
+#   * A BROKEN /etc/init IS AN UNBOOTABLE DISK.  V10's ld writes its output even
+#     when symbols are undefined, so "it produced a file" is not "it produced a
+#     program" -- v8's stage 8 built empty DIRECTORIES named /bin/sh and
+#     /etc/init and the disk walked 4,507 files and then stopped dead after
+#     autoconfig with the CPU idle.  A staged tree cannot do that.
+#   * K11 WANTS A TREE, NOT A MACHINE.  The next phase builds a full-capacity
+#     filesystem with V10's own mkfs, and what it needs is exactly a directory
+#     hierarchy to copy in -- which is what this produces.
+#
+# Stages 1 and 2 already work this way: /usr/s1 and /usr/s2 are staged
+# toolchains, not installs over the system.
+log_user 1
+source [file dirname [info script]]/v10drive.exp
+
+# Long, for the same reason K10.1 is: ~358 units, ~1,700 compiles and then ~300
+# links.  The ceiling is set by what a run needs to be TOLD, not by what it
+# should take, and a watchdog that can fire during real work is worse than the
+# hang it guards against.
+set V10_RUN_SECS 21600
+
+if {[llength $argv] < 2} {
+    puts "usage: v10-link.exp <image> <src-image>"
+    exit 2
+}
+set img [lindex $argv 0]
+set src [lindex $argv 1]
+
+set N   /n/v10            ;# the courier disk, mounted
+set K   /n/v10/mk         ;# our generated makefiles and lists
+set T1  /usr/s1           ;# stage 1's passes -- the same compiler K10.1 used
+set OBJ /usr/k10lnk       ;# scratch on a WRITABLE filesystem
+set W   /usr/w10          ;# the STAGED root: the world, not installed over
+
+set results {}
+proc note {name ok} { global results; lappend results [list $name $ok assert] }
+
+proc report {} {
+    global results
+    puts "\n===== V10 K10.3: LINK AND INSTALL THE WORLD ====="
+    set failed 0
+    foreach r $results {
+        set ok [lindex $r 1]
+        puts [format "  %-52s %s" [lindex $r 0] [expr {$ok ? "ok" : "NO"}]]
+        if {!$ok} { incr failed }
+    }
+    puts "===== [expr {[llength $results] - $failed}]/[llength $results] =====\n"
+    return $failed
+}
+
+v10_boot $img [list "set rq1 ra81" "attach rq1 $src"]
+v10_login root
+v10_sh "PATH=/bin:/etc:/usr/bin; export PATH" 120
+v10_sh "OK=-ok" 120
+
+# ------------------------------------------------------------ preconditions ---
+#
+# EVERY ONE OF THESE COSTS A WHOLE RUN IF IT IS ASSUMED.  /n has to exist because
+# V10's mkdir makes one level at a time, and `mkdir /n/v10' failing silently once
+# had 26 assertions fail with nothing naming the cause.
+v10_sh "mkdir /n; mkdir $N" 120
+note "courier disk mounts" \
+    [v10_try "/etc/mount /dev/ra1c $N && echo MT\$OK" "MT-ok" 600]
+note "the world is on it" \
+    [v10_try "test -s $N/src/cmd/sh/service.c && echo WS\$OK" "WS-ok" 300]
+note "the unit list is on it" \
+    [v10_try "test -s $K/world.units && echo WU\$OK" "WU-ok" 300]
+note "the generator table is on it" \
+    [v10_try "test -s $K/world.gen && echo WG\$OK" "WG-ok" 300]
+note "the LINK table is on it" \
+    [v10_try "test -s $K/world.link && echo WL\$OK" "WL-ok" 300]
+note "the survey script is on it" \
+    [v10_try "test -s $K/worldc.sh && echo WC\$OK" "WC-ok" 300]
+note "stage 1's ccom is installed" \
+    [v10_try "test -s $T1/lib/ccom && echo S1\$OK" "S1-ok" 300]
+note "yacc is installed (stage 1 built it)" \
+    [v10_try "test -s $T1/bin/yacc && echo YA\$OK" "YA-ok" 300]
+note "lex is present (the golden's prebuilt 1995 binary)" \
+    [v10_try "test -s /usr/bin/lex && echo LX\$OK" "LX-ok" 300]
+
+# ---------------------------------------- K10.2's libraries, which this needs ---
+#
+# THE IMAGE IS THE PRECONDITION, AND IT MUST BE NAMED AS ONE.  This run links,
+# so it needs an image K10.2 has already installed into: /usr/lib carrying the
+# 26 archives, each under every -l name it answers to.  A .stage1 clone has none
+# of them, and every link would fail on `-lm' -- 51 units' worth -- which would
+# read as a catastrophic finding about the Tenth Edition rather than as the wrong
+# disk.  tools/v10-link.sh defaults to K10.2's output image for this reason, and
+# these four assertions are what make a wrong one say so in one line.
+note "libc is installed (stage 2 built it)" \
+    [v10_try "test -s /lib/libc.a && echo LI\$OK" "LI-ok" 300]
+note "libm.a is in /usr/lib (K10.2; 51 units ask for -lm)" \
+    [v10_try "test -s /usr/lib/libm.a && echo L1\$OK" "L1-ok" 300]
+note "libipc.a is in /usr/lib (30 units)" \
+    [v10_try "test -s /usr/lib/libipc.a && echo L2\$OK" "L2-ok" 300]
+note "libl.a and liby.a are there (lex and yacc runtimes)" \
+    [v10_try "test -s /usr/lib/libl.a -a -s /usr/lib/liby.a && echo L3\$OK" \
+        "L3-ok" 300]
+
+# ------------------------------------ the headers stage 2 already chose ---
+#
+# One proc, one generated list -- see v10_inc_extra in tools/v10drive.exp for why
+# this is not a block of copies written out in each harness.
+v10_inc_extra $K $N/ours
+foreach h {stdlib float stdarg stddef limits u shares} {
+    note "$h.h installed at /usr/include" \
+        [v10_try "test -s /usr/include/$h.h && echo H\$OK" "H-ok" 300]
+}
+
+# -------------------------------------------------------- the staged root ---
+#
+# mkdir MAKES ONE LEVEL, and this has cost a run before: `mkdir /n/v10' failed
+# because /n did not exist, the source disk had no mount point, and 26 assertions
+# failed with nothing naming the cause.  So every level is created explicitly,
+# in order, and the directory list comes from world.link's own second column
+# rather than from a list typed here -- a second copy of that list would be a
+# second thing to get wrong.
+v10_sh "rm -rf $W; mkdir $W" 300
+v10_run "sed -e '/^#/d' -e 's/^\[^ \]* //' -e 's/ .*//' $K/world.link | sort -u > /tmp/dests ; echo DL\$OK" "DL-ok" 600
+note "the destination list is not empty" \
+    [v10_try "test -s /tmp/dests && echo DE\$OK" "DE-ok" 300]
+# `mkdir -p' does not exist here, so each path is made a level at a time by
+# walking its components.  Errors are expected and ignored -- a level that is
+# already there says `File exists' -- which is why the assertion below tests the
+# RESULT rather than the exit status of the loop.
+v10_run "for d in `cat /tmp/dests` ; do p=$W ; for c in `echo \$d | sed -e 's|/| |g'` ; do p=\$p/\$c ; mkdir \$p ; done ; done ; echo MD\$OK" "MD-ok" 900
+foreach d {bin etc lib usr/bin usr/lib usr/games} {
+    note "staged $W/$d exists" \
+        [v10_try "test -d $W/$d && echo SD\$OK" "SD-ok" 300]
+}
+
+# ---------------------------------------------------- compile, link, install ---
+#
+# One command, and worldc.sh's own `WORLDC-done' as the end marker -- v10_run
+# waits for the program's own closing output and re-syncs afterwards, which is
+# what a command that takes the tty needs.  v10_sh would send the marker along
+# WITH the command and then wait forever for a string the script had consumed.
+#
+# The seventh argument is what makes this K10.3 rather than K10.1.
+v10_run "sh $K/worldc.sh $N $OBJ /bin/cc $T1/lib/ $T1/bin/yacc /usr/bin/lex $W" \
+    "WORLDC-done" 18000
+
+# THE CANARY IS AN ASSERTION, NOT A COURTESY.  If the flags are wrong every unit
+# fails, and 0/358 reads as a devastating finding about the Tenth Edition rather
+# than as a mistake in this file.  It is a marker file and not `test -s can.log',
+# which was inverted: a compile that succeeds writes nothing, so the old form
+# asserted that the canary had FAILED and K10.1 never exited 0.
+note "the canary compiled -- so the flags are right" \
+    [v10_try "test -s $OBJ/can.mark && echo CL\$OK" "CL-ok" 300]
+note "the run produced a result file" \
+    [v10_try "test -s $OBJ/res.log && echo RS\$OK" "RS-ok" 300]
+
+# A HANDFUL OF NAMED BINARIES, BECAUSE A COUNT CAN BE RIGHT AND THE TREE STILL
+# WRONG.  v8's stage 8 reported 400 files carried and installed while /bin/sh and
+# /etc/init were empty DIRECTORIES -- the count came from the copy loop and
+# nothing looked at the result.  These four are chosen for what each proves:
+# cat is a loose .c with no makefile and no -l at all; hoc links -lm, the flag
+# 51 units ask for and a library that holds one integer; ratfor links -ly, so
+# yacc ran and its runtime resolved; and sh is the one command whose absence
+# makes a disk unbootable.
+note "cat installed (a loose .c, libc only)" \
+    [v10_try "test -s $W/bin/cat && echo B1\$OK" "B1-ok" 300]
+note "hoc installed (-lm resolved)" \
+    [v10_try "test -s $W/usr/bin/hoc && echo B2\$OK" "B2-ok" 300]
+note "ratfor installed (yacc ran, -ly resolved)" \
+    [v10_try "test -s $W/usr/bin/ratfor && echo B3\$OK" "B3-ok" 300]
+note "sh installed (the one whose absence is an unbootable disk)" \
+    [v10_try "test -s $W/bin/sh && echo B4\$OK" "B4-ok" 300]
+
+set failed [report]
+v10_halt
+exit [expr {$failed ? 1 : 0}]

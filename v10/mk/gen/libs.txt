@@ -7,7 +7,7 @@ libcc libcc makefile libcc.a 4 4 4 0 makefile
 libcurses libcurses makefile crlib 35 35 35 1 makefile
 libdbm libdbm makefile libdbm.a 1 1 1 2 makefile
 libj libj makefile libj.a 12 12 12 2 archive
-libl libl makefile libl.a 5 5 5 15 archive
+libl libl makefile libl.a 5 5 5 17 archive
 libm libm makefile libm.a 1 1 1 51 makefile
 libmp libmp makefile libmp.a 9 9 9 0 archive
 libnm libnm makefile libnm.a 12 12 12 0 makefile

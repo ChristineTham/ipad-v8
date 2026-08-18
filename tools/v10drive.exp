@@ -147,6 +147,32 @@ source [file dirname [info script]]/norun.exp
 # path it installs to (relative, no leading slash).  Column 2 is how a driver
 # copies a staged tool into the running system without restating where each
 # one lives -- which is the same duplication one field over.
+# v10_inc_extra <mkdir-on-guest> <overlay-on-guest>  --  install the headers
+# r70 keeps only inside a compiler's directory, from the one generated list.
+#
+# THIS EXISTS BECAUSE TWO HARNESSES DISAGREED WITH THE SURVEY ABOUT
+# /usr/include, AND THE DISAGREEMENT FLATTERED THE TAPE.  tools/v10-world.py has
+# always resolved <stdlib.h>, <float.h> and <stdarg.h> -- stage 2 chose which of
+# r70's four copies of each pcc2 can read and recorded the evidence -- but the
+# copies were performed by tools/v10-stage2.exp alone, on the .s2 image chain.
+# K10.1 runs on a .stage1 clone, which has none of them, so it surveyed one
+# machine and compiled on another; fourteen units failed on a missing stdlib.h or
+# stddef.h and those failures were written up as header facts about the tape.
+# Eleven of them named a decision already made.
+#
+# One proc rather than a block in each harness, on the tc.order rule: a
+# component list that appears twice will disagree, silently.  The list itself is
+# v10/mk/gen/inc.extra, generated from the same table the survey resolves
+# against, and v10-world.py --check refuses when it disagrees with what stage 2
+# copies.  Nothing here decides anything.
+proc v10_inc_extra {mk ours} {
+    # A `while read' loop over a file, run through v10_run because it takes the
+    # tty for as long as the copies take and prints its own end marker.  The
+    # provenance column picks the source: r70's own variant directory under
+    # /usr/include, or our overlay on the courier disk.
+    v10_run "sed -e '/^#/d' $mk/inc.extra | while read h w f ; do case \$w in r70) cp /usr/include/\$f /usr/include/\$h ;; *) cp $ours/\$f /usr/include/\$h ;; esac ; done ; echo IXDONE" "IXDONE" 900
+}
+
 proc v10_order {file {col 0}} {
     global V10_GEN
     set path [file join $V10_GEN $file]

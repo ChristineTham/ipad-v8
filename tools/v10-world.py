@@ -105,12 +105,106 @@ ANSI_HINTS = [
 # on the argument recorded in CLAUDE.md: the tape ships four copies of each and
 # the job is to pick the one pcc2 parses, not to write one.  Listed here so the
 # survey resolves exactly what the machine will have, not what r70 contains.
+#
+# K10.1b EXTENDS THE SAME DECISION PAST libc's THREE, and the extension is
+# smaller than the candidate list because most of the candidates are not C.
+# Measured, one variant at a time, with installable() below rather than by eye:
+#
+#   stddef.h  7 units   lcc/  CC/  olcc/     all three parse; lcc's is chosen
+#                       because it GUARDS its size_t typedef (_SIZE_T/_SIZE_T_)
+#                       and the other two typedef unconditionally -- so lcc's
+#                       is the only one that can be installed beside another
+#                       header doing the same without a redeclaration error.
+#   limits.h  3 units   lcc/  CC/           both parse; lcc's is chosen on
+#                       correctness -- CC's says `INT_MIN 0x80000000', which is
+#                       an UNSIGNED constant in C, where lcc's says
+#                       `(-INT_MAX-1)'.
+#   u.h       1 unit    olcc/  libc/        olcc's parses; libc's declares an
+#                       ANONYMOUS STRUCT inside a union, which pcc2 has no
+#                       syntax for.  cmd/lp uses the typedefs and not `Length',
+#                       so olcc's macro form of it costs nothing.
+#
+# AND FOUR CANDIDATES ARE NOT A LAYOUT QUESTION AT ALL, which is the finding
+# rather than a shortfall -- r70's only copy of each is written in a language
+# this compiler does not speak, so they need converting like the printf family
+# and are deliberately absent from this table:
+#
+#   malloc.h  2 units   CC/ only, and it is C++     -- `extern "C" {'
+#   memory.h  2 units   CC/ only, and it is C++     -- `extern "C" {' + void *
+#   sysent.h  1 unit    CC/ is C++, oCC/ is ANSI prototypes throughout
+#   locale.h  1 unit    lcc/ only, ANSI prototypes  -- `char *setlocale(int,
+#                                                      const char *);'
 INSTALLED_EXTRA = {
     "stdlib.h": "CC/stdlib.h",
     "float.h": "lcc/float.h",
-    "stdarg.h": "lcc/stdarg.h",
-    "shares.h": "<ours: v10/src/include/shares.h>",
+    # CC's, not lcc's, and the reason is one character -- lcc's va_arg macro
+    # says `3U' and pcc2 lexes the ANSI suffix as an identifier.  Recorded in
+    # full in tools/v10-stage2.exp; this table said `lcc/stdarg.h' for a week
+    # while the machine had CC's, which is the kind of drift inc_extra() and the
+    # cross-check in sanity() now make impossible.
+    "stdarg.h": "CC/stdarg.h",
+    "stddef.h": "lcc/stddef.h",
+    "limits.h": "lcc/limits.h",
+    "u.h": "olcc/u.h",
+    # `ours:' is a path under v10/src/, not a choice among r70's copies: these
+    # two are reconstructions from the tape's own manual (lnode(5), limits(2),
+    # shares(5)) checked against Bell Labs' machine code.  sys/lnode.h is here
+    # even though no unit includes it directly -- shares.h does, and a header
+    # the machine has must be a header this table knows about, or the
+    # cross-check below has a hole exactly the size of the drift it exists to
+    # catch.
+    "shares.h": "ours:include/shares.h",
+    "sys/lnode.h": "ours:include/sys/lnode.h",
 }
+OURS_PREFIX = "ours:"
+
+# What disqualifies a variant header from being installed, as a test instead of
+# a judgement.  CLAUDE.md's rule is that a failure under one compiler is no
+# evidence about another, and its corollary is that a REGEX is not evidence
+# either -- so this is not used to predict a unit's fate.  It is used for one
+# narrow thing: to refuse to ADD a header to INSTALLED_EXTRA that pcc2 provably
+# cannot read, because that decision is ours and it lands on all 356 units at
+# once.  sanity() asserts every entry above passes it.
+NOT_C = [
+    (re.compile(r'extern[ \t]+"C"'),                  'extern "C" -- C++'),
+    (re.compile(r'\bvoid[ \t]*\*'),                   "void *"),
+    (re.compile(r'\bconst\b'),                        "const"),
+    # A prototype: a declarator whose parameter list holds a TYPE rather than
+    # bare K&R names.  Anchored on the opening paren so `foo(a, b)' does not
+    # match and `foo(int a, char *b)' does.
+    (re.compile(r'\w[ \t]*\([ \t]*(?:const[ \t]+)?'
+                r'(?:void|char|short|int|long|float|double|unsigned|signed|'
+                r'size_t|FILE)\b[^)]*\)[ \t]*;'),     "an ANSI prototype"),
+    # A tagless `struct { ... };' as a union member -- pcc2 has no syntax for
+    # it.  \s and not [ \t]: libc/u.h puts the brace on the NEXT LINE, and with
+    # the tighter class this test passed a header it should have rejected.
+    (re.compile(r'\bstruct\s*\{[^}]*\}\s*;', re.S), "an anonymous struct"),
+    # AN ANSI `U' SUFFIX, WHICH THIS TEST WOULD OTHERWISE MISS ENTIRELY, and
+    # stage 2 found it the hard way.  lcc/stdarg.h is pure #defines and so
+    # PARSES by every test above -- but its macro body says
+    #   _littleendian_va_arg(list, mode, 3U)
+    # and pcc2 lexes `3U' as 3 followed by the identifier U.  The header
+    # compiles; the EXPANSION fails, hundreds of lines away in whichever source
+    # used va_arg, reported as `syntax error / saw NAME'.  `L' is deliberately
+    # not matched: K&R has the long suffix, and lcc/limits.h's 0xffffffffL is
+    # fine.  This is the one place where the test reaches past the header's own
+    # syntax, and it is here because a measurement demanded it.
+    (re.compile(r'\b0[xX][0-9a-fA-F]+[uU]|\b[0-9]+[uU]'), "an ANSI U suffix"),
+]
+
+
+def installable(text):
+    """None if pcc2 could read this header, else why not.
+
+    Comments are stripped first: `/* extern const char* ctermid(...) */' in
+    oCC/sysent.h is commented out on the tape and would otherwise disqualify a
+    header on the strength of a line no compiler ever sees.
+    """
+    live = re.sub(r'/\*.*?\*/', ' ', text, flags=re.S)
+    for pat, why in NOT_C:
+        if pat.search(live):
+            return why
+    return None
 
 # r70 keeps several headers ONLY inside a compiler's variant directory --
 # include/lcc/, include/CC/, include/olcc/, include/oCC/, include/libc/ -- and
@@ -121,6 +215,221 @@ INSTALLED_EXTRA = {
 # which of the tape's four copies belongs at /usr/include", which are entirely
 # different pieces of work.
 VARIANT_DIRS = ["lcc", "CC", "olcc", "oCC", "libc"]
+
+# ---------------------------------------------------------------- generators ---
+# yacc and lex, which the survey did not run and therefore could not survey.
+#
+# csources() takes .c files, so a unit whose grammar is a .y was measured with
+# the grammar left out -- and nine units then reported `missing:y.tab.h', a
+# header yacc WRITES.  That is not a fact about the tape; it is the survey
+# declining to run step one of the build.
+#
+# FOUR SUFFIXES, NOT TWO, and the fourth is why this is driven off the makefiles
+# rather than off a suffix list alone: cmd/ratfor's grammar is `r.g' and
+# cmd/ipa's lexer is `ipa_trans.lex'.  A scan looking for *.y and *.l finds
+# neither, and ratfor's makefile says `yacc -d r.g' in as many words.
+GEN_SUF = (".y", ".l", ".g", ".lex")
+BUILD_FILES = ["mkfile", "makefile", "Makefile"]
+MACRO_DEF = re.compile(r'^([A-Za-z_][A-Za-z_0-9]*)[ \t]*=[ \t]*(.*)$')
+MACRO_USE = re.compile(r'\$\{([A-Za-z_][A-Za-z_0-9]*)\}'
+                       r'|\$\(([A-Za-z_][A-Za-z_0-9]*)\)'
+                       r'|\$([A-Za-z_][A-Za-z_0-9]*)')
+
+# THE TAPE'S OWN FLAGS, AND THEY ARE UNIFORM.  Sixteen makefiles write
+# `yacc -d' and four write `$YACC $YFLAGS' over `YFLAGS = -d'; not one asks for
+# anything else.  So -d is the tape's answer and not our preference -- which
+# matters, because -d is exactly what makes y.tab.h appear.
+YACC_DEFAULT = "-d"
+LEX_DEFAULT = ""
+
+# The names yacc and lex write.  Used to tell a recipe that TRANSFORMS the
+# generated source from one that merely renames it.
+GEN_OUT = re.compile(r'\b(y\.tab\.[ch]|lex\.yy\.c)\b')
+
+
+def macros_of(text):
+    """Top-level NAME = value definitions, ignoring recipe lines."""
+    out = {}
+    for line in text.splitlines():
+        if line.startswith("\t") or line.lstrip().startswith("#"):
+            continue
+        mo = MACRO_DEF.match(line)
+        if mo:
+            out[mo.group(1)] = mo.group(2)
+    return out
+
+
+def expand(s, macros, depth=0):
+    """Substitute ${X}, $(X) and bare $X, bounded against a cycle."""
+    if depth > 6 or "$" not in s:
+        return s
+    def sub(mo):
+        name = mo.group(1) or mo.group(2) or mo.group(3)
+        return macros.get(name, "")
+    return expand(MACRO_USE.sub(sub, s), macros, depth + 1)
+
+
+def gen_recipes(d):
+    """Every yacc/lex invocation the unit's build files actually contain.
+
+    Returns {basename: (tool, flags, redirected)}.
+
+    THE TOOL MUST BE THE COMMAND, NOT MERELY A WORD ON THE LINE.  The first
+    version matched any token whose basename was `yacc' or `lex', which found
+    three links -- `cc lmain.o y.tab.o ... -o lex' in cmd/lex, and
+    `$(CC) -o yacc y?.o' in cmd/yacc and cmd/picasso.  Every one of those is the
+    program being LINKED, and reading them as generator invocations would have
+    had the survey run `lex' over a unit that has no lexer.  A tool name in
+    argument position is not a tool being run.
+    """
+    out = {}
+    # THE UNIT ROOT IS NOT WHERE THE MAKEFILE ALWAYS IS.  cmd/ccom holds only
+    # common/ and vax/, and it is vax/makefile that carries the yacc recipe --
+    # with the `sed' that makes cgram.c.  Reading the root alone found no recipe
+    # at all, fell back to the default, and emitted a plain yacc row for a unit
+    # whose generated source is post-processed; our own ccom.mk has done it
+    # correctly since stage 1.  Same bounded set sources() walks, for the same
+    # reason: any other machine's directory is another machine's build.
+    dirs = [d] + machine_dirs(d)
+    for b, d0 in [(b, x) for x in dirs for b in BUILD_FILES]:
+        p = os.path.join(d0, b)
+        if not os.path.isfile(p):
+            continue
+        text = read(p)
+        macros = macros_of(text)
+        # A RECIPE IS A BLOCK, NOT A LINE, and reading it line by line missed
+        # the whole point in two units.  cmd/ccom runs `yacc $M/cgram.y' and
+        # then `sed s_^# line .*_/* & */_ y.tab.c >cgram.c' on the NEXT line;
+        # cmd/2500 runs yacc and then edits y.tab.c with `ed'.  Judged one line
+        # at a time both look like a plain yacc invocation, and the survey would
+        # have compiled a generated source the tape never compiles.
+        for block in blocks_of(text):
+            lines = [expand(x, macros) for x in block]
+            whole = "\n".join(lines)
+            hit = None
+            for body in lines:
+                if body.startswith("#"):
+                    continue
+                toks = body.split()
+                # A recipe may open with make's own prefixes, and V10's mk uses
+                # them: `-' ignore-status, `@' quiet.
+                if toks and toks[0][0] in "-@" and len(toks[0]) > 1:
+                    toks = [toks[0].lstrip("-@")] + toks[1:]
+                while toks and toks[0] in ("-", "@", "-@", "@-"):
+                    toks = toks[1:]
+                if not toks:
+                    continue
+                tool = os.path.basename(toks[0])
+                if tool not in ("yacc", "lex"):
+                    continue
+                infile, flags = None, []
+                for t in toks[1:]:
+                    if t.startswith(">"):
+                        break
+                    if t.endswith(GEN_SUF):
+                        infile = t
+                    elif t.startswith("-"):
+                        flags.append(t)
+                if infile is not None:
+                    hit = (os.path.basename(infile), tool, " ".join(flags), body)
+                    break
+            if hit is None:
+                continue
+            base, tool, flags, invocation = hit
+            # WHAT DISQUALIFIES A ROW IS A CHANGED FILE, NOT A CHANGED NAME, and
+            # the first version of this test could not tell them apart: it
+            # flagged any `>' anywhere in the block, which caught cmd/cpp's
+            # `mv y.tab.c cpy.c'.  A rename is nothing -- our own cpp.mk does
+            # exactly that, and compiling the same bytes under either name tests
+            # the same thing.  A `sed' or an `ed' over the generated source is
+            # everything, because then the file the compiler sees is not the
+            # file the generator wrote.
+            post = None
+            if ">" in invocation:
+                # The tool's own output redirected -- cmd/2500's
+                # `lex -t lex.l > lex.c', where -t makes lex write to stdout.
+                post = "redirects its output"
+            else:
+                for line in lines:
+                    if not GEN_OUT.search(line):
+                        continue
+                    verb = os.path.basename(line.split()[0]) if line.split() else ""
+                    if verb in ("sed", "ed"):
+                        post = "passes the output through " + verb
+                        break
+            out.setdefault(base, (tool, flags, post))
+    return out
+
+
+def blocks_of(text):
+    """Recipe blocks: the runs of tab-indented lines that follow a target.
+
+    Bounded to contiguous runs, which is what make itself does -- a
+    non-indented line ends the recipe.
+    """
+    out, cur = [], []
+    for line in text.splitlines():
+        if line.startswith("\t"):
+            cur.append(line.strip())
+        elif cur:
+            out.append(cur)
+            cur = []
+    if cur:
+        out.append(cur)
+    return out
+
+
+def generators(u):
+    """The unit's generator inputs, as (tool, file, flags, object, note).
+
+    Suffix scan for the FILES, makefiles for the FLAGS -- and in that order,
+    because most of this tree has no explicit yacc line at all: awk, eqn, grap,
+    hoc, pic and make all leave it to make's built-in .y suffix rule, so a
+    makefile-only scan finds a third of them and reports the rest as having no
+    grammar.  Where a recipe does exist it governs, since it is the tape stating
+    what it does with its own source.
+    """
+    if not u.root:
+        return []
+    recipes = gen_recipes(u.root)
+    out = []
+    for p in u.paths:
+        if not p.endswith(GEN_SUF):
+            continue
+        base = os.path.basename(p)
+        tool, flags, post = recipes.get(
+            base, ("yacc" if base.endswith((".y", ".g")) else "lex", None, None))
+        if flags is None:
+            flags = YACC_DEFAULT if tool == "yacc" else LEX_DEFAULT
+        elif tool == "yacc" and "-d" not in flags.split():
+            # y.tab.h is what -d writes, and six units include it.  A makefile
+            # omitting -d is building only the .c; adding it costs nothing and
+            # is what the other twenty makefiles ask for.
+            flags = (flags + " " + YACC_DEFAULT).strip()
+        # THE OBJECT IS THE GENERATOR'S NATURAL OUTPUT, NOT A NAME WE INVENT.
+        # The first version wrote `<grammar>.o', and cmd/config proves that
+        # wrong twice over: its OBJS line names `y.tab.o' and `lex.yy.o'
+        # outright, and deriving from the grammar gave config.y and config.l
+        # the SAME object -- a collision that would have had one silently
+        # overwrite the other.  Units that do rename (eqn's `mv y.tab.o
+        # eqn.o') only matter to a LINK, and this survey does not link.
+        obj = "y.tab.o" if tool == "yacc" else "lex.yy.o"
+        note = post + " -- needs its own recipe" if post else "-"
+        out.append((tool, os.path.relpath(p, u.root), flags, obj, note))
+    rows = sorted(out, key=lambda r: r[1])
+    # A second grammar in one unit writes over the first's y.tab.c.  Only two
+    # units do it -- cmd/gcc (cexp.y, parse.y) and cmd/ccom (cgram.y, sty.y) --
+    # and both are named rather than merged, because "compile them in sequence
+    # and see" produces one object from two grammars and no warning.
+    kept, taken = [], {}
+    for tool, f, flags, obj, note in rows:
+        if note == "-" and obj in taken:
+            note = ("a second %s source; %s already writes %s"
+                    % (tool, taken[obj], obj))
+        elif note == "-":
+            taken[obj] = f
+        kept.append((tool, f, flags, obj, note))
+    return kept
 
 # Directories under cmd/ that are plainly not a single command.  Kept as data
 # with a reason each, because "it has no main()" already classifies most of
@@ -144,11 +453,17 @@ def read(path):
 
 
 def sources(d):
-    """The .c/.h/.s/.y/.l files of one directory, not recursing."""
+    """The .c/.h/.s and generator files of one directory, not recursing.
+
+    `.g' and `.lex' are here for exactly two files -- cmd/ratfor/r.g and
+    cmd/ipa/ipa_trans.lex -- and both are load-bearing: without them the copy
+    manifest leaves the grammar behind and the unit fails on the guest for a
+    reason the host cannot see.
+    """
     out = []
     try:
         for n in sorted(os.listdir(d)):
-            if n.endswith((".c", ".h", ".s", ".y", ".l")):
+            if n.endswith((".c", ".h", ".s") + GEN_SUF):
                 p = os.path.join(d, n)
                 if os.path.isfile(p):
                     out.append(p)
@@ -194,14 +509,17 @@ class Unit(object):
         self.variant = []             # only under r70's lcc/CC/... -- a decision
         self.hints = []               # ANSI constructs found, by label
         self.has_main = False
+        self.mains = []               # the .c files carrying a main()
         self.overlay = False          # do we already carry a patched copy?
+        self.gen = []                 # (tool, file, flags, object, note)
+        self.made = set()             # headers the generators WRITE
 
     @property
     def ok(self):
         return not self.missing
 
 
-def resolve(header, bracket, unit_dirs, unit_root=None):
+def resolve(header, bracket, unit_dirs, unit_root=None, made=()):
     """Where would the guest find this header?  None if nowhere.
 
     The search order is cc's: for "..." the including file's own directory
@@ -216,6 +534,14 @@ def resolve(header, bracket, unit_dirs, unit_root=None):
     its own directory plus its siblings, and the return value names which one,
     because that string IS the -I the makefile needs.
     """
+    # A header the unit's OWN generators write, which is where the nine
+    # `missing:y.tab.h' verdicts came from.  This is checked before anything
+    # else because the generated copy is the one the build compiles against:
+    # eight units also ship a stale y.tab.h beside the grammar (a build
+    # artefact that came out on the tape, the same reading the 46 prebuilt
+    # binaries get), and the recipe regenerates it either way.
+    if header in made:
+        return "generated"
     if header.startswith("/"):
         # /usr/include/... is the SYSTEM path spelled the long way, and it
         # resolves on a real guest -- cmd/strings.c writes
@@ -332,13 +658,32 @@ def includes_of(text):
 
 
 def scan(unit):
-    """Fill in a unit's includes, missing headers, hints and main()."""
+    """Fill in a unit's generators, includes, missing headers, hints and main()."""
+    unit.gen = generators(unit)
+    for tool, _f, _fl, _o, note in unit.gen:
+        # ONLY THE ROWS THE GUEST WILL ACTUALLY RUN.  A skipped generator writes
+        # nothing, so counting its output as present is the same drift that had
+        # this tool resolving stdlib.h against a machine that did not have it --
+        # the host's model must be what the guest does, not what it could do.
+        if note != "-":
+            continue
+        if tool == "yacc":
+            # -d writes both, and several units include the .h under an alias
+            # they cp it to -- prevy.tab.h (awk, eqn, grap) and x.tab.h (hoc).
+            # Those are the same file under another name, so the recipe that
+            # makes y.tab.h makes them too.
+            unit.made |= set(["y.tab.h", "y.tab.c",
+                              "prevy.tab.h", "x.tab.h"])
+        else:
+            unit.made.add("lex.yy.c")
     dirs = sorted(set(os.path.dirname(p) for p in unit.paths))
     seen = set()
     for p in unit.paths:
         text = read(p)
         if MAIN.search(text):
             unit.has_main = True
+            if p.endswith(".c"):
+                unit.mains.append(os.path.basename(p))
         for pat, label in ANSI_HINTS:
             if pat.search(text) and label not in unit.hints:
                 unit.hints.append(label)
@@ -348,7 +693,7 @@ def scan(unit):
                 continue
             seen.add(key)
             unit.includes.append(key)
-            where = resolve(header, bracket, dirs, unit.root)
+            where = resolve(header, bracket, dirs, unit.root, unit.made)
             if where is None or where.startswith("FOREIGN"):
                 # A FOREIGN hit is not a resolution -- see resolve().  It is
                 # recorded so the reason is visible, and still counts against
@@ -439,6 +784,42 @@ def sanity(units):
     if len(silent) > len(units) // 4:
         problems.append("%d of %d units report NO includes at all"
                         % (len(silent), len(units)))
+    # Every variant header we claim the machine will have must be one pcc2 can
+    # actually read.  This decision lands on all 356 units at once -- an
+    # unparseable /usr/include/stddef.h fails every unit that includes it and
+    # would read as a language fact about the tape -- so it is asserted here
+    # rather than trusted to the comment above the table.
+    for h, src in sorted(INSTALLED_EXTRA.items()):
+        if src.startswith(OURS_PREFIX):
+            p = os.path.join(OURS, src[len(OURS_PREFIX):])
+            if not os.path.exists(p):
+                problems.append("INSTALLED_EXTRA names %s, which the overlay "
+                                "does not carry" % src)
+            continue                      # ours, so its own review governs it
+        p = os.path.join(R70, src)
+        if not os.path.exists(p):
+            problems.append("INSTALLED_EXTRA names %s, which r70 does not have"
+                            % src)
+            continue
+        why = installable(read(p))
+        if why:
+            problems.append("INSTALLED_EXTRA installs %s as <%s> and it carries "
+                            "%s -- pcc2 cannot read it" % (src, h, why))
+    # And it must agree with the copies stage 2 actually performs.  This table
+    # said `lcc/stdarg.h' while the machine had CC's for a week; both parse, so
+    # nothing failed and nothing said so.  Only the headers stage 2 touches are
+    # compared -- it predates the extension and is not expected to install
+    # stddef.h, limits.h or u.h.
+    s2 = dict((dst, src) for src, dst in STAGE2_CP.findall(read(STAGE2)))
+    for dst, src in sorted(s2.items()):
+        want = INSTALLED_EXTRA.get(dst)
+        if want is None:
+            problems.append("v10-stage2.exp installs <%s> and INSTALLED_EXTRA "
+                            "does not list it" % dst)
+        elif not want.startswith(OURS_PREFIX) and want != src:
+            problems.append("v10-stage2.exp installs %s as <%s>, this table says "
+                            "%s -- one of them is describing a machine that does "
+                            "not exist" % (src, dst, want))
     if problems:
         sys.stderr.write("v10-world: NO MEASUREMENT --\n")
         for p in problems:
@@ -552,7 +933,7 @@ def status(u):
     lcc produced while exiting 0 -- and CLAUDE.md's rule there applies here:
     an absent failure is not a success.
     """
-    if not csources(u):
+    if not csources(u) and not u.gen:
         return "nosrc", "no .c found under the unit -- not surveyed"
     if u.missing:
         return "blocked", "missing:" + ",".join(u.missing)
@@ -636,12 +1017,231 @@ def world_units(units):
     ]
     for u in sorted(units, key=lambda x: x.name):
         srcs = csources(u)
-        if not srcs:
-            continue
         d = "." if u.kind == "file" else os.path.relpath(u.root, CMD)
+        if not srcs:
+            # A unit whose ONLY source is a grammar -- cmd/expr is expr.y and a
+            # header, cmd/ipa is ipa_trans.lex.  These had no row at all, so the
+            # survey never visited them: not reported as failing, simply absent,
+            # which is the quietest way for a measurement to be incomplete.
+            # `-' rather than an empty tail, because a row that ends after two
+            # fields cannot be told from a truncated one.
+            if not u.gen:
+                continue
+            out.append("%s %s -" % (u.name, d))
+            continue
         rel = [os.path.relpath(os.path.join(SRC, s), os.path.join(CMD, d))
                for s in srcs]
         out.append("%s %s %s" % (u.name, d, " ".join(sorted(rel))))
+    return "\n".join(out) + "\n"
+
+
+LFLAG = re.compile(r'-l([A-Za-z0-9_]+)')
+WHERE = os.path.join(ROOT, "v10", "mk", "where.txt")
+LIBS_UNITS = os.path.join(GEN, "libs.units")
+# Unresolved in where.txt, and the file says why it is left that way: "a command
+# installed to the wrong directory is invisible until something cannot find it,
+# and by then the disk is built."  A staged install still has to put it
+# somewhere, so the destination is /usr/bin and the row records that the choice
+# was ours -- which is what lets the report count the guesses.
+DEST_DEFAULT = "/usr/bin"
+
+
+def where():
+    """{command: (directory, provenance)} from v10/mk/where.txt."""
+    out = {}
+    for line in read(WHERE).splitlines():
+        if not line or line.startswith("#"):
+            continue
+        f = line.split("\t")
+        if len(f) < 3:
+            continue
+        out[f[0]] = (f[1] or DEST_DEFAULT, f[2] if f[1] else "default")
+    return out
+
+
+def answerable():
+    """The -l names /usr/lib can answer, read off K10.2's own install column.
+
+    Not typed out here: v10/mk/gen/libs.units is generated by tools/v10-libs.py
+    and carries every name each archive is installed under -- libtermlib alone
+    answers both -ltermcap and -ltermlib from one build.  A second list of the
+    same thing is a list that will disagree, which cost a stage-1 run when
+    BUILDTOOLS appeared in both mkdep.py and v10-stage1.exp.
+    """
+    out = set(["c"])                       # libc, which stage 2 built
+    for line in read(LIBS_UNITS).splitlines():
+        if not line or line.startswith("#"):
+            continue
+        for inst in line.split()[5:]:
+            m = re.match(r'lib([A-Za-z0-9_]+)\.a$', inst)
+            if m:
+                out.add(m.group(1))
+    return out
+
+
+def link_libs(u):
+    """The -l flags this unit's own build files ask for, in the order written.
+
+    A MAKEFILE'S -l LIST IS NO MORE A STATEMENT ABOUT V10 THAN ITS CC LINE IS,
+    which K10.2 measured rather than assumed: thirteen of the names the command
+    tree asks for exist nowhere in the tarball -- -lbsd (13 uses), -lport (7),
+    -lether, -lmodel, -lgc, -ld (4 each), -lresolv, -ltroff, -layout, -lcoexpr,
+    -large, -lsocket, -lpost -- the fingerprint of makefiles written for other
+    machines, the same evidence as cmd/lcc/include/sparc_sun/.  So the flags are
+    recorded as the tape writes them and the report says which can be answered;
+    they are not filtered here, because a link that fails for a named absent
+    library is a finding and a link quietly missing a library is a defect.
+    """
+    if not u.root:
+        return []
+    order = []
+    for d in [u.root] + machine_dirs(u.root):
+        for b in BUILD_FILES:
+            p = os.path.join(d, b)
+            if not os.path.isfile(p):
+                continue
+            text = read(p)
+            macros = macros_of(text)
+            for line in text.splitlines():
+                if not line.startswith("\t"):
+                    continue
+                body = expand(line.strip(), macros)
+                if not is_link(body):
+                    continue
+                for name in LFLAG.findall(body):
+                    if name not in order:
+                        order.append(name)
+    return order
+
+
+# Commands that take a -l flag and are not linking.  Both of these were found in
+# the output rather than reasoned about, which is why the list is short and
+# specific rather than a guess at what else might exist.
+NOT_LINKERS = ("lint", "pr", "lex", "yacc", "nm", "size", "ar", "ranlib")
+
+
+def is_link(body):
+    """Is this recipe line a LINK?
+
+    A -l ON A LINE THAT IS NOT A LINK IS NOT A LIBRARY, and taking every -l in
+    the makefile gave two false positives immediately:
+
+        cmd/config   pr -l57 main.c config.y ... | netlpr -c vpr
+        cmd/efl      lint -p *.c -lS
+
+    `pr -l57' is a page length and `lint -lS' names a lint library.  Recorded as
+    -l57 and -lS they would have been reported as libraries the tarball does not
+    provide -- two more entries in a list whose whole value is that every name in
+    it is real.  Same shape as reading `cc ... -o lex' as an invocation of lex:
+    the flag is in argument position to something else.
+
+    The test is the COMMAND, with one fallback: a makefile that never defines CC
+    leaves `$(CC)' expanding to nothing, so the first token becomes an object
+    file.  In that case a line carrying `-o' and not `-c' is a link.
+    """
+    toks = body.split()
+    if toks and toks[0][0] in "-@" and len(toks[0]) > 1:
+        toks = [toks[0].lstrip("-@")] + toks[1:]
+    while toks and toks[0] in ("-", "@", "-@", "@-"):
+        toks = toks[1:]
+    if not toks:
+        return False
+    cmd = os.path.basename(toks[0])
+    if cmd in NOT_LINKERS:
+        return False
+    if cmd in ("cc", "ld", "CC"):
+        return "-c" not in toks
+    return "-o" in toks and "-c" not in toks
+
+
+def world_link(units):
+    """What each unit links against and where it is installed.
+
+    THREE FIELDS AND A TAIL, again: name, destination directory, how the
+    destination was decided, then the -l flags.  The OBJECT list is deliberately
+    absent -- it is world.units plus world.gen, both of which the guest already
+    reads, and restating it here would be the third copy of a list this project
+    has already watched disagree with itself.
+
+    `-' for a unit with no -l flags at all, which is most of them: the loose .c
+    files under cmd/ have no makefile, and cat, ls, mv and their kind need
+    nothing but libc.
+    """
+    dest = where()
+    out = [
+        "# What each command links against, and where it installs.",
+        "#",
+        "# Generated by tools/v10-world.py; check with --check.  Read by the",
+        "# guest as `while read name dir how libs' -- the flags are the tail.",
+        "#",
+        "# The destination comes from v10/mk/where.txt, whose third column says",
+        "# on whose authority: mk (the tape's own install rule), man (V10's",
+        "# manual), v8 (measured off a real Eighth Edition disk) or default",
+        "# (ours, because it had to go somewhere).  The install is STAGED under a",
+        "# DESTDIR, so nothing here overwrites the golden's own binaries -- the",
+        "# 46 prebuilt commands stay available as the oracle they are.",
+        "#",
+    ]
+    skipped = []
+    for u in sorted(units, key=lambda x: x.name):
+        if not csources(u) and not u.gen:
+            continue
+        if u.name.endswith("/"):
+            # THE SECOND GENERATION, WHICH IS NOT A PROGRAM WE BUILD.  The tape
+            # ships `ed' and `sort' twice -- a loose .c and a directory of the
+            # same name -- and mkdep.py builds the loose one, which is K&R and
+            # which pcc2 parses; the directory is the POSIX rewrite.  Two
+            # generations, not one program, exactly as with stdio in libc.
+            #
+            # A ROW WOULD ALSO BREAK THE LINK MECHANICALLY, and that is the part
+            # worth stating: the name carries a trailing slash, so `cc -o ed/'
+            # writes to a directory that does not exist and `cp ed/ .../ed/'
+            # cannot work either.  The failure would be reported as a unit that
+            # would not link -- a harness artefact dressed as a finding, which is
+            # the error this project keeps having to unpick.  And they would
+            # install over the loose one's binary besides.
+            skipped.append("# SKIPPED %-10s the second generation of `%s'; "
+                           "mkdep.py builds the loose .c"
+                           % (u.name, u.name.rstrip("/")))
+            continue
+        if len(u.mains) > 1:
+            # A cmd/ DIRECTORY IS NOT NECESSARILY A COMMAND, and this is the
+            # measurement that says so: 71 of the units carry more than one
+            # main() among their .c files.  cmd/worm has 22, cmd/qsnap 17,
+            # cmd/uucp 11 -- these are subsystems, not programs, and `compact'
+            # is the small clear case (compact.c and uncompact.c, two programs
+            # with no shared code).
+            #
+            # LINKING ALL THE OBJECTS TOGETHER WOULD FAIL on `multiply defined
+            # _main', and that failure would be reported as a unit that will not
+            # link -- a harness artefact dressed as a finding.  The obvious
+            # repair is worse than the skip: pairing each main with ALL the
+            # unit's other objects would give cmd/awk a `maketab' carrying the
+            # whole of awk, because ld pulls in every .o it is named.  Which
+            # objects belong to which program is in each unit's own makefile, and
+            # writing those out is mkdep.py-scale work -- which is exactly why
+            # the boot path has generated makefiles and this survey does not.
+            #
+            # So they are named, with the count, and left for the phase that
+            # generates a makefile per program.
+            skipped.append("# SKIPPED %-10s %d main() functions -- a subsystem, "
+                           "not a program: %s"
+                           % (u.name, len(u.mains), " ".join(sorted(u.mains))))
+            continue
+        if not u.mains and not u.gen:
+            # No main() at all: nothing to link into a program.  The generator
+            # exception matters -- cmd/expr's main IS its grammar, so its main()
+            # is in expr.y and no .c carries one.
+            skipped.append("# SKIPPED %-10s no main() in any .c -- not a program"
+                           % u.name)
+            continue
+        d, how = dest.get(u.name, (DEST_DEFAULT, "default"))
+        libs = link_libs(u)
+        out.append("%s %s %s %s" % (u.name, d, how,
+                                    " ".join("-l" + x for x in libs) or "-"))
+    if skipped:
+        out.append("#")
+        out.extend(skipped)
     return "\n".join(out) + "\n"
 
 
@@ -670,26 +1270,57 @@ WORLDC = r'''#!/bin/sh
 # K10.1: compile every surveyed command unit and say which ones built.
 # GENERATED by tools/v10-world.py -- do not edit here.
 #
-#	sh worldc.sh <srcroot> <objdir> <ccpath> <bprefix>
+#	sh worldc.sh <srcroot> <objdir> <ccpath> <bprefix> <yacc> <lex> [destdir]
 #
 # srcroot  the mounted courier disk, e.g. /n/v10
 # objdir   scratch on a WRITABLE filesystem, e.g. /usr/k10obj
 # ccpath   the driver, /bin/cc
 # bprefix  stage 1's passes, e.g. /usr/s1/lib/
+# yacc     stage 1 builds it -- /usr/s1/bin/yacc
+# lex      the golden's prebuilt one -- /usr/bin/lex (there is no lex source
+#          pass in stage 1, and prebuilt.txt records the binary at usr/bin/lex)
+# destdir  K10.3 ONLY.  Given, each unit that compiles is then LINKED and
+#          INSTALLED under this prefix; absent, this is K10.1's compile-only
+#          survey and behaves exactly as it did.
+#
+# ONE SCRIPT, TWO PHASES, for the reason v10-boot780.sh gives for one harness
+# driving two simulators: the assertions cannot drift between "it compiles" and
+# "it compiles and links" if the compiling is done by the same lines.  It also
+# buys a cross-check nothing else provides -- K10.3's built count must equal
+# K10.1's, and any difference is a fault in one of the two runs rather than a
+# finding.
 SRC=$1
 OBJ=$2
 CCP=$3
 BP=$4
+YACC=$5
+LEX=$6
+DEST=$7
 UD=$SRC/src/cmd
 JQ=$SRC/jerq
 CF="-O -c"
 CC="$CCP -B$BP -t02p"
+# NO -c, AND NO -B EITHER, AND THE SECOND HALF IS NOT AN OVERSIGHT.  V10's cc
+# has three -t letters -- 0 (ccom), 2 (c2) and p (cpp) -- and that is all
+# cmd/cc.c handles; a, l and c were added to V8's cc.c by this project in S5.
+# So on V10 there is no way to point cc at another `ld', `crt0.o' or `libc.a',
+# and a link here necessarily uses the system's.  That is stated rather than
+# worked around: the question K10.3 asks is whether the commands link against
+# the libraries K10.2 built and installed in /usr/lib, and they do so through
+# the machine's own ld.  -B is kept for the compile passes, where it does work.
+CCL="$CCP -B$BP -t02p"
 
 P=CBUILT
 Q=CFAILED
 N=CNOSRC
 K=CANARY
 SP=SPACE
+G=CGEN
+L=CLINKED
+LN=CNOLINK
+I=CINSTALL
+IN=CNOINST
+ND=CNODEST
 
 rm -rf $OBJ
 mkdir $OBJ
@@ -739,6 +1370,15 @@ FAILRUN=""
 $CC $CF $UD/halt.c > can.log 2>&1
 if test -s halt.o
 then
+	# A MARKER FILE, BECAUSE THE ABSENCE OF DIAGNOSTICS CANNOT BE ASSERTED.
+	# v10-compile.exp tested `test -s can.log' and called that "the canary
+	# compiled", which is inverted: a compile that SUCCEEDS writes nothing,
+	# so the assertion was true only when the canary had failed.  K10.1 has
+	# never exited 0 for this reason -- it reported 6/7 on a run in which 241
+	# units compiled, which no wrong set of flags can do.  Same fault
+	# v10-libs.sh hit and the same fix: assert a marker the success path
+	# writes, never the presence or absence of a compiler's output.
+	echo ok > can.mark
 	echo "$K-ok"
 else
 	echo "NO$K"
@@ -759,6 +1399,14 @@ do
 	SD=$UD/$dir
 	ok=y
 	rm -f u.log
+	# EVERY GENERATED FILE GOES, AT THE TOP OF EVERY UNIT.  y.tab.h is
+	# written into $OBJ and $OBJ is not emptied between units, so one unit's
+	# grammar header would sit there satisfying the NEXT unit's
+	# `#include "y.tab.h"' with another program's token numbers -- compiling
+	# cleanly, and wrong.  That is the flattering direction again: it would
+	# have raised the count.  Cleaning here rather than after the unit means
+	# it also holds on the paths that `continue'.
+	rm -f y.tab.c y.tab.h prevy.tab.h x.tab.h lex.yy.c
 	# The four units that need more than the unit dir, common/ and vax/ --
 	# adb/comm, f77/alt, mk/export, nupas/attin.  Absent from world.incs is
 	# the usual case and adds nothing.
@@ -767,6 +1415,89 @@ do
 	do
 		XI="$XI -I$SD/$x"
 	done
+	# ------------------------------------------------- yacc and lex first ---
+	# STEP ONE OF THE BUILD, WHICH THIS SURVEY USED TO SKIP.  Nine units
+	# reported `missing:y.tab.h' -- a header yacc writes -- and two more
+	# (expr, ipa) were not surveyed at all because their only source is a
+	# grammar.  Reading that as a fact about the tape is what a survey that
+	# does not run the generators looks like from the outside.
+	#
+	# THE TALLY IS A FILE AND NOT A VARIABLE, and this is the one place in
+	# this script where that distinction bites: 1970s sh forks for a compound
+	# command carrying an input redirection, so `ok=n' set inside
+	# `while read ... done < g.lst' would be assigned in a dead child and
+	# lost -- exactly the fault that had v10-libs report 26 of 26 libraries
+	# built while 42 members had not compiled.  A file is immune either way
+	# and needs no theory about which shell forks when.
+	rm -f gbad.cnt
+	sed -e '/^#/d' -e "/^$name /!d" -e "s/^$name //" $SRC/mk/world.gen > g.lst
+	while read tool gf gobj gflags
+	do
+		if test -z "$tool" ; then continue ; fi
+		case "$tool" in
+		yacc)	gsrc=y.tab.c ;;
+		*)	gsrc=lex.yy.c ;;
+		esac
+		rm -f $gsrc
+		# The generator reads from the courier disk and writes into $OBJ,
+		# which is why this runs with $OBJ as the working directory: yacc
+		# and lex both write their output to the current directory and
+		# have no -o.  A build that wrote beside the source would change
+		# the source disk's id and the next stage would refuse it.
+		case "$tool" in
+		yacc)	( $YACC $gflags $SD/$gf 2>&1 ; echo "GST=$?" ) \
+				| sed -e 20q > g1.log ;;
+		*)	( $LEX $gflags $SD/$gf 2>&1 ; echo "GST=$?" ) \
+				| sed -e 20q > g1.log ;;
+		esac
+		gst=`sed -e '/^GST=/!d' -e 's/GST=//' -e 1q g1.log`
+		if test "$gst" != 0 -o ! -s $gsrc
+		then
+			echo . >> gbad.cnt
+			echo "$G-no $name $tool $gf" >> u.log
+			sed -e 4q g1.log >> u.log
+			continue
+		fi
+		# The tape's own aliasing, copied because the tape does it: awk,
+		# eqn and grap cp y.tab.h to prevy.tab.h and hoc to x.tab.h, so
+		# that a grammar whose tokens did not change does not force a
+		# recompile.  Those are the names their .c files include.
+		if test "$tool" = yacc -a -s y.tab.h
+		then
+			cp y.tab.h prevy.tab.h
+			cp y.tab.h x.tab.h
+		fi
+		( $CC $CF -I. -I$SD -I$SD/common -I$SD/vax $XI -I$JQ $gsrc 2>&1
+		  echo "CCST=$?" ) | sed -e 40q > g1.log
+		gst=`sed -e '/^CCST=/!d' -e 's/CCST=//' -e 1q g1.log`
+		gout=`echo $gsrc | sed -e 's|\.c$|.o|'`
+		if test "$gst" != 0 -o ! -s $gout
+		then
+			echo . >> gbad.cnt
+			echo "$G-cc $name $gf" >> u.log
+			sed -e 4q g1.log >> u.log
+		elif test "$gout" != "$gobj"
+		then
+			# world.gen's object column IS the generator's natural
+			# output today, so this is normally a no-op -- and `mv x
+			# x' is an ERROR, not a no-op, which is why it is
+			# guarded rather than run unconditionally.  The column
+			# stays because a link stage has to know the name.
+			mv $gout $gobj
+		fi
+	done < g.lst
+	if test -f gbad.cnt
+	then
+		ok=n
+		sed -e 6q u.log
+	fi
+	# A grammar-only unit -- world.units writes `-' for its sources, since a
+	# row that simply ends after two fields cannot be told from a truncated
+	# one.  There is nothing further to compile.
+	if test "$srcs" = "-"
+	then
+		srcs=""
+	fi
 	for f in $srcs
 	do
 		# THE COMPILER'S OUTPUT IS BOUNDED BY A PIPE, AND THAT IS A BUG
@@ -805,7 +1536,12 @@ do
 		then
 			S=$SRC/ours/cmd/$dir/$f
 		fi
-		( $CC $CF -I$SD -I$SD/common -I$SD/vax $XI -I$JQ $S 2>&1
+		# -I. IS $OBJ, WHERE THE GENERATED HEADER IS.  It cannot shadow a
+		# unit's own file: cpp searches the including file's directory
+		# first for "..." regardless of -I order, so the eight units that
+		# ship a y.tab.h beside the grammar still compile against their
+		# own -- which is the tape's artefact and the right one to prefer.
+		( $CC $CF -I. -I$SD -I$SD/common -I$SD/vax $XI -I$JQ $S 2>&1
 		  echo "CCST=$?" ) | sed -e 40q > u1.log
 		st=`sed -e '/^CCST=/!d' -e 's/CCST=//' -e 1q u1.log`
 		if test "$st" != 0
@@ -821,6 +1557,80 @@ do
 		echo "$P $name" >> $OBJ/res.log
 		echo "$P $name"
 		FAILRUN=""
+		# ------------------------------------ K10.3: link and install ---
+		# Only when a DESTDIR was given, so K10.1 is untouched.
+		#
+		# EVERY .o IN $OBJ BELONGS TO THIS UNIT, which is why `*.o' is
+		# the object list and no third copy of it is needed: the loop
+		# removes them per unit, and world.gen's outputs land here too.
+		# world.link therefore carries only what is new -- the
+		# destination and the -l flags.
+		if test -n "$DEST"
+		then
+			LL=""
+			# world.link SAYS WHETHER A UNIT IS BUILT AT ALL, and a
+			# unit with no row is skipped rather than linked with
+			# defaults.  `ed/' and `sort/' -- the tape's second
+			# generation, whose names carry a trailing slash -- would
+			# otherwise reach `cc -o ed/' and be reported as units
+			# that would not link, which is a harness artefact
+			# dressed as a finding.  The token makes the skip
+			# visible, since a silent one is how a unit goes missing.
+			for x in `sed -e '/^#/d' -e "/^$name /!d" \
+				      -e 's/^[^ ]* [^ ]* [^ ]* //' -e 1q \
+				      $SRC/mk/world.link`
+			do
+				if test "$x" != "-" ; then LL="$LL $x" ; fi
+			done
+			DD=`sed -e '/^#/d' -e "/^$name /!d" \
+				-e 's/^[^ ]* //' -e 's/ .*//' -e 1q \
+				$SRC/mk/world.link`
+			if test -z "$DD"
+			then
+				echo "$ND $name" >> $OBJ/res.log
+				echo "$ND $name"
+				rm -f *.o
+				continue
+			fi
+			rm -f $name
+			( $CCL -o $name *.o $LL 2>&1
+			  echo "LST=$?" ) | sed -e 30q > l1.log
+			lst=`sed -e '/^LST=/!d' -e 's/LST=//' -e 1q l1.log`
+			# THREE TESTS, BECAUSE V10'S ld WRITES ITS OUTPUT FILE
+			# EVEN WHEN SYMBOLS ARE UNDEFINED -- it reports them and
+			# clears the execute bits, so `test -s' passes on a
+			# binary that cannot run.  A diagnostic added during
+			# stage 3 reported SUCCESS for a component that had just
+			# failed with `Undefined: _atof' for exactly this reason.
+			# `Undefined' is looked for with sed because there is no
+			# grep on this machine, and -x is not used because 1970s
+			# test cannot be assumed to have it.
+			sed -e '/Undefined/!d' -e 1q l1.log > lu.log
+			if test "$lst" = 0 -a -s $name -a ! -s lu.log
+			then
+				echo "$L $name" >> $OBJ/res.log
+				echo "$L $name"
+				if test -d $DEST$DD
+				then
+					if cp $name $DEST$DD/$name
+					then
+						echo "$I $name" >> $OBJ/res.log
+					else
+						echo "$IN $name $DEST$DD" \
+						    >> $OBJ/res.log
+						echo "$IN $name $DEST$DD"
+					fi
+				else
+					echo "$IN $name $DEST$DD" >> $OBJ/res.log
+					echo "$IN $name $DEST$DD"
+				fi
+			else
+				echo "$LN $name" >> $OBJ/res.log
+				echo "$LN $name"
+				sed -e 3q l1.log
+			fi
+			rm -f $name l1.log lu.log
+		fi
 	else
 		echo "$Q $name" >> $OBJ/res.log
 		echo "$Q $name"
@@ -867,6 +1677,17 @@ sed -e "/^$N /!d" $OBJ/res.log > $OBJ/t.log
 n=`sed -n '$=' $OBJ/t.log`
 if test -z "$n"; then n=0; fi
 echo "TALLYN $n"
+if test -n "$DEST"
+then
+sed -e "/^$L /!d" $OBJ/res.log > $OBJ/t.log
+	n=`sed -n '$=' $OBJ/t.log`
+	if test -z "$n"; then n=0; fi
+	echo "TALLYL $n"
+sed -e "/^$I /!d" $OBJ/res.log > $OBJ/t.log
+	n=`sed -n '$=' $OBJ/t.log`
+	if test -z "$n"; then n=0; fi
+	echo "TALLYI $n"
+fi
 echo "WORLDC-done"
 '''
 
@@ -912,11 +1733,113 @@ def world_incs(units):
     return "\n".join(out) + "\n"
 
 
+def world_gen(units):
+    """Which units must run yacc or lex first, and with what.
+
+    FIVE FIELDS AND A TAIL, and the flags are the tail on purpose: `lex' takes
+    none in most of this tree, and a row read as `while read name tool file obj
+    flags' with flags in the middle would shift every field left the moment one
+    was empty.  Same discipline as world.units -- one kind of thing per row, and
+    the variable-length part last.
+
+    A unit whose recipe post-processes the generated source is emitted as a
+    COMMENT rather than dropped silently.  cmd/2500 is the case: it runs
+    `yacc -d -D gram.y' and then edits y.tab.c with `ed', and `lex -t lex.l >
+    lex.c' and edits that too.  Running the generator without the edits would
+    compile something the tape never compiled, and dropping the row without
+    saying so would leave a unit quietly relying on the y.tab.c the tape happens
+    to ship -- which is a build artefact from someone's working directory, the
+    same reading the 46 prebuilt binaries get.  Naming it keeps that visible.
+    """
+    out = [
+        "# Units whose build begins with yacc or lex, and the tape's own flags.",
+        "#",
+        "# Generated by tools/v10-world.py; check with --check.  Read by the",
+        "# guest as `while read name tool file obj flags', so the flags are the",
+        "# tail -- see the function comment.",
+        "#",
+        "# -d is not our preference: sixteen makefiles write `yacc -d' outright",
+        "# and four more write $YFLAGS over `YFLAGS = -d'.  It is also what makes",
+        "# y.tab.h exist, which nine units include.",
+        "#",
+    ]
+    skipped = []
+    for u in sorted(units, key=lambda x: x.name):
+        for tool, f, flags, obj, note in u.gen:
+            if note != "-":
+                skipped.append("# SKIPPED %-10s %s %s -- %s" % (u.name, tool, f, note))
+                continue
+            out.append("%s %s %s %s %s" % (u.name, tool, f, obj, flags))
+    if skipped:
+        out.append("#")
+        out.extend(skipped)
+    return "\n".join(out) + "\n"
+
+
+def inc_extra():
+    """The headers a harness must install before it measures anything.
+
+    THIS FILE EXISTS BECAUSE THE SURVEY AND THE MACHINE DISAGREED, and the
+    disagreement ran in the flattering direction for a whole phase.
+    INSTALLED_EXTRA describes what /usr/include holds, and resolve() has always
+    consulted it -- but only tools/v10-stage2.exp ever performed the copies, on
+    the .s2 image chain, while tools/v10-compile.sh runs on a .stage1 clone that
+    has none of them.  So K10.1 surveyed a machine with stdlib.h and then
+    compiled on a machine without it, and the resulting fourteen failures were
+    written up as header facts about the tape:
+
+        2500 awk ed eqn grap idiff join map pic sort zero   stdlib.h
+        cb ed sum                                           stddef.h
+
+    Eleven of those name a header whose variant was CHOSEN AND RECORDED by
+    stage 2 in 2026-08-17.  Nothing was wrong with the decision; it simply never
+    reached this machine.  Same shape as the app's `it is in the golden, it will
+    arrive on Reset', and the same answer: put the list in one generated place
+    and have every consumer read it.
+
+    Three columns -- header, provenance, path -- and one kind of thing per row,
+    so `while read h from path' reads what it looks like.  The path is relative
+    to /usr/include for r70's own variants and to the overlay root for ours.
+    """
+    out = [
+        "# Headers to install into /usr/include before compiling anything.",
+        "#",
+        "# Generated by tools/v10-world.py; check with --check.  r70 keeps these",
+        "# only inside a compiler's variant directory and the job is to pick the",
+        "# one pcc2 can read -- see INSTALLED_EXTRA in the generator for the",
+        "# evidence behind each choice.  `ours' rows come from the overlay,",
+        "# v10/src/, and are reconstructions rather than a choice among copies.",
+        "#",
+        "# fields: header  r70|ours  path",
+        "#",
+    ]
+    for h in sorted(INSTALLED_EXTRA):
+        src = INSTALLED_EXTRA[h]
+        if src.startswith(OURS_PREFIX):
+            out.append("%-12s ours  %s" % (h, src[len(OURS_PREFIX):]))
+        else:
+            out.append("%-12s r70   %s" % (h, src))
+    return "\n".join(out) + "\n"
+
+
+# Where stage 2 performs its own copies, so the two lists cannot drift.  It is
+# the older consumer and it carries the prose reasoning for three of the
+# choices, so it is left as it is and CHECKED rather than rewritten -- the
+# tc.order lesson, where a component list that appeared twice disagreed for a
+# whole run and nothing said so.
+STAGE2 = os.path.join(ROOT, "tools", "v10-stage2.exp")
+STAGE2_CP = re.compile(r'cp \$(?:INC|N)(?:/ours)?/([A-Za-z_0-9./]+\.h) '
+                       r'\$INC/([A-Za-z_0-9./]+\.h)')
+
+
 GENERATED = [
     ("world.txt", lambda u, p: world_txt(u, p)),
     ("world.cpio", lambda u, p: world_cpio(u)),
     ("world.units", lambda u, p: world_units(u)),
     ("world.incs", lambda u, p: world_incs(u)),
+    ("world.gen", lambda u, p: world_gen(u)),
+    ("world.link", lambda u, p: world_link(u)),
+    ("inc.extra", lambda u, p: inc_extra()),
     ("worldc.sh", lambda u, p: WORLDC),
 ]
 
@@ -1010,6 +1933,34 @@ def main():
                 hist.setdefault(h, []).append(u.name)
         for h, who in sorted(hist.items(), key=lambda kv: (-len(kv[1]), kv[0])):
             print("%-24s %3d  %s" % (h, len(who), " ".join(sorted(who))))
+        return 0
+
+    if "--variants" in args:
+        # Every header r70 keeps only inside a compiler's directory, with each
+        # copy's verdict.  The point of printing all of them is that the
+        # INSTALLED_EXTRA choices are then reviewable against the alternatives
+        # instead of asserted -- and it reproduces stage 2's three decisions
+        # from a test written for a different phase, which is the closest thing
+        # to an independent check available here.
+        wanted = {}
+        for u in units:
+            for h in u.variant:
+                wanted.setdefault(h, []).append(u.name)
+        print("%-12s %-5s %-8s %s" % ("header", "dir", "verdict", "why / who"))
+        for h in sorted(set(list(wanted) + list(INSTALLED_EXTRA))):
+            for v in VARIANT_DIRS:
+                p = os.path.join(R70, v, h)
+                if not os.path.exists(p):
+                    continue
+                why = installable(read(p))
+                chosen = INSTALLED_EXTRA.get(h) == "%s/%s" % (v, h)
+                print("%-12s %-5s %-8s %s%s"
+                      % (h, v, "PARSES" if why is None else "no",
+                         why or "",
+                         "   <- INSTALLED" if chosen else ""))
+            if h in wanted:
+                print("%-12s %-5s %-8s wanted by: %s"
+                      % ("", "", "", " ".join(sorted(set(wanted[h])))))
         return 0
 
     report(units, pre)

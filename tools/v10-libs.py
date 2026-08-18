@@ -722,8 +722,32 @@ def survey(rel, d):
         names.add(archive[3:-2])
     if not names and u["name"].startswith("lib"):
         names.add(u["name"][3:])
+    extra = ALSO_ANSWERS.get(u["name"])
+    if extra:
+        names.add(extra[3:-2])
     u["lnames"] = sorted(names)
     return u
+
+
+# A LIBRARY THE TAPE INSTALLS UNDER A SECOND NAME THAT ITS MAKEFILE NEVER
+# MENTIONS.  cmd/pret and cmd/struct link `-lln', and libl's makefile builds and
+# installs only libl.a -- so those two units could not link and the flag went
+# into the report as one the tarball does not provide.  It does provide it:
+# src/libl/ carries a PREBUILT libln.a beside the source, and its member list is
+#
+#	allprint.o  main.o  reject.o  yyless.o  yywrap.o
+#
+# which is, member for member, exactly what the makefile puts in libl.a.  So
+# libln.a is libl.a under a second name, and the question is a system-layout one
+# of the same kind as libtermlib answering both -ltermcap and -ltermlib from a
+# single build.
+#
+# THE TAPE'S OWN ARTEFACT SETTLES IT, which is why this is a table and not a
+# guess: sanity() below compares the prebuilt archive's members against the
+# members the makefile names and refuses to print a measurement if they differ.
+# Installing our BUILD under the second name is not the same as installing the
+# prebuilt archive -- the prebuilt one stays an oracle and is never copied.
+ALSO_ANSWERS = {"libl": "libln.a"}
 
 
 def sanity(libs):
@@ -746,6 +770,26 @@ def sanity(libs):
                  "-- the build-file parser is not reading this tree, so no "
                  "number here means anything"
                  % (len(empty), len(live), " ".join(empty[:6])))
+    # ALSO_ANSWERS is a claim about two archives holding the same thing, so it
+    # is checked against both rather than trusted.  A prebuilt archive whose
+    # members have drifted from the makefile's list would mean the second name is
+    # a DIFFERENT library, and installing our build under it would put the wrong
+    # code behind a -l flag -- silently, since ld would find something.
+    for name, second in sorted(ALSO_ANSWERS.items()):
+        u = next((x for x in live if x["name"] == name), None)
+        if u is None:
+            sys.exit("v10-libs: ALSO_ANSWERS names %s, which is not a library "
+                     "in this tree" % name)
+        p = os.path.join(SRC, u["rel"], second)
+        got, _why = ar_members(p)
+        if not got:
+            sys.exit("v10-libs: ALSO_ANSWERS claims %s is %s under another name, "
+                     "but %s has no readable members" % (second, name, p))
+        want = set(u["members"])
+        if set(got) != want:
+            sys.exit("v10-libs: %s and %s do not hold the same members -- %s vs "
+                     "%s.  The second name would put different code behind a -l "
+                     "flag." % (second, u["archive"], sorted(got), sorted(want)))
     guessed = [u for u in live if u["from"].startswith("GLOB")]
     if len(guessed) > len(live) // 2:
         sys.exit("v10-libs: %d of %d member lists are globs -- neither the "

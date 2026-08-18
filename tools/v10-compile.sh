@@ -153,6 +153,22 @@ printf "   units compiled            %4s\n" "$built"
 printf "   units that did not        %4s\n" "$failed"
 printf "   units with no source      %4s\n" "$nosrc"
 
+# ------------------------------------------------------- yacc and lex, apart ---
+#
+# A GENERATOR FAILURE IS ITS OWN CAUSE AND MUST NOT BE COUNTED AS A LANGUAGE
+# ONE.  Fifty-one units now run yacc or lex before the compiler sees anything,
+# and a grammar that yacc rejects fails the unit for a reason that has nothing to
+# do with pcc2 -- the same distinction the twenty-consecutive-failures guard
+# exists to make.  worldc.sh tags these CGEN-no (the generator refused) and
+# CGEN-cc (its output would not compile), so they are separable here.
+ngen=$(grep -cE 'CGEN-(no|cc) ' "$LOG" 2>/dev/null || true)
+if [[ "${ngen:-0}" != 0 ]]; then
+    echo
+    printf "   of the failures, %s began at yacc or lex:\n" "$ngen"
+    grep -oE 'CGEN-(no|cc) [A-Za-z_0-9+./-]+ [A-Za-z_0-9+./-]+' "$LOG" \
+        | sort -u | sed -e 's/^/      /' | head -20
+fi
+
 # ------------------------------------------------- host prediction vs machine ---
 pred=$(mktemp); got=$(mktemp)
 trap 'rm -f "$pred" "$got"' EXIT

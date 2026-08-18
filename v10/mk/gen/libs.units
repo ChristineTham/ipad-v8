@@ -2,7 +2,7 @@
 libm libm libm.a ar - libm.a
 libipc ipc/libipc libipc.a ar - libipc.a
 libcbt libcbt libcbt.a ar - libcbt.a
-libl libl libl.a ar - libl.a
+libl libl libl.a ar - libl.a libln.a
 libF77 libF77 libF77.a ar - libF77.a
 libI77 libI77 libI77.a ar - libI77.a
 libtermlib libtermlib termcap.a ar - libtermcap.a libtermlib.a
