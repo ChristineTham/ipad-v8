@@ -2597,6 +2597,45 @@ names — `/usr/bin/find`, `/bin/chmod`, `/bin/ls`, `/usr/bin/cpio`, `/bin/grep`
 `BOOTPATH` is deliberate, not a duplicated list: the first builds `v10cpio` for the
 *Eighth* Edition host that makes V10 media, the second is `/bin/cpio` on the Tenth.
 
+**K14 — AND THE DISK V10 BUILT BOOTS** (2026-08-19,
+`bash tools/v10-mkdisk.sh`, **14/14, exit 0**). V10 made two filesystems on a
+blank RA81, filled them, halted, and the disk it built **came up to a login
+prompt**. Every byte of source arrived over TCP — the 243 MB tape at `/n/tree`,
+our overlay at `/n/ours`, the generated makefiles at `/n/mk`, on netfs devices 0,
+1 and 2 — so no courier disk appears anywhere in the run. **This settles the
+mechanism of rung 10**; what remains for a shippable `v10.disk` is *what to copy*.
+
+The layout is V10's own, and getting there retracted a deviation rather than
+adding one — root on `a`, swap on `b`, `/usr` on `c`, mounted by the `/etc/rc` the
+golden already ships. The host's independent reading agrees, and the geometry is
+Bell Labs':
+
+	                       root (a)        /usr (c)
+	filesystem size    1280 blocks     30752 blocks
+	i-list               19 blocks       473 blocks
+	s_tfree             826 blocks     30115 blocks
+	free BY BITMAP      826 blocks     30115 blocks   <- counted, not read
+	block 0                            475 of 512 bytes non-zero
+
+**Both i-list figures are identical to the golden's own.** They follow from the
+filesystem size and we used Bell Labs' sizes, so what V10 built has the geometry of
+what Bell Labs shipped. Three faults on the way, all in the *measurement* rather
+than the thing measured, and each is a gotcha above: `ra_sizes[]` is in **sectors**
+(so the harness asked for eight times partition `a`, and only the host-side read
+said so); `used = s_fsize - s_tfree` **includes the i-list**, which inflated the
+content from 2.1 MB to a reported 6.4 and produced a *false* justification for the
+two-filesystem layout; and editing `v10-mkdisk.sh` mid-run made bash resume inside
+a word and **silently skip the host-side verification** while the guest still
+reported 14/14.
+
+**Rung 8 is answered, and the answer is that the terminal half cannot be built**
+(2026-08-19, host-side, no simulator). `muxterm`'s own makefile names `3cc`/`3as`/
+`3ld`/`3nm`; `src/man/man9/3cc.9` documents all eight of those tools as the DMD-5620
+cross-compiler; and **the man page is the only one of the eight on the tape**. See
+Decisions for the full evidence, including that `mux` is absent from V10's live
+source tree entirely and that the wire format differs from V8's by exactly one
+never-negotiated constant.
+
 **Superseded, kept for the measurements: K12.1 at 21/24.**
 V10 autoconfigured the Interlan, brought IP up on it with the tape's own
 `dipconfig`, pushed the TCP line discipline onto `/dev/ip6` with `tcpconfig`, put
@@ -2650,21 +2689,21 @@ short-return branch it guards is reachable on a larger transfer.
   SIMH prints is `il_rint_ack` returning `il_dib.vec` and `il_cint_ack` returning
   `il_dib.vec + 4`, which is why the config names only the base.
 
-Next: **K12.2, two objects and a relink.** Both patched files live in prebuilt
-archives — `ar t` puts `streamio.x` in `os.a` and `tcp_device.x` in `inet.a` — so
-this is `ar r` plus a link, not a kernel source build. See the `lcc`/`asm.sed`
-entry in Gotchas for the recipe and for why `cc` may be able to stand in.
-Superseded, kept for its measurements: K12.1's inputs were all measured already — the config
-carries `ni1010a 0 ub 0 reg 0764000 vec 0350`, the model is
-`libsimh/patches/pdp11_il.c`, and of the N track's four stream faults only three
-transfer. Start with **QBIGB**: `lsys/os/streamio.c` takes transfers of 512 bytes
-or more whole on a queue carrying that flag, which V8 had no equivalent of, and
-pushing it is cheaper to measure than patching a constant. Then the two workarounds a 780
-kernel retires: K11's full-capacity filesystem (V8's `filsys.h` caps a
-filesystem at 30,752 blocks and V8 no longer has to read the result) and K12's
-netfs (`ipnx780.m` already carries `netafs 4`/`netbfs 4` and the app's `vax780`
-has the Interlan), which together retire the courier disk whose staleness cost a
-run today.
+Next, in order of what is blocked by what:
+- **`/lib` back on root** (task, harness comment records it): the golden keeps
+  `/lib` on root and the boot path is 2.1 MB against 4.8 MB usable, so the split
+  K14 used is a deviation chosen while a miscounted figure made root look full.
+- **What to copy** for a shippable `v10.disk` — K10.3's 203 commands, K10.2's 26
+  libraries, stage 1's toolchain — then the Swift work to carry a second machine
+  beside V8 (two committed images with identity stamps, two working copies under
+  `~/Library/Application Support/ipnx/`, `app-check` proving both chains).
+- **Rung 8's reachable half**: V10's own host-side `mux` from
+  `history/ix/src/jerq/mux/`, built with `MAXPKTDSIZE` at 64 to match the only
+  5620 `muxterm` we possess. Its four missing headers are already located —
+  `sys/pex.h` in the same `history/ix` tree the source comes from, `sys/label.h` as
+  r70's top-level `include/label.h`, and `tty.h`/`jioctl.h` via the
+  `/usr/jerq/include` that K10.2 installs and mux's own mkfile already puts on `-I`.
+
 Also **submit** — the remaining steps need the Apple account and a
 final name decision, all listed in [docs/app-store.md](docs/app-store.md).
 **Not yet exercised — one thing, and it needs a human at a mouse**: `mux`/`jim`
