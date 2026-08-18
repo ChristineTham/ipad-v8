@@ -70,6 +70,13 @@ rc=${PIPESTATUS[0]}
 echo
 echo "== what is actually on the disk V10 built =="
 python3 "$ROOT/tools/v10-free.py" "$BLANK" h || rc=1
+# BLOCK 0, READ FROM THE IMAGE.  The ROM jumps to offset 0xC inside it, so an
+# all-zero block 0 is a HALT at PC 0000000D and nothing past it is ever read.
+BB0=$(python3 -c "print(sum(1 for b in open('$BLANK','rb').read(512) if b))")
+printf '   block 0: %s of 512 bytes non-zero%s\n' "$BB0" \
+    "$( [[ "$BB0" == 0 ]] && echo '   <- NO BOOT BLOCK, it cannot boot' )"
+[[ "$BB0" != 0 ]] || rc=1
+
 if ! python3 "$ROOT/tools/v10-free.py" "$BLANK" h 2>/dev/null | grep -q 'flag=1'; then
     echo "== NO MEASUREMENT: no N-arm bitmap, so this is inside V8's old ceiling =="
     rc=1
