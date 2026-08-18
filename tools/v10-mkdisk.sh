@@ -61,6 +61,27 @@ trap 'for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null; done' EXIT
 no_overlap "$BLANK" "$ROOT/work/v10gold/$GOLD" || exit 1
 IMG=$(v10_clone "$GOLD" k14) || exit 1
 
+# THE BOOT BLOCK, HOST-SIDE AND BEFORE THE RUN, because that is how the one V10
+# disk this project already boots gets one -- tools/v10-golden.sh:202:
+#
+#	dd if=.../lsys/boot/bb/4kb of="$OUT" bs=512 count=1 conv=notrunc
+#
+# Two guest-side attempts failed instead: reading `bb/4kb' off a share after
+# `umount -a' gave `cp: I/O error', and `cp' to the block device left block 0 all
+# zero -- 508 bytes at offset 0 is a read-modify-write of a 4096-byte buffer, which
+# V10's cp may not do to a block special at all.  None of that needs answering: the
+# block is 508 bytes of position-independent code at sector 0 and the host can
+# place it.
+#
+# BEFORE the run, not after, because boot 2 -- the boot of the copy -- happens
+# INSIDE the expect script, and a boot block written afterwards would be tested by
+# nothing.  The risk is the opposite one: if `mkbitfs' zeroes sector 0 on its way
+# past, this is lost.  That is exactly what the block-0 check below measures, so a
+# wrong guess here reports itself instead of hiding.
+echo "== placing the tape's own 4K boot block at sector 0 =="
+dd if="$ROOT/work/v10/src/lsys/boot/bb/4kb" of="$BLANK" \
+   bs=512 count=1 conv=notrunc 2>/dev/null
+
 echo "== V10 builds a disk on $(basename "$BLANK") =="
 expect "$ROOT/tools/v10-mkdisk.exp" "$IMG" "$BLANK" "$TPORT" "$OPORT" "$MPORT" 2>&1 | tee "$LOG"
 rc=${PIPESTATUS[0]}

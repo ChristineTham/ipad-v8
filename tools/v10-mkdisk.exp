@@ -137,10 +137,16 @@ if {$mounted} {
     # directory, because copying `/' would copy the mount point into itself.
     foreach d {bin etc lib dev} { v10_sh "mkdir $MP/$d" 120 }
     foreach d {usr tmp n} { v10_sh "mkdir $MP/$d" 120 }
+    # /unix FIRST, and lsys/boot/README is why: "/unix must be in the filesystem
+    # beginning at the front of the boot device, and must be no more than singly
+    # indirect".  The boot block is 508 bytes and follows at most one level of
+    # indirection, so a kernel whose blocks are scattered behind thousands of
+    # copied files may be unreachable even though the file is perfectly good.
+    # tools/v10-golden.exp records the same ordering for the same reason.
+    v10_sh "cp /unix $MP/unix" 1800
     foreach d {bin etc lib dev} {
         v10_sh "cd /$d; find . -print | cpio -pd $MP/$d > /dev/null 2>&1" 3600
     }
-    v10_sh "cp /unix $MP/unix" 1800
     note "the system copies onto it" \
         [v10_try "test -s $MP/bin/sh && test -s $MP/etc/init && echo CP\$OK" "CP-ok" 600]
     note "/unix is on the new disk" \
@@ -160,44 +166,9 @@ if {$mounted} {
     v10_sh "/etc/umount -a" 900
     v10_sh "sync" 300
 
-    # ------------------------------------------------ THE BOOT BLOCK ---------
-    #
-    # mkbitfs WRITES A SUPERBLOCK AND AN I-LIST AND NO BOOT BLOCK, and the halt PC
-    # proves it rather than suggesting it.  lsys/boot/star/uda.s, at 0xfa02:
-    #
-    #	# read block 0 into bottom of memory
-    #		clrl	r8		# block 0
-    #		jsb	(r6)
-    #	# start boot block
-    #		jmp	0xc-WMEM(sp)
-    #
-    # so the ROM reads block 0 and jumps to offset 0xC inside it.  On a freshly
-    # zeroed image that is a block of zeros, VAX opcode 0x00 is HALT, and the
-    # machine stopped with `HALT instruction, PC: 0000000D' -- one byte past the
-    # jump target.  Measured on the images too: the golden's block 0 has 475 of 512
-    # bytes non-zero and the disk V10 built had ZERO.  That also rules out the two
-    # other candidates for the halt, because nothing past block 0 was ever read.
-    #
-    # lsys/boot/README states the contract: "The boot block reads in /unix
-    # directly... /unix must be in the filesystem beginning at the front of the
-    # boot device, and must be no more than singly indirect."  Partition h starts
-    # at sector 0, so the first half holds; a kernel this size is nowhere near
-    # singly indirect.
-    #
-    # `bb/4kb', NOT `bb/1kb' -- 4k.s opens `.set FSBSIZE, 8*512' and
-    # `.set FSSHIFT, 12', which is BITFS's 4096-byte block.  508 bytes, so it fits
-    # block 0 with room to spare.  `cp' to the BLOCK device writes it at offset 0
-    # through the buffer cache, and the filesystem is unmounted by now.
-    # STAGED TO LOCAL DISK EARLIER, because by this point the shares are gone.
-    # The first attempt read it off /n/tree here and got `cp: I/O error' -- the
-    # copy sits AFTER `umount -a', and anything reached through a mount that is no
-    # longer usable fails exactly like a broken disk.  Fetch it while the share is
-    # live and write it when the filesystem is quiet: two different moments, and
-    # the boot block needs both.
-    note "the tape's own 4K boot block was staged before the unmount" \
-        [v10_try "test -s $OBJ/4kb && echo BB\$OK" "BB-ok" 600]
-    v10_sh "cp $OBJ/4kb /dev/ra1h" 900
-    v10_sh "sync" 300
+    # NO BOOT BLOCK HERE.  It is written host-side by tools/v10-mkdisk.sh, exactly
+    # as tools/v10-golden.sh:202 does for the disk this project already boots --
+    # see that script for why two guest-side attempts did not work.
     v10_sh "/etc/nafsmnt -u /n/tree; /etc/nafsmnt -u /n/ours; /etc/nafsmnt -u /n/mk" 900
     v10_sh "sync" 300
 } else {
