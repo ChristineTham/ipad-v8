@@ -513,7 +513,16 @@ diffs and the reasoning.
       Details: [v10-log/2026-08-18.md](v10-log/2026-08-18.md)
 - [ ] **`sam` and `samterm`** — the reason `v10blit` matters, and something V8
       never had
-- [ ] A reproducible `v10.disk` build script, in the shape of Track S's stages
+- [~] A reproducible `v10.disk` build script, in the shape of Track S's stages.
+      **K14, 2026-08-18: V10 made a 111,384-block / 435 MB filesystem, mounted it and
+      copied a system into it — over a live netfs share with no courier disk in the
+      run — and the host confirms `flag=1` with `s_tfree` and the bit-by-bit count
+      agreeing at 109,758.** The copy does not boot yet: `HALT instruction, PC:
+      0000000D`, with `/unix`, `/bin/sh` and `/etc/init` all present on it. Three
+      candidates, two answerable by reading `lsys/boot/star/`: the partition (`h`
+      versus the golden's `a`), a boot block `mkbitfs` does not write, and device
+      nodes that `cpio -pd` copied as regular files rather than `mknod`'d.
+      Details: [v10-log/2026-08-18.md](v10-log/2026-08-18.md)
 
 **Its inputs are all measured now, which is the difference between this and where
 Track S started.** Counted host-side off the generated metadata:

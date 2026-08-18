@@ -17,11 +17,21 @@
 # does, rung 10's mechanism is proven and everything left is choosing WHAT to
 # copy -- K10.3's 203 commands, K10.2's 26 libraries, stage 1's toolchain.
 #
-# THE MINOR IS 87 AND K11 LEARNED THAT THE EXPENSIVE WAY.  BITFS|unit|part is
-# `64 | (unit<<3) | part', so unit 2 partition h is 64|16|7 = 87.  K11 first
-# wrote 79 -- which is unit ONE -- and made a perfectly good filesystem on top of
-# the source disk while nineteen assertions reported success.  Only the host's
-# read of the still-zeroed blank said otherwise.
+# THE TARGET GOES ON rq1, AND OUR OWN KERNEL IS WHY.  `ipnx780.m' configures
+# `ra 0' and `ra 1' and stops -- its own comment says "ra 2..5 REMOVED, one
+# controller and we have two disks" -- so a disk attached as rq2 has no device
+# behind it and `mkbitfs' answers `/dev/ra2h: No such device or address'.  K11 got
+# away with rq2 because it ran on the SEKI golden under vax750, whose config
+# carries more RA units; on the machine this project actually ships there are two.
+# Nothing is lost: source arrives over TCP now, so rq1 is free.
+#
+# SO THE MINOR IS 79, AND THAT IS NOT A CONTRADICTION OF K11.  BITFS|unit|part is
+# `64 | (unit<<3) | part'.  K11's blank was on rq2 and it first wrote 79, which
+# addresses unit ONE -- so it made a perfectly good filesystem on top of the
+# source disk while nineteen assertions reported success, and only the host's read
+# of the still-zeroed blank said otherwise.  The lesson was never "use 87": it is
+# that the minor must be computed from the unit the disk is ACTUALLY on.  Here
+# that unit is 1, so 64|8|7 = 79.
 #
 # AND THE COPY'S /etc/rc MUST LOSE ITS /usr MOUNT.  The golden keeps /usr on
 # `ra0c', partition c of unit 0; the new disk is partition h, the WHOLE drive, so
@@ -69,7 +79,7 @@ set IL [list "set il enable" "set il address=2013E800" "set il vector=E8" \
              "attach il nat:"]
 
 # ======================================= BOOT 1: build the disk ==============
-v10_boot $img [concat [list "set rq2 ra81" "attach rq2 $blank"] $IL]
+v10_boot $img [concat [list "set rq1 ra81" "attach rq1 $blank"] $IL]
 note "boot 1: the builder came up" 1
 v10_login root
 v10_sh "PATH=/bin:/etc:/usr/bin; export PATH" 120
@@ -107,16 +117,16 @@ note "mkbitfs builds from the share" \
     [v10_try "cd $OBJ/mkbitfs; make -f /n/mk/mkbitfs.mk \$A \$B \$C > m.log 2>&1 && echo MB\$OK" \
         "MB-ok" 1800]
 
-v10_sh "rm -f /dev/ra2h" 60
-v10_sh "/etc/mknod /dev/ra2h b 7 87" 300
-v10_sh "ls -l /dev/ra2h" 120
+v10_sh "rm -f /dev/ra1h" 60
+v10_sh "/etc/mknod /dev/ra1h b 7 79" 300
+v10_sh "ls -l /dev/ra1h" 120
 note "the whole-drive BITFS node exists" \
-    [v10_try "test -b /dev/ra2h && echo ND\$OK" "ND-ok" 300]
+    [v10_try "test -b /dev/ra1h && echo ND\$OK" "ND-ok" 300]
 note "mkbitfs writes a $BLKS-block filesystem" \
-    [v10_try "$OBJ/mkbitfs/mkbitfs /dev/ra2h $BLKS && echo MF\$OK" "MF-ok" 1800]
+    [v10_try "$OBJ/mkbitfs/mkbitfs /dev/ra1h $BLKS && echo MF\$OK" "MF-ok" 1800]
 
 v10_sh "rm -rf $MP; mkdir $MP" 300
-set mounted [v10_try "/etc/mount /dev/ra2h $MP && echo M1\$OK" "M1-ok" 900]
+set mounted [v10_try "/etc/mount /dev/ra1h $MP && echo M1\$OK" "M1-ok" 900]
 note "V10 mounts the disk it just made" $mounted
 
 if {$mounted} {
