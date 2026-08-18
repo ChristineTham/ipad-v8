@@ -723,6 +723,97 @@ at the old flat `v8/` is moved on first launch, never abandoned.
     header does — but until it does, every lex unit fails and the failure reads
     as a grammar the tape cannot process. `test -s /usr/bin/lex` is not
     "lex works".
+- **`cpio -pd` DOES NOT MAKE THE DIRECTORY YOU COPY INTO, and every existing use
+  of the idiom got away with it by accident.** `-d` creates the directories that
+  appear *inside* the archive; the destination itself must exist, and when it does
+  not the failure is `cannot write in </mnt/src/ipc/internet>` **on stderr with a
+  zero exit status** — so a run that copied nothing looks like a run that worked.
+  `v10-srcdisk.exp` has carried that warning in a comment since the `cmd/` copies
+  were written, and it still cost a 20-minute rebuild, because the reason the
+  other copies work is not the idiom: `libs.cpio` had already created `netfs/` and
+  `ipc/` as **path components** of `netfs/libnetb/…` and `ipc/libin/…`, and never
+  `ipc/internet`. So a new top-level copy needs its own `mkdir`, one level at a
+  time (V8's `mkdir` makes one), added to the loop at the top rather than beside
+  the copy. What made this cheap rather than silent was the `&& echo NI$OK` marker
+  and the stamp-on-failure guard: two assertions said NO, `v10-srcdisk.sh` skipped
+  the assemble *and* the stamp, and the chained runner refused to boot the next
+  harness at all.
+- **DEVICE MAJORS AND LINE-DISCIPLINE INDICES ARE PROPERTIES OF THE TAPE, NOT OF
+  OUR CONFIG — `lsys/lib/tab` says so, and that is why our 780 kernel boots a
+  `/dev` that was made for `seki`.** The obvious reading of a generated
+  `cdevsw[]` is that it follows the config's device list, so a machine with a
+  different `.m` would number its devices differently and every node in
+  `v10/mk/gen/proto-dev` would be wrong under `ipnx780`. It is not so. `tab` is
+  the `-t` argument K7 already passes to `mkconf`, and it is a fixed assignment:
+
+	cdev 0 console   cdev 4 hp    cdev 28 ra    cdev 42 ip
+	cdev 1 dz11      cdev 8 starcons            cdev 43 tcp
+	cdev 44 ni1010a  cdev 50 udp
+
+	ld 0 ttyld   ld 10 ipld   ld 11 tcpld   ld 14 udpld
+
+  So `il` is char major 44 on any V10 kernel, `/dev/ip6` and `/dev/ip17` are IP
+  **protocol numbers** rather than unit numbers (6 = TCP, 17 = UDP, which is what
+  V8's `/etc/rc` pushes onto them), and the `ld` numbers match `libc/gen/
+  linedis.c`'s table exactly — `ip_ld = 10`, `tcp_ld = 11`, `arp_ld = 13`,
+  `udp_ld = 14`, the same integers V8 uses. **Read `tab` before writing a
+  `mknod`**: a wrong major is not a harmless one, since on V8 a node built into
+  the wrong `bdevsw` slot panicked the kernel through a wild pointer.
+  - **`tcpld 0` DOES NOT REMOVE THE LINE DISCIPLINE, and the tape proves it
+    rather than the reasoning.** Our `ipnx780.m` carries `ipld 0 / udpld 0 /
+    tcpld 0` — copied from `alice.m`, a real working CSRC 780 — which reads as
+    "no TCP", the same way `netafs 0` really did mean no netfs. The counts are
+    different animals: a filesystem type needs instances, a line discipline
+    needs a `streamtab[]` slot. `lsys/misc/europa.m` has all three at zero and
+    the generated `europa.c.c` beside it still says `&ipstream /* 10 */`,
+    `&tcpstream /* 11 */`, `&udpstream /* 14 */`. **The tarball ships mkconf's
+    own output for eight machines** (`lsys/misc/*.c.c`) — when a question is
+    "what would the generator do", read one instead of running one.
+  - `arp` is the exception worth knowing: it has **no `ld` line in `tab`** and
+    `arp_ld = 13` indexes a NULL slot. Nothing pushes it — `ipconfig`/`dipconfig`
+    set `IPIOARP` and then do ARP in *userland* over a raw ether minor.
+- **AN ARCHIVE MEMBER'S UNDEFINED EXTERNALS NAME THE OTHER ARCHIVES YOU NEED, and
+  reading them is cheaper than a boot.** Calling the tape's own `tcp_sock()` and
+  `tcp_connect()` instead of hand-rolling them pulls `libin.a(tcp_lib.o)` in, and
+  that object leaves `_errstr` and `_flabclr` undefined — neither of which is in
+  libin, and one of which (`flabclr`, "for security unix") looks like a symbol
+  from a Bell Labs variant we do not have. Both resolve: `flabclr` is
+  `libc/sys/label.c` and `errstr` is `libipc/ipcopen.c`. **Which is also why
+  `LIBIN` in `ipc/internet/mkfile` is TWO archives** — `../libin/libin.a
+  ../libipc/libipc.a` — and that is load-bearing rather than decorative:
+  `in_address()` calls `qvalue()` from `libipc/qns.o` for the not-a-dotted-quad
+  case. A 20-line symbol-table dump over the tape's own `.a` answered all of it
+  in a second.
+- **`dipconfig` IS THE ipconfig THAT NEEDS NO 27TH LIBRARY, and the mkfile's own
+  link lines are the whole argument.** `ipconfig: cc -o ipconfig ipconfig.o
+  $LIBIN $LIBCOMMON` against `dipconfig: cc -o dipconfig dipconfig.o $LIBIN`.
+  `libcommon` is `ipc/mgrs/common/` — `logevent`, `logconsole`, `detach`,
+  `print`, `fprint` — a library in no manifest, wanted for a program whose extra
+  features over `dipconfig` are a subnet mask and a syslog. `dipconfig` is the
+  earlier generation of the same program, does the identical five ioctls
+  (`FIOPUSHLD ip_ld`, `IPIOLOCAL`, `IPIOHOST`/`IPIONET`, `IPIOARP`, `ENIOTYPE`)
+  and needs only what K10.2 built. **And `tcpconfig` has no rule in that mkfile
+  at all** (`MGRS=ipconfig routed dkipconfig udpconfig`) while a prebuilt binary
+  of it sits in the directory — the working-directory pattern again, in the
+  opposite direction to the 46 commands.
+- **A HEADER WITH NO INCLUDE GUARD, NAMED TWICE, BLAMES BELL LABS FOR YOUR BUG.**
+  r70's `<sys/inet/tcp.h>` has no guard and `<sys/inet/tcp_user.h>` includes it
+  itself under `#ifndef KERNEL`, so naming both gives pcc2 the same two typedefs
+  twice — and the second time round `tcp_port` is already a type name, so
+  `typedef unsigned short tcp_port` reads as three type specifiers combined:
+
+	"/usr/include/sys/inet/tcp.h":3:illegal type combination
+	"/usr/include/sys/inet/tcp.h":5:illegal type combination
+
+  Two errors pointing at a 1983 header and none at the file that caused them,
+  which reads as pcc2 not accepting `unsigned short` — a claim contradicted by
+  every other file in the tree. `<sys/inet/in.h>` escaped only because its first
+  line happens to be `#ifndef INADDR_ANY`. **The tape's own idiom is one header**:
+  `ipc/libin/tcp_lib.c` includes `<sys/inet/tcp_user.h>` and nothing else.
+- **`chmod` IS NOT ON THE V10 GOLDEN EITHER** (`chmod: not found`), which matters
+  less than it sounds: a program built with `cc -o` is already executable, so the
+  fix is usually to build rather than to copy-and-chmod. Add it to the absent
+  list beside `ar cmp tail grep wc dd find sort mknod`.
 - **A HOST-SIDE MODEL OF `/usr/include` IS WORTH NOTHING UNLESS THE HARNESS
   INSTALLS WHAT IT MODELS, and this ran in the flattering direction for a whole
   phase.** `tools/v10-world.py` has always resolved `<stdlib.h>`, `<float.h>`
@@ -2275,7 +2366,64 @@ which does just what we want"*. **`dirread` is V10 syscall 22** — the slot V8
 fills with `sumount` — and `resdir.c` is a complete drop-in at 33 lines against
 104, since `libdir`'s extra function is `static`.
 
-Next: **K12.1, the transport**, whose every input is measured already — the config
+**K12.1 — THE TRANSPORT WORKS** (2026-08-18, `bash tools/v10-tcpfs.sh`, 21/24).
+V10 autoconfigured the Interlan, brought IP up on it with the tape's own
+`dipconfig`, pushed the TCP line discipline onto `/dev/ip6` with `tcpconfig`, put
+an ARP frame on the wire, opened a TCP connection to the host and **mounted a
+netafs filesystem over it** with `fmount(2)`. netfsd's own trace is the
+independent witness: `connection accepted`, `NSTART`, `NSTAT ino=2`, then
+`NREAD count=4096 -> 48 bytes` — three 16-byte V8 directory entries, `.`, `..`
+and `hello.txt`.
+
+What remains is **one line of kernel**, and the guest printed its own diagnostic:
+
+	# ls /n/host
+	neta: read -1 expected 48
+
+`istread()` copies `min(count, …)` and then `freeb(bp)` regardless, so the read of
+the reply *header* discards the payload sharing its block and the read of the
+*data* times out. That is the N track's own finding — `usr/src/netfs/README` asked
+for it ("you'll have to fix things") — and V8's fix is the model. Two named
+overlay patches now exist: `lsys/os/streamio.c` (keep the partial block; return
+0 for a zero-length read) and `lsys/inet/tcp_device.c` (QDELIM beside QBIGB).
+**QDELIM is not what bit** — the header read succeeded — but it stays, because the
+short-return branch it guards is reachable on a larger transfer.
+- **`fmount`'s FOURTH ARGUMENT IS THE DEVICE NUMBER, NOT A FLAG**, and the
+  kernel's own parameter name misleads. `namount(sip, ip, flag, mnt, fstyp)`
+  hands it to `nadomount()`, which does `pi.i_dev = flag; iget(&pi, flag,
+  ROOTINO)` and builds the root's tag as `(flag<<16)|ROOTINO`. V8 passed dev as
+  `gmount`'s *second* argument; V10 moved it to the last.
+- **V10's CLIENT FAKES THE ROOT AND INVENTS ITS OWN TAG, and Bell Labs wrote down
+  why.** `lsys/fs/neta.c`'s `nadomount()`: *"fake the root, rather than sending
+  NAGET now, to avoid a deadlock when a server mounts itself / the next stat will
+  correct it"*, with `rip->i_un.i_tag = (flag<<16)|ROOTINO`. V8's client opens
+  every mount with `NGET(dev, ROOTINO)`, which is what allocates a tag in our
+  server; V10 skips it, and `nastat()` copies mode/nlink/uid/gid/size/tm out of
+  the reply and **not** `y.tag`, so it keeps that tag for the life of the mount.
+  Answering ENOENT to it gave a mount that succeeded and then had no root — `ls`
+  said *No such file or directory* while the server logged six requests it had
+  answered correctly. `Export.handle(tag:orRootIno:)` binds the root handle to the
+  client's tag, and only for `rootIno`: an unknown tag on any other inode really
+  is a protocol error.
+- **A FLOATING VECTOR AND AN ADDRESS 040 OUT.** `ipnx780.m` carries `ni1010a 0 ub
+  0 reg 0764000 vec 0350` while `libsimh/patches/apply-il.sh` puts the card at
+  I/O-page offset **04040** (= 0764040, because 0164040 is what V8's kernel
+  declares and what `dev/il.c`'s `ilstd[]` calls the board's standard address) and
+  marks the vector `flt VEC`. The Unibus-to-SIMH mapping is a measurement, not a
+  header: the UDA50A shows as `2013F468` against the config's `0772150`, so
+  `IOPAGEBASE` is `0x20100000` and Unibus 0764000 is SIMH `2013E800`. **`show rq`
+  is the wrong control for the vector** — an MSCP controller reports "no vector"
+  because the driver hands it one at initialisation, so `vec 0154` proves nothing.
+  The right control is this file's own note that `dz11 0 vec 0300` is SIMH's `C0`:
+  plain octal-to-hex of the same number, so 0350 is **0xE8**. The `C8-CC` *range*
+  SIMH prints is `il_rint_ack` returning `il_dib.vec` and `il_cint_ack` returning
+  `il_dib.vec + 4`, which is why the config names only the base.
+
+Next: **K12.2, two objects and a relink.** Both patched files live in prebuilt
+archives — `ar t` puts `streamio.x` in `os.a` and `tcp_device.x` in `inet.a` — so
+this is `ar r` plus a link, not a kernel source build. See the `lcc`/`asm.sed`
+entry in Gotchas for the recipe and for why `cc` may be able to stand in.
+Superseded, kept for its measurements: K12.1's inputs were all measured already — the config
 carries `ni1010a 0 ub 0 reg 0764000 vec 0350`, the model is
 `libsimh/patches/pdp11_il.c`, and of the N track's four stream faults only three
 transfer. Start with **QBIGB**: `lsys/os/streamio.c` takes transfers of 512 bytes

@@ -235,7 +235,7 @@ final class Connection {
 
     /// NSTAT -- the only operation that returns tm[3].
     private func doStat(_ x: Senda, _ y: inout Rcva) -> Bool {
-        guard let h = export.handle(tag: x.tag) else { return respond(&y, V8Errno.ENOENT) }
+        guard let h = export.handle(tag: x.tag, orRootIno: x.ino) else { return respond(&y, V8Errno.ENOENT) }
         var st = stat()
         if lstat(h.path, &st) == 0 { h.st = st }
         export.describe(h, into: &y)
@@ -253,7 +253,7 @@ final class Connection {
               let name = wire.readExactly(Int(x.count)) else { return false }
         let text = String(decoding: name.prefix(while: { $0 != 0 }), as: UTF8.self)
 
-        guard let parent = export.handle(tag: x.tag) else {
+        guard let parent = export.handle(tag: x.tag, orRootIno: x.ino) else {
             return respond(&y, V8Errno.ENOENT)
         }
         // A side effect was asked for. Read-only means read-only, and saying so
@@ -294,13 +294,13 @@ final class Connection {
         guard x.count >= 0, x.count <= Self.maxCount,
               let data = wire.readExactly(Int(x.count)) else { return false }
         guard !cfg.readOnly else { return respond(&y, V8Errno.EROFS) }
-        guard let h = export.handle(tag: x.tag) else { return respond(&y, V8Errno.ENOENT) }
+        guard let h = export.handle(tag: x.tag, orRootIno: x.ino) else { return respond(&y, V8Errno.ENOENT) }
         return respond(&y, export.write(h, offset: x.offset, data: data))
     }
 
     private func doTrunc(_ x: Senda, _ y: inout Rcva) -> Bool {
         guard !cfg.readOnly else { return respond(&y, V8Errno.EROFS) }
-        guard let h = export.handle(tag: x.tag) else { return respond(&y, V8Errno.ENOENT) }
+        guard let h = export.handle(tag: x.tag, orRootIno: x.ino) else { return respond(&y, V8Errno.ENOENT) }
         return respond(&y, export.truncate(h))
     }
 
@@ -312,7 +312,7 @@ final class Connection {
     /// close for no reason the user could act on. A refusal that matters --
     /// chmod, chown -- is still refused below.
     private func doUpdat(_ x: Senda, _ y: inout Rcva) -> Bool {
-        guard let h = export.handle(tag: x.tag) else { return respond(&y, V8Errno.ENOENT) }
+        guard let h = export.handle(tag: x.tag, orRootIno: x.ino) else { return respond(&y, V8Errno.ENOENT) }
         let wantsMeta = UInt16(truncatingIfNeeded: x.mode) != UInt16(truncatingIfNeeded: h.st.st_mode)
             || (x.uid == 0 && (x.newuid != export.mapUID || x.newgid != export.mapGID))
         if cfg.readOnly {
@@ -372,7 +372,7 @@ final class Connection {
     /// NREAD -- header first, then the payload. `y.count` is what follows, and
     /// a short answer is how EOF is signalled; there is no separate EOF.
     private func doRead(_ x: Senda, _ y: inout Rcva) -> Bool {
-        guard let h = export.handle(tag: x.tag) else { return respond(&y, V8Errno.ENOENT) }
+        guard let h = export.handle(tag: x.tag, orRootIno: x.ino) else { return respond(&y, V8Errno.ENOENT) }
         var want = min(max(x.count, 0), Self.maxCount)
         if cfg.maxRead > 0 { want = min(want, cfg.maxRead) }
         switch export.read(h, offset: x.offset, count: want) {

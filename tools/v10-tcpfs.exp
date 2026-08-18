@@ -1,0 +1,391 @@
+#!/usr/bin/env expect
+# K12.1: NETFS OVER TCP ON V10 -- the transport half.
+#
+#	expect tools/v10-tcpfs.exp <k7-image> <src-image> <netfsd-port>
+#
+# WHAT K12.0 SETTLED AND WHAT THIS ATTEMPTS.  K12.0 mounted a netfs filesystem on
+# V10 over a PIPE, read a file back byte-identical and wrote one through -- so the
+# client, the netb protocol library and fmount(2) all work.  Everything left is
+# transport, and this is it: the same fmount(2) call on a TCP connection to the
+# host instead of on a pipe to a local server.
+#
+# THE PROTOCOL IS netafs AND NOT netbfs, AND THAT IS WHAT MAKES THIS TRACTABLE.
+# V10 carries both clients and ipnx780.m configures four instances of each.  netb
+# is the later, portable one; neta is V8's, and this project has had a server for
+# it since the N track -- netfs/, the SwiftPM package both app targets link.  Three
+# measurements, not a preference:
+#
+#	neta.h        V10's is V8's PLUS THREE LINES -- NSEARCH 0, NMKDIR 17,
+#	              NRMDIR 18 -- struct senda, struct rcva and the original
+#	              sixteen opcodes IDENTICAL
+#	NETVERSION    1 in both
+#	fstyp         nafs is 1 in seki's own fstypsw[], which is V8's RMFSTYP 1
+#
+# So the wire is already spoken at both ends and the missing piece was a mounter:
+# V10 removed gmount (slot 49 reads `nosys / was gmount') and the shipped mounter,
+# netfs/libnetb/setup.c, reaches its server only over Datakit.  v10/src/cmd/
+# nafsmnt.c is the port -- gmount -> fmount, by fd instead of by device number --
+# and it is a NAMED ADDITION with its reasoning in v10/src/PATCHES.md.
+#
+# THREE THINGS STAND BETWEEN A V10 AND A CONNECTION, all of them recorded from the
+# N track and none of them obvious:
+#
+#   * TCP must be PUSHED onto an ip device first (`tcpconfig /dev/ip6 &' on V8).
+#     Without it open() succeeds, the tcpuser write succeeds, and the connect
+#     blocks FOREVER with no diagnostic, because nothing is underneath the device.
+#   * The tcp minor must be ODD.  tcp_device.c refuses an even minor whose socket
+#     is not already active -- that is the accept side -- and libin's tcp_sock()
+#     encodes it as `for(n = 01; n < 100; n += 2)' without saying why.
+#   * The guest reaches the host at 10.0.2.2, because SLiRP rewrites every address
+#     inside its virtual network to the host's loopback.  Nothing is forwarded.
+#
+# This run is a PROBE as much as a build: each precondition is its own assertion,
+# so a machine that cannot get to a connection says which step it stopped at
+# instead of failing at the mount and looking like a protocol problem.
+log_user 1
+
+set here [file dirname [info script]]
+source $here/v10drive.exp
+
+set V10_SIMH [file normalize [file join $here .. work opensimh BIN vax780]]
+set V10_ROM  [file normalize [file join $here .. work v10 src lsys boot star uda]]
+set V10_RUN_SECS 7200
+
+if {[llength $argv] < 3} {
+    puts "usage: v10-tcpfs.exp <k7-image> <src-image> <port>"
+    exit 2
+}
+set img  [lindex $argv 0]
+set src  [lindex $argv 1]
+set port [lindex $argv 2]
+
+set N   /n/v10
+set NF  /n/v10/src/netfs
+set T1  /usr/s1
+set OBJ /usr/k12tcp
+set MP  /n/host
+
+set results {}
+proc note {name ok} { global results; lappend results [list $name $ok assert] }
+
+proc report {} {
+    global results
+    puts "\n===== V10 K12.1: NETFS OVER TCP ====="
+    set failed 0
+    foreach r $results {
+        set ok [lindex $r 1]
+        puts [format "  %-52s %s" [lindex $r 0] [expr {$ok ? "ok" : "NO"}]]
+        if {!$ok} { incr failed }
+    }
+    puts "===== [expr {[llength $results] - $failed}]/[llength $results] =====\n"
+    return $failed
+}
+
+# `set il enable' and `attach il nat:' -- the NI1010 model is this project's own
+# (libsimh/patches/pdp11_il.c) and is in both the desktop build and the library
+# the app links.
+#
+# THE ADDRESS IS OFF BY 040 AND THE VECTOR FLOATS, both found by reading rather
+# than by a failed run.  `ipnx780.m' carries `ni1010a 0 ub 0 reg 0764000 vec
+# 0350' -- alice's own numbers -- while `libsimh/patches/apply-il.sh' puts the
+# card at I/O-page offset **04040**, which is 0764040 in the notation V10's
+# config uses, because 0164040 is what V8's kernel declares and what dev/il.c's
+# ilstd[] calls the board's standard address.  The same patch marks the vector
+# `flt VEC': V8 discovers it in ilprobe through cvec, and V10's mkconf compiles
+# 0350 in.  So there are TWO numbers to reconcile and only one of them looks
+# like a mismatch from the config.
+#
+# The Unibus-to-SIMH mapping is a measurement, not a header: CLAUDE.md records
+# the UDA50A appearing as SIMH 2013F468 while ipnx780.m gives it Unibus 0772150,
+# so IOPAGEBASE is 0x20100000 and Unibus 0764000 is SIMH 2013E800.
+#
+# `set il address=' moves the SIMULATOR, which is this project's stated
+# preference where the two disagree -- it keeps V10's own numbers and leaves
+# V8's working path untouched, which changing the shared patch would not.  The
+# MEASURED, AND HERE IS THE ANSWER.  The first run with these `show' lines said
+#
+#	IL  MAC=02:07:01:00:00:01, address=2013E800-2013E807*, vector=C8-CC*, BR4
+#	RQ  address=2013F468-2013F46B, no vector, BR5, UDA50A
+#
+# so the address took (the `*' means set rather than autoconfigured) and SIMH had
+# floated the vector to C8/CC -- octal 0310 and 0314 -- against the 0350 the
+# kernel compiles in.  `show rq' turned out to be the wrong control, because an
+# MSCP controller has "no vector": the driver hands it one at initialisation, so
+# the UDA50's `vec 0154' proves nothing about notation.  The right control was
+# already in CLAUDE.md -- "dz11 0 vec 0300, SIMH's DZ vector base (C0)" -- which
+# fixes the mapping as plain octal-to-hex of the same number.  0350 is 0xE8.
+#
+# Two vectors, and the driver needs both: il_rint_ack returns il_dib.vec and
+# il_cint_ack returns il_dib.vec + 4, which is why SIMH shows a C8-CC range and
+# why ipnx780.m names only the base.
+v10_boot $img [list "set rq1 ra81" "attach rq1 $src" \
+                    "set il enable" "set il address=2013E800" \
+                    "set il vector=E8" \
+                    "show il" "show rq" "attach il nat:"]
+# NOT "with the Interlan attached" -- that was a claim this line cannot make.
+# Reaching it means v10_boot did not bail, i.e. the kernel reached a login
+# prompt with `set il enable' and `attach il nat:' accepted by the simulator.
+# Whether V10's AUTOCONFIG found the card is a different question and the answer
+# is dipconfig's: `open("/dev/il0")' is what fails when nothing was probed.
+note "the 780 booted our kernel to a login prompt" 1
+v10_login root
+v10_sh "PATH=/bin:/etc:/usr/bin; export PATH" 120
+v10_sh "OK=-ok" 120
+
+# ------------------------------------------------------------ preconditions ---
+v10_sh "mkdir /n; mkdir $N" 120
+note "courier disk mounts" \
+    [v10_try "/etc/mount /dev/ra1c $N && echo MT\$OK" "MT-ok" 600]
+note "the running kernel is ours, not seki" \
+    [v10_try "sed -n '/ipnx 780/p' /unix" "ipnx 780" 900]
+note "our netafs mounter is on the courier disk" \
+    [v10_try "test -s $N/ours/cmd/nafsmnt.c && echo NM\$OK" "NM-ok" 300]
+note "libin.a is installed (K10.2 built it; nafsmnt links -lin)" \
+    [v10_try "test -s /usr/lib/libin.a && echo LI\$OK" "LI-ok" 300]
+note "r70 has the inet userland header" \
+    [v10_try "test -s /usr/include/sys/inet/tcp_user.h && echo TU\$OK" "TU-ok" 300]
+
+# ------------------------------------------- did autoconfig find the Interlan? ---
+#
+# THE FIRST REAL QUESTION, AND IT IS THE SIMULATOR'S HALF.  Our SIMH model
+# autoconfigures its CSR and vector (IOBA_AUTO/VEC_AUTO) while ipnx780.m hardcodes
+# 0764000 and 0350.  If those disagree, V10 probes, finds nothing, and prints
+# nothing -- so the device is asserted from the boot transcript rather than
+# assumed.  V8's driver is `ill' and V10's is `ni1010a'; grepping for `il' in the
+# wrong place finds nothing and reads as "no card".
+# THE PROBE LOOKED IN A FILE V10 DOES NOT HAVE.  `/usr/adm/messages' is a BSD
+# convention; V10's autoconfig prints to the console at boot, so the evidence is
+# in this run's own transcript and the DRIVER greps for it -- there is nothing on
+# the guest to ask.  Removed rather than left failing: an assertion that can never
+# pass stops being read, which is how a missing libc member hid for a week.
+# `ls X && echo OK' IS NOT AN EXISTENCE TEST ON V10 -- cmd/ls.c perrors and then
+# exit(0)s, so it reports ok over "No such file or directory".  test -c is.
+note "the il0 node exists" \
+    [v10_try "test -c /dev/il0 && echo IL\$OK" "IL-ok" 300]
+v10_sh "ls -l /dev/il0" 300
+
+# -------------------------------------------------- the inet device nodes ---
+#
+# V8 SHIPS NO /dev/udp* AND NO udpconfig, AND THE SAME KIND OF GAP IS EXPECTED
+# HERE -- the N track lost a day to name resolution failing while TCP worked
+# perfectly, for exactly that reason.  So the nodes are made rather than hoped for,
+# and `ls -l' is printed for the record.  mknod is stage 1's, since the golden has
+# none.
+# THE NODES, MADE RATHER THAN HOPED FOR.  The golden HAS /dev/tcp01 -- `crw-rw-rw-
+# 43, 1', odd minor, exactly what an outgoing call needs -- and has no /dev/ip6 at
+# all.  The majors come from seki's own generated cdevsw[]: ip 42, tcp 43, il 44,
+# udp 50.  This is the same gap the N track met on V8, where the shipped system had
+# no /dev/udp* and no udpconfig and name resolution failed while TCP worked.
+# mknod IS BUILT HERE, because the golden has none -- `/etc/mknod: not found',
+# which cost K11 a run.  Same makefile, same tape source.
+v10_sh "rm -rf $OBJ; mkdir $OBJ; mkdir $OBJ/mknod" 300
+v10_sh "A='SRC=$N/src OURS=$N/ours INCDIR=/usr/include TOOLDIR=$OBJ DESTDIR=$OBJ'" 120
+v10_sh "B='CC=cc CCPATH=/bin/cc CPP=$T1/lib/cpp CCOM=$T1/lib/ccom C2=$T1/lib/c2'" 120
+v10_sh "C='AS=/bin/as LD=/bin/ld LIBC=/lib/libc.a'" 120
+note "mknod builds on V10" \
+    [v10_try "cd $OBJ/mknod; make -f $N/mk/mknod.mk \$A \$B \$C > m.log 2>&1 && echo MB\$OK" \
+        "MB-ok" 1800]
+# THE MAJORS ARE FIXED BY mkconf's OWN TABLE, WHICH IS WHY THEY CAN BE WRITTEN
+# HERE AT ALL.  lsys/lib/tab -- the `-t' argument K7 passes -- reads `cdev 42 ip',
+# `cdev 43 tcp', `cdev 44 ni1010a', `cdev 50 udp', so a major is a property of the
+# tape and not of our device list.  Without that the numbers would be a guess, and
+# a wrong major is not a harmless one: on V8 a node built into the wrong bdevsw
+# entry panicked the kernel through a wild pointer.
+#
+# /dev/ip6 and /dev/ip17 are IP PROTOCOL NUMBERS, not unit numbers -- 6 is TCP and
+# 17 is UDP, which is why V8's /etc/rc pushes tcp onto ip6 and udp onto ip17.
+# /dev/il1 is the second of the eight minors ni1010a.c gives each card ("Each
+# hardware device has eight minor devices starting at N*8"); dipconfig wants it as
+# a raw Ethernet channel to do ARP on while il0 carries IP.
+v10_sh "rm -f /dev/ip6 /dev/il1" 60
+v10_sh "$OBJ/mknod/mknod /dev/ip6 c 42 6" 300
+v10_sh "$OBJ/mknod/mknod /dev/il1 c 44 1" 300
+v10_sh "ls -l /dev/ip6 /dev/il1 /dev/tcp01" 300
+note "an ip device node exists" \
+    [v10_try "test -c /dev/ip6 && echo IP\$OK" "IP-ok" 300]
+note "an ODD tcp device node exists" \
+    [v10_try "test -c /dev/tcp01 && echo TC\$OK" "TC-ok" 300]
+note "a raw ether node for ARP exists" \
+    [v10_try "test -c /dev/il1 && echo IE\$OK" "IE-ok" 300]
+
+# ---------------------------------------------- the inet userland, BUILT ---
+#
+# THREE PROGRAMS, AND THE TAPE HAS A PREBUILT BINARY FOR NONE OF THE TWO WE NEED.
+# ipc/internet/ ships `ipconfig', `route', `netstat' and `arp' as Bell Labs' own
+# 1995 VAX executables -- and `tcpconfig' only as source with NO RULE IN THE
+# MKFILE at all (`MGRS=ipconfig routed dkipconfig udpconfig'), while `dipconfig'
+# has a rule and no binary.  Both are the ordinary state of a developer's working
+# directory, and the project's own rule settles what to do: the prebuilt binaries
+# are an ORACLE, never a shortcut, so these are compiled here.
+#
+# WHY dipconfig AND NOT ipconfig.  The mkfile's own link lines differ:
+#
+#	ipconfig:  cc -o ipconfig  ipconfig.o  $LIBIN $LIBCOMMON
+#	dipconfig: cc -o dipconfig dipconfig.o $LIBIN
+#
+# ipconfig wants ipc/mgrs/common/libcommon.a for `logevent', `logconsole',
+# `detach', `print' and `fprint' -- a 27th library, in no manifest, for a program
+# whose extra features are a subnet mask and a syslog.  dipconfig is the earlier
+# generation of the same program, does the identical five ioctls, and needs only
+# what K10.2 already built.  LIBIN IS BOTH ARCHIVES: the mkfile defines it as
+# `../libin/libin.a ../libipc/libipc.a', and that is not decoration -- libin's
+# in_address() calls qvalue() from libipc/qns.o for the not-a-dotted-quad case,
+# and libin's tcp_lib.o leaves `_errstr' undefined, which libipc/ipcopen.o
+# defines.  Read out of the tape's own libin.a with a symbol dump rather than
+# discovered by a failed link.
+set CC "cc -B$T1/lib/ -t02p -O"
+set IN "/usr/lib/libin.a /usr/lib/libipc.a"
+set IX "$N/src/ipc/internet"
+set OX "$N/ours/ipc/internet"
+
+# COMPILED FROM OUR OVERLAY, WITH THE TAPE'S DIRECTORY ON -I, AND BOTH HALVES
+# MATTER.  Neither program compiles as it stands: r70's <sgtty.h> reaches only
+# <sys/ttyio.h>, so FIOPUSHLD, the whole IPIO* family, ENIOTYPE and ENIOADDR are
+# all undeclared -- which in K&R C makes each an implicit `extern int' and the
+# failure a LINK error naming a macro (`Undefined: _FIOPUSHLD').  The tape's own
+# answer is in the same directory: ipconfig.c, the later generation of the
+# program beside dipconfig, names <sys/filio.h>, <sys/inio.h> and <sys/enio.h>
+# outright.  Two named patches in v10/src/, recorded in PATCHES.md.
+#
+# -I$IX because dipconfig.c includes "config.h" in QUOTES, which cpp resolves
+# against the including file's own directory -- and that directory is now ours,
+# where no config.h exists.  The tape's copy has to be reachable by name.
+note "the inet userland is on the courier disk" \
+    [v10_try "test -s $IX/tcpconfig.c && echo CF\$OK" "CF-ok" 300]
+# THE SRCID GUARD CANNOT SEE THIS ONE, so it is asked directly.  These two files
+# were added to the overlay while the source disk was being built -- safe only
+# because `ours' is copied near the END of that run, and the stamp is written
+# after it.  If that race were ever lost the disk would carry the tape's sources
+# under a stamp claiming ours, which is the one hole srcid exists to close.
+note "and OUR patched copies arrived with it" \
+    [v10_try "test -s $OX/dipconfig.c && echo OV\$OK" "OV-ok" 300]
+
+# tcpconfig needs NO library but libc, and the symbol that makes it work is a
+# libc global: libc/gen/linedis.c is a table of line-discipline INDICES --
+# `int tcp_ld = 11' -- and tcpconfig passes its ADDRESS to FIOPUSHLD, which
+# copyin()s it and indexes streamtab[].  V10's linedis.c and V8's agree on all
+# four inet numbers (ip 10, tcp 11, arp 13, udp 14), and so does mkconf's tab.
+set dipok 0
+set tcpok 0
+note "tcpconfig compiles on V10 (libc alone -- tcp_ld is a libc global)" \
+    [set tcpok [v10_try "cd $OBJ; $CC -o tcpconfig $OX/tcpconfig.c > t.log 2>&1 && echo TB\$OK" \
+        "TB-ok" 1800]]
+if {!$tcpok} { v10_sh "sed -e 20q $OBJ/t.log" 300 }
+note "dipconfig compiles on V10 (libin + libipc)" \
+    [set dipok [v10_try "cd $OBJ; $CC -I$IX -o dipconfig $OX/dipconfig.c $IN > d.log 2>&1 && echo DB\$OK" \
+        "DB-ok" 1800]]
+if {!$dipok} { v10_sh "sed -e 20q $OBJ/d.log" 300 }
+
+# ------------------------------------------------------- bring the interface up ---
+#
+# `ipconfig /dev/il0 <me> <net> /dev/il1 &' is the N track's own line off V8's
+# /etc/rc, and the one number that cost that track a debugging session is the
+# THIRD argument: V8's inet is CLASSFUL, so the interface's network is 10.0.0.0
+# and NOT SLiRP's 10.0.2.0.  dipconfig branches on exactly that -- `if(hisaddr &
+# 0xff)' picks IPIOHOST for a host address and IPIONET for a network one -- so a
+# .2.0 there would configure a host route to a network address and nothing would
+# be reachable.
+#
+# Backgrounded and redirected, both deliberately.  It stays resident because it
+# IS the ARP responder (IPIOARP, then a select() loop on the ip and ether fds),
+# so it can never exit successfully; and its arpwhohas() carries a debug fprintf
+# to stderr, which on this console would splice through the marker protocol and
+# corrupt every reading taken after it.
+set ipup 0
+if {$dipok} {
+    v10_sh "cd $OBJ; ./dipconfig /dev/il0 10.0.2.15 10.0.0.0 /dev/il1 > /tmp/dip.log 2>&1 &" 300
+    v10_sh "/bin/sleep 5" 120
+    # A COMPLAINT INSIDE FIVE SECONDS IS THE FAILURE, and there is nothing else it
+    # could be: every diagnostic in dipconfig's startup path is a perror followed
+    # by exit(1), and the only thing it writes on the success path is the
+    # arpwhohas debug line, which cannot fire until something asks it to resolve
+    # an address -- i.e. not before the mount below.
+    set ipup [v10_try "test -s /tmp/dip.log || echo DU\$OK" "DU-ok" 300]
+    note "dipconfig stayed up -- ip_ld pushed onto /dev/il0" $ipup
+    if {!$ipup} { v10_sh "sed -e 10q /tmp/dip.log" 300 }
+} else {
+    note "dipconfig stayed up -- ip_ld pushed onto /dev/il0" 0
+}
+
+# ------------------------------------------------- push TCP onto the ip line ---
+#
+# Without this open("/dev/tcp01") succeeds, the tcpuser write succeeds, and the
+# connect blocks FOREVER with no diagnostic, because nothing is underneath the
+# device.  Same shape as ipconfig: resident, so redirected and backgrounded.
+set tcpup 0
+if {$tcpok} {
+    v10_sh "cd $OBJ; ./tcpconfig /dev/ip6 > /tmp/tcp.log 2>&1 &" 300
+    v10_sh "/bin/sleep 3" 120
+    set tcpup [v10_try "test -s /tmp/tcp.log || echo TU2\$OK" "TU2-ok" 300]
+    note "tcpconfig stayed up -- tcp_ld pushed onto /dev/ip6" $tcpup
+    if {!$tcpup} { v10_sh "sed -e 10q /tmp/tcp.log" 300 }
+} else {
+    note "tcpconfig stayed up -- tcp_ld pushed onto /dev/ip6" 0
+}
+
+# ------------------------------------------------------------ build nafsmnt ---
+# NO `rm -rf $OBJ' here: mknod was built into it above, and the node this run
+# depends on was made with it.  Wiping the directory that holds the tool you just
+# used is the kind of thing that fails two assertions later and looks like the
+# compiler.
+note "nafsmnt compiles on V10" \
+    [v10_try "cd $OBJ; $CC -o nafsmnt $N/ours/cmd/nafsmnt.c $IN > n.log 2>&1 && echo NB\$OK" \
+        "NB-ok" 1800]
+if {![v10_try "test -s $OBJ/nafsmnt && echo NX\$OK" "NX-ok" 300]} {
+    v10_sh "sed -e 25q $OBJ/n.log" 300
+}
+note "nafsmnt is an executable" \
+    [v10_try "test -s $OBJ/nafsmnt && echo NE\$OK" "NE-ok" 300]
+
+# ---------------------------------------------------------------- the mount ---
+#
+# GATED, BECAUSE AN UNGATED ASSERTION DOWNSTREAM OF A FAILED MOUNT TESTS SOMETHING
+# ELSE.  A write to $MP/probe after a failed mount lands in the mount POINT's own
+# directory and passes; `ls $MP' on an unmounted empty directory prints nothing and
+# an unanchored match on nothing is a NO for the right reason only by luck.  So
+# each step is skipped and REPORTED AS FAILED when what it needs did not happen: a
+# phase that did not run is not a phase that passed.
+v10_sh "mkdir $MP" 300
+set mounted 0
+if {$ipup && $tcpup && [v10_try "test -s $OBJ/nafsmnt && echo NE2\$OK" "NE2-ok" 300]} {
+    set mounted [v10_try "cd $OBJ; ./nafsmnt 10.0.2.2 $port $MP" "mounted on" 900]
+}
+note "nafsmnt reaches the host and mounts" $mounted
+
+if {$mounted} {
+    note "the mount point lists the served directory" \
+        [v10_try "ls $MP" "hello" 600]
+    note "a file reads back over TCP" \
+        [v10_try "sed -e 1q $MP/hello.txt" "hello from the host" 600]
+    note "and a write goes back over TCP" \
+        [v10_try "cp /etc/motd $MP/tcpprobe && sed -e 2q $MP/tcpprobe" "Tenth Edition" 900]
+} else {
+    note "the mount point lists the served directory" 0
+    note "a file reads back over TCP" 0
+    note "and a write goes back over TCP" 0
+}
+
+# AN INDEPENDENT WITNESS FOR THE WIRE, WHICH THE MOUNT CANNOT GIVE.  dipconfig's
+# arpwhohas() prints one debug line per address the ip layer asks it to resolve,
+# and nothing else on its success path writes at all -- so a non-empty /tmp/dip.log
+# NOW, having been empty before the connect, is the stack saying it tried to put a
+# frame on the wire.  It is evidence about the transport rather than about netfs,
+# which is the half of K12 this run exists to test, and it is true whether or not
+# the mount succeeded.
+v10_sh "sed -e 3q /tmp/dip.log" 300
+# GATED ON $ipup, OR IT PASSES FOR THE OPPOSITE REASON.  A non-empty dip.log means
+# "ARP was asked to resolve something" only if the log was EMPTY before the
+# connect -- which is exactly what $ipup measured.  If dipconfig had died at
+# startup its perror would be sitting in the same file, and an ungated
+# `test -s' would report the wire working because the interface failed.  That is
+# the K11 shape: a test whose subject does not exist, so it tests something else.
+set arpseen 0
+if {$ipup} { set arpseen [v10_try "test -s /tmp/dip.log && echo AW\$OK" "AW-ok" 300] }
+note "the ip layer asked ARP to resolve an address (a frame reached the wire)" $arpseen
+
+v10_sh "cd /; sync" 300
+if {$mounted} { v10_sh "cd $OBJ; ./nafsmnt -u $MP" 600 }
+
+set failed [report]
+v10_halt
+exit [expr {$failed ? 1 : 0}]

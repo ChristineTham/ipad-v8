@@ -611,6 +611,258 @@ arrives.
  
 ```
 
+## tcpconfig.c: `<sgtty.h>` no longer reaches the ioctl it uses
+
+`ipc/internet/tcpconfig.c`, sha256 `32937d8882a073c5`
+
+`tcpconfig /dev/ip6 &` is what pushes the TCP line discipline onto an IP
+device, and without it `open("/dev/tcpNN")` succeeds, the `tcpuser` write
+succeeds, and the connect blocks FOREVER with no diagnostic.  It cannot be
+compiled as it stands:
+
+	#include <stdio.h>
+	#include <sgtty.h>
+	#include <signal.h>
+	...
+	if(ioctl(fd, FIOPUSHLD, &tcp_ld) < 0){
+
+r70's `<sgtty.h>` includes exactly one header, `<sys/ttyio.h>`, and neither
+defines `FIOPUSHLD` -- so in K&R C the name becomes an implicit `extern int`
+and the failure is a link error, `Undefined: _FIOPUSHLD`, naming a macro.
+`TCPIOMAXSEG` on the two-argument path is unreachable the same way.
+
+**This is not r70 skew and the usual control cannot settle it: there is no
+`sgtty.h` in either 1995 kernel tree to `cmp` against.**  The tape answers it a
+different way, in the same directory.  `ipconfig.c` -- the later generation of
+the program beside this one -- names the headers outright:
+
+	#include <sys/filio.h>
+	#include <sys/inio.h>
+	#include <sys/enio.h>
+
+So the include list this file wants is written down; it simply belongs to its
+successor.  That reading is corroborated by the state of the directory:
+`tcpconfig` has **no rule in `ipc/internet/mkfile` at all**
+(`MGRS=ipconfig routed dkipconfig udpconfig`) while a prebuilt 1995 binary of
+it sits beside the source, so whatever `/usr/include/sgtty.h` it was last
+compiled against is not the one the archive preserved.
+
+Two lines in, nothing out.  All four ioctl headers in this family are pure
+`#define`s with no includes of their own, so this cannot re-trip the
+double-typedef trap that `mv.c` above records.
+```diff
+--- tarball/ipc/internet/tcpconfig.c
++++ ours/ipc/internet/tcpconfig.c
+@@ -2,4 +2,6 @@
+ #include <sgtty.h>
+ #include <signal.h>
++#include <sys/filio.h>	/* ipnx: FIOPUSHLD; see PATCHES.md */
++#include <sys/inio.h>	/* ipnx: TCPIOMAXSEG */
+ 
+ extern int tcp_ld;
+```
+
+## dipconfig.c: the same missing ioctl headers, three of them
+
+`ipc/internet/dipconfig.c`, sha256 `9721692578711305`
+
+The same fault as `tcpconfig.c` above, in the program that gives the interface
+its address.  `dipconfig` is used rather than `ipconfig` because the mkfile's
+own two link lines differ:
+
+	ipconfig:  cc -o ipconfig  ipconfig.o  $LIBIN $LIBCOMMON
+	dipconfig: cc -o dipconfig dipconfig.o $LIBIN
+
+`$LIBCOMMON` is `ipc/mgrs/common/libcommon.a` -- `logevent`, `logconsole`,
+`detach`, `print`, `fprint` -- a twenty-seventh library, in no manifest, wanted
+for a program whose extra features over this one are a subnet mask and a
+syslog.  `dipconfig` performs the identical five ioctls (`FIOPUSHLD ip_ld`,
+`IPIOLOCAL`, `IPIOHOST`/`IPIONET`, `IPIOARP`, `ENIOTYPE`) and needs only what
+K10.2 already built.
+
+It includes `<sgtty.h>` and `<sys/ethernet.h>`, which between them define none
+of `FIOPUSHLD`, `IPIOLOCAL`, `IPIOHOST`, `IPIONET`, `IPIOARP`, `IPIORESOLVE`,
+`ENIOTYPE` or `ENIOADDR`.  Every one of the eight is in the three headers
+`ipconfig.c` names, and this file predates its successor naming them --
+`ipconfig.c` is also the one with a subnet mask and `getopt`, so the two are
+plainly successive drafts.  `ETHERPUP_IPTYPE` and `ETHERPUP_ARPTYPE` arrive
+already, from the `<sys/ethernet.h>` this file does include.
+
+**AND IT NAMES BOTH `<sys/param.h>` AND `<sys/types.h>`, WHICH IS THE `mv.c`
+TRAP IN REVERSE.**  `sys/param.h` line 131 is `#include "sys/types.h"` and
+`sys/types.h` has no include guard, so naming both parses all fourteen typedefs
+twice.  Measured, and the error names the header rather than the file:
+
+	"/usr/include/sys/types.h":33..47: illegal type combination
+	"/usr/include/sys/types.h":39: syntax error / saw TYPE
+	"/usr/include/sys/types.h":44: syntax error / saw [
+
+Lines 33 to 47 are exactly `u_char` through `llong_t`; line 39 is
+`typedef long daddr_t` where `daddr_t` is already a type name, and line 44's
+`saw [` is `typedef long label_t[14]`.  So param.h REPLACES types.h rather than
+joining it -- the same conclusion the `cmd/mv.c` entry reaches, arrived at from
+the opposite direction (mv.c had to gain param.h; this has to lose types.h).
+Nothing is lost: `fd_set`, which `doarp()` needs, is in types.h and still
+arrives through param.h.  `<signal.h>` is safe as it stands, because it carries
+its own `#ifndef NSIG` and this file includes it before param.h does.
+
+**And the pattern predicted this.**  `dipconfig` has a rule in the mkfile and
+**no prebuilt binary** -- exactly like `mv.c` and `fsck.c`, the two boot-path
+commands whose one-line header faults this project already found.  What survived
+on the tape is whatever was last compiled in place; what will not compile is
+what nobody had compiled.
+```diff
+--- tarball/ipc/internet/dipconfig.c
++++ ours/ipc/internet/dipconfig.c
+@@ -2,7 +2,9 @@
+ #include <errno.h>
+ #include <signal.h>
+-#include <sys/param.h>
+-#include <sys/types.h>
++#include <sys/param.h>	/* ipnx: which INCLUDES sys/types.h -- see below */
+ #include <sgtty.h>
++#include <sys/filio.h>	/* ipnx: FIOPUSHLD; see PATCHES.md */
++#include <sys/inio.h>	/* ipnx: the IPIO* family */
++#include <sys/enio.h>	/* ipnx: ENIOTYPE, ENIOADDR */
+ #include <sys/ethernet.h>
+ #include <sys/inet/in.h>
+```
+
+## tcp_device.c: QBIGB without QDELIM truncates a netafs reply
+
+`lsys/inet/tcp_device.c`, sha256 `d339e850fdc51d6e`
+
+The netfs client reads its server's reply with `istread()` on the stream inode of
+an open `/dev/tcpNN`, and `istread()` gives up early on this condition
+(`lsys/os/streamio.c`):
+
+	if ((nc && (OTHERQ(stq->wrq->next)->flag&QDELIM)==0)
+	 || stq->flag&HUNGUP) {
+		... return(nc);          /* a SHORT read */
+
+`stq->wrq->next` is the tcp device's write queue, so `OTHERQ` of it is the tcp
+device's read queue -- and `tcpdopen()` sets `QBIGB` on the write queue and
+nothing on the read queue.  So whenever the queue momentarily empties with bytes
+already delivered, the read returns short, and `neta.c` reads a `struct rcva` in
+one call and treats a short return as a protocol error.  This is the N track's
+"returns short when a queue momentarily empties" fault, which V8 needed fixed in
+`istread()` itself and V10 can fix one layer up instead.
+
+**It is an omission by the tape's own pattern, not a decision.**  The line
+discipline in the same subsystem sets it on both queues --
+
+	tcp_ld.c:45   q->flag |= QDELIM;
+	tcp_ld.c:46   WR(q)->flag |= QDELIM;
+
+-- and every stream driver in `lsys/io` writes the two flags in one statement:
+`ni1010a.c:141`, `deqna.c:202`, `kdi.c:177`, `debna.c:90`, all
+`WR(q)->flag |= QDELIM|QBIGB`.  `tcp_device.c` is the only member of that family
+with QBIGB alone.
+
+Note what is NOT changed.  `strdata`'s 512-byte high-water mark stays, because
+`istwrite` already takes a 1024-byte block when `count >= 512 &&
+stq->wrq->next->flag&QBIGB` and this device's queues are `{…, 2048, 64}` both
+ways -- so QBIGB, which the plan named as the first thing to try, was already
+on.
+```diff
+--- tarball/lsys/inet/tcp_device.c
++++ ours/lsys/inet/tcp_device.c
+@@ -94,5 +94,6 @@
+ 	tp->so_wq = WR(q);
+ 	q->ptr = (caddr_t)tp;
+-	WR(q)->flag |= QBIGB;
++	q->flag |= QDELIM;		/* ipnx: see PATCHES.md */
++	WR(q)->flag |= QDELIM|QBIGB;
+ 	WR(q)->ptr = (caddr_t)tp;
+ 	--tcp_busy;
+```
+
+## streamio.c: istread() throws away the rest of the block
+
+`lsys/os/streamio.c`, sha256 `1e5f78d0c9146e49`
+
+netfs reads a reply in two calls -- the fixed-size `struct rcva` header, then
+`y.count` bytes of data (`lsys/fs/neta.c:653,658`) -- and TCP hands the stream
+head one block holding both.  `istread()` copies `min(count, ...)`, and then:
+
+	n = bp->class;
+	freeb(bp);              <- the data past `count' goes with it
+
+So the header read consumes the header and DISCARDS the payload, and the second
+call finds an empty queue and times out.  Measured on the running machine, with
+the kernel printing its own diagnostic:
+
+	# ls /n/host
+	neta: read -1 expected 48
+
+48 bytes is three 16-byte V8 directory entries -- `.`, `..` and `hello.txt` --
+which `netfsd` logged itself as having sent.  So the bytes reached the guest and
+the kernel threw them away; nothing about the transport was wrong.
+
+**This is the N track's own finding, and V8's fix is the model.** That project's
+`usr/sys/sys/streamio.c` makes three changes for exactly this reason
+(`tools/drive-streamfix.sh`, phase N6), and two of the three transfer to V10:
+
+	a zero-length read returns 0          transfers -- V10 would sleep 30 ticks
+	                                      and then return -1
+	a partly consumed block is put back   transfers -- this is the fault above
+	an empty queue waits for more         does NOT transfer.  V8 removed the
+	                                      short-return branch outright; V10
+	                                      already guards it with QDELIM, and the
+	                                      `lsys/inet/tcp_device.c' entry above
+	                                      supplies that flag instead, which is
+	                                      one line in a driver rather than a
+	                                      change to the OS's read semantics.
+
+Safe for the same reason it was safe on V8: `lsys/fs/neta.c` and `netb.c` are
+the only callers of `istread` in the whole kernel, and both want byte-stream
+semantics.  `usr/src/netfs/README` asked for this in as many words -- "The code
+here assumes it is talking to Datakit in several places.  If you want to use
+another network, you'll have to fix things."
+
+The delimiter check moves inside the fully-consumed branch, because `bp->class`
+belongs to the block and a block that has been put back has not delivered its
+delimiter yet.  V10 carries the delimiter as `S_DELIM` in `bp->class` where V8
+used a separate `M_DELIM` message type, so the shape differs from V8's patch
+even though the correction is the same.
+```diff
+--- tarball/lsys/os/streamio.c
++++ ours/lsys/os/streamio.c
+@@ -302,4 +302,11 @@
+ 	if ((stq = stenter(ip)) == NULL)
+ 		return(-1);
++	/* ipnx: a byte stream never sends the zero-length write that
++	   produced Datakit's delimiter, so waiting for one here costs
++	   30 ticks and then reports failure.  See PATCHES.md. */
++	if (count == 0) {
++		stexit(ip);
++		return(0);
++	}
+ 	for (;;) {
+ 		s = spl6();
+@@ -333,7 +340,17 @@
+ 			nc += n;
+ 			count -= n;
+-			n = bp->class;
+-			freeb(bp);
+-			if (n&S_DELIM) {
++			bp->rptr += n;		/* ipnx: see PATCHES.md */
++			if (bp->rptr < bp->wptr) {
++				/* the caller's buffer filled first: keep the rest */
++				putbq(RD(stq->wrq), bp);
++			} else {
++				n = bp->class;
++				freeb(bp);
++				if (n&S_DELIM) {
++					stexit(ip);
++					return(nc);
++				}
++			}
++			if (count == 0) {	/* ipnx: satisfied */
+ 				stexit(ip);
+ 				return(nc);
+```
+
 ## fgets.c: a 1993 ANSI member, converted to K&R (B2.2d)
 
 `libc/stdio/fgets.c`, sha256 `11a0f4ee411e523d`

@@ -495,11 +495,31 @@ diffs and the reasoning.
 
 ### B4 — the V10 experience
 
-- [ ] Multi-user: `init`, gettys, `login`
+- [x] Multi-user: `init`, gettys, `login` — **done**, K8/K9. The golden reaches
+      `login: root` on the 750 and on the 780, under the library both app targets
+      link (`tools/v10-boot780.sh app`, 5/5)
 - [ ] `mux` against dmd_core (firmware 8;7;3 — the protocol is unchanged from V8)
 - [ ] **`sam` and `samterm`** — the reason `v10blit` matters, and something V8
       never had
 - [ ] A reproducible `v10.disk` build script, in the shape of Track S's stages
+
+**Its inputs are all measured now, which is the difference between this and where
+Track S started.** Counted host-side off the generated metadata:
+
+	v10/mk/gen/prebuilt.txt    57  the tape's own linked VAX binaries
+	v10/mk/gen/tc.order         7  stage 1's toolchain: yacc cpp ccom as c2 ld cc
+	v10/mk/gen/libs.txt        26  libraries, 500 members, K10.2
+	v10/mk/gen/world.link     288  units with a link recipe, of which
+	                          203  link AND install today (K10.3)
+
+So the script's shape is not a research question: `tools/v10-golden.sh`'s base plus
+K10.3's staged root plus K7's kernel plus K11's filesystem, on one RA81. Three
+things it must get right, each already paid for once elsewhere in this project —
+`mkfs` does not clear data blocks and the artefact is committed (Track S), the
+staged root exists precisely so the 57 prebuilt oracles are not overwritten
+(K10.3), and installing an `ld` output whose symbols were undefined gives an
+unbootable disk that walks 4,507 files and then stops with the CPU idle (Track S's
+`/bin/sh`-as-a-directory).
 
 ### B5 — merge into the app
 

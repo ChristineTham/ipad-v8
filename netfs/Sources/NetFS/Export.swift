@@ -150,6 +150,40 @@ final class Export {
 
     func handle(tag: Int32) -> Handle? { handles[tag] }
 
+    /// Resolve a request's handle, accepting a tag this server never issued when
+    /// the request names the root inode.
+    ///
+    /// V10'S CLIENT FAKES THE ROOT AND INVENTS ITS OWN TAG, and Bell Labs wrote
+    /// down why. `lsys/fs/neta.c`'s `nadomount()`:
+    ///
+    ///     /*
+    ///      * fake the root, rather than sending NAGET now,
+    ///      * to avoid a deadlock when a server mounts itself
+    ///      * the next stat will correct it
+    ///      */
+    ///     rip->i_un.i_tag = (flag<<16)|ROOTINO;
+    ///
+    /// So where V8's client opens every mount with `NGET(dev, ROOTINO)` -- which
+    /// is what allocates a tag here -- V10 deliberately skips it and synthesises
+    /// `(dev<<16)|ROOTINO` instead. Its first request is therefore `NSTAT` with a
+    /// tag out of the client's own namespace, and `nastat()` copies `mode`,
+    /// `nlink`, `uid`, `gid`, `size` and `tm[]` out of the reply and **not**
+    /// `y.tag` -- so the client keeps that tag for the life of the mount rather
+    /// than adopting ours. Answering ENOENT to it produced a mount that
+    /// succeeded and then had no root: `ls` said "No such file or directory"
+    /// while the server logged six requests it had answered correctly.
+    ///
+    /// Binding the root handle to the client's tag is the whole fix. It is
+    /// deliberately narrow -- only `rootIno`, and only when the tag is unknown --
+    /// because an unknown tag on any other inode really is a protocol error, and
+    /// widening it would turn a stale-handle bug into silent misdirection.
+    func handle(tag: Int32, orRootIno ino: Int32) -> Handle? {
+        if let h = handles[tag] { return h }
+        guard ino == Int32(rootIno), let h = handle(forIno: rootIno) else { return nil }
+        handles[tag] = h                      // answer under the client's own tag
+        return h
+    }
+
     /// Make, or return, the handle for a host path. Mirrors `newnetf()`.
     func handle(forPath path: String) -> Handle? {
         var st = stat()

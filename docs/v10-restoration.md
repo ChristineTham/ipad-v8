@@ -162,7 +162,11 @@ hardware terms.
       alice's UDA50 addresses are, in its own words, *"annoyingly nonstandard"*
       (`0772160`) where SIMH's RQ defaults to `0772150` — so either the config moves or
       `set rq addr=` does.
-- [ ] **K5c — write OUR 780 config** rather than compiling `alice.m` verbatim. This is
+- [x] **K5c — write OUR 780 config. DONE** — `v10/src/lsys/astro/ipnx780.m` exists,
+      K7 links a kernel from it and K8/K9 boot that kernel on both simulators. This box
+      was still `[ ]` on 2026-08-18, a day after the config it asks for had booted twice;
+      see the "stale checkboxes" note under K9. The original text follows, unchanged,
+      because it is an accurate description of what was written. This is
       the "generate a new config we can build from" instruction applied to the kernel:
       one Unibus adapter, one UDA50 at SIMH's address, `il` enabled, `netafs`/`netbfs`
       non-zero, swap sized for the image we actually build. Derived from `alice.m` and
@@ -297,7 +301,11 @@ hardware terms.
 Sequenced this way, the libc questions below are no longer on the critical path — they
 are what K10 cleans up once there is a machine to clean it up on.
 
-- [ ] **K10.4 — read each unit's own object list.** `worldc.sh` compiles every
+- [x] **K10.4 — read each unit's own object list. DONE** (2026-08-18) and worth
+      **247 → 251 compiled, 200 → 203 linked**. Three keep-witnesses and two refusals,
+      all recorded in CLAUDE.md and in `v10/mk/gen/world.drop`; the second inconsistency
+      it exposed was that `world_link` counted `main()`s among sources the build does not
+      compile, so `cmd/sed` was filed as a subsystem over `osed0.c`. As planned: `worldc.sh` compiles every
       `.c` it finds, and a unit's directory holds files its build does not use.
       Parsing `OFILES`/`OBJS`/`OBJECTS` where a unit has one would close `sh`
       and probably several more; it also changes the basis of the measurement, so
@@ -336,7 +344,10 @@ carried forward out of habit:
       32,768 bits, so the ceiling is now **31,457,280 blocks of 4096 = 128 GB**,
       four hundred times the largest disk this project emulates. The whole 243 MB
       tree fits on one filesystem with room to spare.
-- [ ] **K12 — netfs on V10, and no more courier disks.** "There is no netfs on V10" was
+- [~] **K12 — netfs on V10, and no more courier disks.** **K12.0 is done** — netfs
+      mounts over a pipe, 16/16 — so the client, the netb protocol library and `fmount(2)`
+      all work and only the transport is open. K12.1 below is that transport and is the
+      one live item in this plan. "There is no netfs on V10" was
       true of *`seki`*, for two reasons that are both ours to change once we generate the
       config:
       - `lsys/astro/seki.m` configures `netafs 0` and `netbfs 0` — the filesystem types
@@ -416,6 +427,12 @@ carried forward out of habit:
       `lsys/os/streamio.c` takes big transfers whole on a queue carrying that flag,
       which V8 had no equivalent of, and pushing it is cheaper to measure than
       patching a constant.
+      **First two attempts: 7/15 then 9/15**, and the six named causes are written up
+      in [v10-log/2026-08-18.md](v10-log/2026-08-18.md) — `ipc/internet` was on no
+      manifest, `dipconfig` is the `ipconfig` that needs no `libcommon`, a header
+      with no include guard named twice blamed Bell Labs for our bug, `lsys/lib/tab`
+      fixes every major and `ld` index, and **the Interlan is 040 off the address
+      the config compiles in**.
 
 That is the real argument for the 780: not one kernel, but the end of three workarounds
 at once — two simulators, a block ceiling, and source arriving on a disk.

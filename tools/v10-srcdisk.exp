@@ -113,7 +113,11 @@ note "source filesystem mounts" \
     [v8_try "/etc/mount /dev/rp1c $M && echo MT\$OK" "MT-ok" 300]
 
 # ------------------------------------------------------------ the contents ---
-foreach d {src src/cmd src/lsys ours mk} { v8_sh "mkdir $M/$d" 60 }
+# src/ipc AND src/ipc/internet, both, because V8's mkdir makes one level at a
+# time -- and the inet userland's copy is the one that proved the comment below
+# is not decoration: `cannot write in </mnt/src/ipc/internet>' with libs.cpio
+# having already made src/ipc as a path component of ipc/libin.
+foreach d {src src/cmd src/lsys src/ipc src/ipc/internet ours mk} { v8_sh "mkdir $M/$d" 60 }
 
 # EVERY cpio DESTINATION HAS TO EXIST FIRST.  `-d' makes the directories that
 # appear inside the archive; it does NOT make the one you are copying into,
@@ -227,6 +231,27 @@ note "src: the netfs servers, which K12 mounts through a pipe" \
         "NS-ok" 900]
 note "src: zarf's source specifically" \
     [v8_try "test -s $M/src/netfs/serv/zarf.c && echo NZ\$OK" "NZ-ok" 120]
+
+# THE INET USERLAND, WHICH IS NOT A LIBRARY EITHER AND SO WAS ALSO IN NO
+# MANIFEST.  K12.1 needs three programs out of ipc/internet: `dipconfig' to
+# push ip_ld onto /dev/il0 and give the interface its address, `tcpconfig' to
+# push tcp_ld onto /dev/ip6, and `route' if anything ever has to leave the
+# local net.  None can be reached any other way -- libs.cpio carries ipc/libin
+# and ipc/libipc because they ARE libraries and stops there, so K12.1's first
+# run reported `tcpconfig is present -- NO' about a file that had never been
+# copied.
+#
+# The whole directory goes, not the three sources, because it also carries the
+# PREBUILT binaries and they are the oracle: `ipconfig', `route', `netstat' and
+# `arp' are Bell Labs' own linked VAX executables, and what we build can be
+# compared against them on the one machine that has both.
+note "src: the inet userland (dipconfig, tcpconfig, route)" \
+    [v8_try "cd $V/ipc/internet; find . -print | cpio -pd $M/src/ipc/internet && echo NI\$OK" \
+        "NI-ok" 900]
+note "src: tcpconfig.c specifically (the tape has no rule for it)" \
+    [v8_try "test -s $M/src/ipc/internet/tcpconfig.c && echo NT\$OK" "NT-ok" 120]
+note "src: dipconfig.c, the ipconfig that needs no libcommon" \
+    [v8_try "test -s $M/src/ipc/internet/dipconfig.c && echo ND\$OK" "ND-ok" 120]
 note "libs: lib4014's SOURCE BUNDLE (ar bundles source)" \
     [v8_try "test -s $M/src/libplot/lib4014/tek.c.a && echo L3\$OK" "L3-ok" 120]
 note "libs: libtr's oracle (ar bundles objects too)" \
