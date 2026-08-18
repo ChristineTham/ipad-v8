@@ -498,7 +498,19 @@ diffs and the reasoning.
 - [x] Multi-user: `init`, gettys, `login` — **done**, K8/K9. The golden reaches
       `login: root` on the 750 and on the 780, under the library both app targets
       link (`tools/v10-boot780.sh app`, 5/5)
-- [ ] `mux` against dmd_core (firmware 8;7;3 — the protocol is unchanged from V8)
+- [ ] `mux` against dmd_core (firmware 8;7;3 — the protocol is unchanged from V8).
+      **Reconnaissance done 2026-08-18 and it reframes this rung: there is no 5620
+      `muxterm` on the tape.** A scan of `blit/`, `src/history/ix/src/jerq` and
+      `src/630` for the WE32100 COFF magic finds **zero** files. `blit/` is the
+      68000 Blit tree — `68ld`, no `32ld` — so the host side is there as a VAX
+      binary (`blit/bin/mux`, 0413) while the *terminal* side exists only as source
+      under `history/ix/src/jerq/`. Two routes, and picking one is an authenticity
+      decision: build a WE32100 `muxterm` from that source (needs a WE32100
+      compiler, which `blit/lib/ccom`/`mc2` are not), or download V8's `muxterm`
+      under V10's `mux`. Cheapest decisive experiment either way: build `32ld` from
+      `history/ix/src/jerq/32ld/32ld.c` — a VAX program — and see whether it pushes
+      anything down a DZ line into dmd_core.
+      Details: [v10-log/2026-08-18.md](v10-log/2026-08-18.md)
 - [ ] **`sam` and `samterm`** — the reason `v10blit` matters, and something V8
       never had
 - [ ] A reproducible `v10.disk` build script, in the shape of Track S's stages
