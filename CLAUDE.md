@@ -801,6 +801,28 @@ at the old flat `v8/` is moved on first launch, never abandoned.
     would have lost 4 of 5). Both are recorded in `v10/mk/gen/world.drop` with
     every drop, because *a rule that quietly declines to fire is
     indistinguishable from one that had nothing to do.*
+- **THE ASSERTION DISCIPLINE, because six of them could not fail across K11 and
+  K12 and the failures came in three shapes.** Every assertion here is
+  `<command> && echo TOKEN$OK` matched against `TOKEN-ok`, and the whole value of
+  that form is that **the thing being tested is what produces the token**. Break
+  that and the assertion reports the weather. The three ways it broke, all in one
+  week:
+  - **A semicolon where `&&` was meant.** `icheck /dev/x ; echo IK$OK` prints
+    `IK-ok` whatever icheck did, and duly reported *"icheck reads it back: ok"*
+    directly above `cannot open /dev/ra2h`. Three separate assertions had this.
+  - **A command whose exit status does not mean what it looks like.**
+    `ls X && echo OK` is not an existence test on V10 because `ls` exits 0 for a
+    missing file; `test -s foo.log` is not "it compiled" because a successful
+    compile writes nothing.
+  - **A test whose subject does not exist, so it tests something else.** A write
+    to `$MP/probe` after a failed mount writes to the mount point's own directory
+    and passes. Anything downstream of a mount, an attach or a build must be
+    **gated on it**, and a skipped assertion reported as a failure: *a phase that
+    did not run is not a phase that passed.*
+  The general form, worth more than the three cases: **assert the RESULT through a
+  marker the success path alone can write, and never the absence of a complaint.**
+  And prove it bites — a permanently-passing assertion is worse than a
+  permanently-failing one, because the failing kind eventually gets read.
 - **A GUEST CAN REPORT SUCCESS ABOUT THE WRONG DISK, and K11 did — nineteen
   assertions, all true, all about a filesystem written over the source disk.** The
   minor was `64 | (1<<3) | 7 = 79`, so a node *named* `/dev/ra2h` addressed
@@ -2227,7 +2249,38 @@ overlay exists only because V8's `hp` driver reads bit 6 of the minor as part of
 the drive number, and on V10 the original check is exactly right. So K11 retires
 that overlay's reason as well as V8's ceiling.
 
-Next: the two workarounds a 780
+**K12.0 — NETFS RUNS ON V10** (2026-08-18, `bash tools/v10-netfs.sh`,
+**16/16, exit 0**). K12 was scoped as a phase — kernel stream work, a transport,
+then a mount — and this is the decisive measurement put ahead of the machinery.
+V10 ships `runfs`, which mounts a netfs filesystem on a **pipe** via `fmount(2)`:
+no device node, no Interlan, no TCP, no line discipline. `zarf` serves `/usr`, the
+mount is `/n/local`, so the whole test is a loopback and `cmp` can hold the
+protocol to the byte:
+
+	# ls /n/local     adm bin blit include jerq k10lib lib obj s1 tmp
+	# cmp /n/local/include/stdio.h /usr/include/stdio.h    byte-identical
+	# cp /etc/motd /n/local/tmp/nbprobe                    and it writes
+
+So **the client, the netb protocol library and the mount all work**, and what
+remains of K12 is transport and nothing else. It runs on **K7's kernel built on
+top of K10.2's libraries** — `bash tools/v10-kernel.sh
+ipnx-v10-ra81.img.stage1.k102`, 17/17 — because `seki` configures `netbfs 0` and
+cannot mount one however good the userland is, and `zarf` needs `libnetb.a`.
+
+**`serv/makefile` names the System V directory reader on a Research Unix tree**,
+which is the `libc/mkfile names cc for lcc members` finding in another subsystem:
+`libdir.c` includes `<dirent.h>`, which r70 does not have, while `resdir.c` sits
+beside it saying *"read directories, research-style / uses dirread system call,
+which does just what we want"*. **`dirread` is V10 syscall 22** — the slot V8
+fills with `sumount` — and `resdir.c` is a complete drop-in at 33 lines against
+104, since `libdir`'s extra function is `static`.
+
+Next: **K12.1, the transport**, whose every input is measured already — the config
+carries `ni1010a 0 ub 0 reg 0764000 vec 0350`, the model is
+`libsimh/patches/pdp11_il.c`, and of the N track's four stream faults only three
+transfer. Start with **QBIGB**: `lsys/os/streamio.c` takes transfers of 512 bytes
+or more whole on a queue carrying that flag, which V8 had no equivalent of, and
+pushing it is cheaper to measure than patching a constant. Then the two workarounds a 780
 kernel retires: K11's full-capacity filesystem (V8's `filsys.h` caps a
 filesystem at 30,752 blocks and V8 no longer has to read the result) and K12's
 netfs (`ipnx780.m` already carries `netafs 4`/`netbfs 4` and the app's `vax780`

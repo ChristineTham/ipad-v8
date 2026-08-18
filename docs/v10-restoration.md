@@ -383,6 +383,40 @@ carried forward out of habit:
       Sequenced that way K12 is a phase, not a run: kernel stream work, then a transport,
       then `nmount`. The N track was N0–N7 for the same ground on V8.
 
+- [x] **K12.0 — NETFS RUNS ON V10, over a pipe. DONE** (2026-08-18,
+      `bash tools/v10-netfs.sh`, **16/16, exit 0**). The decisive measurement put
+      ahead of the machinery, and it settles which half of K12 is real. V10 ships
+      `runfs`, which mounts a netfs filesystem on a **pipe** via `fmount(2)` —
+      no device node, no Interlan, no TCP, no line discipline — with `zarf` as the
+      server. Serving `/usr` and mounting it at `/n/local` made the whole test a
+      loopback, so `cmp` could hold the protocol to the byte:
+
+	# ls /n/local          adm bin blit include jerq k10lib lib obj s1 tmp
+	# cmp /n/local/include/stdio.h /usr/include/stdio.h     byte-identical
+	# cp /etc/motd /n/local/tmp/nbprobe                     and it writes
+
+      So **the client, the netb protocol library and the mount all work**, and the
+      remaining work is transport and nothing else. It runs on K7's kernel built
+      on top of K10.2's libraries (`bash tools/v10-kernel.sh
+      ipnx-v10-ra81.img.stage1.k102`, 17/17), because `seki` cannot mount a
+      `netbfs` at all — zero instances — and `zarf` needs `libnetb.a`.
+
+      One finding on the way, and it is the tape's usual one: `serv/makefile`
+      names the **System V** directory reader (`libdir.c`, `#include <dirent.h>`,
+      which r70 does not have) on a Research Unix tree, while `resdir.c` sits
+      beside it saying *"read directories, research-style / uses dirread system
+      call, which does just what we want"*. `dirread` is V10 syscall 22, the slot
+      V8 fills with `sumount`.
+
+- [ ] **K12.1 — the transport.** What is left after K12.0, and every input to it is
+      already measured: the config carries `ni1010a 0 ub 0 reg 0764000 vec 0350`,
+      the SIMH model is `libsimh/patches/pdp11_il.c`, and of the N track's four
+      stream faults only three transfer (the hang is fixed; the 512-byte head, the
+      short read and the discarded remainder are not). Start with **QBIGB** —
+      `lsys/os/streamio.c` takes big transfers whole on a queue carrying that flag,
+      which V8 had no equivalent of, and pushing it is cheaper to measure than
+      patching a constant.
+
 That is the real argument for the 780: not one kernel, but the end of three workarounds
 at once — two simulators, a block ceiling, and source arriving on a disk.
 

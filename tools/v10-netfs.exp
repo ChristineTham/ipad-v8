@@ -1,0 +1,232 @@
+#!/usr/bin/env expect
+# K12.0: NETFS ON V10, over a pipe -- the client, the protocol and fmount(2),
+# with no network in the way at all.
+#
+#	expect tools/v10-netfs.exp <k7-image> <src-image>
+#
+# WHY THIS IS THE FIRST RUN AND NOT THE LAST.  K12 is "netfs on V10 and no more
+# courier disks", and it is a phase: kernel stream work, a transport, then a mount.
+# B1 and B2.0 were both won by putting the decisive measurement ahead of the
+# machinery, and there is one here that costs nothing -- because V10 ships a way to
+# run netfs with no network whatsoever.
+#
+# `netfs/README', in Bell Labs' own words: *"runfs starts a server by hand,
+# mounted on some local file and connected through a pipe"*.  And runfs.c does
+# exactly that -- pipe(), fork(), the child runs the uid/login handshake and calls
+#
+#	fmount(fd, ...)			/* NBFS 4 -- "for fmount" */
+#
+# while the parent execs the server on the other end.  fmount(2) is one of the six
+# syscalls V10 has and V8 does not (slot 26), so this is a mount on a FILE
+# DESCRIPTOR: no device node, no Interlan, no TCP, no line discipline.
+#
+# So it separates the two halves of K12 cleanly.  If a pipe-mounted netfs works,
+# the client, the protocol library and the mount are all sound and the remaining
+# work is purely transport.  If it does not, no amount of transport work would have
+# helped and the answer was never going to be found at the network end.
+#
+# THE KERNEL HAS TO BE OURS, AND ONLY ONE IMAGE HAS IT.  seki configures
+# `netbfs 0' -- the filesystem type compiled in with ZERO instances -- so the
+# golden cannot mount one however good the userland is.  v10/src/lsys/astro/
+# ipnx780.m configures `netafs 4' and `netbfs 4', K7 builds that kernel and
+# installs it as /unix, and K9 proved it boots.  This runs on K7's output ON TOP OF
+# K10.2's, so /usr/lib/libnetb.a is there as well: `bash tools/v10-kernel.sh
+# ipnx-v10-ra81.img.stage1.k102' produces exactly that image.
+#
+# `zarf' is the server: netfs/README calls it "present the local file system", and
+# it is the only one of the six the README calls portable.  Serving /usr and
+# mounting it back at /n/local makes the whole test a loopback -- one machine, one
+# pipe, and a filesystem that has to come back byte for byte.
+log_user 1
+
+set here [file dirname [info script]]
+source $here/v10drive.exp
+
+# THE 780, NOT THE 750, and both settings are needed before v10_boot: the ROM is
+# the star boot block (lsys/boot/star/uda) rather than the 750's.
+set V10_SIMH [file normalize [file join $here .. work opensimh BIN vax780]]
+set V10_ROM  [file normalize [file join $here .. work v10 src lsys boot star uda]]
+set V10_RUN_SECS 7200
+
+if {[llength $argv] < 2} {
+    puts "usage: v10-netfs.exp <k7-image> <src-image>"
+    exit 2
+}
+set img [lindex $argv 0]
+set src [lindex $argv 1]
+
+set N   /n/v10            ;# the courier disk
+set K   /n/v10/mk         ;# our generated makefiles
+set NF  /n/v10/src/netfs  ;# the tape's netfs tree
+set T1  /usr/s1           ;# stage 1's passes
+set OBJ /usr/k12obj       ;# scratch
+set MP  /n/local          ;# where the pipe-served filesystem is mounted
+
+set results {}
+proc note {name ok} { global results; lappend results [list $name $ok assert] }
+
+proc report {} {
+    global results
+    puts "\n===== V10 K12.0: NETFS OVER A PIPE ====="
+    set failed 0
+    foreach r $results {
+        set ok [lindex $r 1]
+        puts [format "  %-52s %s" [lindex $r 0] [expr {$ok ? "ok" : "NO"}]]
+        if {!$ok} { incr failed }
+    }
+    puts "===== [expr {[llength $results] - $failed}]/[llength $results] =====\n"
+    return $failed
+}
+
+v10_boot $img [list "set rq1 ra81" "attach rq1 $src"]
+note "the 780 booted our kernel to a login prompt" 1
+v10_login root
+v10_sh "PATH=/bin:/etc:/usr/bin; export PATH" 120
+v10_sh "OK=-ok" 120
+
+# ------------------------------------------------------------ preconditions ---
+v10_sh "mkdir /n; mkdir $N" 120
+note "courier disk mounts" \
+    [v10_try "/etc/mount /dev/ra1c $N && echo MT\$OK" "MT-ok" 600]
+note "the netfs tree is on it" \
+    [v10_try "test -s $NF/libnetb/runfs.c && echo NF\$OK" "NF-ok" 300]
+note "zarf's source is on it" \
+    [v10_try "test -s $NF/serv/zarf.c && echo ZS\$OK" "ZS-ok" 300]
+# K10.2's libnetb.a, which is why this runs on K10.2's image and not stage 1's.
+note "libnetb.a is installed (K10.2 built it)" \
+    [v10_try "test -s /usr/lib/libnetb.a && echo LN\$OK" "LN-ok" 300]
+note "stage 1's ccom is installed" \
+    [v10_try "test -s $T1/lib/ccom && echo S1\$OK" "S1-ok" 300]
+# THE KERNEL IS THE PRECONDITION THAT MATTERS.  A netbfs mount on a seki kernel
+# fails no matter how good the userland is, and the failure says `Invalid
+# argument' rather than naming the cause -- so the running kernel's own version
+# string is asserted before anything is built.
+# THE KERNEL'S OWN VERSION STRING, out of /unix itself -- which is what
+# v10-boot780.exp asserts and is the only thing that cannot be stale.  This
+# started as `sed -e 2q /etc/motd' looking for `ipnx', and that was wrong twice
+# over: /etc/motd is written by tools/v10-boot780.sh and NOT by K7, so a perfectly
+# good K7 image still carries seki's; and a motd is a file anyone can edit, where
+# the string compiled into /unix is the kernel saying what it is.
+note "the running kernel is ours, not seki" \
+    [v10_try "sed -n '/ipnx 780/p' /unix" "ipnx 780" 900]
+
+# ------------------------------------------------------- build runfs and zarf ---
+#
+# runfs IS SELF-CONTAINED, and the tape's own makefile line is right: `cc -O -o
+# runfs runfs.c'.  It looked wrong -- runfs.c calls setup(), and libnetb has a
+# setupmain.c -- but setup() is defined in runfs.c itself at line 97, and
+# setupmain.c is a PROGRAM's main.  Linking libnetb into runfs would collide on
+# _main.
+v10_sh "rm -rf $OBJ; mkdir $OBJ" 300
+set CC "cc -B$T1/lib/ -t02p -O"
+note "runfs builds" \
+    [v10_try "cd $OBJ; $CC -o runfs $NF/libnetb/runfs.c > r.log 2>&1 && echo RF\$OK" \
+        "RF-ok" 900]
+if {![v10_try "test -s $OBJ/runfs && echo RX\$OK" "RX-ok" 300]} {
+    v10_sh "sed -e 20q $OBJ/r.log" 300
+}
+# zarf: three objects and libnetb, with -I../libnetb as its own makefile says --
+# but NOT the third object the makefile names.
+#
+# THE MAKEFILE PICKS THE SYSTEM V DIRECTORY READER ON A RESEARCH UNIX TREE, which
+# is the `libc/mkfile names cc for members only lcc can compile' finding again, in
+# a different subsystem.  serv/ ships THREE readers and `ZFILES' names the wrong
+# one for this machine:
+#
+#	libdir.c     #include <dirent.h>     System V -- and r70 HAS NO dirent.h
+#	bsdlibdir.c  #include <sys/dir.h>    BSD
+#	resdir.c     no directory header at all
+#
+# so the first run failed with `libdir.c: 16: Can't find include file dirent.h'.
+# resdir.c is the one, and it says so itself in its opening comment: *"read
+# directories, research-style / uses dirread system call, which does just what we
+# want"*.  `dirread' is V10 SYSCALL 22 -- the slot V8 fills with `sumount' -- and
+# libc/sys/dirread.s is its stub, so this is a call V8 does not have and V10 does.
+# resdir.c defines dodirread() and dodircleanup(); libdir's third function, ftod(),
+# is `static' and internal, so it is a complete drop-in at 33 lines against 104.
+note "zarf builds (resdir.c, not the makefile's libdir.c)" \
+    [v10_try "cd $OBJ; $CC -o zarf -I$NF/libnetb -I$NF/serv $NF/serv/zarf.c $NF/serv/except.c $NF/serv/resdir.c /usr/lib/libnetb.a > z.log 2>&1 && echo ZB\$OK" \
+        "ZB-ok" 1800]
+if {![v10_try "test -s $OBJ/zarf && echo ZX\$OK" "ZX-ok" 300]} {
+    v10_sh "sed -e 25q $OBJ/z.log" 300
+}
+note "zarf is an executable" \
+    [v10_try "test -s $OBJ/zarf && echo ZE\$OK" "ZE-ok" 300]
+
+# ---------------------------------------------------------------- the mount ---
+#
+# `runfs <mpoint> <server> <args>' -- and zarf takes `-r <root>' for what to
+# serve, defaulting to `/'.  Serving /usr and mounting it at /n/local makes this a
+# loopback: the same machine on both ends of one pipe.
+#
+# THE MOUNT IS BACKGROUNDED because runfs's parent BECOMES the server -- it execs
+# it -- so the command does not return while the filesystem is up.  Its child has
+# already mounted by then, so the shell gets its prompt back and the mount is
+# live.
+v10_sh "mkdir $MP" 300
+v10_sh "cd $OBJ; ./runfs $MP ./zarf -r /usr &" 300
+v10_sh "/bin/sleep 5" 120
+# A NETFS MOUNT DOES NOT APPEAR IN mtab, AND THAT IS CORRECT.  This started as an
+# assertion and it was asserting something untrue: /etc/mtab is written by
+# mount(8), and runfs never calls it -- it calls fmount(2) directly on a file
+# descriptor.  Exactly the same shape as V8, where a netfs mount is a gmount(2)
+# object released by `nmount -u <id>' and umount(8) knows nothing about it.  So
+# this is printed for the record and the mount is proved by USING it, below.
+v10_sh "cat /etc/mtab" 300
+note "and the mount point lists the served tree" \
+    [v10_try "ls $MP" "include" 600]
+# THE READ IS THE RESULT.  A directory listing comes from one netfs walk; reading a
+# file's CONTENTS is the protocol doing work -- open, read, done -- and it is what
+# the transport half will have to reproduce.
+note "a file reads back through the pipe" \
+    [v10_try "sed -e 2q $MP/include/stdio.h" "define" 600]
+# `&&', NOT `;'.  With a semicolon RD-ok printed whatever the read did, and this
+# reported ok in a run where the mount had never happened -- the fourth time in two
+# phases.  The rule is worth stating as a rule: EVERY assertion must be phrased so
+# that the thing being tested is what produces the token.
+# A WHOLE FILE, not just its first two lines: `sed -n $=' reads to the end and
+# prints the line count, so this is the protocol doing open, many reads and done.
+# The file is K10.2's own libnetb.a -- chosen because it is certainly there and
+# certainly large.  It replaces `test -s $MP/lib/libc.a', which named a file that
+# does not exist: libc.a is in /lib, not /usr/lib, so that assertion was false
+# about the tree rather than about netfs.
+# A BYTE COMPARISON, WHICH IS THE STRONGEST READ TEST AVAILABLE AND MIRRORS WHAT
+# V8'S NETFS PROOF DID.  Because this is a loopback -- zarf serves /usr and the
+# mount is /n/local -- the same file is reachable two ways, so `cmp' can hold the
+# protocol to the byte instead of to a line count.  stage 1 builds cmp as a
+# BUILDTOOL, which is why there is one on this machine at all.
+#
+# It replaces `sed -n $= $MP/lib/libnetb.a', which produced no output and no error:
+# sed counting lines in a binary ARCHIVE is a test artefact and says nothing about
+# netfs, as the write test immediately below it proved by working.
+note "a file is byte-identical read through netfs and read locally" \
+    [v10_try "$T1/bin/cmp $MP/include/stdio.h /usr/include/stdio.h && echo RD\$OK" \
+        "RD-ok" 1800]
+# AND THE WRITE DIRECTION, which is the half that makes a share useful.  netfs's
+# own README says of the six servers that "all but zarf are read-only file systems
+# for now", so zarf is the one that can take a write -- and V8's netfs was proven
+# both ways with checksums, so V10's should be too.
+note "and a write goes through and reads back" \
+    [v10_try "cp /etc/motd $MP/tmp/nbprobe && sed -e 2q $MP/tmp/nbprobe" "Research" 900]
+note "the written file is visible on the SERVED side too" \
+    [v10_try "test -s /usr/tmp/nbprobe && echo WS\$OK" "WS-ok" 300]
+
+# ------------------------------------------------------------ take it down ---
+#
+# A netfs mount is released by its OWN call and not by umount(8): on V8 that is
+# `nmount -u <id>', and V10's own runfs calls funmount() -- syscall 50, another of
+# the six V8 does not have.  umount(8) knows only ordinary block filesystems and
+# answers a bare I/O error, which reads as the connection being at fault and is
+# not.  So this uses umount -a, whose umountall() walks mtab backwards, and the
+# assertion is on what mtab says afterwards.
+v10_sh "cd /; sync" 300
+# And the same for the teardown: `umount -a; echo UM$OK' always printed UM-ok.
+# What is asserted now is the RESULT -- that the mount point is gone from mtab --
+# through a marker the test itself produces.
+note "umount -a releases it" \
+    [v10_try "/etc/umount -a; sed -n '/local/p' /etc/mtab > /tmp/m; test -s /tmp/m || echo UM\$OK" \
+        "UM-ok" 900]
+
+set failed [report]
+v10_halt
+exit [expr {$failed ? 1 : 0}]

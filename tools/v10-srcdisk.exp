@@ -214,6 +214,19 @@ note "libs: libipc (an ipc/ unit)" \
     [v8_try "test -s $M/src/ipc/libipc/ipcopen.c && echo L1\$OK" "L1-ok" 120]
 note "libs: libF77 (the bulk)" \
     [v8_try "test -s $M/src/libF77/pow_dd.c && echo L2\$OK" "L2-ok" 120]
+# THE NETFS SERVERS, WHICH ARE NOT A LIBRARY AND SO WERE IN NO MANIFEST.
+# libs.cpio carries netfs/libnetb -- it is one of K10.2's 26 libraries -- and
+# stops there, so `netfs/serv/zarf.c' was absent and K12's first run failed on a
+# file that had never been copied.  zarf is the server netfs/README calls "present
+# the local file system", and the only one of the six it calls portable; runfs
+# mounts it on a pipe through fmount(2), which is netfs with no network at all.
+# The whole netfs tree is copied rather than just serv/: libnetb arriving twice
+# costs nothing and needing to keep two lists in step costs a run.
+note "src: the netfs servers, which K12 mounts through a pipe" \
+    [v8_try "cd $V/netfs; find . -print | cpio -pd $M/src/netfs && echo NS\$OK" \
+        "NS-ok" 900]
+note "src: zarf's source specifically" \
+    [v8_try "test -s $M/src/netfs/serv/zarf.c && echo NZ\$OK" "NZ-ok" 120]
 note "libs: lib4014's SOURCE BUNDLE (ar bundles source)" \
     [v8_try "test -s $M/src/libplot/lib4014/tek.c.a && echo L3\$OK" "L3-ok" 120]
 note "libs: libtr's oracle (ar bundles objects too)" \
