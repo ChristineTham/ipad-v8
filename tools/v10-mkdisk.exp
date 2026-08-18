@@ -233,18 +233,14 @@ note "and mounts /usr inside it" $umounted
 if {$mounted} {
     # find | cpio -pd, the idiom K13.1 installed the tools for.  Directory by
     # directory, because copying `/' would copy the mount point into itself.
-    # WHAT GOES ON ROOT.  /etc/init, /etc/rc, /etc/getty, /bin/sh and /dev are what
-    # reach a login prompt; /lib is the compiler's (libc.a and the three passes) and
-    # nothing in a boot opens it, so it goes to /usr/lib here.
-    #
-    # THAT IS A DEVIATION FROM THE GOLDEN AND IT IS ON THE LIST TO UNDO.  The
-    # golden keeps /lib on ROOT, and with the boot path measured at 2.1 MB against
-    # 4.8 MB usable it fits there comfortably -- the split was chosen while a
-    # miscounted 6.4 MB made root look full (see the header).  It is harmless for a
-    # boot and wrong for fidelity; rung 10's disk should carry /lib on root.
-    foreach d {bin etc dev} { v10_sh "mkdir $MP/$d" 120 }
+    # /lib IS ON ROOT, WHERE THE GOLDEN KEEPS IT.  An earlier generation of this
+    # harness put it on /usr/lib, chosen while a miscounted figure made root look
+    # full: `s_fsize - s_tfree' includes the filesystem's own i-list, so 2.1 MB of
+    # boot path read as 6.4.  Measured directly -- bin 833,811 + etc 526,152 + lib
+    # 631,774 + unix 228,310 = 2,220,047 -- it is 2.1 MB against 4.8 MB usable on
+    # partition `a', so the split bought nothing and cost fidelity.
+    foreach d {bin etc lib dev} { v10_sh "mkdir $MP/$d" 120 }
     foreach d {tmp n} { v10_sh "mkdir $MP/$d" 120 }
-    v10_sh "mkdir $MP/usr/lib" 120
     # /unix FIRST, and lsys/boot/README is why: "/unix must be in the filesystem
     # beginning at the front of the boot device, and must be no more than singly
     # indirect".  The boot block is 508 bytes and follows at most one level of
@@ -252,10 +248,18 @@ if {$mounted} {
     # copied files may be unreachable even though the file is perfectly good.
     # tools/v10-golden.exp records the same ordering for the same reason.
     v10_sh "cp /unix $MP/unix" 1800
-    foreach d {bin etc dev} {
+    foreach d {bin etc lib dev} {
         v10_sh "cd /$d; find . -print | cpio -pd $MP/$d > /dev/null 2>&1" 3600
     }
-    v10_sh "cd /lib; find . -print | cpio -pd $MP/usr/lib > /dev/null 2>&1" 3600
+    # AND THE COPIED /etc/mtab IS THE BUILDER'S, NOT THE NEW DISK'S.  Copying /etc
+    # wholesale brings the builder's mount table with it, so the previous run's boot
+    # 2 answered `umount -a' over /mnt2 and /mnt2/usr -- the builder's own mount
+    # points for the disk being built -- and `cat /etc/mtab' on the new disk listed
+    # all three.  Cosmetic, because V10 rewrites mtab as filesystems mount and the
+    # boot reaches login: either way, but a disk this project ships must not carry
+    # another machine's mount table.  Truncated rather than removed: /etc/mtab must
+    # EXIST for mount to append to it.
+    v10_sh "cat /dev/null > $MP/etc/mtab" 300
     note "the system copies onto it" \
         [v10_try "test -s $MP/bin/sh && test -s $MP/etc/init && echo CP\$OK" "CP-ok" 600]
     note "/unix is on the new disk" \
