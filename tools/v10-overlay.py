@@ -459,19 +459,35 @@ the kernel threw them away; nothing about the transport was wrong.
 	a zero-length read returns 0          transfers -- V10 would sleep 30 ticks
 	                                      and then return -1
 	a partly consumed block is put back   transfers -- this is the fault above
-	an empty queue waits for more         does NOT transfer.  V8 removed the
-	                                      short-return branch outright; V10
-	                                      already guards it with QDELIM, and the
-	                                      `lsys/inet/tcp_device.c' entry above
-	                                      supplies that flag instead, which is
-	                                      one line in a driver rather than a
-	                                      change to the OS's read semantics.
+	an empty queue waits for more         TRANSFERS AFTER ALL, and the first
+	                                      reading of this table was wrong -- see
+	                                      below.
 
 Safe for the same reason it was safe on V8: `lsys/fs/neta.c` and `netb.c` are
 the only callers of `istread` in the whole kernel, and both want byte-stream
 semantics.  `usr/src/netfs/README` asked for this in as many words -- "The code
 here assumes it is talking to Datakit in several places.  If you want to use
 another network, you'll have to fix things."
+
+**ALL THREE OF V8'S CHANGES TRANSFER, AND THE THIRD ONE TOOK TWO MEASUREMENTS TO
+ADMIT.** The table above first read "does not transfer: V10 already guards it with
+QDELIM" -- true of the guard and false of the machine. `istread()` returns short on
+
+	if ((nc && (OTHERQ(stq->wrq->next)->flag&QDELIM)==0) || stq->flag&HUNGUP)
+
+so the guard fires only when the downstream read queue advertises QDELIM -- and the
+tcp device correctly never does (see below), so the branch is always live. K12's
+24/24 did not catch it because every read there was small enough to arrive in one
+block: 48 bytes of directory, 52 bytes of file. The first read big enough to span
+TCP segments said so at once, on K14's build off a live share:
+
+	neta: read 2000 expected 2898
+
+Same shape as the NI1010 chaining bug, one layer up: *it survived N2, N3 and most
+of N6 because nothing before netfs ever sent a frame over 1024 bytes.* So the
+branch goes, exactly as V8's does, and `istread` now waits for the full count
+unless the far end has hung up. Safe for V8's reason: `lsys/fs/neta.c` and
+`netb.c` are the only callers in the kernel and both want byte-stream semantics.
 
 **AND THE QDELIM HALF OF THIS IS RETRACTED, having been measured and found
 wrong.** A previous version of this overlay also set `QDELIM` on
@@ -496,7 +512,27 @@ belongs to the block and a block that has been put back has not delivered its
 delimiter yet.  V10 carries the delimiter as `S_DELIM` in `bp->class` where V8
 used a separate `M_DELIM` message type, so the shape differs from V8's patch
 even though the correction is the same.""",
-        edits=[("\tif ((stq = stenter(ip)) == NULL)\n\t\treturn(-1);\n\tfor (;;) {",
+        # THE ANCHOR CARRIES `return(nc);' DELIBERATELY.  stread() has this
+        # condition character-for-character and ends it with a bare `return;', so
+        # the shorter anchor matches BOTH -- which the occurrence check refused,
+        # naming the count.  That is the hazard CLAUDE.md records for this exact
+        # file: stread() and istread() share whole lines verbatim, and a
+        # context-anchored edit once landed in the wrong one and broke the kernel
+        # at a line number nowhere near the target.
+        edits=[("\t\t\tif ((nc && (OTHERQ(stq->wrq->next)->flag&QDELIM)==0)\n"
+                "\t\t\t || stq->flag&HUNGUP) {\n"
+                "\t\t\t\tsplx(s);\n\t\t\t\tstexit(ip);\n"
+                "\t\t\t\treturn(nc);\n\t\t\t}",
+                "\t\t\t/* ipnx: WAIT for the full count -- see PATCHES.md.  The\n"
+                "\t\t\t   QDELIM guard fires only when the downstream read queue\n"
+                "\t\t\t   advertises delimiters, and a tcp device never does, so\n"
+                "\t\t\t   this branch used to return short the first time a reply\n"
+                "\t\t\t   spanned two TCP segments: `neta: read 2000 expected\n"
+                "\t\t\t   2898'.  Only a hangup ends a read early now. */\n"
+                "\t\t\tif (stq->flag&HUNGUP) {\n"
+                "\t\t\t\tsplx(s);\n\t\t\t\tstexit(ip);\n"
+                "\t\t\t\treturn(nc);\n\t\t\t}", 1),
+               ("\tif ((stq = stenter(ip)) == NULL)\n\t\treturn(-1);\n\tfor (;;) {",
                 "\tif ((stq = stenter(ip)) == NULL)\n\t\treturn(-1);\n"
                 "\t/* ipnx: a byte stream never sends the zero-length write that\n"
                 "\t   produced Datakit's delimiter, so waiting for one here costs\n"

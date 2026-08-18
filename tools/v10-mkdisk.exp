@@ -1,0 +1,174 @@
+#!/usr/bin/env expect
+# K14: can V10 build a bootable disk of its own?  The decisive experiment for
+# rung 10, in its cheapest form.
+#
+#	expect tools/v10-mkdisk.exp <k13-image> <blank> <tree-port> <ours-port> <mk-port>
+#
+# NO COURIER DISK.  Every V10 harness before this one carried source on an RA81
+# that took fourteen minutes to build; this one mounts the tape, our overlay AND
+# the generated makefiles over TCP with `nafsmnt', on three device numbers, and
+# reads its build description off the repository working tree.  That is what K13
+# was for, and this is the first phase to spend it.
+#
+# WHAT IS BEING ASKED.  K11 proved V10 can MAKE a 111,384-block filesystem; this
+# asks whether it can put a system in one and boot it.  Cheapest sufficient
+# version: copy the running root's /bin, /etc, /lib and /dev plus /unix onto the
+# new disk, attach it as rq0, and see whether it reaches a login prompt.  If it
+# does, rung 10's mechanism is proven and everything left is choosing WHAT to
+# copy -- K10.3's 203 commands, K10.2's 26 libraries, stage 1's toolchain.
+#
+# THE MINOR IS 87 AND K11 LEARNED THAT THE EXPENSIVE WAY.  BITFS|unit|part is
+# `64 | (unit<<3) | part', so unit 2 partition h is 64|16|7 = 87.  K11 first
+# wrote 79 -- which is unit ONE -- and made a perfectly good filesystem on top of
+# the source disk while nineteen assertions reported success.  Only the host's
+# read of the still-zeroed blank said otherwise.
+#
+# AND THE COPY'S /etc/rc MUST LOSE ITS /usr MOUNT.  The golden keeps /usr on
+# `ra0c', partition c of unit 0; the new disk is partition h, the WHOLE drive, so
+# on the copy those two overlap and mounting one inside the other would write a
+# filesystem through another.  The line goes before the disk is ever booted.
+log_user 1
+
+set here [file dirname [info script]]
+source $here/v10drive.exp
+
+set V10_SIMH [file normalize [file join $here .. work opensimh BIN vax780]]
+set V10_ROM  [file normalize [file join $here .. work v10 src lsys boot star uda]]
+set V10_RUN_SECS 7200
+
+if {[llength $argv] < 5} {
+    puts "usage: v10-mkdisk.exp <k13-image> <blank> <tport> <oport> <mport>"
+    exit 2
+}
+set img   [lindex $argv 0]
+set blank [lindex $argv 1]
+set tport [lindex $argv 2]
+set oport [lindex $argv 3]
+set mport [lindex $argv 4]
+
+set T1    /usr/s1
+set OBJ   /usr/k14obj
+set MP    /mnt2
+set BLKS  111384
+
+set results {}
+proc note {name ok} { global results; lappend results [list $name $ok assert] }
+proc report {} {
+    global results
+    puts "\n===== V10 K14: A DISK BUILT BY V10 ====="
+    set failed 0
+    foreach r $results {
+        puts [format "  %-52s %s" [lindex $r 0] [expr {[lindex $r 1] ? "ok" : "NO"}]]
+        if {!([lindex $r 1])} { incr failed }
+    }
+    puts "===== [expr {[llength $results] - $failed}]/[llength $results] =====\n"
+    return $failed
+}
+
+set IL [list "set il enable" "set il address=2013E800" "set il vector=E8" \
+             "attach il nat:"]
+
+# ======================================= BOOT 1: build the disk ==============
+v10_boot $img [concat [list "set rq2 ra81" "attach rq2 $blank"] $IL]
+note "boot 1: the builder came up" 1
+v10_login root
+v10_sh "PATH=/bin:/etc:/usr/bin; export PATH" 120
+v10_sh "OK=-ok" 120
+
+# The three shares, on three device numbers -- neta.h's `server may be using
+# several', and nadomount() gives EBUSY for a repeat.
+v10_sh "mkdir /n; mkdir /n/tree; mkdir /n/ours; mkdir /n/mk" 120
+set sh1 [v10_try "/etc/nafsmnt 10.0.2.2 $tport /n/tree 0" "mounted on" 900]
+set sh2 [v10_try "/etc/nafsmnt 10.0.2.2 $oport /n/ours 1" "mounted on" 900]
+set sh3 [v10_try "/etc/nafsmnt 10.0.2.2 $mport /n/mk   2" "mounted on" 900]
+note "the tape mounts over TCP (no courier disk in this run)" $sh1
+note "our overlay mounts"                                    $sh2
+note "and the generated makefiles mount"                     $sh3
+set shares [expr {$sh1 && $sh2 && $sh3}]
+
+if {!$shares} {
+    note "mkbitfs builds from the share" 0
+    note "the whole-drive BITFS node exists" 0
+    note "mkbitfs writes a $BLKS-block filesystem" 0
+    note "V10 mounts the disk it just made" 0
+    note "the system copies onto it" 0
+    note "/unix is on the new disk" 0
+    note "boot 2: THE DISK V10 BUILT reaches a login prompt" 0
+    set failed [report]
+    v10_halt
+    exit 1
+}
+
+v10_sh "rm -rf $OBJ; mkdir $OBJ; mkdir $OBJ/mkbitfs" 300
+v10_sh "A='SRC=/n/tree/src OURS=/n/ours INCDIR=/usr/include TOOLDIR=$OBJ DESTDIR=$OBJ'" 120
+v10_sh "B='CC=cc CCPATH=/bin/cc CPP=$T1/lib/cpp CCOM=$T1/lib/ccom C2=$T1/lib/c2'" 120
+v10_sh "C='AS=/bin/as LD=/bin/ld LIBC=/lib/libc.a'" 120
+note "mkbitfs builds from the share" \
+    [v10_try "cd $OBJ/mkbitfs; make -f /n/mk/mkbitfs.mk \$A \$B \$C > m.log 2>&1 && echo MB\$OK" \
+        "MB-ok" 1800]
+
+v10_sh "rm -f /dev/ra2h" 60
+v10_sh "/etc/mknod /dev/ra2h b 7 87" 300
+v10_sh "ls -l /dev/ra2h" 120
+note "the whole-drive BITFS node exists" \
+    [v10_try "test -b /dev/ra2h && echo ND\$OK" "ND-ok" 300]
+note "mkbitfs writes a $BLKS-block filesystem" \
+    [v10_try "$OBJ/mkbitfs/mkbitfs /dev/ra2h $BLKS && echo MF\$OK" "MF-ok" 1800]
+
+v10_sh "rm -rf $MP; mkdir $MP" 300
+set mounted [v10_try "/etc/mount /dev/ra2h $MP && echo M1\$OK" "M1-ok" 900]
+note "V10 mounts the disk it just made" $mounted
+
+if {$mounted} {
+    # find | cpio -pd, the idiom K13.1 installed the tools for.  Directory by
+    # directory, because copying `/' would copy the mount point into itself.
+    foreach d {bin etc lib dev} { v10_sh "mkdir $MP/$d" 120 }
+    foreach d {usr tmp n} { v10_sh "mkdir $MP/$d" 120 }
+    foreach d {bin etc lib dev} {
+        v10_sh "cd /$d; find . -print | cpio -pd $MP/$d > /dev/null 2>&1" 3600
+    }
+    v10_sh "cp /unix $MP/unix" 1800
+    note "the system copies onto it" \
+        [v10_try "test -s $MP/bin/sh && test -s $MP/etc/init && echo CP\$OK" "CP-ok" 600]
+    note "/unix is on the new disk" \
+        [v10_try "test -s $MP/unix && echo UX\$OK" "UX-ok" 300]
+    # THE /usr MOUNT HAS TO GO -- ra0c and ra0h overlap on one drive.
+    v10_sh "sed -e '/ra0c/d' $MP/etc/rc > $MP/etc/rc.new" 600
+    v10_sh "cp $MP/etc/rc.new $MP/etc/rc; rm -f $MP/etc/rc.new" 300
+    # `grep X; echo TOKEN' PRINTS THE TOKEN WHATEVER grep FOUND -- the semicolon
+    # trap, which cost K11 three assertions that reported "icheck reads it back:
+    # ok" directly above "cannot open /dev/ra2h".  The ABSENCE of a line is what
+    # has to be asserted here, so the success path is the else branch and it
+    # writes the marker itself.
+    note "the copy's /etc/rc no longer mounts ra0c over its own root" \
+        [v10_try "if grep ra0c $MP/etc/rc > /dev/null; then echo RCBAD; else echo RC\$OK; fi" \
+            "RC-ok" 600]
+    v10_sh "cd /; sync" 600
+    v10_sh "/etc/umount -a" 900
+    v10_sh "sync" 300
+} else {
+    note "the system copies onto it" 0
+    note "/unix is on the new disk" 0
+    note "the copy's /etc/rc no longer mounts ra0c over its own root" 0
+}
+v10_halt
+
+# ================================ BOOT 2: boot what V10 built ================
+#
+# ATTACHED AS rq0, because the boot ROM loads /unix from unit 0 and ipnx780.m's
+# root is `ra 0'.  Nothing of the builder is attached: if this reaches a login
+# prompt, it did so out of a filesystem V10 made and filled.
+if {$mounted} {
+    v10_boot $blank {}
+    note "boot 2: THE DISK V10 BUILT reaches a login prompt" 1
+    v10_login root
+    v10_sh "PATH=/bin:/etc:/usr/bin; export PATH" 120
+    v10_sh "OK=-ok" 120
+    v10_sh "cd /; sync" 300
+    v10_halt
+} else {
+    note "boot 2: THE DISK V10 BUILT reaches a login prompt" 0
+}
+
+set failed [report]
+exit [expr {$failed ? 1 : 0}]

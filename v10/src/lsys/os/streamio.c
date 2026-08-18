@@ -311,8 +311,13 @@ caddr_t addr;
 	for (;;) {
 		s = spl6();
 		if ((bp = getq(RD(stq->wrq))) == NULL) {
-			if ((nc && (OTHERQ(stq->wrq->next)->flag&QDELIM)==0)
-			 || stq->flag&HUNGUP) {
+			/* ipnx: WAIT for the full count -- see PATCHES.md.  The
+			   QDELIM guard fires only when the downstream read queue
+			   advertises delimiters, and a tcp device never does, so
+			   this branch used to return short the first time a reply
+			   spanned two TCP segments: `neta: read 2000 expected
+			   2898'.  Only a hangup ends a read early now. */
+			if (stq->flag&HUNGUP) {
 				splx(s);
 				stexit(ip);
 				return(nc);
