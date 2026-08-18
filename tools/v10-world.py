@@ -394,6 +394,109 @@ def blocks_of(text):
     return out
 
 
+OBJ_TOKEN = re.compile(r'\b([A-Za-z_0-9.+-]+\.o)\b')
+
+
+def build_text(d):
+    """All of the unit's build files as one string, for a mentioned-by-name test."""
+    out = []
+    for d0 in [d] + machine_dirs(d):
+        for b in BUILD_FILES:
+            p = os.path.join(d0, b)
+            if os.path.isfile(p):
+                out.append(read(p))
+    return "\n".join(out)
+
+
+def build_objects(d):
+    """Every .o name the unit's build files mention, macros expanded.
+
+    Continuation lines are joined FIRST, because the object list is normally
+    wrapped: cmd/sh's $OFILES spans three lines and reading them separately finds
+    only the first eight of twenty-four objects -- which would have "proved" that
+    sixteen of the shell's own sources are not in its build.
+    """
+    out = set()
+    for d0 in [d] + machine_dirs(d):
+        for b in BUILD_FILES:
+            p = os.path.join(d0, b)
+            if not os.path.isfile(p):
+                continue
+            text = read(p)
+            macros = macros_of(text)
+            for line in text.replace("\\\n", " ").splitlines():
+                out |= set(OBJ_TOKEN.findall(expand(line, macros)))
+    return out
+
+
+def out_of_build(u):
+    """Sources in the unit's directory that its own build does not use.
+
+    A UNIT'S DIRECTORY HOLDS FILES ITS BUILD DOES NOT COMPILE, and one of them
+    fails the whole unit under a generic recipe.  cmd/sh is the case: it dies on
+    `"cmd/sh/profile.c":18: illegal pointer/integer combination', and profile.c is
+    not among the 24 objects in sh's own $OFILES.  Fifty units are like this, and
+    what they hold is exactly what a working directory accumulates -- hello.c and
+    x.c, awk's maketab helper, other machines' back ends in cmd/gcc
+    (output-m68k.c, output-ns32k.c, output-spur.c), superseded generations
+    (osed0.c, olint1.c, OLDex_temp.c) and 2.test.c.
+    #
+    TWO WITNESSES, AND BOTH ARE THE TAPE'S OWN.  A source is dropped only when
+    its object is absent from every object list in the build files AND there is no
+    leftover `.o' beside it -- and these are developers' working directories, so
+    what was compiled in place is evidence of what the build uses.  cmd/sh has 24
+    objects present and profile.c is the one source without one.
+    #
+    TWO GUARDS, BECAUSE THIS RULE CAN RUN IN THE FLATTERING DIRECTION.  Dropping a
+    source raises the number of units that compile, so a reading error here looks
+    like progress:
+      * never drop the source carrying a unit's only main(), which on the naive
+        rule dropped cmd/docgen's docgen.c -- a 3-source unit losing its program;
+      * never drop more than half a unit's sources.  Past that the likelier
+        explanation is that this function has misread the build than that the tape
+        ships that much dead code, and cmd/xref (4 of 5), cmd/spool (6 of 9) and
+        cmd/style (6 of 8) all sat above the line.
+    Both refusals are recorded in world.drop rather than being silent.
+    """
+    if not u.root:
+        return [], []
+    srcs = [os.path.relpath(p, SRC) for p in u.paths if p.endswith(".c")]
+    if len(srcs) < 2:
+        return [], []
+    named = build_objects(u.root)
+    if len(named) < 2:
+        return [], []                 # no object list to read; compile everything
+    btext = build_text(u.root)
+    drop, why = [], []
+    for rel in sorted(srcs):
+        base = os.path.basename(rel)
+        obj = base[:-2] + ".o"
+        if obj in named:
+            continue
+        if os.path.exists(os.path.join(SRC, os.path.dirname(rel), obj)):
+            continue                  # its own object is sitting there
+        # A THIRD WITNESS, IN THE KEEP DIRECTION, because a build can name a
+        # source without ever naming an object.  cmd/docgen's makefile says
+        #     docgen: docgen.c
+        # and lets make's implicit rule do the rest, so no `docgen.o' exists in
+        # the text or on disk -- and the two-object test dropped the program the
+        # unit is named after.  A build file naming a file is the strongest
+        # statement available that the file belongs to it.
+        if re.search(r'(^|[^A-Za-z_0-9.+-])' + re.escape(base) + r'($|[^A-Za-z_0-9])',
+                     btext):
+            continue
+        if base in u.mains and len(u.mains) < 2:
+            why.append("%s kept: it carries the unit's only main()" % base)
+            continue
+        drop.append(rel)
+    if len(drop) * 2 > len(srcs):
+        why.append("nothing dropped: %d of %d sources would go, which is more "
+                   "likely a misread build than that much dead code"
+                   % (len(drop), len(srcs)))
+        return [], why
+    return drop, why
+
+
 def generators(u):
     """The unit's generator inputs, as (tool, file, flags, object, note).
 
@@ -541,8 +644,11 @@ class Unit(object):
         self.hints = []               # ANSI constructs found, by label
         self.has_main = False
         self.mains = []               # the .c files carrying a main()
+        self.mainskept = []           # ... of those, the ones the build uses
         self.overlay = False          # do we already carry a patched copy?
         self.gen = []                 # (tool, file, flags, object, note)
+        self.drop = []                # sources the unit's own build does not use
+        self.dropwhy = []             # and where the guards refused to drop
         self.made = set()             # headers the generators WRITE
 
     @property
@@ -691,6 +797,21 @@ def includes_of(text):
 def scan(unit):
     """Fill in a unit's generators, includes, missing headers, hints and main()."""
     unit.gen = generators(unit)
+    # main() first, because out_of_build() needs it -- one cheap pass, and it
+    # cannot use the loop below since that loop is what the drops filter.
+    for p in unit.paths:
+        if p.endswith(".c") and MAIN.search(read(p)):
+            unit.mains.append(os.path.basename(p))
+    unit.drop, unit.dropwhy = out_of_build(unit)
+    dropped = set(os.path.basename(x) for x in unit.drop)
+    # MAINS AMONG THE SOURCES THE BUILD ACTUALLY USES, which is not the same list
+    # and the difference decides whether a unit can be linked at all.  unit.mains
+    # has to stay the FULL set, because out_of_build()'s guard needs it to know
+    # whether a source carries the unit's only main() -- but world_link() asking
+    # the full set counted cmd/sed as a subsystem over `osed0.c', a superseded
+    # generation the build does not compile, and the same for cmd/tbl and
+    # cmd/uucp.  csources() honours the drop, so this must too.
+    unit.mainskept = [m for m in unit.mains if m not in dropped]
     for tool, _f, _fl, _o, note in unit.gen:
         # ONLY THE ROWS THE GUEST WILL ACTUALLY RUN.  A skipped generator writes
         # nothing, so counting its output as present is the same drift that had
@@ -710,11 +831,15 @@ def scan(unit):
     dirs = sorted(set(os.path.dirname(p) for p in unit.paths))
     seen = set()
     for p in unit.paths:
+        # A DROPPED SOURCE'S INCLUDES MUST NOT BLOCK THE UNIT, because the guest
+        # will not compile it -- the host's model has to be what the guest does,
+        # which is the whole lesson of inc.extra.  Headers are still scanned: a
+        # .h is included by whoever includes it, dropped or not.
+        if p.endswith(".c") and os.path.basename(p) in dropped:
+            continue
         text = read(p)
         if MAIN.search(text):
             unit.has_main = True
-            if p.endswith(".c"):
-                unit.mains.append(os.path.basename(p))
         for pat, label in ANSI_HINTS:
             if pat.search(text) and label not in unit.hints:
                 unit.hints.append(label)
@@ -971,9 +1096,15 @@ def report(units, pre):
 
 
 def csources(u):
-    """The unit's .c files, deduplicated, relative to src/."""
+    """The unit's .c files that its own build uses, relative to src/.
+
+    See out_of_build(): a directory holds files the build does not compile, and
+    compiling them fails the unit on source the tape never compiles.
+    """
+    drop = set(u.drop)
     return sorted(set(os.path.relpath(p, SRC)
-                      for p in u.paths if p.endswith(".c")))
+                      for p in u.paths if p.endswith(".c"))
+                  - drop)
 
 
 def status(u):
@@ -1265,7 +1396,7 @@ def world_link(units):
                            "mkdep.py builds the loose .c"
                            % (u.name, u.name.rstrip("/")))
             continue
-        if len(u.mains) > 1:
+        if len(u.mainskept) > 1:
             # A cmd/ DIRECTORY IS NOT NECESSARILY A COMMAND, and this is the
             # measurement that says so: 71 of the units carry more than one
             # main() among their .c files.  cmd/worm has 22, cmd/qsnap 17,
@@ -1287,9 +1418,10 @@ def world_link(units):
             # generates a makefile per program.
             skipped.append("# SKIPPED %-10s %d main() functions -- a subsystem, "
                            "not a program: %s"
-                           % (u.name, len(u.mains), " ".join(sorted(u.mains))))
+                           % (u.name, len(u.mainskept),
+                              " ".join(sorted(u.mainskept))))
             continue
-        if not u.mains and not u.gen:
+        if not u.mainskept and not u.gen:
             # No main() at all: nothing to link into a program.  The generator
             # exception matters -- cmd/expr's main IS its grammar, so its main()
             # is in expr.y and no .c carries one.
@@ -1855,6 +1987,42 @@ def world_gen(units):
     return "\n".join(out) + "\n"
 
 
+def world_drop(units):
+    """Every source a unit's own build does not use, and every refusal to drop.
+
+    A GENERATED RECORD RATHER THAN A SILENT FILTER.  Dropping a source raises the
+    number of units that compile, so this rule runs in the flattering direction
+    and must be reviewable in a diff -- the same reason world.gen writes its
+    skipped rows as comments instead of omitting them.  The two guards' refusals
+    are here too: a rule that quietly declines to fire is indistinguishable from
+    one that had nothing to do.
+    """
+    out = [
+        "# Sources in a unit's directory that its own build does not compile.",
+        "#",
+        "# Generated by tools/v10-world.py; check with --check.  NOT read by the",
+        "# guest -- world.units already carries the filtered source list.  This",
+        "# file exists so the filter is reviewable.",
+        "#",
+        "# Two witnesses, both the tape's: the object is named in no object list",
+        "# in the build files, AND there is no leftover .o beside the source.",
+        "# See out_of_build() for the two guards on top of that.",
+        "#",
+    ]
+    ndrop = nrefuse = 0
+    for u in sorted(units, key=lambda x: x.name):
+        for rel in u.drop:
+            out.append("%-14s %s" % (u.name, rel))
+            ndrop += 1
+        for w in u.dropwhy:
+            out.append("# %-12s %s" % (u.name, w))
+            nrefuse += 1
+    out.append("#")
+    out.append("# %d sources dropped across %d units; %d refusals by the guards."
+               % (ndrop, len([u for u in units if u.drop]), nrefuse))
+    return "\n".join(out) + "\n"
+
+
 def inc_extra():
     """The headers a harness must install before it measures anything.
 
@@ -1918,6 +2086,7 @@ GENERATED = [
     ("world.incs", lambda u, p: world_incs(u)),
     ("world.gen", lambda u, p: world_gen(u)),
     ("world.link", lambda u, p: world_link(u)),
+    ("world.drop", lambda u, p: world_drop(u)),
     ("inc.extra", lambda u, p: inc_extra()),
     ("worldc.sh", lambda u, p: WORLDC),
 ]

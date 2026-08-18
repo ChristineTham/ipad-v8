@@ -84,7 +84,7 @@ ctags              file  no   ready    -
 cu                 file  no   ready    -
 cut                file  no   ready    -
 cvcrypt            file  no   ready    -
-daemon             dir   no   blocked  missing:gcos.c
+daemon             dir   no   ready    -
 dag                dir   yes  blocked  missing:unistd.h
 date               file  no   ready    -
 dblbuf             file  no   ready    -
@@ -173,7 +173,7 @@ ld                 file  no   ready    -
 learn              dir   no   ready    -
 lex                dir   yes  ready    -
 lfactor            dir   no   ready    -
-library            dir   yes  blocked  missing:dos.h
+library            dir   yes  ready    -
 limiter            file  no   ready    -
 lint               dir   no   blocked  missing:manifest,mfile1
 ln                 file  no   ready    -
@@ -232,7 +232,7 @@ passwdx            file  no   ready    -
 paste              file  no   ready    -
 patch              file  no   ready    -
 pic                dir   no   ready    -
-picasso            dir   yes  blocked  missing:comments.h,dpost.h,ext.h,gen.h,motion.h,path.h
+picasso            dir   yes  ready    -
 pico               dir   yes  ready    -
 plot               dir   no   ready    -
 poly               dir   no   blocked  missing:poly.h

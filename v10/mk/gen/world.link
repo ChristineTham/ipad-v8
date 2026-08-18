@@ -27,6 +27,7 @@ apsend /usr/bin default -
 ar /bin v8 -
 arcv /usr/bin default -
 arff /bin v8 -
+as /bin mk -
 asa /usr/bin v8 -
 ascii /usr/bin v8 -
 bad144 /usr/bin default -
@@ -65,6 +66,7 @@ ctags /usr/bin v8 -
 cu /usr/bin v8 -
 cut /usr/bin v8 -
 cvcrypt /usr/bin default -
+daemon /usr/bin default -
 dag /usr/lib v8 -lm
 date /bin v8 -
 dblbuf /usr/bin default -
@@ -178,6 +180,7 @@ nupas /usr/bin default -
 od /bin v8 -
 ofsck /usr/bin default -
 oops /bin v8 -
+osh /usr/bin default -
 p /usr/bin v8 -
 paper /usr/bin default -
 passwdx /usr/bin default -
@@ -218,6 +221,8 @@ rmdir /bin v8 -
 rscan /usr/bin default -
 sa /etc man -
 savecore /etc man -
+sdb /usr/bin default -
+sed /usr/bin default -
 seq /usr/bin v8 -
 setgid /usr/bin default -
 setlog /usr/bin default -
@@ -247,6 +252,7 @@ tabs /usr/bin v8 -
 tail /usr/bin v8 -
 tape /usr/bin v8 -
 tar /bin v8 -
+tbl /usr/bin default -
 tee /usr/bin v8 -
 telno /usr/bin default -
 test /bin v8 -
@@ -272,6 +278,7 @@ unexpand /usr/bin default -
 uniq /usr/bin v8 -
 units /usr/bin default -
 update /etc v8 -
+usgmake /usr/bin default -
 uudecode /usr/bin v8 -
 uuencode /usr/bin v8 -
 v7 /usr/bin default -
@@ -292,63 +299,58 @@ yacc /usr/bin mk -
 yes /usr/bin default -
 zero /usr/bin default -
 #
-# SKIPPED PDP11      8 main() functions -- a subsystem, not a program: 11cc.c 11ld.c 11nm.c 11ranlib.c 11reloc.c 11size.c 11strip.c t.c
-# SKIPPED as         2 main() functions -- a subsystem, not a program: asmain.c x.c
+# SKIPPED PDP11      7 main() functions -- a subsystem, not a program: 11cc.c 11ld.c 11nm.c 11ranlib.c 11reloc.c 11size.c 11strip.c
 # SKIPPED asd        5 main() functions -- a subsystem, not a program: asdrcv.c inspkg.c mkpkg.c seal.c unseal.c
 # SKIPPED asd++      4 main() functions -- a subsystem, not a program: cdaemon.c dkinstall.c mkspool.c udaemon.c
 # SKIPPED at         2 main() functions -- a subsystem, not a program: at.c atrun.c
 # SKIPPED awk        2 main() functions -- a subsystem, not a program: main.c maketab.c
 # SKIPPED backup.old 31 main() functions -- a subsystem, not a program: absolute.c bcp.c bgrep.c block.c blog.c bpush.c conv.c copies.c dbupdate.c fcheck.c fetch.c fileupd.c iprint.c juke0.c jukeserver.c logger.c logtrim.c mklock.c notdone.c rcv.c remnotdone.c startclient.c startmunge.c stats.c sum.c sweep.c verify.c wfetch.c wormserver.c wormupd.c wormy.c
-# SKIPPED btree      16 main() functions -- a subsystem, not a program: btadd.c btbuild.c btcat.c btcreat.c btdelete.c btdiag.c btexer.c btran.c btreport.c btsquash.c bttest.c get.c prelim.c salvage.c slvg.c slvg2.c
+# SKIPPED btree      11 main() functions -- a subsystem, not a program: btadd.c btbuild.c btcat.c btcreat.c btdelete.c btdiag.c btexer.c btran.c btreport.c btsquash.c bttest.c
 # SKIPPED calendar   3 main() functions -- a subsystem, not a program: calendar1.c calendar2.c calendar4.c
 # SKIPPED cb         3 main() functions -- a subsystem, not a program: cb.c ocb.c oocb.c
 # SKIPPED cbt        9 main() functions -- a subsystem, not a program: btadd.c btbuild.c btcat.c btcreat.c btdelete.c btlook.c btran.c btreport.c btsquash.c
-# SKIPPED ccom       6 main() functions -- a subsystem, not a program: a.c gbug.c gentable.c local.c printx.c printx.c
+# SKIPPED ccom       3 main() functions -- a subsystem, not a program: local.c printx.c printx.c
 # SKIPPED cflow      4 main() functions -- a subsystem, not a program: dag.c flip.c lpfx.c nmf.c
 # SKIPPED cfront     4 main() functions -- a subsystem, not a program: munch.c munch2.1.c szal.c szal2.1.c
 # SKIPPED chuck      2 main() functions -- a subsystem, not a program: main.c upchuck.c
 # SKIPPED compact    2 main() functions -- a subsystem, not a program: compact.c uncompact.c
 # SKIPPED compress   3 main() functions -- a subsystem, not a program: atob.c btoa.c compress.c
 # SKIPPED cref       6 main() functions -- a subsystem, not a program: crpost.c dr.c ind0.c make.c mtab.c upost.c
-# SKIPPED daemon     2 main() functions -- a subsystem, not a program: daemon.c fgdemon.c
 # SKIPPED dc         3 main() functions -- a subsystem, not a program: dc.c osdc.c sdc.c
-# SKIPPED descrypt   3 main() functions -- a subsystem, not a program: decrypt.c encrypt.c genSP.c
+# SKIPPED descrypt   2 main() functions -- a subsystem, not a program: decrypt.c encrypt.c
 # SKIPPED dict       9 main() functions -- a subsystem, not a program: colthlook.c colthread.c ldefine.c namelook.c namelook1.c nameread.c odefine.c slanglook.c wdefine.c
 # SKIPPED diff       2 main() functions -- a subsystem, not a program: diff.c diffh.c
-# SKIPPED dimpress   8 main() functions -- a subsystem, not a program: buildrast.c dimpress.c main.c makedev.c makemap.c odimpress.c printrast.c readrast.c
+# SKIPPED dimpress   6 main() functions -- a subsystem, not a program: buildrast.c dimpress.c makedev.c makemap.c printrast.c readrast.c
 # SKIPPED docgen     2 main() functions -- a subsystem, not a program: docgen.c timestamp.c
 # SKIPPED ed/        the second generation of `ed'; mkdep.py builds the loose .c
 # SKIPPED ether      3 main() functions -- a subsystem, not a program: arpconfig.c ipconfig.c netconfig.c
 # SKIPPED ex         3 main() functions -- a subsystem, not a program: ex.c expreserve.c exrecover.c
-# SKIPPED f2c        3 main() functions -- a subsystem, not a program: main.c xsum.c xsum0.c
+# SKIPPED f2c        2 main() functions -- a subsystem, not a program: main.c xsum.c
 # SKIPPED f77        2 main() functions -- a subsystem, not a program: driver.c main.c
 # SKIPPED face       2 main() functions -- a subsystem, not a program: faces.c scaffold.c
-# SKIPPED gcc        13 main() functions -- a subsystem, not a program: c.c cccp.c cexp.c gcc.c gencodes.c genconfig.c genemit.c genextract.c genflags.c genoutput.c genpeep.c genrecog.c toplev.c
-# SKIPPED gre        5 main() functions -- a subsystem, not a program: efile.c htest.c lt1.c main.c refile.c
+# SKIPPED gcc        12 main() functions -- a subsystem, not a program: cccp.c cexp.c gcc.c gencodes.c genconfig.c genemit.c genextract.c genflags.c genoutput.c genpeep.c genrecog.c toplev.c
+# SKIPPED gre        4 main() functions -- a subsystem, not a program: htest.c lt1.c main.c refile.c
 # SKIPPED lcomp      6 main() functions -- a subsystem, not a program: 5bb.c bb.c lprint.c lsub.c syscore.c sysprof.c
 # SKIPPED learn      3 main() functions -- a subsystem, not a program: lcount.c learn.c tee.c
-# SKIPPED lint       3 main() functions -- a subsystem, not a program: lint1.c lint2.c olint1.c
+# SKIPPED lint       2 main() functions -- a subsystem, not a program: lint1.c lint2.c
 # SKIPPED lp         6 main() functions -- a subsystem, not a program: file.c ipcopen.c lpdaemon.c lpsend.c olpdaemon.c prtoserva.c
 # SKIPPED matlab     no main() in any .c -- not a program
 # SKIPPED mk         2 main() functions -- a subsystem, not a program: glob.c main.c
 # SKIPPED movie      8 main() functions -- a subsystem, not a program: fdevelop.c host.c newer.c ohost.c oterm.c sunhost.c sunterm.c term.c
-# SKIPPED netnews    12 main() functions -- a subsystem, not a program: batch.c berknews.c caesar.c checknews.c expire.c inews.c readnews.c recmail.c recnews.c sendnews.c unbatch.c uurec.c
+# SKIPPED netnews    11 main() functions -- a subsystem, not a program: batch.c caesar.c checknews.c expire.c inews.c readnews.c recmail.c recnews.c sendnews.c unbatch.c uurec.c
 # SKIPPED oasd++     4 main() functions -- a subsystem, not a program: cdaemon.c dkinstall.c mkspool.c udaemon.c
 # SKIPPED omovie     8 main() functions -- a subsystem, not a program: blithost.c blitterm.c fdevelop.c host.c newer.c sunhost.c sunterm.c term.c
 # SKIPPED ops        3 main() functions -- a subsystem, not a program: getfs.c getuname.c ps.c
-# SKIPPED osh        2 main() functions -- a subsystem, not a program: c.c main.c
 # SKIPPED oworm      16 main() functions -- a subsystem, not a program: c.c poot.c wbtree.c wcat.c wdir.c wls.c wmkfs.c wmv.c woffline.c wormupd.c wread.c wreset.c wrm.c wstat.c wtmpdir.c wwrite.c
 # SKIPPED pack       2 main() functions -- a subsystem, not a program: pack.c unpack.c
-# SKIPPED picasso    3 main() functions -- a subsystem, not a program: dpost.c main.c y1.c
+# SKIPPED picasso    2 main() functions -- a subsystem, not a program: main.c y1.c
 # SKIPPED poly       2 main() functions -- a subsystem, not a program: polypic.c polypr.c
 # SKIPPED post       2 main() functions -- a subsystem, not a program: main.c post.c
 # SKIPPED post.src   no main() in any .c -- not a program
 # SKIPPED postscript no main() in any .c -- not a program
 # SKIPPED qsnap      17 main() functions -- a subsystem, not a program: %51snap.c Q2snap.c beep.c foo.c ibic.c junk.c qbright.c qcal.c qdump.c qlevel.c qprep.c qreset.c qreso.c qsnap.c qstatus.c qt.c qtest.c
 # SKIPPED rarepl     2 main() functions -- a subsystem, not a program: rarct.c rarepl.c
-# SKIPPED refer      12 main() functions -- a subsystem, not a program: deliv1.c flagger.c hunt1.c inv1.c kaiser.c mkey1.c ml1.c ml2.c refer1.c thash.c what1.c what4.c
-# SKIPPED sdb        2 main() functions -- a subsystem, not a program: main.c ss.c
-# SKIPPED sed        2 main() functions -- a subsystem, not a program: osed0.c sed0.c
+# SKIPPED refer      7 main() functions -- a subsystem, not a program: deliv1.c hunt1.c inv1.c mkey1.c refer1.c what1.c what4.c
 # SKIPPED server     2 main() functions -- a subsystem, not a program: Oserver.c server.c
 # SKIPPED sign       4 main() functions -- a subsystem, not a program: enroll.c resign.c sign.c verify.c
 # SKIPPED sort/      the second generation of `sort'; mkdep.py builds the loose .c
@@ -357,14 +359,12 @@ zero /usr/bin default -
 # SKIPPED spool      5 main() functions -- a subsystem, not a program: dpr.c fget.c fsend.c gaps.c gcat.c
 # SKIPPED strip      2 main() functions -- a subsystem, not a program: stab.c strip.c
 # SKIPPED struct     2 main() functions -- a subsystem, not a program: beauty.c main.c
-# SKIPPED tbl        3 main() functions -- a subsystem, not a program: oot1.c t1.c y2.c
 # SKIPPED town       9 main() functions -- a subsystem, not a program: apmem.c drfast.c drnp.c dx.c fastown.c faststate.c mark.c patch.c town.c
-# SKIPPED troff      6 main() functions -- a subsystem, not a program: d202.c hc.c makedev.c n1.c ta.c tc.c
+# SKIPPED troff      3 main() functions -- a subsystem, not a program: d202.c n1.c ta.c
 # SKIPPED upas       no main() in any .c -- not a program
-# SKIPPED usgmake    2 main() functions -- a subsystem, not a program: main.c rdhdr.c
-# SKIPPED uucp       11 main() functions -- a subsystem, not a program: cico.c rmlock.c uucheck.c uucleanup.c uucp.c uugrep.c uuname.c uusched.c uustat.c uux.c uuxqt.c
+# SKIPPED uucp       10 main() functions -- a subsystem, not a program: cico.c uucheck.c uucleanup.c uucp.c uugrep.c uuname.c uusched.c uustat.c uux.c uuxqt.c
 # SKIPPED uudiff     5 main() functions -- a subsystem, not a program: lenrem.c locpart.c printable.c run1.c trim.c
-# SKIPPED view2d     21 main() functions -- a subsystem, not a program: antial.c contour.c fill.c half_pan.c halft.c jerq.c level.c makemap.c meth_reset.c ramp.c regrid.c rks.c slice.c step.c t.c testpat.c unzoom.c vdata.c view2d.c viewtd.c wedge.c
+# SKIPPED view2d     19 main() functions -- a subsystem, not a program: antial.c contour.c fill.c half_pan.c halft.c jerq.c level.c meth_reset.c ramp.c regrid.c rks.c slice.c step.c t.c unzoom.c vdata.c view2d.c viewtd.c wedge.c
 # SKIPPED vsw        3 main() functions -- a subsystem, not a program: dynasty.c main.c vswconf.c
 # SKIPPED weather    8 main() functions -- a subsystem, not a program: wcomp.c wdtr.c weather.c weather_read.c weather_save.c wsort.c xcomp.c xwe.c
 # SKIPPED worm       22 main() functions -- a subsystem, not a program: c.c owcopy.c poot.c wbtree.c wcat.c wcopy.c wdir.c wls.c wmkfs.c wmount.c wmv.c woffline.c wpoke.c wread.c wreset.c wrm.c wstat.c wtmp.c wtmp1.c wtmpdir.c wwrite.c zero.c

@@ -771,6 +771,29 @@ at the old flat `v8/` is moved on first launch, never abandoned.
     beside a live `rand.c` and `hypot.c` and are ordinary superseded copies —
     both `rand.o` and `hypot.o` are in the archive. `gets.c-1` has no live
     counterpart and carries the note. **Read the file, not the suffix.**
+- **A UNIT'S DIRECTORY HOLDS FILES ITS BUILD DOES NOT COMPILE, and a survey that
+  compiles every `.c` fails the unit on them.** `cmd/sh` dies on
+  `"cmd/sh/profile.c":18: illegal pointer/integer combination`, and `profile.c` is
+  not among the 24 objects in sh's own `$OFILES`. Fifty units are like that, and
+  what they hold is what a working directory accumulates: `hello.c`, `x.c`, awk's
+  `maketab` helper, other machines' back ends in `cmd/gcc`, superseded
+  generations (`osed0.c`, `olint1.c`, `OLDex_temp.c`), `2.test.c`. Reading each
+  unit's object list is a **fidelity** change, not a way to raise a number.
+  - **Three witnesses, in the KEEP direction, and each is the tape's own
+    statement**: the object is named in a build file's object list; a leftover
+    `.o` sits beside the source (developers' working directories, so what was
+    compiled in place is evidence); or **the build names the source itself** —
+    `cmd/docgen`'s makefile says `docgen: docgen.c` and lets make's implicit rule
+    do the rest, so no `docgen.o` exists anywhere and without that witness the
+    test dropped the program the unit is named after.
+  - **Join continuation lines FIRST.** sh's `$OFILES` spans three lines; read
+    separately they name eight of twenty-four objects, which would "prove" that
+    sixteen of the shell's own sources are not in its build.
+  - **Two refusals, because dropping a source raises the score** — never drop a
+    unit's only `main()`, and never drop more than half its sources (`cmd/xref`
+    would have lost 4 of 5). Both are recorded in `v10/mk/gen/world.drop` with
+    every drop, because *a rule that quietly declines to fire is
+    indistinguishable from one that had nothing to do.*
 - **A `cmd/` DIRECTORY IS NOT NECESSARILY A COMMAND: 71 of the 358 units carry
   more than one `main()`.** `cmd/worm` has 22 programs in it, `cmd/qsnap` 17,
   `cmd/uucp` 11, and `cmd/compact` is the small clear case — `compact.c` and
@@ -2025,8 +2048,10 @@ and they were read as the current state and reported as the next step. They are
 resolved in place now. A plan with two answers to the same question gets read at
 the wrong one.
 
-**K10.1 — THE WORLD COMPILES, 247 OF 358, AND K10.1 EXITS 0 FOR THE FIRST TIME**
-(2026-08-18, `bash tools/v10-compile.sh`, **20/20**). The 241 below was measured
+**K10.1 — THE WORLD COMPILES, 251 OF 358, AND K10.1 EXITS 0 FOR THE FIRST TIME**
+(2026-08-18, `bash tools/v10-compile.sh`, **21/21**).  247 of those came from
+fixing the three faults below; the last four came from **K10.4**, which stopped
+compiling files the tape's own build does not compile. The 241 below was measured
 through a machine that did not have the headers the survey said it had, a survey
 that never ran yacc, and an assertion that was inverted. All three are fixed and
 each is written up in [docs/v10-log/2026-08-18.md](docs/v10-log/2026-08-18.md);
@@ -2111,9 +2136,9 @@ including that `lib5620`'s and `libblit`'s `openpl.c` are the same file differin
 in three places (`/usr/jerq/` vs `/usr/blit/`, `32ld` vs `68ld`, and that
 identifier) — the 5620-versus-Blit naming trap in a pair of *libraries*.
 
-**K10.3 — THE WORLD LINKS AND INSTALLS: 200 commands, built and placed by V10**
-(2026-08-18, `bash tools/v10-link.sh`, **35/35, exit 0**). Of 358 units, 247
-compile, **200 of those link**, and all 200 install — into a **staged root** at
+**K10.3 — THE WORLD LINKS AND INSTALLS: 203 commands, built and placed by V10**
+(2026-08-18, `bash tools/v10-link.sh`, **35/35, exit 0**). Of 358 units, 251
+compile, **203 of those link**, and all 203 install — into a **staged root** at
 `/usr/w10`, never over the machine's own `/bin` and `/etc`. That is a decision
 with three reasons and the first two settle it: the 46 prebuilt binaries are the
 **oracle** and installing over them destroys the comparison on the only machine
@@ -2141,12 +2166,20 @@ statement rather than a shortfall: 71 units carry more than one `main()` and are
 subsystems rather than programs (see the gotcha), and `ed/` and `sort/` are the
 tape's second generation of each.
 
-Next: **K10.4** — read each unit's own object list instead of every `.c`.
-`cmd/sh` is the case that shows why: it fails on a `profile.c` that is **not in
-its own `$OFILES`** and is the one source in that directory with no `.o` beside
-it, so the survey compiles a file the tape never compiles and fails the unit on
-it. That is the limit of one generic recipe over 358 units. Then the two
-workarounds a 780
+**K10.4 — COMPILE THE FILES THE BUILD COMPILES** (2026-08-18, same runs). The
+survey read every `.c` in a unit's directory, and `cmd/sh` failed on a
+`profile.c` that is **not in its own `$OFILES`** — so it compiled a file the tape
+never compiles and failed the shell on it. Reading each unit's own object list is
+a *fidelity* change, not a way to raise a number, and it is worth **247 → 251
+compiled and 200 → 203 linked**. Three witnesses and two guards, all in the
+gotcha above; every drop and every refusal is in `v10/mk/gen/world.drop`.
+
+A second inconsistency fell out of the first: **`world_link` counted `main()`s
+among sources the build does not compile**, so `cmd/sed` was filed as a subsystem
+over `osed0.c` and `cmd/tbl` over `oot1.c`. `csources()` honours the drop, so the
+main count must too — 281 link rows became 288.
+
+Next: the two workarounds a 780
 kernel retires: K11's full-capacity filesystem (V8's `filsys.h` caps a
 filesystem at 30,752 blocks and V8 no longer has to read the result) and K12's
 netfs (`ipnx780.m` already carries `netafs 4`/`netbfs 4` and the app's `vax780`

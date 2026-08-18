@@ -43,6 +43,13 @@ RA_SIZES = {
     "d": (249848, 280568),
     "e": (249848, 530416),
     "g": (749544, 30720),
+    # `h' is the WHOLE DRIVE.  lsys/io/ra.c's ra_sizes[] has eight entries and the
+    # last is `HUGE, 0' -- 0x7fffffff blocks from offset 0, which the driver clamps
+    # to the disk's own size (`limit = ra->di.radsize - sp->blkoff').  HUGE is not
+    # a number this table can hold, so the RA81's real extent stands in: 891,072
+    # sectors, 456 MB, 111,384 blocks of 4096 -- 3.6 times V8's ceiling, which is
+    # what K11 is for.
+    "h": (891072, 0),
 }
 
 # A bitmapped (4K) filesystem: BSIZE(dev) is 4096 when the minor has bit 64
@@ -168,8 +175,67 @@ def free_blocks(image, part="c"):
             w = struct.unpack_from("<I", sb, o["S_bfree"] + 4 * i)[0]
             bits += bin(w).count("1")
     else:
-        bits = None                     # N arm: the bitmap is in its own blocks
+        bits = large_bits(image, part, fsize, isize)
     return tfree, fsize, isize, name, bits, valid, flag
+
+
+# The out-of-superblock bitmap: BCOUNT * NBBY bits per block, and BCOUNT is
+# BSIZE(dev) = 4096 for a bitmapped filesystem (lsys/h/param.h:77).
+BITSPERBLK = BSIZE * 8
+
+
+def large_bits(image, part, fsize, isize):
+    """Free blocks counted from an N-arm bitmap, which lives on the disk.
+
+    THE SUPERBLOCK CANNOT TELL YOU WHERE IT IS.  The N arm's `S_blk[BITMAP-1]'
+    is an array of `struct buf *' -- kernel buffer pointers, meaningless in a
+    disk image -- so the location has to come from the code that wrote it.
+    cmd/mkbitfs.c's largefree() is unambiguous:
+
+	nblks = (sb.s_fsize + BITSPERBLK-1)/BITSPERBLK;
+	maxblk = sb.s_fsize - nblks;
+	freeb = maxblk;			/* first block of bitmap */
+
+    and it then writes one block at a time with `freeb++'.  So the bitmap is the
+    LAST nblks blocks of the filesystem, in order.
+
+    WHY THIS MATTERS ENOUGH TO READ THE DISK FOR.  A full V10 filesystem does not
+    fail, it SLEEPS -- lsys/fs/alloc.c prints `file system full' and waits for
+    space that is not coming -- so a guest-side probe blocks in the same alloc()
+    as the thing it is meant to protect.  This tool is the only place the question
+    can be answered, and until now it answered `None' for exactly the filesystems
+    K11 exists to create.
+    """
+    nsect, off = RA_SIZES[part]
+    nblks = (fsize + BITSPERBLK - 1) // BITSPERBLK
+    if nblks < 1 or nblks >= 960:
+        sys.exit("v10-free: an N-arm bitmap of %d blocks is outside what "
+                 "S_blk[BITMAP-1] can address -- s_fsize %d is not credible"
+                 % (nblks, fsize))
+    first = fsize - nblks
+    base = off * SECTOR
+    size = os.path.getsize(image)
+    if base + (first + nblks) * BSIZE > size:
+        sys.exit("v10-free: the bitmap would end past %s -- s_fsize %d and the "
+                 "partition disagree" % (image, fsize))
+    bits = 0
+    with open(image, "rb") as fh:
+        for i in range(nblks):
+            fh.seek(base + (first + i) * BSIZE)
+            blk = fh.read(BSIZE)
+            if len(blk) != BSIZE:
+                sys.exit("v10-free: short read of bitmap block %d" % i)
+            for w in struct.unpack("<%dI" % (BSIZE // 4), blk):
+                bits += bin(w).count("1")
+    # A bitmap cannot mark more free than the data area holds.  Same argument as
+    # the s_tfree check above: a wrong offset produces a plausible integer, and a
+    # plausible integer is what this project's worst measurements were made of.
+    room = fsize - isize - nblks
+    if bits > room:
+        sys.exit("v10-free: the bitmap marks %d blocks free where the data area "
+                 "holds %d -- so it is not being read where it was written"
+                 % (bits, room))
+    return bits
 
 
 def main():
@@ -194,7 +260,12 @@ def main():
     print("  bitmap valid=%d flag=%d  (flag 1 = bitmap outside the superblock)"
           % (valid, flag))
     if bits is None:
-        print("  free by bitmap    (N arm -- bitmap is in its own blocks)")
+        print("  free by bitmap    (no bitmap read)")
+    elif flag:
+        print("  FREE BY BITMAP    %6d blocks  %6.1f MB   <- the truth, read from"
+              % (bits, mb(bits)))
+        print("                    the last %d blocks of the filesystem (N arm)"
+              % ((fsize + BITSPERBLK - 1) // BITSPERBLK))
     else:
         print("  FREE BY BITMAP    %6d blocks  %6.1f MB   <- the truth"
               % (bits, mb(bits)))

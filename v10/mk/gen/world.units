@@ -15,7 +15,7 @@
 4014 . 4014.c
 450 . 450.c
 512restor . 512restor.c
-PDP11 PDP11 11cc.c 11ld.c 11nm.c 11ranlib.c 11reloc.c 11size.c 11strip.c t.c
+PDP11 PDP11 11cc.c 11ld.c 11nm.c 11ranlib.c 11reloc.c 11size.c 11strip.c
 ac . ac.c
 accton . accton.c
 adb adb vax/hello.c vax/mchframe.c vax/mchinit.c vax/mchio.c vax/mchpr.c vax/mchrun.c vax/mchsys.c vax/opset.c vax/optab.c vax/regs.c vax/setup.c
@@ -26,7 +26,7 @@ apsend apsend apsend.mkhd.c
 ar . ar.c
 arcv . arcv.c
 arff . arff.c
-as as ascode.c asexpr.c asio.c asjxxx.c asmain.c asparse.c aspseudo.c asscan.c assyms.c x.c
+as as ascode.c asexpr.c asio.c asjxxx.c asmain.c asparse.c aspseudo.c asscan.c assyms.c
 asa . asa.c
 ascii . ascii.c
 asd asd alloc.c args.c asdrcv.c chk.c closedir.c crypt.c data.c ftw.c fullname.c gid.c header.c inspkg.c mkcsum.c mkdir.c mkpkg.c opendir.c package.c path.c pwd.c readdir.c seal.c seekdir.c telldir.c tmpname.c transname.c uid.c unseal.c
@@ -41,7 +41,7 @@ bcp bcp CCITT.c Coord.c Path.c Text.c bcp.c jslr.c myftw.c piclib.c postlib.c ra
 bigcore . bigcore.c
 bison bison LR0.c allocate.c closure.c conflicts.c derives.c files.c getargs.c gram.c lalr.c lex.c main.c nullable.c output.c print.c reader.c symtab.c vmsgetargs.c warshall.c
 books . books.c
-btree btree bdelete.c bt.c btadd.c btbuild.c btcat.c btcreat.c btdelete.c btdiag.c btexer.c btran.c btreport.c btsquash.c bttest.c bwrite.c diskrd.c diskwrt.c get.c lib.c nodesz.c prelim.c salvage.c seek.c slvg.c slvg2.c tran.c
+btree btree bdelete.c bt.c btadd.c btbuild.c btcat.c btcreat.c btdelete.c btdiag.c btexer.c btran.c btreport.c btsquash.c bttest.c bwrite.c diskrd.c diskwrt.c lib.c nodesz.c seek.c tran.c
 byteyears . byteyears.c
 c2 c2 c20.c c21.c c22.c
 cal . cal.c
@@ -52,7 +52,7 @@ cat . cat.c
 cb cb cb.c cbtype.c ocb.c oocb.c
 cbt cbt btadd.c btbuild.c btcat.c btcreat.c btdelete.c btlook.c btran.c btreport.c btsquash.c
 cc . cc.c
-ccom ccom common/allo.c common/catch2.c common/common1.c common/cost.c common/lookup.c common/memcpy.c common/optim.c common/pftn.c common/pjw.c common/prepass.c common/printx.c common/reader.c common/scan.c common/t2print.c common/trees.c common/xdefs.c vax/a.c vax/debug.c vax/gbug.c vax/genaux.c vax/gencode.c vax/genmore.c vax/gentable.c vax/lcatch2.c vax/local.c vax/local2.c vax/long_name.c vax/memcpy.c vax/nexit.c vax/printx.c vax/reader.c
+ccom ccom common/allo.c common/catch2.c common/common1.c common/lookup.c common/memcpy.c common/optim.c common/pftn.c common/pjw.c common/printx.c common/reader.c common/scan.c common/t2print.c common/trees.c common/xdefs.c vax/debug.c vax/genaux.c vax/gencode.c vax/genmore.c vax/lcatch2.c vax/local.c vax/local2.c vax/memcpy.c vax/printx.c vax/reader.c
 cflow cflow dag.c flip.c lpfx.c nmf.c
 cfront cfront malloc.c munch.c munch2.1.c szal.c szal2.1.c
 charge . charge.c
@@ -81,7 +81,7 @@ ctags . ctags.c
 cu . cu.c
 cut . cut.c
 cvcrypt . cvcrypt.c
-daemon daemon banner.c daemon.c daemon0.c fgdemon.c lab.c lp0.c lp1.c orig.lpd.c phone.dpd.c phone.fgd.c spider.dpd.c spider.fgd.c
+daemon daemon banner.c daemon.c daemon0.c lab.c lp0.c lp1.c
 dag dag TrieFA.ins.c dag.c dag_edge.c dag_levels.c dag_misc.c dag_pos.c dag_ranks.c dag_simplex.c dag_spline.c dag_start.c dag_stem.c draw_dag.c edge_t.c emit_gd.c emit_pic.c emit_ps.c kpvmalloc.c node_t.c parsedag.c trie.c util.c
 date . date.c
 dblbuf . dblbuf.c
@@ -89,13 +89,13 @@ dc dc dc.c osdc.c sdc.c
 dcheck . dcheck.c
 dd . dd.c
 deroff . deroff.c
-descrypt descrypt SP.c alpha.c crunch.c decrypt.c des.c encrypt.c genSP.c getpass.c io.c keysetup.c permute.c randblock.c setup.c
+descrypt descrypt SP.c alpha.c crunch.c decrypt.c des.c encrypt.c getpass.c io.c keysetup.c permute.c randblock.c setup.c
 df . df.c
 dict dict colthlook.c colthread.c ldefine.c namelook.c namelook1.c nameread.c odefine.c slanglook.c wdefine.c
 diction diction diction.c
 diff diff diff.c diffdir.c diffh.c diffreg.c
 diff3 diff3 diff3.c
-dimpress dimpress bimp.c buildrast.c dimpress.c draw.c editrast.c glob.c impdraw.c main.c makedev.c makemap.c misc.c odimpress.c oldrast.c orast.c printrast.c rast.c readrast.c res.c rotate.c
+dimpress dimpress bimp.c buildrast.c dimpress.c draw.c editrast.c glob.c impdraw.c makedev.c makemap.c misc.c oldrast.c printrast.c rast.c readrast.c res.c rotate.c
 dired dired dired.c
 dirname . dirname.c
 dis . dis.c
@@ -117,10 +117,10 @@ eqn eqn diacrit.c eqnbox.c font.c fromto.c funny.c glob.c input.c integral.c lex
 equal equal =.c
 error error errorfilter.c errorinput.c errormain.c errorpi.c errorsubr.c errortouch.c
 ether ether arpconfig.c findslot.c ipconfig.c netconfig.c order.c
-ex ex OLDex_temp.c bcopy.c ex.c ex_addr.c ex_cmds.c ex_cmds2.c ex_cmdsub.c ex_data.c ex_extern.c ex_get.c ex_io.c ex_put.c ex_re.c ex_set.c ex_subr.c ex_temp.c ex_tty.c ex_unix.c ex_v.c ex_vadj.c ex_vget.c ex_vmain.c ex_voper.c ex_vops.c ex_vops2.c ex_vops3.c ex_vput.c ex_vwind.c expreserve.c exrecover.c ovprintf.c printf.c tgoto.c
+ex ex bcopy.c ex.c ex_addr.c ex_cmds.c ex_cmds2.c ex_cmdsub.c ex_data.c ex_extern.c ex_get.c ex_io.c ex_put.c ex_re.c ex_set.c ex_subr.c ex_temp.c ex_tty.c ex_unix.c ex_v.c ex_vadj.c ex_vget.c ex_vmain.c ex_voper.c ex_vops.c ex_vops2.c ex_vops3.c ex_vput.c ex_vwind.c expreserve.c exrecover.c printf.c
 expand . expand.c
 expr expr -
-f2c f2c cds.c data.c equiv.c error.c exec.c expr.c format.c formatdata.c gram.c init.c intr.c io.c lex.c main.c malloc.c mallocdbug.c malloczap.c mem.c memset.c misc.c names.c niceprintf.c output.c p1output.c parse_args.c pread.c proc.c put.c putpcc.c safstrncpy.c sysdep.c vax.c version.c xsum.c xsum0.c
+f2c f2c cds.c data.c equiv.c error.c exec.c expr.c format.c formatdata.c gram.c init.c intr.c io.c lex.c main.c malloc.c mem.c memset.c misc.c names.c niceprintf.c output.c p1output.c parse_args.c pread.c proc.c put.c putpcc.c safstrncpy.c sysdep.c vax.c version.c xsum.c
 f77 f77 data.c driver.c equiv.c error.c exec.c expr.c gram.c init.c intr.c io.c lex.c main.c misc.c proc.c put.c putpcc.c vax.c vaxx.c
 face face error.c faced.c faces.c file.c request.c scaffold.c
 factor factor factor.c
@@ -136,13 +136,13 @@ fmt . fmt.c
 fold . fold.c
 fsck . fsck.c
 fsplit . fsplit.c
-gcc gcc alloc.c alloca.c aux-output.c b.c c.c cccp.c cexp.c combine.c cse.c dbxout.c decl.c emit-rtl.c explow.c expmed.c expr.c final.c flow.c fold-const.c gcc.c gencodes.c genconfig.c genemit.c genextract.c genflags.c genoutput.c genpeep.c genrecog.c global-alloc.c gnulib.c integrate.c jump.c local-alloc.c loop.c obstack.c optabs.c output-m68k.c output-ns32k.c output-spur.c output-vax.c parse.tab.c print-tree.c recog.c regclass.c reload.c reload1.c rtl.c stmt.c stor-layout.c stupid.c symout.c toplev.c tree.c typecheck.c varasm.c version.c
+gcc gcc alloca.c aux-output.c cccp.c cexp.c combine.c cse.c dbxout.c decl.c emit-rtl.c explow.c expmed.c expr.c final.c flow.c fold-const.c gcc.c gencodes.c genconfig.c genemit.c genextract.c genflags.c genoutput.c genpeep.c genrecog.c global-alloc.c gnulib.c integrate.c jump.c local-alloc.c loop.c obstack.c optabs.c parse.tab.c print-tree.c recog.c regclass.c reload.c reload1.c rtl.c stmt.c stor-layout.c stupid.c symout.c toplev.c tree.c typecheck.c varasm.c version.c
 getopt . getopt.c
 getty . getty.c
 getuid . getuid.c
 grap grap coord.c for.c frame.c input.c label.c main.c misc.c plot.c print.c ticks.c
 graph graph graph.c
-gre gre bm.c buf.c buffer.c cw.c dofgrep.c dogre.c efile.c eg.c egbr.c egcanon.c egcomp.c egcw.c egerror.c eglit.c egmatch.c egparen.c egpos.c egstate.c fns.c getopt.c htest.c lt1.c main.c re.c refile.c
+gre gre bm.c buffer.c cw.c dofgrep.c dogre.c eg.c egbr.c egcanon.c egcomp.c egcw.c egerror.c eglit.c egmatch.c egparen.c egpos.c egstate.c fns.c getopt.c htest.c lt1.c main.c re.c refile.c
 grep . grep.c
 groups . groups.c
 halt . halt.c
@@ -170,9 +170,9 @@ ld . ld.c
 learn learn copy.c dounit.c lcount.c learn.c list.c makpipe.c maktee.c mem.c mysys.c selsub.c selunit.c start.c tee.c whatnow.c wrapup.c
 lex lex header.c ldefs.c lmain.c once.c sub1.c sub2.c y.tab.c
 lfactor lfactor dgcd.c lfactor.c madd.c mdiv.c min.c mout.c mulmod.c mult.c search.c util.c
-library library checkdoc.c dosdir.c dospopen.c gnamef.c library.c option1.c option2.c option3.c reader.c uppercase.c
+library library checkdoc.c gnamef.c library.c option1.c option2.c option3.c reader.c uppercase.c
 limiter . limiter.c
-lint lint cgram.c lint1.c lint2.c olint1.c
+lint lint cgram.c lint1.c lint2.c
 ln . ln.c
 load load load.c
 log . log.c
@@ -186,7 +186,7 @@ m4 m4 m4.c m4ext.c m4macs.c y.tab.c
 make make doname.c dosys.c files.c gram.c ident.c main.c misc.c
 makekey . makekey.c
 man man man.c
-map map index.c map.c myindex.c plotPS.c symbol.c
+map map index.c map.c plotPS.c symbol.c
 markbad . markbad.c
 matlab matlab src/ofault.c src/sgset.c
 mc . mc.c
@@ -205,7 +205,7 @@ mv . mv.c
 ncheck . ncheck.c
 neqn neqn diacrit.c eqnbox.c font.c fromto.c funny.c glob.c integral.c io.c lex.c lookup.c mark.c matrix.c move.c over.c paren.c pile.c shift.c size.c sqrt.c text.c
 netfsbug . netfsbug.c
-netnews netnews src/batch.c src/berknews.c src/caesar.c src/cextern.c src/checknews.c src/control.c src/digest.c src/expire.c src/ftime.c src/fullname.c src/funcs.c src/getdate.c src/header.c src/iextern.c src/ifuncs.c src/inews.c src/logdir.c src/pathinit.c src/process.c src/readdir.c src/readnews.c src/readr.c src/recmail.c src/recnews.c src/rextern.c src/rfuncs.c src/rfuncs2.c src/sendnews.c src/uname.c src/unbatch.c src/uurec.c
+netnews netnews src/batch.c src/caesar.c src/checknews.c src/control.c src/digest.c src/expire.c src/fullname.c src/funcs.c src/getdate.c src/header.c src/iextern.c src/ifuncs.c src/inews.c src/pathinit.c src/process.c src/readnews.c src/readr.c src/recmail.c src/recnews.c src/rextern.c src/rfuncs.c src/rfuncs2.c src/sendnews.c src/uname.c src/unbatch.c src/uurec.c
 newer . newer.c
 newgrp . newgrp.c
 news . news.c
@@ -220,7 +220,7 @@ ofsck . ofsck.c
 omovie omovie blithost.c blitterm.c fdevelop.c fdsymbol.c fdutil.c host.c hsupport.c libj.c newer.c protocol.c sunhost.c sunterm.c term.c tprotocol.c
 oops oops oops.c
 ops ops doselect.c fdprint.c getargs.c getfs.c gettty.c getuname.c nalloc.c printp.c ps.c sort.c
-osh osh args.c blok.c c.c cmd.c defs.c error.c expand.c fault.c func.c io.c macro.c main.c msg.c name.c pathserv.c print.c profile.c readdir.c sctype.c service.c setbrk.c spname.c stak.c string.c word.c xec.c
+osh osh args.c blok.c cmd.c defs.c error.c expand.c fault.c func.c io.c macro.c main.c msg.c name.c pathserv.c print.c sctype.c service.c setbrk.c spname.c stak.c string.c word.c xec.c
 oworm oworm btree.c c.c flink.c getopt.c inode.c io.c mapdev.c poot.c sym.c vlink.c wbtree.c wcat.c wdir.c wls.c wmkfs.c wmv.c woffline.c wormupd.c wread.c wreset.c wrm.c wstat.c wtmpdir.c wwrite.c
 p p p.c pad.c spname.c
 pack pack pack.c unpack.c
@@ -229,8 +229,8 @@ passwdx . passwdx.c
 paste . paste.c
 patch . patch.c
 pic pic arcgen.c blockgen.c boxgen.c circgen.c for.c input.c linegen.c main.c misc.c movegen.c pltroff.c print.c symtab.c textgen.c
-picasso picasso arcgen.c attrs.c blockgen.c boxgen.c circgen.c dpost.c font.c fonts.c for.c input.c linegen.c main.c math.c misc.c movegen.c objcopy.c picgen.c plps.c print.c ps_include.c symtab.c textgen.c tmpfile.c troffgen.c xform.c xstubs.c y1.c y2.c y3.c y4.c
-pico pico 2bit.c builtins.c files.c gen.c lex.c loops.c main.c munge.c nodes.c opt.c other.c pfb.c pmet.c psin.c ptan.c sym.c tobit.c windows.c y.tab.c
+picasso picasso arcgen.c attrs.c blockgen.c boxgen.c circgen.c font.c fonts.c for.c input.c linegen.c main.c math.c misc.c movegen.c objcopy.c picgen.c plps.c print.c ps_include.c symtab.c textgen.c tmpfile.c troffgen.c xform.c xstubs.c y1.c y2.c y3.c y4.c
+pico pico builtins.c files.c gen.c lex.c loops.c main.c munge.c nodes.c opt.c other.c pfb.c pmet.c psin.c ptan.c sym.c tobit.c windows.c
 plot plot driver.c
 poly poly polypic.c polypr.c
 post post attr.c call.c config.c eqattr.c error.c fmt.c ipc.c join.c main.c opt.c path.c post.c pq.c strcon.c strvec.c sys.c
@@ -260,7 +260,7 @@ ratfor ratfor r0.c r1.c r2.c rio.c rlex.c rlook.c
 readslow . readslow.c
 reboot . reboot.c
 reccp . reccp.c
-refer refer deliv1.c deliv2.c flagger.c glue1.c glue2.c glue3.c glue4.c glue5.c hunt1.c hunt2.c hunt3.c hunt5.c hunt6.c hunt7.c hunt8.c hunt9.c inv1.c inv2.c inv3.c inv5.c inv6.c iread.c kaiser.c mkey1.c mkey2.c mkey3.c ml1.c ml2.c refer..c refer0.c refer1.c refer2.c refer3.c refer4.c refer5.c refer6.c refer7.c refer8.c shell.c thash.c tick.c types.c what..c what1.c what2.c what3.c what4.c
+refer refer deliv1.c deliv2.c glue1.c glue2.c glue3.c glue4.c glue5.c hunt1.c hunt2.c hunt3.c hunt5.c hunt6.c hunt7.c hunt8.c hunt9.c inv1.c inv2.c inv3.c inv5.c inv6.c iread.c mkey1.c mkey2.c mkey3.c refer..c refer0.c refer1.c refer2.c refer3.c refer4.c refer5.c refer6.c refer7.c refer8.c shell.c tick.c what1.c what2.c what3.c what4.c
 reloc . reloc.c
 renice . renice.c
 restor . restor.c
@@ -271,15 +271,15 @@ rmdir . rmdir.c
 rscan . rscan.c
 sa . sa.c
 savecore . savecore.c
-sdb sdb access.c decode.c display.c docomm.c fio.c main.c message.c old.c opset.c optab.c pcs.c prvar.c rdwr.c re.c runpcs.c setup.c ss.c sub.c symt.c udef.c version.c xeq.c
-sed sed osed0.c osed1.c sed0.c sed1.c
+sdb sdb access.c decode.c display.c docomm.c fio.c main.c message.c old.c opset.c optab.c pcs.c prvar.c re.c runpcs.c setup.c sub.c symt.c udef.c version.c xeq.c
+sed sed sed0.c sed1.c
 seq . seq.c
 server server Oserver.c server.c
 setgid . setgid.c
 setlog . setlog.c
 setpart . setpart.c
 settod . settod.c
-sh sh args.c blok.c cmd.c defs.c error.c expand.c fault.c func.c io.c macro.c main.c msg.c name.c pathserv.c print.c profile.c sctype.c service.c shsetbrk.c spname.c stak.c string.c word.c xec.c
+sh sh args.c blok.c cmd.c defs.c error.c expand.c fault.c func.c io.c macro.c main.c msg.c name.c pathserv.c print.c sctype.c service.c shsetbrk.c spname.c stak.c string.c word.c xec.c
 showq . showq.c
 sign sign enroll.c ix.c notary.c resign.c sign.c verify.c xs.c
 size . size.c
@@ -292,14 +292,14 @@ sort/ sort cfiles.c cgets.c field.c files.c fsort.c memmove.c merge.c number.c r
 sp . sp.c
 spell spell pcode.c sprog.c
 spell.old spell.old hash.c hashcheck.c hashlook.c hashmake.c huff.c parsecode.c spellin.c spellprog.c squeeze.c typecode.c typeprint.c unsqueeze.c
-spitbol spitbol arg2scb.c cpys2sc.c doexec.c doset.c dosys.c fakexit.c flush.c getdate.c gethost.c lenfnm.c listman.c openerr.c osclose.c osigs.c osopen.c ospipe.c osread.c oswait.c oswrite.c rdenv.c sigs.c sigtrap.c sioarg.c swcinp.c swcoup.c testty.c wrtaout.c
+spitbol spitbol arg2scb.c cpys2sc.c doexec.c doset.c dosys.c fakexit.c flush.c getdate.c gethost.c lenfnm.c listman.c openerr.c osclose.c osopen.c ospipe.c osread.c oswait.c oswrite.c rdenv.c sigs.c sigtrap.c sioarg.c swcinp.c swcoup.c testty.c wrtaout.c
 spline . spline.c
 split . split.c
 spool spool dpr.c fget.c fsend.c gaps.c gcat.c lab.c lp0.c lp1.c spool.c
 stat . stat.c
 strings . strings.c
 strip strip fcopy.c hash.c prtsym.c rdout.c shrink.c stab.c strip.c symwrite.c
-struct struct 0.alloc.c 0.args.c 0.def.c 0.extr.c 0.graph.c 0.list.c 0.parts.c 0.string.c 1.finish.c 1.form.c 1.fort.c 1.hash.c 1.init.c 1.line.c 1.main.c 1.node.c 1.recog.c 1.tables.c 2.dfs.c 2.dom.c 2.head.c 2.inarc.c 2.main.c 2.test.c 2.tree.c 3.branch.c 3.flow.c 3.loop.c 3.main.c 3.reach.c 3.test.c 3.then.c 4.brace.c 4.form.c 4.main.c 4.out.c bdef.c beauty.c main.c tree.c
+struct struct 0.alloc.c 0.args.c 0.def.c 0.extr.c 0.graph.c 0.list.c 0.parts.c 0.string.c 1.finish.c 1.form.c 1.fort.c 1.hash.c 1.init.c 1.line.c 1.main.c 1.node.c 1.recog.c 1.tables.c 2.dfs.c 2.dom.c 2.head.c 2.inarc.c 2.main.c 2.tree.c 3.branch.c 3.flow.c 3.loop.c 3.main.c 3.reach.c 3.then.c 4.brace.c 4.form.c 4.main.c 4.out.c bdef.c beauty.c main.c tree.c
 stty . stty.c
 style style abbrev.c dict.c edict.c ehash.c nhash.c outp.c pscan.c ydict.c
 su . su.c
@@ -310,7 +310,7 @@ tabs . tabs.c
 tail . tail.c
 tape . tape.c
 tar . tar.c
-tbl tbl oot1.c ot4.c ot5.c otg.c t..c t0.c t1.c t2.c t3.c t4.c t5.c t6.c t7.c t8.c t9.c tb.c tc.c te.c tf.c tg.c ti.c tm.c tr.c ts.c tt.c tu.c tv.c xx.c y1.c y2.c yy.c
+tbl tbl t..c t0.c t1.c t2.c t3.c t4.c t5.c t6.c t7.c t8.c t9.c tb.c tc.c te.c tf.c tg.c ti.c tm.c tr.c ts.c tt.c tu.c tv.c
 tee . tee.c
 telno . telno.c
 test . test.c
@@ -324,7 +324,7 @@ tr . tr.c
 trace trace assert.c cmalloc.c malloc_t.c trace.expr.c trace1.c trace2.c trace3.c trace4.c trace5.c trace6.c trace7.c trace8.c trace9.c
 track . track.c
 treesum . treesum.c
-troff troff d202.c draw.c hc.c hytab.c makedev.c n1.c n10.c n2.c n3.c n4.c n5.c n6.c n7.c n8.c n9.c ni.c nii.c suftab.c t10.c t11.c t6.c ta.c tc.c
+troff troff d202.c draw.c hytab.c n1.c n10.c n2.c n3.c n4.c n5.c n6.c n7.c n8.c n9.c ni.c suftab.c t10.c t11.c t6.c ta.c
 true . true.c
 tsort tsort refstore.c subs.c tsort.c
 tty . tty.c
@@ -339,14 +339,14 @@ uniq . uniq.c
 units units mkcdate.c
 upas upas common/aux.c common/mail.c common/string.c common/syslog.c
 update . update.c
-usgmake usgmake doname.c dosys.c dyndep.c files.c main.c misc.c ofiles.c prtmem.c rdhdr.c rules.c
-uucp uucp anlwrk.c callers.c chremdir.c cico.c cntrl.c conn.c cpmv.c dio.c eio.c expfile.c gename.c getargs.c getprm.c getpwinfo.c gio.c gnamef.c gnxseq.c gtcfile.c gwd.c imsg.c line.c logent.c mailst.c permission.c pk0.c pk1.c pkdefs.c rmlock.c shio.c strpbrk.c sysopen.c systat.c ulockf.c utility.c uucheck.c uucleanup.c uucp.c uucpdefs.c uucpname.c uugrep.c uuname.c uusched.c uustat.c uux.c uuxqt.c versys.c xio.c xqt.c
+usgmake usgmake doname.c dosys.c dyndep.c files.c main.c misc.c prtmem.c rules.c
+uucp uucp anlwrk.c callers.c chremdir.c cico.c cntrl.c conn.c cpmv.c dio.c eio.c expfile.c gename.c getargs.c getprm.c getpwinfo.c gio.c gnamef.c gnxseq.c gtcfile.c gwd.c imsg.c line.c logent.c mailst.c permission.c pk0.c pk1.c pkdefs.c shio.c sysopen.c systat.c ulockf.c utility.c uucheck.c uucleanup.c uucp.c uucpdefs.c uucpname.c uugrep.c uuname.c uusched.c uustat.c uux.c uuxqt.c versys.c xio.c xqt.c
 uudecode . uudecode.c
 uudiff uudiff lenrem.c locpart.c printable.c run1.c trim.c
 uuencode . uuencode.c
 v7 . v7.c
 v8 . v8.c
-view2d view2d antial.c contour.c fill.c half_pan.c halft.c hide.c jerq.c level.c makemap.c meth_reset.c metheus.c moviefil.c ramp.c rd.c regrid.c rks.c slice.c step.c sys.c t.c testpat.c unzoom.c vdata.c view2d.c viewtd.c wedge.c wr.c
+view2d view2d antial.c contour.c fill.c half_pan.c halft.c hide.c jerq.c level.c meth_reset.c metheus.c moviefil.c ramp.c rd.c regrid.c rks.c slice.c step.c sys.c t.c unzoom.c vdata.c view2d.c viewtd.c wedge.c wr.c
 vis . vis.c
 visi visi hashing.c init.c lexio.c macros.c nodes.c queues.c screen.c vis.c
 vmstat . vmstat.c

@@ -337,6 +337,37 @@ carried forward out of habit:
       become scaffolding to retire. It also removes the "never edit `v10/` while a build
       is running" hazard's *cause* rather than just its warning.
 
+      **Both of those two reasons are already discharged, which is worth saying plainly
+      before the phase starts.** `v10/src/lsys/astro/ipnx780.m` configures `netafs 4` and
+      `netbfs 4` at lines 127–128 and carries `ni1010a 0 ub 0 reg 0764000 vec 0350`; K7
+      builds that kernel and K9 boots it to `login:` under the library the app links. So
+      K12 is not "give V10 a network filesystem" — the client is compiled in, with
+      instances, on a machine that runs. What is left is the same four-fault list the N
+      track worked through, and **reading V10's own `lsys/os/streamio.c` changes the size
+      of it** (measured 2026-08-18, host-side, before any run):
+
+      - **The hang is already fixed.** V8's `istread()` waited forever for the `M_DELIM`
+        a zero-length Datakit write used to produce, so every EOF hung. V10's sleeps
+        `tsleep(..., PRIBIO, 30)` and returns −1 on `TS_TIME`, with a `printf` behind a
+        parameter whose declaration reads *"flag is for timeout debugging"*. That fault
+        does not transfer.
+      - **The 512-byte stream head does.** `struct qinit strdata = { strput, NULL,
+        nilopen, nulldev, 512, 256 }` — the same high-water mark V8 had. But V10 has a
+        path V8 did not: `if (count >= 512 && stq->wrq->next->flag&QBIGB)` at two sites
+        in the same file, so a **QBIGB** queue takes big transfers whole. Whether pushing
+        that flag is enough is the first thing to measure, and it is cheaper than
+        patching a constant.
+      - **The short read and the discarded remainder both transfer.** `istread()` returns
+        `nc` whenever a queue momentarily empties and the peer has not set `QDELIM`, and
+        it copies `min(count, wptr-rptr)` and then frees the block either way.
+      - The userland is *better* than V8's: `src/netfs/` ships `libnetb` (which K10.2
+        already builds and installs as `libnetb.a`), `serv/zarf` to present a local
+        filesystem, and `runfs`/`setup` to start and supervise servers — where V8 had the
+        client only.
+
+      Sequenced that way K12 is a phase, not a run: kernel stream work, then a transport,
+      then `nmount`. The N track was N0–N7 for the same ground on V8.
+
 That is the real argument for the 780: not one kernel, but the end of three workarounds
 at once — two simulators, a block ceiling, and source arriving on a disk.
 
