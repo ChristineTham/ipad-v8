@@ -46,12 +46,29 @@
 # clamps to the disk.  An RA81 is 891,072 sectors, so 111,384 blocks of 4096:
 # 456 MB, and 3.6 times MAXSMALL.  The minor is
 #
-#	64 | (1<<3) | 7  =  79
-#	   BITFS(79) = 79 & 64      -> true, 4096-byte blocks
-#	   UNIT(79)  = (79>>3) & 07 -> unit 1, the blank disk
-#	   PART(79)  = 79 & 07      -> 7, `h', the whole drive
+#	64 | (2<<3) | 7  =  87
+#	   BITFS(87) = 87 & 64      -> true, 4096-byte blocks
+#	   UNIT(87)  = (87>>3) & 07 -> unit 2, the blank disk
+#	   PART(87)  = 87 & 07      -> 7, `h', the whole drive
 #
-# and the block major is 7, which is where seki's own bdevsw[] puts `rabdev'.
+# and the block major is 7, measured rather than assumed: this machine's own
+# /dev/ra0a and /dev/ra0c print `7, 64' and `7, 66', which is BITFS|unit0|part0
+# and BITFS|unit0|part2 -- the same arithmetic, from the same table, on nodes Bell
+# Labs made.  seki.m configures ra 0, ra 1 AND ra 2, so unit 2 exists.
+#
+# THE FIRST RUN USED 87's PREDECESSOR AND WROTE OVER THE SOURCE DISK.  The minor
+# was 79, whose name said `ra2h' and whose bits said unit ONE -- (79>>3)&07 is 1,
+# not 2 -- and the comment above it read "unit 1, the blank disk" while the blank
+# was attached as rq2.  So mkbitfs made a perfectly good 111,384-block filesystem
+# on the COURIER DISK, V10 mounted it, wrote to it, unmounted and remounted it,
+# and all nineteen guest assertions passed.  Only the host-side read of the blank
+# image said anything was wrong, because the blank was still zeroes.
+#
+# Two things to take from that.  The clone rule is what saved it: the courier disk
+# the guest destroyed was `.k11src', and ipnx-v10-src.img's own stamp still
+# matched the repo afterwards.  And a guest that reports success about the wrong
+# disk is exactly why the decisive check is host-side -- so the mount is now also
+# re-checked AFTER mkbitfs, which would have caught it in the guest.
 log_user 1
 source [file dirname [info script]]/v10drive.exp
 
@@ -119,7 +136,12 @@ v10_sh "A='SRC=$N/src OURS=$N/ours INCDIR=/usr/include TOOLDIR=$OBJ DESTDIR=$OBJ
 v10_sh "B='CC=cc CCPATH=/bin/cc CPP=$T1/lib/cpp CCOM=$T1/lib/ccom C2=$T1/lib/c2'" 120
 v10_sh "C='AS=/bin/as LD=/bin/ld LIBC=/lib/libc.a'" 120
 v10_sh "mkdir $OBJ/bin; mkdir $OBJ/etc" 300
-foreach t {mkbitfs icheck} {
+# mknod IS BUILT TOO, because the golden does not have one: `/etc/mknod: not
+# found'.  Add it to the list with ar, cmp, tail, grep, wc, dd, find and sort --
+# and note that mkdep.py already builds `v10mknod' as an FSTOOL for the V8 side,
+# so the makefile was there all along.  mknod.mk reads $(SRC), the tape's own
+# source, which is right on V10.
+foreach t {mkbitfs icheck mknod} {
     v10_sh "rm -rf $OBJ/$t; mkdir $OBJ/$t" 120
     note "$t builds on V10" \
         [v10_try "cd $OBJ/$t; make -f $K/$t.mk \$A \$B \$C > m.log 2>&1 && echo MB\$OK" \
@@ -140,9 +162,15 @@ foreach t {mkbitfs icheck} {
 # whatever major they carry is the right one.
 v10_sh "ls -l /dev/ra0a /dev/ra0c" 300
 v10_sh "rm -f /dev/ra2h" 60
-v10_sh "/etc/mknod /dev/ra2h b 7 79" 300
+v10_sh "$OBJ/mknod/mknod /dev/ra2h b 7 87" 300
+# `test -b', NOT `ls -l ... && echo'.  V10'S ls EXITS 0 FOR A FILE THAT DOES NOT
+# EXIST -- cmd/ls.c line 258 calls perror() on the stat failure and falls through
+# to exit(0) -- so `ls X && echo OK' printed OK for a node mknod had never
+# created, and this assertion passed while the two after it failed.  test's -b is
+# the real question and cmd/test.c has it.
 note "the whole-drive BITFS node exists" \
-    [v10_try "ls -l /dev/ra2h && echo ND\$OK" "ND-ok" 300]
+    [v10_try "test -b /dev/ra2h && echo ND\$OK" "ND-ok" 300]
+v10_sh "ls -l /dev/ra2h" 120
 
 # --------------------------------------------- the filesystem V8 cannot make ---
 #
@@ -151,8 +179,19 @@ note "the whole-drive BITFS node exists" \
 # too many"), and that appears in the transcript rather than being swallowed.
 note "mkbitfs writes a $BLOCKS-block filesystem" \
     [v10_try "$OBJ/mkbitfs/mkbitfs /dev/ra2h $BLOCKS && echo MF\$OK" "MF-ok" 3600]
+# `&&', NOT `;'.  With a semicolon this printed IK-ok whatever icheck did, and it
+# duly reported "icheck reads it back: ok" over `cannot open /dev/ra2h'.  An
+# assertion that cannot fail is not an assertion -- the same fault as
+# `test -s can.log' meaning "the canary compiled".
+# AND THE COURIER DISK MUST STILL BE THERE.  A wrong unit in the minor points
+# mkbitfs at whichever disk that unit really is, and the first run's 79 pointed it
+# at this one -- so every assertion after it passed, about a filesystem on the
+# source disk.  Reading a file off the courier mount is the cheapest possible test
+# that mkbitfs wrote where it was told.
+note "the courier disk survived mkbitfs" \
+    [v10_try "test -s $K/mkbitfs.mk && echo SV\$OK" "SV-ok" 300]
 note "icheck reads it back" \
-    [v10_try "$OBJ/icheck/icheck /dev/ra2h; echo IK\$OK" "IK-ok" 1800]
+    [v10_try "$OBJ/icheck/icheck /dev/ra2h && echo IK\$OK" "IK-ok" 1800]
 
 # ---------------------------------------------------------- mount and use it ---
 #
@@ -163,23 +202,44 @@ note "icheck reads it back" \
 # exactly the distinction a full filesystem hides, since alloc() sleeps instead
 # of failing.
 v10_sh "rm -rf $BIG; mkdir $BIG" 300
-note "V10 mounts it" \
-    [v10_try "/etc/mount /dev/ra2h $BIG && echo M1\$OK" "M1-ok" 600]
-note "and writes to it" \
-    [v10_try "cp /etc/motd $BIG/probe && cat $BIG/probe > /dev/null && echo W1\$OK" \
-        "W1-ok" 600]
-# A second, larger write: one small file can be satisfied from whatever the
-# superblock happens to cache, and the point of the N arm is the blocks beyond it.
-note "and a file big enough to need the bitmap's later blocks" \
-    [v10_try "cat /lib/libc.a > $BIG/big && test -s $BIG/big && echo W2\$OK" \
-        "W2-ok" 1800]
-note "umount -a takes it down cleanly" \
-    [v10_try "cd /; sync; /etc/umount -a && echo U1\$OK" "U1-ok" 600]
-note "it remounts, so the bitmap reached the disk" \
-    [v10_try "/etc/mount /dev/ra2h $BIG && echo M2\$OK" "M2-ok" 600]
-note "and both files are still there" \
-    [v10_try "cat $BIG/probe > /dev/null && test -s $BIG/big && echo R2\$OK" \
-        "R2-ok" 600]
+# A WRITE TEST AFTER A FAILED MOUNT WRITES TO THE MOUNT POINT'S OWN DIRECTORY AND
+# PASSES.  That is what happened on the first run: the mount failed, `/big' was an
+# ordinary directory on the root filesystem, and "and writes to it" and "both files
+# are still there" both reported ok -- three assertions saying yes about a
+# filesystem that had never been created.  So everything downstream of the mount is
+# gated on the mount, and the skipped ones are reported as failures rather than
+# quietly omitted: a phase that did not run is not a phase that passed.
+set mounted [v10_try "/etc/mount /dev/ra2h $BIG && echo M1\$OK" "M1-ok" 600]
+note "V10 mounts it" $mounted
+if {$mounted} {
+    note "and writes to it" \
+        [v10_try "cp /etc/motd $BIG/probe && cat $BIG/probe > /dev/null && echo W1\$OK" \
+            "W1-ok" 600]
+    # A second, larger write: one small file can be satisfied from whatever the
+    # superblock happens to cache, and the point of the N arm is the blocks past it.
+    note "and a file big enough to need the bitmap's later blocks" \
+        [v10_try "cat /lib/libc.a > $BIG/big && test -s $BIG/big && echo W2\$OK" \
+            "W2-ok" 1800]
+    note "umount -a takes it down cleanly" \
+        [v10_try "cd /; sync; /etc/umount -a && echo U1\$OK" "U1-ok" 600]
+    set again [v10_try "/etc/mount /dev/ra2h $BIG && echo M2\$OK" "M2-ok" 600]
+    note "it remounts, so the bitmap reached the disk" $again
+    if {$again} {
+        note "and both files are still there" \
+            [v10_try "cat $BIG/probe > /dev/null && test -s $BIG/big && echo R2\$OK" \
+                "R2-ok" 600]
+    } else {
+        note "and both files are still there (NOT RUN: no remount)" 0
+    }
+} else {
+    foreach skipped {"and writes to it" \
+                     "and a file big enough to need the bitmap's later blocks" \
+                     "umount -a takes it down cleanly" \
+                     "it remounts, so the bitmap reached the disk" \
+                     "and both files are still there"} {
+        note "$skipped (NOT RUN: no mount)" 0
+    }
+}
 
 set failed [report]
 v10_halt

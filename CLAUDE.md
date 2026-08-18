@@ -687,13 +687,20 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   note the driver is `ni1010a` where V8's is `ill`, so grepping the generated
   config for `il` finds nothing and reads as "no card". Source therefore reaches
   V10 on a **disk** (`tools/v10-srcdisk.sh`), not a share.
-- **The V10 golden has no `ar`, `cmp`, `tail`, `grep`, `wc`, `dd`, `find` or
-  `sort`** — measured against `v10/mk/gen/prebuilt.txt` plus the boot path, not
+- **The V10 golden has no `ar`, `cmp`, `tail`, `grep`, `wc`, `dd`, `find`, `sort`
+  or `mknod`** — measured against `v10/mk/gen/prebuilt.txt` plus the boot path, not
   discovered one at a time. (`sort` cost K10.3 a run: `sed … | sort -u >
   /tmp/dests` answered `sort: not found`, the staged root was never created, and
   eleven assertions said NO about a tree that did not exist while the link half
   had worked perfectly. The dedup was not even needed — `mkdir` on an existing
-  directory prints `File exists` and a loop can ignore it.) Two are load-bearing for the bootstrap: stage 2 *is* an archive
+  directory prints `File exists` and a loop can ignore it. `mknod` cost K11 a run
+  the same way — `/etc/mknod: not found`, and `mkdep.py` had the makefile all
+  along as the FSTOOL `v10mknod`.)
+  - **`ls X && echo OK` IS NOT AN EXISTENCE TEST ON V10, because `ls` exits 0 for
+    a file that does not exist.** `cmd/ls.c` calls `perror()` on the stat failure
+    and falls through to `exit(0)`, so K11's node assertion reported ok over
+    `ls: /dev/ra2h: No such file or directory` while `mknod` had never run. `test`
+    has `-b` and `-c` (`cmd/test.c`); use them. Two are load-bearing for the bootstrap: stage 2 *is* an archive
   (`AR = /bin/ar` names a file that is not there) and stage 3 *is* a byte
   comparison. They are built in stage 1 as `BUILDTOOLS`. `/n` was missing too,
   and cost a whole run: `mkdir` makes one level, so `mkdir /n/v10` failed, the
@@ -794,6 +801,25 @@ at the old flat `v8/` is moved on first launch, never abandoned.
     would have lost 4 of 5). Both are recorded in `v10/mk/gen/world.drop` with
     every drop, because *a rule that quietly declines to fire is
     indistinguishable from one that had nothing to do.*
+- **A GUEST CAN REPORT SUCCESS ABOUT THE WRONG DISK, and K11 did — nineteen
+  assertions, all true, all about a filesystem written over the source disk.** The
+  minor was `64 | (1<<3) | 7 = 79`, so a node *named* `/dev/ra2h` addressed
+  **unit 1** — `UNIT(79) = (79>>3)&07` is 1, not 2 — while the blank disk was
+  attached as `rq2`. The comment above it even read *"unit 1, the blank disk"*,
+  contradicting the attachment three lines up. `mkbitfs` made a perfectly good
+  111,384-block filesystem, V10 mounted it, wrote to it, unmounted and remounted
+  it, and only the host's read of the blank image — still all zeroes — said
+  anything was wrong. The right minor is **87**.
+  - **The clone rule is what saved it**: the disk the guest destroyed was
+    `.k11src`, and `ipnx-v10-src.img`'s own stamp still matched the repo
+    afterwards. This is the case the rule was not written for and covered anyway.
+  - So a harness that writes to a device should re-check something it is *not*
+    aiming at. K11 now re-reads a file off the courier mount immediately after
+    `mkbitfs`, which is one line and would have caught it in the guest.
+  - The block major was the one number that needed no debugging, because it was
+    measured: `/dev/ra0a` and `/dev/ra0c` print `7, 64` and `7, 66` —
+    `BITFS|unit0|part0` and `BITFS|unit0|part2`, the same arithmetic on nodes Bell
+    Labs made.
 - **A `cmd/` DIRECTORY IS NOT NECESSARILY A COMMAND: 71 of the 358 units carry
   more than one `main()`.** `cmd/worm` has 22 programs in it, `cmd/qsnap` 17,
   `cmd/uucp` 11, and `cmd/compact` is the small clear case — `compact.c` and
@@ -2178,6 +2204,28 @@ A second inconsistency fell out of the first: **`world_link` counted `main()`s
 among sources the build does not compile**, so `cmd/sed` was filed as a subsystem
 over `osed0.c` and `cmd/tbl` over `oot1.c`. `csources()` honours the drop, so the
 main count must too — 281 link rows became 288.
+
+**K11 — THE CEILING WAS V8'S, AND V10 REMOVED IT** (2026-08-18,
+`bash tools/v10-bigfs.sh`, **20/20, exit 0**). V10 made, checked, mounted, wrote
+to, unmounted and **remounted** a 111,384-block, 435 MB filesystem — 3.6× the
+30,752 every previous V10 disk stopped at — and the host reads `flag=1` off it:
+the free-block bitmap **outside the superblock**, in the N arm of `filsys`'s
+union, which V8's `filsys.h` does not have. `cmd/mkbitfs.c` switches to it
+unprompted (`if (size - isize <= MAXSMALL) smallfree(); else largefree(fd);`) and
+refuses only when the bitmap reaches `BITMAP-1` blocks of 32,768 bits, so the new
+ceiling is **31,457,280 blocks of 4096 = 128 GB** — four hundred times the largest
+disk this project emulates.
+
+The two free-space figures agree exactly while coming from different places:
+`s_tfree` 110,311, against 110,311 counted bit by bit out of the four bitmap
+blocks at the end of the volume. `tools/v10-free.py` reads that arm now, having
+answered `None` for it before — and the host is the only place the question can be
+asked, because *a full V10 filesystem does not fail, it sleeps*.
+
+The tape's own `mkbitfs` is what built it, via `mkbitfs.mk`: our `v10mkbitfs`
+overlay exists only because V8's `hp` driver reads bit 6 of the minor as part of
+the drive number, and on V10 the original check is exactly right. So K11 retires
+that overlay's reason as well as V8's ceiling.
 
 Next: the two workarounds a 780
 kernel retires: K11's full-capacity filesystem (V8's `filsys.h` caps a

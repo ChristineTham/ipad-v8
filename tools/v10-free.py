@@ -153,9 +153,16 @@ def free_blocks(image, part="c"):
     if not (0 <= tfree <= fsize):
         sys.exit("v10-free: s_tfree reads %d against s_fsize %d -- impossible, "
                  "so the offsets are wrong" % (tfree, fsize))
-    if not all(32 <= b < 127 for b in sb[o["s_fsmnt"]:o["s_fsmnt"] + 1]):
-        sys.exit("v10-free: s_fsmnt does not begin with a printable byte -- "
-                 "the offsets are wrong")
+    # s_fsmnt IS THE MOUNT POINT, AND A FILESYSTEM THAT HAS NEVER BEEN MOUNTED HAS
+    # NONE.  Requiring a printable first byte was right for every image this tool
+    # had seen -- the stage disks all carry `/mnt2' -- and wrong for the one K11
+    # makes: a fresh mkbitfs writes zeroes there, so the check rejected a
+    # superblock it was reading perfectly.  A NUL is a legitimate empty string;
+    # anything else non-printable is still the offsets being wrong.
+    first = sb[o["s_fsmnt"]]
+    if first != 0 and not (32 <= first < 127):
+        sys.exit("v10-free: s_fsmnt begins with byte %d, which is neither NUL nor "
+                 "printable -- the offsets are wrong" % first)
     if o["_end"] != BSIZE:
         sys.exit("v10-free: struct filsys computes to %d bytes, not one %d-byte "
                  "block -- the offsets are wrong" % (o["_end"], BSIZE))
@@ -253,7 +260,7 @@ def main():
     tfree, fsize, isize, name, bits, valid, flag = free_blocks(image, part)
     mb = lambda n: n * BSIZE / 1048576.0
     print("%s partition %s" % (os.path.basename(image), part))
-    print("  mounted as        %s" % name)
+    print("  mounted as        %s" % (name if name else "(never mounted)"))
     print("  filesystem size   %6d blocks  %6.1f MB" % (fsize, mb(fsize)))
     print("  i-list            %6d blocks" % isize)
     print("  s_tfree (a HINT)  %6d blocks  %6.1f MB" % (tfree, mb(tfree)))

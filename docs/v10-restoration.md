@@ -314,13 +314,28 @@ Both of those are constraints this project **imposed on itself** to get started,
 V10 kernel we configure ourselves removes both. Worth writing down so they are not
 carried forward out of habit:
 
-- [ ] **K11 — a full-capacity filesystem.** Today the V10 disks are built *by V8*, so
-      they must be readable by V8 — and V8's `filsys.h` has only the R and B arms of the
-      superblock union, no N, which caps a filesystem at
-      `MAXSMALL = BITMAP*BITCELL = 961*32 = 30752` blocks. That is why the source disk
-      is 16,384 blocks on a 456 MB RA81. **Once V10 runs its own `mkfs`/`mkbitfs`, V8
-      never has to read the result and the ceiling is gone** — full RP07 or RA81
-      capacity, and the whole 243 MB tree fits with room to spare.
+- [x] **K11 — a full-capacity filesystem. DONE** (2026-08-18,
+      `bash tools/v10-bigfs.sh`, **20/20, exit 0**). V10 made, checked, mounted,
+      wrote to, unmounted and remounted a **111,384-block, 435 MB** filesystem —
+      3.6× the 30,752 every previous V10 disk stopped at — and the host reads
+      `flag=1` off it, the out-of-superblock bitmap arm V8's `filsys.h` does not
+      have. The two free-space figures agree exactly from different sources:
+      `s_tfree` 110,311 against 110,311 counted bit by bit out of the four bitmap
+      blocks at the end of the volume. Details, including four assertions that
+      could not fail and one minor number that wrote to the wrong disk, in
+      [docs/v10-log/2026-08-18.md](v10-log/2026-08-18.md).
+
+      The analysis this item was written from was exactly right and is worth
+      keeping: the V10 disks were built *by V8*, so they had to be readable by V8,
+      and V8's `filsys.h` has only the R and B arms of the superblock union — no N
+      — which caps a filesystem at `MAXSMALL = BITMAP*BITCELL = 961*32 = 30752`
+      blocks. That is why the source disk is 16,384 blocks on a 456 MB RA81. Once
+      V10 ran its own `mkbitfs`, V8 never had to read the result and the ceiling
+      was gone. What the run added to the prediction is the size of the new one:
+      `largefree()` refuses only when its bitmap reaches `BITMAP-1` blocks of
+      32,768 bits, so the ceiling is now **31,457,280 blocks of 4096 = 128 GB**,
+      four hundred times the largest disk this project emulates. The whole 243 MB
+      tree fits on one filesystem with room to spare.
 - [ ] **K12 — netfs on V10, and no more courier disks.** "There is no netfs on V10" was
       true of *`seki`*, for two reasons that are both ours to change once we generate the
       config:
