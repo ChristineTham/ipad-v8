@@ -25,18 +25,49 @@
 # carries more RA units; on the machine this project actually ships there are two.
 # Nothing is lost: source arrives over TCP now, so rq1 is free.
 #
-# SO THE MINOR IS 79, AND THAT IS NOT A CONTRADICTION OF K11.  BITFS|unit|part is
-# `64 | (unit<<3) | part'.  K11's blank was on rq2 and it first wrote 79, which
-# addresses unit ONE -- so it made a perfectly good filesystem on top of the
-# source disk while nineteen assertions reported success, and only the host's read
-# of the still-zeroed blank said otherwise.  The lesson was never "use 87": it is
-# that the minor must be computed from the unit the disk is ACTUALLY on.  Here
-# that unit is 1, so 64|8|7 = 79.
+# SO THE PARTITION IS `a' AND THE MINOR IS COMPUTED, NOT WRITTEN DOWN.
+# BITFS|unit|part is `64 | (unit<<3) | part', and K11's lesson was never "use 87":
+# it is that the minor must be computed from the unit the disk is ACTUALLY on.
+# K11's blank was on rq2 and it first wrote 79, which addresses unit ONE -- so it
+# made a perfectly good filesystem on top of the source disk while nineteen
+# assertions reported success, and only the host's read of the still-zeroed blank
+# said otherwise.  So this harness derives the minor from $UNIT and $PART below and
+# writes neither.
 #
-# AND THE COPY'S /etc/rc MUST LOSE ITS /usr MOUNT.  The golden keeps /usr on
-# `ra0c', partition c of unit 0; the new disk is partition h, the WHOLE drive, so
-# on the copy those two overlap and mounting one inside the other would write a
-# filesystem through another.  The line goes before the disk is ever booted.
+# AND ROOT IS PARTITION `a', WHICH RETRACTS THE WHOLE-DRIVE FILESYSTEM.  K14 first
+# built one 111,384-block filesystem on partition `h' and changed the KERNEL to
+# root on it, because `ra_sizes[]' gives `a' only 10,240 blocks and a kernel rooted
+# on `a' cannot read a 435 MB superblock:
+#
+#	unix
+#	mem = 6062080
+#	panic: iinit mount
+#
+# That is the clamp in `lsys/io/ra.c' firing exactly as written -- limit is
+# `min(radsize - blkoff, nblocks)', and K11 put the free-block bitmap in the LAST
+# blocks of a large filesystem, so the mount reads past 10,240 and gets ENOSPC.
+# Two things make partition `a' the better answer, and the second is decisive:
+#
+#   THE SWAP OVERLAPS.  `ipnx780.m' has `swap ra 01 20480' -- partition `b',
+#   blocks 10240..30720 -- which is INSIDE a whole-drive filesystem.  That disk
+#   boots and then swaps over its own data blocks.
+#
+#   AND alice ROOTS ON 0100, so a whole-drive root is OUR deviation and not the
+#   tape's.  `seki' agrees (v10/src/PATCHES.md).  Building the disk the way V10
+#   builds disks needs no patch at all, which is what the authenticity rule asks
+#   for -- so the DISK moved and the kernel went back to alice's value.
+#
+# 10,240 blocks is 40 MB, against the golden's own root of 1,280 blocks (5.0 MB)
+# and the 6.4 MB this run copies, so there is eight times the room Bell Labs used.
+# It is also inside MAXSMALL (BITMAP*BITCELL = 961*32 = 30,752), so V10's mkbitfs
+# chooses smallfree() and the bitmap lives IN the superblock -- flag=0, exactly as
+# the golden's root and /usr both read.  K11's N-arm bitmap is not retired by this;
+# it is simply not what a 40 MB root uses.
+#
+# AND THE COPY'S /etc/rc MUST STILL LOSE ITS /usr MOUNT, for a different reason
+# than before.  `a' and `c' do not overlap, so nothing would be written through
+# anything -- but there is no filesystem on `c' yet, so the mount would fail on
+# every boot.  The line goes before the disk is ever booted.
 log_user 1
 
 set here [file dirname [info script]]
@@ -46,8 +77,8 @@ set V10_SIMH [file normalize [file join $here .. work opensimh BIN vax780]]
 set V10_ROM  [file normalize [file join $here .. work v10 src lsys boot star uda]]
 set V10_RUN_SECS 7200
 
-if {[llength $argv] < 5} {
-    puts "usage: v10-mkdisk.exp <k13-image> <blank> <tport> <oport> <mport>"
+if {[llength $argv] < 7} {
+    puts "usage: v10-mkdisk.exp <k13-image> <blank> <tport> <oport> <mport> <blocks> <part>"
     exit 2
 }
 set img   [lindex $argv 0]
@@ -55,11 +86,23 @@ set blank [lindex $argv 1]
 set tport [lindex $argv 2]
 set oport [lindex $argv 3]
 set mport [lindex $argv 4]
+set BLKS  [lindex $argv 5]
+set PART  [lindex $argv 6]
+
+# THE MINOR, COMPUTED.  BITFS|unit|part, and the disk is attached as rq1 because
+# `ipnx780.m' configures `ra 0' and `ra 1' and stops -- its own comment says "ra
+# 2..5 REMOVED, one controller and we have two disks" -- so a disk on rq2 has no
+# device behind it and mkbitfs answers `No such device or address'.
+set UNIT  1
+set PIDX  [string first $PART "abcdefgh"]
+if {$PIDX < 0} { puts "v10-mkdisk: partition '$PART' is not a..h"; exit 2 }
+set MINOR [expr {64 | ($UNIT << 3) | $PIDX}]
+set NODE  /dev/ra$UNIT$PART
+puts "== target $NODE, minor $MINOR, $BLKS blocks =="
 
 set T1    /usr/s1
 set OBJ   /usr/k14obj
 set MP    /mnt2
-set BLKS  111384
 
 set results {}
 proc note {name ok} { global results; lappend results [list $name $ok assert] }
@@ -120,16 +163,16 @@ note "mkbitfs builds from the share" \
     [v10_try "cd $OBJ/mkbitfs; make -f /n/mk/mkbitfs.mk \$A \$B \$C > m.log 2>&1 && echo MB\$OK" \
         "MB-ok" 1800]
 
-v10_sh "rm -f /dev/ra1h" 60
-v10_sh "/etc/mknod /dev/ra1h b 7 79" 300
-v10_sh "ls -l /dev/ra1h" 120
+v10_sh "rm -f $NODE" 60
+v10_sh "/etc/mknod $NODE b 7 $MINOR" 300
+v10_sh "ls -l $NODE" 120
 note "the whole-drive BITFS node exists" \
-    [v10_try "test -b /dev/ra1h && echo ND\$OK" "ND-ok" 300]
+    [v10_try "test -b $NODE && echo ND\$OK" "ND-ok" 300]
 note "mkbitfs writes a $BLKS-block filesystem" \
-    [v10_try "$OBJ/mkbitfs/mkbitfs /dev/ra1h $BLKS && echo MF\$OK" "MF-ok" 1800]
+    [v10_try "$OBJ/mkbitfs/mkbitfs $NODE $BLKS && echo MF\$OK" "MF-ok" 1800]
 
 v10_sh "rm -rf $MP; mkdir $MP" 300
-set mounted [v10_try "/etc/mount /dev/ra1h $MP && echo M1\$OK" "M1-ok" 900]
+set mounted [v10_try "/etc/mount $NODE $MP && echo M1\$OK" "M1-ok" 900]
 note "V10 mounts the disk it just made" $mounted
 
 if {$mounted} {
@@ -151,7 +194,9 @@ if {$mounted} {
         [v10_try "test -s $MP/bin/sh && test -s $MP/etc/init && echo CP\$OK" "CP-ok" 600]
     note "/unix is on the new disk" \
         [v10_try "test -s $MP/unix && echo UX\$OK" "UX-ok" 300]
-    # THE /usr MOUNT HAS TO GO -- ra0c and ra0h overlap on one drive.
+    # THE /usr MOUNT HAS TO GO, and no longer because anything overlaps: root is
+    # partition `a' and /usr would be `c', which are disjoint.  There is simply no
+    # filesystem on `c' of the new disk, so the mount fails on every boot.
     v10_sh "sed -e '/ra0c/d' $MP/etc/rc > $MP/etc/rc.new" 600
     v10_sh "cp $MP/etc/rc.new $MP/etc/rc; rm -f $MP/etc/rc.new" 300
     # `grep X; echo TOKEN' PRINTS THE TOKEN WHATEVER grep FOUND -- the semicolon

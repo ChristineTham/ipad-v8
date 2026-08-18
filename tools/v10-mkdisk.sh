@@ -23,6 +23,13 @@ done
 GOLD="${1:-ipnx-v10-ra81.img.stage1.k102.k7.k13}"
 BLANK="$ROOT/work/v10gold/ipnx-v10-made.img"
 TPORT="${TPORT:-9290}"; OPORT="${OPORT:-9291}"; MPORT="${MPORT:-9292}"
+
+# THE LAYOUT, DEFINED ONCE AND PASSED DOWN.  It used to live in v10-mkdisk.exp
+# while the host-side check below hard-coded partition `h' separately, which is the
+# shape of fault CLAUDE.md records as "a component list that appears twice will
+# disagree, silently".  Root is partition `a' as alice configures it -- see the
+# retraction at the top of v10-mkdisk.exp -- and 10,240 blocks is the whole of it.
+BLKS="${BLKS:-10240}"; PART="${PART:-a}"
 NETFSD="$ROOT/netfs/.build/release/netfsd"
 LOG="$ROOT/work/v10-mkdisk.log"
 
@@ -83,14 +90,15 @@ dd if="$ROOT/work/v10/src/lsys/boot/bb/4kb" of="$BLANK" \
    bs=512 count=1 conv=notrunc 2>/dev/null
 
 echo "== V10 builds a disk on $(basename "$BLANK") =="
-expect "$ROOT/tools/v10-mkdisk.exp" "$IMG" "$BLANK" "$TPORT" "$OPORT" "$MPORT" 2>&1 | tee "$LOG"
+expect "$ROOT/tools/v10-mkdisk.exp" "$IMG" "$BLANK" "$TPORT" "$OPORT" "$MPORT" \
+    "$BLKS" "$PART" 2>&1 | tee "$LOG"
 rc=${PIPESTATUS[0]}
 
 # THE HOST READS WHAT THE GUEST WROTE, because a full V10 filesystem SLEEPS rather
 # than failing and no guest-side probe can see past that.
 echo
 echo "== what is actually on the disk V10 built =="
-python3 "$ROOT/tools/v10-free.py" "$BLANK" h || rc=1
+python3 "$ROOT/tools/v10-free.py" "$BLANK" "$PART" || rc=1
 # BLOCK 0, READ FROM THE IMAGE.  The ROM jumps to offset 0xC inside it, so an
 # all-zero block 0 is a HALT at PC 0000000D and nothing past it is ever read.
 BB0=$(python3 -c "print(sum(1 for b in open('$BLANK','rb').read(512) if b))")
@@ -98,8 +106,23 @@ printf '   block 0: %s of 512 bytes non-zero%s\n' "$BB0" \
     "$( [[ "$BB0" == 0 ]] && echo '   <- NO BOOT BLOCK, it cannot boot' )"
 [[ "$BB0" != 0 ]] || rc=1
 
-if ! python3 "$ROOT/tools/v10-free.py" "$BLANK" h 2>/dev/null | grep -q 'flag=1'; then
-    echo "== NO MEASUREMENT: no N-arm bitmap, so this is inside V8's old ceiling =="
+# THE SIZE, AND THE TWO FREE READINGS AGAINST EACH OTHER.  This check used to
+# assert `flag=1' -- K11's bitmap outside the superblock -- which was right for one
+# whole-drive filesystem and is WRONG for a root on partition `a': 10,240 blocks is
+# inside MAXSMALL (BITMAP*BITCELL = 961*32 = 30,752), so V10's own mkbitfs chooses
+# smallfree() and flag reads 0, exactly as it does on the golden's own root and
+# /usr.  Asserting flag=1 here would fail on a correct disk.  What IS load-bearing
+# is that the filesystem is the size we asked for and that s_tfree agrees with the
+# bitmap -- two readings from different places in the superblock, so a disagreement
+# is real news rather than a restatement.
+FREE=$(python3 "$ROOT/tools/v10-free.py" "$BLANK" "$PART" 2>/dev/null)
+FS=$(printf '%s\n' "$FREE" | sed -n 's/^  filesystem size *\([0-9]*\) blocks.*/\1/p')
+if [[ "$FS" != "$BLKS" ]]; then
+    echo "== NO MEASUREMENT: filesystem size reads '${FS:-nothing}', not $BLKS =="
+    rc=1
+fi
+if printf '%s\n' "$FREE" | grep -q 'disagrees'; then
+    echo "== NO MEASUREMENT: s_tfree and the bitmap disagree =="
     rc=1
 fi
 

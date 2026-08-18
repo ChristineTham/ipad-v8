@@ -690,11 +690,59 @@ result.
    **done 2026-08-16**: `cmd/ld.c`, 1,946 lines, compiled by V10's own
    compiler. The resulting linker then linked hello, producing a binary whose
    text and data are identical to the one the first linker made
-3. V10 libc builds — **next**, and where the r70 header skew starts to bite
-4. Core userland builds (sh, init, getty, login, mount, fs tools, mux host side)
-5. `star` kernel links
-6. Boot block + filesystem image assemble
-7. **Kernel reaches single-user on SIMH** ← the headline moment; announce
-8. Multi-user; `mux` from a dmd_core 5620 (firmware 8;7;3 — protocol unchanged from V8)
-9. `sam`/`samterm` running
-10. Reproducible `v10.disk` build script → merge into the app as "Edition 10"
+3. ~~V10 libc builds~~ — **done 2026-08-17**, `tools/v10-stage2.sh` 38/38: **260 of
+   261 members**, 143 byte-identical to Bell Labs'. `setupshares` is a named
+   exclusion, not a shortfall. The r70 header skew did bite, and the answer was a
+   *system-layout* decision three times over (`shares.h`, `stdlib.h`, `float.h`,
+   `stdarg.h` — picking which of the tape's four variants pcc2 can parse)
+4. ~~Core userland builds~~ — **done 2026-08-18**, `tools/v10-link.sh` 35/35: of 358
+   units, 251 compile and **203 link and install** into a staged root. `mux`'s host
+   side is the exception and is discussed at rung 8
+5. ~~`star` kernel links~~ — **done 2026-08-17**, `tools/v10-kernel.sh` 20/20, and it
+   is our own `ipnx780.m` rather than a Bell Labs machine
+6. ~~Boot block + filesystem image assemble~~ — **done 2026-08-19** (K14). The boot
+   block is written host-side, `/unix` is copied first because
+   `lsys/boot/README` requires it to be at most singly indirect, and root is
+   partition `a` as `alice.m` configures it — see the swap-overlap finding in
+   [v10-log/2026-08-19.md](v10-log/2026-08-19.md)
+7. ~~**Kernel reaches single-user on SIMH**~~ — **done 2026-08-17**, and it went
+   straight past single-user to **multi-user with a login prompt** (K9,
+   `tools/v10-boot780.sh app` 5/5, on the static library both app targets link)
+8. Multi-user; `mux` from a dmd_core 5620 — **ANSWERED 2026-08-19, AND THE
+   TERMINAL HALF IS IMPOSSIBLE FROM THE TAPE.** This rung was written on the
+   assumption "protocol unchanged from V8", and that is half right in a way worth
+   stating precisely:
+   - **The terminal-side compiler is not on the tape.** `muxterm`'s own makefile
+     names `CC = 3cc`, `AS = 3as`, `3ld`, `3nm`, and `src/man/man9/3cc.9` says what
+     those are — *"the C compiler for the MAC-32 microprocessor in the Teletype
+     DMD-5620 terminal"*. **The man page is the only one of the eight that
+     survived**; the WE32100 `libj.a`/`liblayer.a`/`libsys`/`libc` it links are
+     absent too, and `src/630`'s alternative route names a `src/dmdcc` that does
+     not exist. Same shape as the 1989 libc compiler: documented, not shipped.
+   - **There is no prebuilt fallback.** The V10 golden has no `/usr/jerq` at all
+     (K10.2's harness creates it), and the tape's one prebuilt WE32100 `muxterm`
+     is the **630's**, a different terminal from the 5620 `dmd_core` emulates.
+   - **`mux` is not in V10's live source tree.** `src/cmd/` has no jerq/mux/5620
+     directory; every `mux.c` is in `blit/` (68000), `src/630/` or
+     `src/history/ix/` (the *Ninth* Edition's archive). On a real V10 the 5620
+     software arrived as a separate distribution tape.
+   - **The host half IS buildable** — `history/ix/src/jerq/mux/mux.c`, 1,144 lines
+     of plain VAX C naming `$CC` not `3cc`, linking a seven-member `lib.a`.
+   - **And the wire format differs by exactly one constant.** The packet header
+     byte is identical (V10 replaced VAX bitfields with `P_seq`/`P_channel` masks
+     that reproduce the same bits); `packets.h` differs only in `#else`/`#endif`
+     annotations; `pconfig.h`'s difference is behind `#ifndef Blit` and muxterm
+     compiles `-DBlit`. What changed is `MAXPKTDSIZE`, **64 → 124**, and the tape
+     annotates it `/* was 64 */`. It is never negotiated — `precv.c:89` rejects an
+     oversized packet — so matching is necessary and sufficient, and building the
+     host at 64 restores the tape's own earlier value.
+
+   So the reachable result is V10's own host-side `mux` driving the 5620 `muxterm`
+   this project already builds and widens, with one measured constant matched. A
+   fully-authentic 5620 `muxterm` cannot be produced from what survived.
+9. `sam`/`samterm` running — depends on rung 8, and on the same absent `3cc` for
+   `samterm`, which is also a 5620 program
+10. Reproducible `v10.disk` build script → merge into the app as "Edition 10" —
+    K14 is its mechanism; what remains after it is choosing what to copy (K10.3's
+    203 commands, K10.2's 26 libraries, stage 1's toolchain) and the Swift work
+    for a second machine beside V8

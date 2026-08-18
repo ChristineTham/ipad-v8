@@ -452,6 +452,58 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   carried as data. **V11** is where there is one language and one compiler, so the
   per-file question is ended rather than managed. Which compiler is V11's decision,
   not V10's.
+- **THE 5620's COMPILER IS NOT ON THE TAPE, SO A FULLY-AUTHENTIC `muxterm`
+  CANNOT BE BUILT — and the tape says so in four places.** This settles rung 8,
+  which was carried for weeks as "an authenticity decision" when it is a
+  measurement. `src/history/ix/src/jerq/mux/term/makefile` — `muxterm`'s own
+  build — names `CC = 3cc`, `AS = 3as`, `3ld`, `3nm`; and
+  `src/man/man9/3cc.9` says what those are, verbatim: *"3cc is the C compiler for
+  the MAC-32 microprocessor in the Teletype DMD-5620 terminal"*, heading a family
+  of eight (`3cc 3as 3ar 3ld 3nm 3size 3strip cprs`). **The man page is the only
+  one of the eight that survived** — no binary, no source, searched by name across
+  all 25,682 files and by every makefile that references them. The WE32100
+  `libj.a`/`liblayer.a`/`libsys`/`libc` on that link line are absent too, and the
+  second route fails one layer up: `src/630/makefile` line 67 is
+  `DMDCC=src/dmdcc`, a prerequisite of its own `all` target, and
+  `src/630/src/dmdcc` does not exist. Same shape as the 1989 libc compiler —
+  documented, not shipped.
+  - **There is no prebuilt fallback on the V10 side.** The golden has **no
+    `/usr/jerq` at all** (K10.2's transcript shows the harness creating it), so
+    unlike V8 there is no `muxterm`, no `jim`, no 5620 userland on the disk. The
+    tape's one prebuilt WE32100 `muxterm` is `src/630/src/muxterm` — COFF
+    `f_magic` **0560**, 218,450 bytes — and it is the **630 MTG's**, a different
+    terminal from the 5620 `dmd_core` emulates. (`blit/lib/muxterm` is magic
+    **0407**, the 68000 Blit's; `blit/Road.map` states the naming trap itself:
+    *"programs to run the Blit, the 256Kbyte 68000-based research terminal.
+    /usr/jerq has the DMD-5620 code"*.)
+  - **`mux` IS NOT IN V10's LIVE SOURCE TREE**, which reframes the rung rather
+    than merely blocking it. `src/cmd/` has no jerq, mux, blit, 5620 or dmd
+    directory; every `mux.c` on the tape is in `blit/src/mux/` (68000),
+    `src/630/src/` or `src/history/ix/src/jerq/` — and **`ix` is the NINTH
+    edition**. On a real V10 the 5620 software arrived as a separate 5620
+    distribution tape installed into `/usr/jerq`, which is exactly what V8's
+    golden has and V10's has not.
+  - **The host half IS buildable**: `history/ix/src/jerq/mux/mux.c`, 1,144 lines
+    of plain VAX C naming `$CC` not `3cc`, linking a seven-member `lib.a`, with
+    every include present.
+  - **AND THE WIRE FORMAT DIFFERS BY EXACTLY ONE CONSTANT**, which is a `diff`
+    rather than a judgement because both trees carry the protocol headers.
+    `packets.h` differs only in trailing annotations on `#else`/`#endif`;
+    `pconfig.h`'s difference is behind `#ifndef Blit` and muxterm compiles
+    `-DBlit`; and `proto.h` replaced VAX bitfields with masks that reproduce **the
+    same byte** — `P_seq(b) = b & (SEQMOD-1)` is bits 0–1, `P_channel(b) =
+    (b>>SBITS) & (MAXPCHAN-1)` is 2–5, `P_CNTL 0x40` is bit 6, `P_PTYPE 0x80` is
+    bit 7, matching V8's `seq:2, channel:4, cntl:1, ptyp:1` exactly. What changed
+    is `MAXPKTDSIZE`, **64 → 124**, and the tape annotates it `/* was 64 */`. It
+    is **never negotiated** — `proto.h` sizes the receive buffer statically and
+    `precv.c:89` *rejects* an oversized packet — so a 124-byte host against a
+    64-byte terminal fails cleanly rather than corrupting, and matching is
+    necessary and sufficient. Since we build the host, building it at 64 restores
+    the tape's own earlier value.
+  - So the reachable result is V10's own host-side `mux` driving the 5620
+    `muxterm` this project already builds and widens, with one measured constant
+    matched. Rung 9 (`sam`/`samterm`) inherits all of this, because `samterm` is
+    a 5620 program too.
 - **PLAN 9 DID TARGET THE VAX-11/750 — and it is the same machine we emulate.** From
   the Plan 9 wiki's [Other hardware](https://9p.io/wiki/plan9/Other_hardware/index.html)
   page, verbatim:
@@ -821,6 +873,46 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   - `arp` is the exception worth knowing: it has **no `ld` line in `tab`** and
     `arp_ld = 13` indexes a NULL slot. Nothing pushes it — `ipconfig`/`dipconfig`
     set `IPIOARP` and then do ARP in *userland* over a raw ether minor.
+- **A WHOLE-DRIVE ROOT FILESYSTEM SWAPS OVER ITS OWN DATA BLOCKS, AND THE DISK
+  BOOTS FIRST.** `lsys/io/ra.c`'s `ra_sizes[]` is the whole layout, and the two
+  entries that matter both begin at sector 0:
+
+	a   10240 blocks at 0        root
+	b   20480 blocks at 10240    SWAP, and `dump' shares it
+	c  249848 blocks at 30720    /usr
+	h    HUGE blocks at 0        the whole drive
+
+  So a filesystem built on `h` contains partition `b`, and `ipnx780.m`'s
+  `swap ra 01 20480` then writes swap through blocks 10240..30720 of a live
+  filesystem. **Nothing complains**: the disk boots, and the corruption arrives
+  only when something swaps. K14 reached for `h` because a 111,384-block
+  filesystem cannot be rooted on `a` — `ra.c`'s clamp is
+  `limit = min(radsize - blkoff, nblocks)`, and since K11 puts the free-block
+  bitmap in the **last** blocks of a large filesystem, the mount reads past
+  10,240, gets `ENOSPC`, sets `u.u_error` and `iinit` panics:
+
+	unix
+	mem = 6062080
+	panic: iinit mount
+
+  **The fix is to move the DISK, not the kernel**, and the authenticity rule is
+  what settles it: `alice.m` and `seki.m` both say `root regfs ra 0100`, so a
+  whole-drive root is *our* deviation and needs no patch once the disk is laid
+  out the way V10 lays out disks. Measured sizes make it comfortable rather than
+  merely correct — the golden's own root is **1,280 blocks (5.0 MB)** with 1.9 MB
+  free, partition `a` allows 10,240 (40 MB), and a boot-path copy is 6.4 MB.
+  - **`/usr` on the golden is EXACTLY 30,752 blocks, which is `MAXSMALL` to the
+    block** (`BITMAP*BITCELL` = 961*32, `cmd/mkbitfs.c`). Bell Labs sized it to
+    the largest filesystem an in-superblock bitmap can address — precisely the
+    ceiling K11 broke. Consequence for a *root* filesystem: 10,240 blocks is
+    inside MAXSMALL, so `mkbitfs` chooses `smallfree()` and the bitmap stays in
+    the superblock, **`flag=0`**. An assertion demanding K11's `flag=1` therefore
+    fails on a perfectly correct root disk, which is what it did here. K11's
+    N-arm bitmap is not retired by this; it is just not what a 40 MB root uses.
+  - **Derive the minor, never write it down.** `64 | (unit<<3) | part` reproduces
+    every value this project has measured — `/dev/ra0a` 64 and `/dev/ra0c` 66 off
+    Bell Labs' own nodes, K11's 87 on rq2, K14's 79 on rq1 — so a computed minor
+    cannot repeat K11's failure of addressing unit 1 while the disk sat on unit 2.
 - **AN ARCHIVE MEMBER'S UNDEFINED EXTERNALS NAME THE OTHER ARCHIVES YOU NEED, and
   reading them is cheaper than a boot.** Calling the tape's own `tcp_sock()` and
   `tcp_connect()` instead of hand-rolling them pulls `libin.a(tcp_lib.o)` in, and
