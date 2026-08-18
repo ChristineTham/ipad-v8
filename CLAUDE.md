@@ -723,6 +723,25 @@ at the old flat `v8/` is moved on first launch, never abandoned.
     header does — but until it does, every lex unit fails and the failure reads
     as a grammar the tape cannot process. `test -s /usr/bin/lex` is not
     "lex works".
+- **ONE netfs DEVICE NUMBER PER MOUNT, AND `neta.h` SAYS SO IN EIGHT WORDS.**
+  `short dev; /* server may be using several */`, and `nadomount()` is the
+  mechanism: `iget(&pi, dev, ROOTINO)` then EBUSY when `i_count > 1`. Two shares
+  mounted with the same dev give `nafsmnt: fmount: In use` on the second, because
+  both asked for `(fstyp 1, dev 0, ino 2)` and the first still holds that inode.
+  **V8's `nmount` computed the number from a `unique` argument for exactly this
+  reason** — and `nafsmnt.c`'s own comment had reasoned it away ("V8's unique-id
+  … simply disappears"). Only the *zero-minor* rule disappeared. `nafsmnt` takes
+  the dev as an optional fourth argument.
+- **pcc DOES NOT NEST COMMENTS, and the error names neither the comment nor the
+  line.** Quoting a header's own comment verbatim inside a patch note — `short
+  dev; /* server may be using several */` — puts a `/*` inside the block, its
+  closing pair ends the block early, and every line after it becomes code.
+  `nafsmnt.c` failed to compile with nothing pointing at the cause.
+  `tools/v10-overlay.py` checks for it now, and **the first version of that check
+  did not bite**: it walked `build()`'s output, and the file at fault is a
+  hand-maintained addition `build()` knows nothing about — the same half-truth as
+  the orphan prune. It walks the disk. Prove a guard bites; that is the only
+  reason the useless version was found.
 - **A PATTERN ACROSS FOUR DRIVERS IS NOT EVIDENCE ABOUT A FIFTH WHOSE JOB IS
   DIFFERENT: `tcp_device.c` LEAVES QDELIM CLEAR ON PURPOSE.** `tcp_ld.c` sets
   `QDELIM` on both its queues and `ni1010a.c`, `deqna.c`, `kdi.c` and `debna.c`
@@ -2413,6 +2432,18 @@ block and the read of the *data* timed out — `neta: read -1 expected 48`, the
 kernel's own words. Fixed on V8's proven model and built into `os.a` by the new
 overlay-object step in K7 (`cc -S`, `sed -f asm.sed`, `as`, `ar r`, relink; 20/20).
 The QDELIM half was **retracted after it hung the machine** — see Gotchas.
+
+**K13 — AND IT NETWORKS BY ITSELF** (2026-08-18, `bash tools/v10-netboot.sh`,
+**18/18, exit 0**). K12's transport was built on the spot on every run; this
+installs it. `/etc/mknod`, `/dev/ip6`, `/dev/ip17`, `/dev/il1`, `/etc/dipconfig`,
+`/etc/tcpconfig` and `/etc/nafsmnt` go onto the image, `/etc/rc` brings the
+interface up guarded on `/dev/il0` exactly as V8's does, and then the machine is
+**halted and booted again**: the second boot compiles nothing, and two source trees
+mount with one installed command each — the 243 MB tape at `/n/tree` and our own
+overlay at `/n/ours`, so the guest reads our patched `istread` straight off the
+working tree. **`tools/v10-srcdisk.sh` is no longer on the path for reading
+source.** This is B0.6 for the Tenth Edition, and it is on the way to Edition 10 in
+the app rather than beside it.
 
 **Superseded, kept for the measurements: K12.1 at 21/24.**
 V10 autoconfigured the Interlan, brought IP up on it with the tape's own

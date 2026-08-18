@@ -1,0 +1,205 @@
+#!/usr/bin/env expect
+# K13: give V10 a network of its own -- provision the image, then PROVE it comes
+# up by itself on the next boot.
+#
+#	expect tools/v10-netboot.exp <k7-image> <src-image> <tree-port> <ours-port>
+#
+# WHAT THIS BANKS.  K12 proved V10 can mount a macOS folder over TCP, but every
+# step of it was built by the harness on the spot: mknod, the device nodes,
+# dipconfig, tcpconfig and nafsmnt, each compiled on every run.  That is the right
+# shape for an experiment and the wrong shape for a machine.  V8 crossed this line
+# in B0.6 -- the network comes up from /etc/rc and the shares are simply there --
+# and this is the same crossing for the Tenth Edition.  Two consequences, and both
+# are the point:
+#
+#   * every later harness gets a LIVE SOURCE SHARE for nothing, which retires
+#     tools/v10-srcdisk.sh and the fourteen minutes it costs per iteration;
+#   * "Edition 10" in the app needs a guest that networks without a harness
+#     driving it, so this is on that path rather than beside it.
+#
+# THE PROOF IS THE SECOND BOOT, NOT THE FIRST.  Installing the programs proves
+# only that they copied.  So this halts the machine cleanly, boots it again, and
+# asserts that /etc/rc brought the interface up on its own -- nothing compiled,
+# nothing pushed by hand, a share mounted by a single command.  An assertion that
+# runs in the same boot as the install cannot tell the two apart.
+log_user 1
+
+set here [file dirname [info script]]
+source $here/v10drive.exp
+
+set V10_SIMH [file normalize [file join $here .. work opensimh BIN vax780]]
+set V10_ROM  [file normalize [file join $here .. work v10 src lsys boot star uda]]
+set V10_RUN_SECS 7200
+
+if {[llength $argv] < 4} {
+    puts "usage: v10-netboot.exp <k7-image> <src-image> <tree-port> <ours-port>"
+    exit 2
+}
+set img   [lindex $argv 0]
+set src   [lindex $argv 1]
+set tport [lindex $argv 2]
+set oport [lindex $argv 3]
+
+set N   /n/v10
+set T1  /usr/s1
+set OBJ /usr/k13obj
+
+set results {}
+proc note {name ok} { global results; lappend results [list $name $ok assert] }
+proc fact {name ok} { global results; lappend results [list $name $ok fact] }
+
+proc report {} {
+    global results
+    puts "\n===== V10 K13: A MACHINE THAT NETWORKS BY ITSELF ====="
+    set failed 0
+    foreach r $results {
+        if {[lindex $r 2] eq "fact"} {
+            puts [format "  %-52s %s" [lindex $r 0] [expr {[lindex $r 1] ? "yes" : "no"}]]
+            continue
+        }
+        puts [format "  %-52s %s" [lindex $r 0] [expr {[lindex $r 1] ? "ok" : "NO"}]]
+        if {!([lindex $r 1])} { incr failed }
+    }
+    set n 0
+    foreach r $results { if {[lindex $r 2] ne "fact"} { incr n } }
+    puts "===== [expr {$n - $failed}]/$n =====\n"
+    return $failed
+}
+
+# ============================================ BOOT 1: provision ==============
+set IL [list "set il enable" "set il address=2013E800" "set il vector=E8" \
+             "attach il nat:"]
+v10_boot $img [concat [list "set rq1 ra81" "attach rq1 $src"] $IL]
+note "boot 1: the 780 came up" 1
+v10_login root
+v10_sh "PATH=/bin:/etc:/usr/bin; export PATH" 120
+v10_sh "OK=-ok" 120
+v10_sh "mkdir /n; mkdir $N" 120
+note "the courier disk mounts (the last time it is needed)" \
+    [v10_try "/etc/mount /dev/ra1c $N && echo MT\$OK" "MT-ok" 600]
+
+set CC "cc -B$T1/lib/ -t02p -O"
+set IN "/usr/lib/libin.a /usr/lib/libipc.a"
+set IX "$N/src/ipc/internet"
+set OX "$N/ours/ipc/internet"
+
+v10_sh "rm -rf $OBJ; mkdir $OBJ; mkdir $OBJ/mknod" 300
+v10_sh "A='SRC=$N/src OURS=$N/ours INCDIR=/usr/include TOOLDIR=$OBJ DESTDIR=$OBJ'" 120
+v10_sh "B='CC=cc CCPATH=/bin/cc CPP=$T1/lib/cpp CCOM=$T1/lib/ccom C2=$T1/lib/c2'" 120
+v10_sh "C='AS=/bin/as LD=/bin/ld LIBC=/lib/libc.a'" 120
+
+note "mknod builds" \
+    [v10_try "cd $OBJ/mknod; make -f $N/mk/mknod.mk \$A \$B \$C > m.log 2>&1 && echo MB\$OK" \
+        "MB-ok" 1800]
+# INSTALLED, not built-and-forgotten: /etc/mknod is absent from the golden and
+# three harnesses have now built their own copy.
+v10_sh "cp $OBJ/mknod/mknod /etc/mknod" 300
+note "/etc/mknod installed (the golden had none)" \
+    [v10_try "test -s /etc/mknod && echo MI\$OK" "MI-ok" 120]
+
+# The nodes.  Majors from lsys/lib/tab, which fixes them for any V10 kernel:
+# cdev 42 ip, 43 tcp, 44 ni1010a.  ip6/ip17 are PROTOCOL numbers, not units.
+v10_sh "rm -f /dev/ip6 /dev/ip17 /dev/il1" 60
+v10_sh "/etc/mknod /dev/ip6 c 42 6; /etc/mknod /dev/ip17 c 42 17" 300
+v10_sh "/etc/mknod /dev/il1 c 44 1" 300
+note "the ip and raw-ether nodes exist" \
+    [v10_try "test -c /dev/ip6 && test -c /dev/il1 && echo ND\$OK" "ND-ok" 300]
+
+foreach p {dipconfig tcpconfig} {
+    note "$p builds" \
+        [v10_try "cd $OBJ; $CC -I$IX -o $p $OX/$p.c $IN > $p.log 2>&1 && echo PB\$OK" \
+            "PB-ok" 1800]
+    v10_sh "cp $OBJ/$p /etc/$p" 600
+}
+note "the inet userland is installed in /etc" \
+    [v10_try "test -s /etc/dipconfig && test -s /etc/tcpconfig && echo EI\$OK" "EI-ok" 300]
+
+note "nafsmnt builds" \
+    [v10_try "cd $OBJ; $CC -o nafsmnt $N/ours/cmd/nafsmnt.c $IN > n.log 2>&1 && echo NB\$OK" \
+        "NB-ok" 1800]
+v10_sh "cp $OBJ/nafsmnt /etc/nafsmnt" 600
+note "/etc/nafsmnt installed" \
+    [v10_try "test -s /etc/nafsmnt && echo NI\$OK" "NI-ok" 300]
+
+# ------------------------------------------------------------- /etc/rc -------
+#
+# GUARDED ON THE DEVICE NODE, exactly as V8's rc is, so a kernel or a machine
+# without the card boots as it did before.  Written with `echo >>' rather than a
+# here-document because CANBSIZ is 256 and every line here has to survive a tty.
+#
+# The third argument is the NETWORK and V8's inet is CLASSFUL: 10.0.0.0, never
+# SLiRP's 10.0.2.0.  dipconfig branches on `hisaddr & 0xff' to choose IPIONET over
+# IPIOHOST, so a .2.0 there configures a host route to a network address and
+# nothing is reachable.  That one number cost the N track a session.
+v10_sh "cp /etc/rc /etc/rc.pre" 300
+v10_sh "echo 'if test -c /dev/il0' >> /etc/rc" 120
+v10_sh "echo 'then' >> /etc/rc" 120
+v10_sh "echo '/etc/dipconfig /dev/il0 10.0.2.15 10.0.0.0 /dev/il1 > /dev/null 2>&1 &' >> /etc/rc" 120
+v10_sh "echo '/etc/tcpconfig /dev/ip6 > /dev/null 2>&1 &' >> /etc/rc" 120
+v10_sh "echo 'echo \"network: il0 10.0.2.15, gateway 10.0.2.2\"' >> /etc/rc" 120
+v10_sh "echo 'fi' >> /etc/rc" 120
+note "/etc/rc brings the network up, guarded on /dev/il0" \
+    [v10_try "sed -n '/dipconfig/p' /etc/rc" "dipconfig /dev/il0" 300]
+
+v10_sh "cd /; sync" 300
+v10_sh "/etc/umount -a" 600
+v10_sh "sync" 300
+v10_halt
+
+# ============================================ BOOT 2: the proof ==============
+#
+# NOTHING IS BUILT IN THIS BOOT.  If /etc/rc did its job, the interface is up and
+# TCP is pushed before the login prompt appears, and a share is one command.
+v10_boot $img $IL
+note "boot 2: the machine came back" 1
+v10_login root
+v10_sh "PATH=/bin:/etc:/usr/bin; export PATH" 120
+v10_sh "OK=-ok" 120
+
+# THE STANZA SURVIVED THE HALT -- which is all this line can honestly claim.
+# Grepping /etc/rc proves its CONTENT, never that it RAN, and an assertion that
+# reads a file it wrote in the previous boot is a tautology dressed as a test.
+# WHAT PROVES IT RAN IS THE MOUNT BELOW: nafsmnt cannot reach 10.0.2.2 unless
+# ip_ld is pushed onto /dev/il0 and tcp_ld onto /dev/ip6, and in this boot only
+# /etc/rc can have done either -- nothing here compiles or configures anything.
+note "the /etc/rc stanza survived the halt" \
+    [v10_try "sed -n '/dipconfig/p' /etc/rc" "dipconfig /dev/il0" 300]
+v10_sh "mkdir /n; mkdir /n/tree; mkdir /n/ours" 120
+
+# ONE DEVICE NUMBER PER MOUNT.  neta.h: `short dev; /* server may be using
+# several */', and nadomount() does iget(&pi, dev, ROOTINO) then refuses with
+# EBUSY when i_count > 1 -- so two shares sharing a dev give `fmount: In use' on
+# the second, which is exactly what the first run of this harness measured.  V8's
+# nmount computed the number from a `unique' argument for the same reason.
+set m1 [v10_try "/etc/nafsmnt 10.0.2.2 $tport /n/tree 0" "mounted on" 900]
+note "the TAPE mounts as a live share, by one installed command" $m1
+set m2 [v10_try "/etc/nafsmnt 10.0.2.2 $oport /n/ours 1" "mounted on" 900]
+note "and OUR overlay mounts beside it, on its own dev" $m2
+
+if {$m1} {
+    # A REAL STRING, BECAUSE MATCHING "" MATCHES INSTANTLY -- and one checked
+    # against the file rather than guessed: streamio.c's first line is
+    # `#include "sys/param.h"'.  This is content arriving off the wire, not the
+    # absence of a complaint.
+    note "V10 reads the tape over the wire" \
+        [v10_try "sed -e 1q /n/tree/src/lsys/os/streamio.c" "sys/param.h" 600]
+    note "and a deep path resolves (netfs costs a round trip per component)" \
+        [v10_try "test -s /n/tree/src/ipc/libin/tcp_lib.c && echo DP\$OK" "DP-ok" 900]
+} else {
+    note "V10 reads the tape over the wire" 0
+    note "and a deep path resolves (netfs costs a round trip per component)" 0
+}
+if {$m2} {
+    note "our own patched istread is readable over the share" \
+        [v10_try "sed -n '/ipnx: satisfied/p' /n/ours/lsys/os/streamio.c" "ipnx: satisfied" 900]
+} else {
+    note "our own patched istread is readable over the share" 0
+}
+
+v10_sh "cd /; sync" 300
+if {$m1 || $m2} { v10_sh "/etc/nafsmnt -u /n/tree; /etc/nafsmnt -u /n/ours" 600 }
+v10_sh "cd /; sync" 300
+
+set failed [report]
+v10_halt
+exit [expr {$failed ? 1 : 0}]

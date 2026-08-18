@@ -79,10 +79,25 @@
 #include <stdio.h>
 
 #define	NAFS	1	/* netafs, from seki's fstypsw[] -- V8's RMFSTYP */
-#define	NAFSDEV	0	/* fmount's 4th arg: this mount's device number.  Safe at
-			   zero -- iget() looks up (fstyp, dev, ino) and fstyp 1 is
-			   netafs, so it cannot collide with the root disk whatever
-			   that disk's dev happens to be. */
+#define	NAFSDEV	0	/* DEFAULT device number, and it must be DISTINCT PER
+			   MOUNT.  neta.h's own comment on the field says the
+			   server may be using several, and nadomount() is the
+			   mechanism: iget(&pi, dev, ROOTINO), then EBUSY when
+			   i_count > 1.  So a second mount reusing a live dev
+			   answers `fmount: In use' -- measured, on the run that
+			   first mounted two shares at once.  V8's nmount computed
+			   this from a `unique' argument for exactly that reason;
+			   only the zero-minor rule went away, not the number.
+			   Zero is safe as a default because the lookup is
+			   (fstyp, dev, ino) and fstyp 1 is netafs, so it cannot
+			   collide with the root disk.
+
+			   NO NESTED COMMENT HERE, EITHER.  Quoting neta.h's line
+			   verbatim put a `slash-star' inside this block and its
+			   closing pair ended the block early, so everything below
+			   became code -- pcc does not nest comments, and the whole
+			   file failed to compile with the error nowhere near the
+			   cause. */
 
 extern int errno;
 extern long time();
@@ -98,7 +113,7 @@ char **argv;
 {
 	struct tcpuser tu;
 	char version, name[32];
-	int fd, n, port;
+	int fd, n, port, dev;
 	in_addr faddr;
 	char *host, *mnt;
 
@@ -118,13 +133,16 @@ char **argv;
 	}
 
 	if (argc < 4) {
-		fprintf(stderr, "usage: nafsmnt host port mountpoint\n");
+		fprintf(stderr, "usage: nafsmnt host port mountpoint [dev]\n");
 		fprintf(stderr, "       nafsmnt -u mountpoint\n");
 		exit(1);
 	}
 	host = argv[1];
 	port = atoi(argv[2]);
 	mnt = argv[3];
+	/* One mount per dev.  See NAFSDEV above: the kernel keys the mounted root
+	   on (fstyp, dev, ROOTINO), so two shares need two numbers. */
+	dev = (argc > 4) ? atoi(argv[4]) : NAFSDEV;
 
 	faddr = in_address(host);
 	if (faddr == 0) {
@@ -205,7 +223,7 @@ char **argv;
 	 * the server only ever echoes it back.
 	 */
 	x.uid = 0;			/* server debug level */
-	x.dev = NAFSDEV;		/* and fmount is handed the same number */
+	x.dev = dev;			/* and fmount is handed the same number */
 	x.ta = time((long *)0);
 	if (write(fd, &version, 1) != 1) {
 		perror("nafsmnt: version byte");
@@ -235,10 +253,10 @@ char **argv;
 	 * and every subsequent byte on the socket is kernel-generated.
 	 */
 	errno = 0;
-	if (fmount(NAFS, fd, mnt, NAFSDEV) < 0) {
+	if (fmount(NAFS, fd, mnt, dev) < 0) {
 		perror("nafsmnt: fmount");
 		exit(1);
 	}
-	printf("nafsmnt: mounted on %s\n", mnt);
+	printf("nafsmnt: mounted on %s, dev %d\n", mnt, dev);
 	exit(0);
 }

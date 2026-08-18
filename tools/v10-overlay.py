@@ -1447,6 +1447,39 @@ def build():
     return files, "".join(out), problems
 
 
+def nested_comments(text):
+    """-> line number of a `/*' opened inside a comment, or None.
+
+    PCC DOES NOT NEST COMMENTS, and the failure lands nowhere near the cause.
+    Quoting a header's own comment verbatim inside a patch note -- `short dev;
+    /* server may be using several */' -- put a slash-star inside the block and
+    its closing pair ended the block early, so every line after it became code.
+    nafsmnt.c then failed to compile in a way that named neither the comment nor
+    the line, and the run reported it as a build failure of the mounter.
+
+    Cheap to check and impossible to see by reading, so it is checked.
+    """
+    depth = 0
+    i = 0
+    line = 1
+    while i < len(text) - 1:
+        if text[i] == "\n":
+            line += 1
+        two = text[i:i+2]
+        if two == "/*":
+            if depth:
+                return line
+            depth = 1
+            i += 2
+            continue
+        if two == "*/" and depth:
+            depth = 0
+            i += 2
+            continue
+        i += 1
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true")
@@ -1456,6 +1489,25 @@ def main():
         sys.exit("v10-overlay: no %s -- run tools/v10-import.py" % SRC)
 
     files, doc, problems = build()
+
+    # EVERY .c AND .h ON DISK, NOT ONLY THE GENERATED ONES.  The first version of
+    # this check walked `files' -- what build() produces -- and reported nothing
+    # when a nested comment was injected into `cmd/nafsmnt.c', because nafsmnt.c
+    # is a hand-maintained ADDITION and build() knows nothing about it.  That is
+    # the same half-truth that made the orphan prune delete four files: v10/src is
+    # generated patches AND additions, and a check over one half is a check that
+    # cannot see the other.  It is also precisely the file the fault was in.
+    for dirpath, _dirs, names in os.walk(OUT):
+        for nm in sorted(names):
+            if not nm.endswith((".c", ".h")):
+                continue
+            rel = os.path.relpath(os.path.join(dirpath, nm), OUT)
+            n = nested_comments(open(os.path.join(dirpath, nm),
+                                    encoding="latin-1").read())
+            if n is not None:
+                problems.append((rel, "a comment opens inside a comment at line "
+                                      "%d -- pcc does not nest them, so the block "
+                                      "ends early and the error names neither" % n))
     for path, note in problems:
         print("v10-overlay: %s: %s" % (path, note), file=sys.stderr)
 
