@@ -704,8 +704,9 @@ result.
    block is written host-side, `/unix` is copied first because
    `lsys/boot/README` requires it to be at most singly indirect, and the disk gets
    V10's own layout — root on `a` (1,280 blocks, which is what the golden's root
-   is), swap on `b`, `/usr` on `c` — because `ra_sizes[]` is in **sectors** and a
-   5 MB root cannot hold a 6.4 MB copy. See
+   is), swap on `b`, `/usr` on `c` — which needs no kernel patch where a whole-drive
+   root needs one *and* swaps over its own data blocks. `ra_sizes[]` is in
+   **sectors**, which cost a run. See
    [v10-log/2026-08-19.md](v10-log/2026-08-19.md)
 7. ~~**Kernel reaches single-user on SIMH**~~ — **done 2026-08-17**, and it went
    straight past single-user to **multi-user with a login prompt** (K9,

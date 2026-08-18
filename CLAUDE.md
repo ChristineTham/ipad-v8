@@ -915,15 +915,21 @@ at the old flat `v8/` is moved on first launch, never abandoned.
     carried this warning for V8 — *"RP06 partition `a` is 15,884 **sectors**, not
     blocks"* — and `v10-free.py` carried the conversion in a comment. Neither was
     read.
-  - **SO A V10 SYSTEM DISK HAS TWO FILESYSTEMS, AND THAT IS FORCED RATHER THAN
-    TIDY.** A 5 MB root cannot hold the 6.4 MB a boot-path copy measures, and
-    root cannot move: `lsys/boot/README` requires `/unix` to be *"in the
-    filesystem beginning at the front of the boot device"* and `star/uda.s`
-    carries no partition offset, so root is the filesystem at **sector 0** —
-    `a` or `h`, and `h` is the one that overlaps swap. Hence root on `a`, swap on
-    `b`, `/usr` on `c`, mounted by the `/etc/rc` the golden already ships — and
-    `/lib` goes to `/usr/lib` on the copy, because it is the compiler's and no
-    boot opens it.
+  - **SO A V10 SYSTEM DISK HAS TWO FILESYSTEMS — root on `a`, swap on `b`, `/usr`
+    on `c`, mounted by the `/etc/rc` the golden already ships.** Root cannot move
+    even if you wanted it to: `lsys/boot/README` requires `/unix` to be *"in the
+    filesystem beginning at the front of the boot device"* and `star/uda.s` carries
+    no partition offset, so root is the filesystem at **sector 0** — `a` or `h`,
+    and `h` is the one that overlaps swap.
+  - **AND `used = s_fsize - s_tfree` INCLUDES THE I-LIST, WHICH IS NOT CONTENT.**
+    That difference on a 111,384-block filesystem read as 1,626 blocks and was
+    written up as "6.4 MB of content that cannot fit a 5 MB root" — **wrong by 4
+    MB**, because 1,024 of those blocks are the filesystem's own i-list, a property
+    of its *size*. A direct probe (`cat dir/* | wc -c`) measures the boot path at
+    **2.1 MB**: bin 833,811 + etc 526,152 + lib 631,774 + unix 228,310. It would
+    have fitted `a` all along. The two-filesystem layout is right because it is
+    V10's own and needs no kernel patch — never because of the size — and keeping
+    those two claims apart matters, because the size one is false.
   - **`/usr` on the golden is EXACTLY 30,752 blocks, which is `MAXSMALL` to the
     block** (`BITMAP*BITCELL` = 961*32, `cmd/mkbitfs.c`). Bell Labs sized it to
     the largest filesystem an in-superblock bitmap can address — precisely the

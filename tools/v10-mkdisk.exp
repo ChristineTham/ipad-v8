@@ -67,8 +67,11 @@
 # partition to the block -- and its /usr is 30,752, which is MAXSMALL
 # (BITMAP*BITCELL = 961*32) exactly.  Both are copied here rather than invented.
 #
-# SO THERE ARE TWO FILESYSTEMS, AND THAT IS FORCED.  A 5 MB root cannot hold the
-# 6.4 MB the previous run measured, and root cannot move: `lsys/boot/README'
+# SO THERE ARE TWO FILESYSTEMS, BECAUSE THAT IS V10's OWN LAYOUT.  It is NOT a size
+# limit: the size probe below measures the boot path at 2.1 MB against 4.8 MB usable
+# on `a'.  An earlier note here said 6.4 MB, which was `s_fsize - s_tfree' and so
+# counted the filesystem's own 1,024-block i-list as content.  Root cannot move
+# either way, which is the argument that holds: `lsys/boot/README'
 # requires /unix to be "in the filesystem beginning at the front of the boot
 # device" and `star/uda.s' carries no partition offset, so root is the filesystem
 # at sector 0 -- `a' or `h', and `h' is the one that overlaps swap.
@@ -172,6 +175,29 @@ if {!$shares} {
     exit 1
 }
 
+# THE SIZES, MEASURED AND REPORTED BEFORE ANYTHING IS BUILT.  A full V10
+# filesystem does NOT fail -- `lsys/fs/alloc.c' prints `file system full' and then
+# SLEEPS -- so an overflowing copy hangs the guest and costs the whole run's
+# timeout with nothing to show.  These go to the transcript as facts rather than
+# assertions, so even a hung run leaves the numbers behind.
+#
+# AND NEVER `cat' A DIRECTORY OF DEVICE NODES, which is how the first version of
+# this probe was written and would have wedged the session rather than merely
+# delaying it.  `cat /dev/* | wc -c' expands to every node in /dev, and reading
+# `/dev/console' BLOCKS -- consuming the very console this harness types into, so
+# every command after it is swallowed by cat and no marker ever returns.  Reading
+# `/dev/ra0a' or `/dev/ip6' is no better.  A directory is measured with `ls -l',
+# whose fifth column is the size, and /dev is not measured at all: nodes hold no
+# blocks, which is exactly why `cat' of one is a question about the DEVICE.
+# `awk' IS IN NEITHER bootpath.order NOR prebuilt.txt, so it is assumed absent --
+# CLAUDE.md's standing rule for V10.  `cat | wc -c' needs only two tools that are
+# certainly there (wc is one of K13.1's six), and it is perfectly safe for /bin,
+# /etc and /lib because those hold regular files.  /dev is simply not measured.
+foreach d {bin etc lib} {
+    v10_sh "echo SZ $d `cat /$d/* 2>/dev/null | wc -c`" 900
+}
+v10_sh "echo SZ unix `wc -c < /unix`" 300
+
 v10_sh "rm -rf $OBJ; mkdir $OBJ; mkdir $OBJ/mkbitfs" 300
 # `bb/4kb', NOT `bb/1kb': 4k.s opens `.set FSBSIZE, 8*512' and `.set FSSHIFT, 12',
 # which is BITFS's 4096-byte block.  Fetched NOW, while the share is live.
@@ -182,17 +208,6 @@ v10_sh "C='AS=/bin/as LD=/bin/ld LIBC=/lib/libc.a'" 120
 note "mkbitfs builds from the share" \
     [v10_try "cd $OBJ/mkbitfs; make -f /n/mk/mkbitfs.mk \$A \$B \$C > m.log 2>&1 && echo MB\$OK" \
         "MB-ok" 1800]
-
-# THE SIZES, MEASURED AND REPORTED BEFORE ANYTHING IS BUILT.  A full V10
-# filesystem does NOT fail -- `lsys/fs/alloc.c' prints `file system full' and then
-# SLEEPS -- so an overflowing copy hangs the guest and costs the whole run's
-# timeout with nothing to show.  These go to the transcript as facts rather than
-# assertions, so even a hung run leaves the numbers behind.  `wc' is one of the six
-# tools K13.1 installed; `cat dir/*' is enough because /bin and /lib are flat.
-foreach d {bin etc lib dev} {
-    v10_sh "echo SZ $d `cat /$d/* 2>/dev/null | wc -c`" 900
-}
-v10_sh "echo SZ unix `wc -c < /unix`" 300
 
 v10_sh "rm -f $RNODE $UNODE" 60
 v10_sh "/etc/mknod $RNODE b 7 $RMINOR" 300
@@ -218,12 +233,15 @@ note "and mounts /usr inside it" $umounted
 if {$mounted} {
     # find | cpio -pd, the idiom K13.1 installed the tools for.  Directory by
     # directory, because copying `/' would copy the mount point into itself.
-    # WHAT GOES ON ROOT IS DECIDED BY THE BOOT, NOT BY TIDINESS.  Root is 5 MB
-    # and the previous run measured 6.4 MB of content, so something must move --
-    # and the choice is forced rather than arbitrary: /etc/init, /etc/rc,
-    # /etc/getty, /bin/sh and /dev are what reach a login prompt, while /lib is
-    # the compiler's (libc.a and the three passes) and nothing in a boot opens it.
-    # So /lib becomes /usr/lib on the copy, which is where a 122 MB partition is.
+    # WHAT GOES ON ROOT.  /etc/init, /etc/rc, /etc/getty, /bin/sh and /dev are what
+    # reach a login prompt; /lib is the compiler's (libc.a and the three passes) and
+    # nothing in a boot opens it, so it goes to /usr/lib here.
+    #
+    # THAT IS A DEVIATION FROM THE GOLDEN AND IT IS ON THE LIST TO UNDO.  The
+    # golden keeps /lib on ROOT, and with the boot path measured at 2.1 MB against
+    # 4.8 MB usable it fits there comfortably -- the split was chosen while a
+    # miscounted 6.4 MB made root look full (see the header).  It is harmless for a
+    # boot and wrong for fidelity; rung 10's disk should carry /lib on root.
     foreach d {bin etc dev} { v10_sh "mkdir $MP/$d" 120 }
     foreach d {tmp n} { v10_sh "mkdir $MP/$d" 120 }
     v10_sh "mkdir $MP/usr/lib" 120

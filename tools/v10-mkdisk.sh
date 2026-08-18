@@ -46,14 +46,18 @@ TPORT="${TPORT:-9290}"; OPORT="${OPORT:-9291}"; MPORT="${MPORT:-9292}"
 #	                                             which is MAXSMALL exactly
 #	h     891072        0     111384     435.1   the whole drive
 #
-# SO THERE ARE TWO FILESYSTEMS, WHICH IS NOT A CHOICE.  A 5 MB root cannot hold
-# the 6.4 MB this run copies, and root cannot go anywhere else:
+# SO THERE ARE TWO FILESYSTEMS, BECAUSE THAT IS V10's OWN LAYOUT -- not because of
+# any size limit.  (An earlier version of this comment said a 5 MB root could not
+# hold "6.4 MB of content"; that figure was `s_fsize - s_tfree', which INCLUDES the
+# filesystem's 1,024-block i-list.  The boot path measures 2.1 MB and fits `a'
+# easily.  The real argument is that root cannot go anywhere else:
 # `lsys/boot/README' requires /unix to be "in the filesystem beginning at the front
 # of the boot device" and `star/uda.s' carries no partition offset, so root is the
 # filesystem at sector 0 -- `a' or `h' and nothing else.  `h' overlaps swap (see
 # v10-mkdisk.exp).  That leaves the layout V10 itself uses, which needs no kernel
 # patch at all: root on `a', swap on `b', /usr on `c', mounted by the /etc/rc the
-# golden already ships.
+# golden already ships -- and a whole-drive root would need `root regfs ra 0107',
+# a kernel patch, and would then swap over its own data blocks.)
 SECT_PER_BLK=8
 RA_SECT_A=10240
 ROOTPART="${ROOTPART:-a}"; USRPART="${USRPART:-c}"
