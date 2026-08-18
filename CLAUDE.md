@@ -873,6 +873,27 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   - `arp` is the exception worth knowing: it has **no `ld` line in `tab`** and
     `arp_ld = 13` indexes a NULL slot. Nothing pushes it — `ipconfig`/`dipconfig`
     set `IPIOARP` and then do ARP in *userland* over a raw ether minor.
+- **EDITING A `tools/*.sh` MID-RUN MADE BASH RESUME INSIDE A WORD, AND IT SKIPPED
+  THE VERIFICATION WITHOUT FAILING.** The rule was already here — *"during a run,
+  `docs/`, `CLAUDE.md` and brand-new files are safe; `v8/**` and the
+  `tools/*.sh|*.exp` that bash is still reading are not"* — and it was broken to fix
+  a **comment**. bash reads a script incrementally by byte offset, so the edit moved
+  the ground under it:
+
+	tools/v10-mkdisk.sh: line 124: ding.: command not found
+
+  `ding.` is the tail of `hiding.`, the last word of line 120. **The guest-side
+  14/14 was unaffected**, because expect's script is read whole by Tcl at startup —
+  which is exactly what makes this dangerous, since the part that vanished was the
+  driver's *host-side* verification, the half that had caught the
+  sectors-versus-blocks error in the first place. It had to be re-run by hand. *A
+  run can pass every one of its own assertions and silently skip the instrument that
+  would contradict them.* Tcl is safe to edit mid-run and bash is not; when in
+  doubt, wait.
+- **`pwd` IS NOT ON THE V10 GOLDEN EITHER** (`sh: pwd: not found`, printed by
+  `cpio -pd` during a copy that nonetheless succeeded). Add it beside
+  `ar cmp tail grep wc dd find sort mknod chmod`. It is in neither
+  `bootpath.order` nor `prebuilt.txt`, which is the standing test.
 - **A WHOLE-DRIVE ROOT FILESYSTEM SWAPS OVER ITS OWN DATA BLOCKS, AND THE DISK
   BOOTS FIRST.** `lsys/io/ra.c`'s `ra_sizes[]` is the whole layout, and the two
   entries that matter both begin at sector 0:

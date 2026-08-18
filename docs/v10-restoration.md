@@ -700,7 +700,14 @@ result.
    side is the exception and is discussed at rung 8
 5. ~~`star` kernel links~~ — **done 2026-08-17**, `tools/v10-kernel.sh` 20/20, and it
    is our own `ipnx780.m` rather than a Bell Labs machine
-6. ~~Boot block + filesystem image assemble~~ — **done 2026-08-19** (K14). The boot
+6. ~~Boot block + filesystem image assemble~~ — **done 2026-08-19** (K14,
+   `bash tools/v10-mkdisk.sh` **14/14**, exit 0). V10 made two filesystems on a
+   blank RA81, filled them, halted, and **the disk it built came up to a login
+   prompt** — with every byte of source arriving over TCP and no courier disk in
+   the run. The host's own reading agrees and the geometry is Bell Labs': root
+   1,280 blocks with a **19**-block i-list and `/usr` 30,752 with **473**, both
+   identical to the golden's, and both free counts agreeing between `s_tfree` and a
+   bit-by-bit count of the bitmap. The boot
    block is written host-side, `/unix` is copied first because
    `lsys/boot/README` requires it to be at most singly indirect, and the disk gets
    V10's own layout — root on `a` (1,280 blocks, which is what the golden's root
