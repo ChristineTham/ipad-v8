@@ -728,55 +728,6 @@ what nobody had compiled.
  #include <sys/inet/in.h>
 ```
 
-## tcp_device.c: QBIGB without QDELIM truncates a netafs reply
-
-`lsys/inet/tcp_device.c`, sha256 `d339e850fdc51d6e`
-
-The netfs client reads its server's reply with `istread()` on the stream inode of
-an open `/dev/tcpNN`, and `istread()` gives up early on this condition
-(`lsys/os/streamio.c`):
-
-	if ((nc && (OTHERQ(stq->wrq->next)->flag&QDELIM)==0)
-	 || stq->flag&HUNGUP) {
-		... return(nc);          /* a SHORT read */
-
-`stq->wrq->next` is the tcp device's write queue, so `OTHERQ` of it is the tcp
-device's read queue -- and `tcpdopen()` sets `QBIGB` on the write queue and
-nothing on the read queue.  So whenever the queue momentarily empties with bytes
-already delivered, the read returns short, and `neta.c` reads a `struct rcva` in
-one call and treats a short return as a protocol error.  This is the N track's
-"returns short when a queue momentarily empties" fault, which V8 needed fixed in
-`istread()` itself and V10 can fix one layer up instead.
-
-**It is an omission by the tape's own pattern, not a decision.**  The line
-discipline in the same subsystem sets it on both queues --
-
-	tcp_ld.c:45   q->flag |= QDELIM;
-	tcp_ld.c:46   WR(q)->flag |= QDELIM;
-
--- and every stream driver in `lsys/io` writes the two flags in one statement:
-`ni1010a.c:141`, `deqna.c:202`, `kdi.c:177`, `debna.c:90`, all
-`WR(q)->flag |= QDELIM|QBIGB`.  `tcp_device.c` is the only member of that family
-with QBIGB alone.
-
-Note what is NOT changed.  `strdata`'s 512-byte high-water mark stays, because
-`istwrite` already takes a 1024-byte block when `count >= 512 &&
-stq->wrq->next->flag&QBIGB` and this device's queues are `{…, 2048, 64}` both
-ways -- so QBIGB, which the plan named as the first thing to try, was already
-on.
-```diff
---- tarball/lsys/inet/tcp_device.c
-+++ ours/lsys/inet/tcp_device.c
-@@ -94,5 +94,6 @@
- 	tp->so_wq = WR(q);
- 	q->ptr = (caddr_t)tp;
--	WR(q)->flag |= QBIGB;
-+	q->flag |= QDELIM;		/* ipnx: see PATCHES.md */
-+	WR(q)->flag |= QDELIM|QBIGB;
- 	WR(q)->ptr = (caddr_t)tp;
- 	--tcp_busy;
-```
-
 ## streamio.c: istread() throws away the rest of the block
 
 `lsys/os/streamio.c`, sha256 `1e5f78d0c9146e49`
@@ -819,6 +770,24 @@ the only callers of `istread` in the whole kernel, and both want byte-stream
 semantics.  `usr/src/netfs/README` asked for this in as many words -- "The code
 here assumes it is talking to Datakit in several places.  If you want to use
 another network, you'll have to fix things."
+
+**AND THE QDELIM HALF OF THIS IS RETRACTED, having been measured and found
+wrong.** A previous version of this overlay also set `QDELIM` on
+`lsys/inet/tcp_device.c`'s queues, on the argument that `tcp_ld.c` sets it on both
+of its own and that `ni1010a.c`, `deqna.c`, `kdi.c` and `debna.c` all write
+`QDELIM|QBIGB` together -- so its absence read as an omission by the tape's own
+pattern. It is not an omission, it is a decision, and the counter-evidence was
+sitting in the same file: `stread()` carries the identical short-return guard and
+then sleeps with `tsleep(…, STIPRI, 0)` -- **timeout zero, i.e. for ever**. So on a
+queue advertising QDELIM, any read not exactly satisfied blocks permanently, and a
+TCP byte stream never sends a delimiter to end the wait. Measured: `nafsmnt`
+connected, completed the NSTART handshake -- netfsd logged `mounted … as dev 0` --
+and then hung in `read()` of the reply until the harness's watchdog stopped the
+machine. Every driver that does set QDELIM is **message-oriented** (Ethernet
+frames, Datakit), and `tcp_ld.c` sets it on the *discipline*, which frames its own
+messages; the tcp **device** hands userland a byte stream and says so by leaving
+the flag clear. Reading a pattern across four drivers is not evidence about a
+fifth whose job is different.
 
 The delimiter check moves inside the fully-consumed branch, because `bp->class`
 belongs to the block and a block that has been put back has not delivered its

@@ -1,2 +1,1 @@
-lsys/inet/tcp_device.c	tcp_device.x	inet.a
 lsys/os/streamio.c	streamio.x	os.a

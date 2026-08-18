@@ -723,6 +723,36 @@ at the old flat `v8/` is moved on first launch, never abandoned.
     header does — but until it does, every lex unit fails and the failure reads
     as a grammar the tape cannot process. `test -s /usr/bin/lex` is not
     "lex works".
+- **A PATTERN ACROSS FOUR DRIVERS IS NOT EVIDENCE ABOUT A FIFTH WHOSE JOB IS
+  DIFFERENT: `tcp_device.c` LEAVES QDELIM CLEAR ON PURPOSE.** `tcp_ld.c` sets
+  `QDELIM` on both its queues and `ni1010a.c`, `deqna.c`, `kdi.c` and `debna.c`
+  all write `QDELIM|QBIGB` together, so `tcp_device.c`'s `QBIGB` alone reads as an
+  omission. Setting it **hangs the machine**, and the counter-evidence was in the
+  same file all along: `stread()` and `istread()` both short-return only when the
+  downstream read queue lacks QDELIM, and otherwise sleep — `stread` with
+  `tsleep(…, STIPRI, 0)`, **timeout zero, for ever**. A TCP byte stream never sends
+  a delimiter to end that wait. Measured: `nafsmnt` connected, completed the netfs
+  NSTART handshake (netfsd logged `mounted … as dev 0`) and then blocked in
+  `read()` of the reply until the harness watchdog stopped the machine —
+  `connection closed after 0 requests`. Every driver that sets the flag is
+  **message-oriented** (Ethernet frames, Datakit), and `tcp_ld.c` sets it on the
+  *discipline*, which frames its own messages; the tcp **device** hands userland a
+  byte stream and says so by leaving the flag clear. **The real fault was the other
+  one** — `istread()` freeing a block whose tail the caller had not read yet, which
+  the kernel itself reported as `neta: read -1 expected 48`.
+- **`v10/src/` IS NOT WHOLLY GENERATED, so nothing may prune it.**
+  `tools/v10-overlay.py` produces patched copies of tape files, but the directory
+  also holds hand-maintained **additions** the generator knows nothing about:
+  `cmd/nafsmnt.c`, `include/jioctl.h`, `libplot/libpen/openpl.c` and
+  `lsys/astro/ipnx780.m` — the 780 kernel config the whole of K7 depends on. A
+  prune of "everything `build()` does not produce" deleted all four in one run;
+  they were committed, so `git checkout -- v10/src/` restored them, and that is the
+  only reason it cost nothing. The gap it was reaching for is real and still open:
+  **retracting a patch leaves the previous generation's file behind**, `--check`
+  compares only what it generates and says "up to date", and a downstream consumer
+  keeps naming it — `v10/mk/gen/kobj.order` went on listing `tcp_device.x` after
+  the patch was withdrawn, so the kernel harness went on rebuilding it. Delete a
+  withdrawn overlay file by hand until the generator records what it wrote.
 - **`cpio -pd` DOES NOT MAKE THE DIRECTORY YOU COPY INTO, and every existing use
   of the idiom got away with it by accident.** `-d` creates the directories that
   appear *inside* the archive; the destination itself must exist, and when it does
