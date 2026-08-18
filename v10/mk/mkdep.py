@@ -37,6 +37,7 @@ WHAT IS DIFFERENT, AND IT IS SHORTER THAN THE SIMILARITY
 """
 
 import argparse
+import subprocess
 import os
 import re
 import sys
@@ -943,6 +944,44 @@ def component(name):
     return c, None
 
 
+def kernel_objects():
+    """Which kernel objects does v10/src/ patch, and which archive holds each?
+
+    DERIVED, NEVER RESTATED.  K6/K7 compile only the generated conf.c and low.s
+    and link the tape's PREBUILT per-subsystem archives, so a patch to a kernel
+    source changes nothing until its object is recompiled and replaced.  Both
+    halves of that are questions the tape answers: the sources are whatever
+    v10/src/lsys/ carries, and which archive owns an object is what `ar t' says.
+    A hand-written list would be a third copy of a fact already stated twice,
+    and this project has watched one of those disagree in silence.
+
+    -> [(source relpath, object name, archive name)], in source order.
+    """
+    lib = os.path.join(SRC, "lsys", "lib")
+    ours = os.path.join(OURS, "lsys")
+    if not os.path.isdir(ours) or not os.path.isdir(lib):
+        return []
+    members = {}
+    for a in sorted(os.listdir(lib)):
+        if not a.endswith(".a"):
+            continue
+        out = subprocess.run(["ar", "t", os.path.join(lib, a)],
+                             capture_output=True, text=True)
+        for m in out.stdout.split():
+            members.setdefault(m, a)
+    rows = []
+    for dirpath, _dirs, files in os.walk(ours):
+        for f in sorted(files):
+            if not f.endswith(".c"):
+                continue
+            obj = f[:-2] + ".x"
+            if obj not in members:
+                continue
+            rel = os.path.relpath(os.path.join(dirpath, f), OURS)
+            rows.append((rel, obj, members[obj]))
+    return sorted(rows)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true",
@@ -1045,6 +1084,12 @@ def main():
     # by the passes before it, so this file is a sequence and not a set.
     tcorder = tcnames + [n for n in TOOLCHAIN_SIMPLE if n in dict(
         (e[0], e) for e in entries)]
+    # THE KERNEL OBJECTS OUR OVERLAY PATCHES.  Three columns: source under
+    # v10/src, the object name, the tape archive that owns it.  Empty when the
+    # overlay patches no kernel source, which is the normal state.
+    put("kobj.order",
+        "".join("%s\t%s\t%s\n" % r for r in kernel_objects()))
+
     put("tc.order",
         "".join("%s\t%s\t%s\n" % dict((e[0], e) for e in entries)[n]
                 for n in tcorder))

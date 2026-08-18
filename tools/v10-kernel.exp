@@ -43,16 +43,30 @@ set K   /usr/obj/k780         ;# where WE write; the tree stays on the share
 set M   ipnx780               ;# our machine config
 
 set results {}
-proc note {name ok} { global results; lappend results [list $name $ok] }
+proc note {name ok} { global results; lappend results [list $name $ok assert] }
+
+# A PROBE WHOSE NEGATIVE ANSWER IS THE FINDING IS NOT AN ASSERTION.  Stage 2
+# already draws this line for its four lcc probes: `yes'/`no', and not counted, so
+# the tally means "nothing unexpected" and any NO in it is news.  The
+# which-compiler control below is one of these -- the tape's kernel was built by
+# lcc and ours by cc, so bytes differing is the expected reading and scoring it as
+# a failure makes a correct run report 20/22 and stop being read.
+proc fact {name ok} { global results; lappend results [list $name $ok fact] }
 proc report {} {
     global results
     puts "\n===== V10 780 KERNEL RESULTS ====="
     set failed 0
     foreach r $results {
+        if {[lindex $r 2] eq "fact"} {
+            puts [format "  %-46s %s" [lindex $r 0] [expr {[lindex $r 1] ? "yes" : "no"}]]
+            continue
+        }
         puts [format "  %-46s %s" [lindex $r 0] [expr {[lindex $r 1] ? "ok" : "NO"}]]
         if {![lindex $r 1]} { incr failed }
     }
-    puts "===== [expr {[llength $results] - $failed}]/[llength $results] =====\n"
+    set n 0
+    foreach r $results { if {[lindex $r 2] ne "fact"} { incr n } }
+    puts "===== [expr {$n - $failed}]/$n =====\n"
     return $failed
 }
 
@@ -155,6 +169,97 @@ note "the archives copied" \
 v10_sh "cd $K; for a in fs.a io.a star.a bvax.a os.a vm.a inet.a; do ranlib \$a; done" 1800
 note "ranlib rebuilt every table of contents" \
     [v10_try "cd $K; if ar t fs.a > /dev/null && ranlib inet.a; then echo RL\$OK; fi" "RL-ok" 600]
+
+# ----------------------------------- 4b. OUR patched kernel objects ---------
+#
+# K12.2.  The kernel is TWO compiled files and seven prebuilt archives, so a
+# patch to a kernel source changes nothing at all until its object is rebuilt
+# and replaced -- `ar t' puts `streamio.x' in os.a and `tcp_device.x' in inet.a,
+# and neither is anywhere near mkconf's output.  This is the step that makes an
+# overlay patch under v10/src/lsys/ real.
+#
+# THE RECIPE IS THE TAPE'S, AND ITS MIDDLE LINE IS THE ONE TO GET RIGHT.
+# lsys/inet/mkfile:
+#
+#	%.x: %.c
+#		lcc $CFLAGS -S $stem.c
+#		sed -f ../lib/asm.sed <$stem.s | as -o $stem.x
+#
+# `asm.sed' is not an lcc workaround -- it is a PEEPHOLE INLINER, and skipping it
+# fails loudly rather than subtly:
+#
+#	calls $n,_spl6    ->  mfpr $18,r0 ; mtpr $0x18,$18
+#	calls $n,_bcopy   ->  movc3 8(sp),*(sp),*4(sp) ; addl2 $12,sp
+#	calls $n,_copyin  ->  jsb _Copyin ; addl2 $12,sp
+#
+# So spl6(), splx(), bcopy(), copyin() and resume() are written as ordinary C
+# calls throughout the kernel and become inline VAX instructions afterwards --
+# 1985's inline assembly, done with sed.  Omit it and `ld' says
+# `Undefined: _spl6', which is a precondition that cannot pass by accident.
+#
+# WHY `cc' AND NOT `lcc'.  All six kernel mkfiles name lcc, so the tape's kernel
+# is an lcc build -- but the prebuilt `cmd/lcc/etc/lcc' is the one compiled from
+# bowell.c, which hands `-undef' to a cpp that rejects it and therefore emits
+# EMPTY OBJECTS while exiting 0.  A silently empty streamio.x would link and
+# produce a kernel with no stream layer.  `cc' is pcc-derived and emits the same
+# `calls $n,_name' sequence asm.sed matches, so the substitution is plausible --
+# and it is CHECKED rather than assumed: the control below compiles an unchanged
+# member the same way and compares it with the tape's own object.
+set KOBJ [v10_rows kobj.order 3]
+if {[llength $KOBJ] == 0} {
+    note "no kernel objects in the overlay (nothing to replace)" 1
+} else {
+    v10_sh "KF=\"-DKERNEL -I\$Q -I/usr/include\"" 120
+    set allobj 1
+    foreach r $KOBJ {
+        set src [lindex $r 0]
+        set obj [lindex $r 1]
+        set arc [lindex $r 2]
+        set stem [file rootname [file tail $src]]
+        # One pipeline, because a `cc -S' that fails still leaves a stale .s and
+        # `as' would happily assemble the previous run's.
+        # FOURTEEN BYTES, AND THIS IS THE FIFTH TIME.  `k$stem.log' is
+        # `ktcp_device.log' -- 15 characters -- so creat() truncated it to
+        # `ktcp_device.lo' and the diagnostic below then reported
+        # "sed: Can't open .../ktcp_device.log" INSTEAD OF the compiler error,
+        # leaving a failure with no evidence at all.  mkdep.py's put() refuses a
+        # generated name over 14; a name a harness builds at run time is outside
+        # that guard, so it is fixed and short here.
+        set ok [v10_try "cd $K; rm -f $stem.s $obj kobj.log; cc -B$T1/lib/ -t02p \$KF -S $N/ours/$src > kobj.log 2>&1 && sed -f \$P/asm.sed < $stem.s | as -o $obj && test -s $obj && echo KC\$OK" \
+                "KC-ok" 1800]
+        note "our $obj compiles and assembles" $ok
+        if {!$ok} {
+            v10_sh "sed -e 12q $K/kobj.log" 300
+            set allobj 0
+            continue
+        }
+        # `ar r' REPLACES, and then ranlib, because cp/ar both bump the mtime and
+        # V8-era ld reads a stale table of contents as no table at all.
+        note "$obj replaces the tape's in $arc" \
+            [v10_try "cd $K; ar r $arc $obj && ranlib $arc && echo KA\$OK" "KA-ok" 900]
+    }
+    # THE CONTROL, AND IT IS WHAT MAKES `cc' INSTEAD OF `lcc' A MEASUREMENT.
+    # Compile a member we have NOT patched by the identical route and compare it
+    # with the tape's own object out of the archive.  Identical bytes say our
+    # substitute compiler reproduces what built this kernel; different bytes say
+    # it does not, which is a finding rather than a failure -- the same
+    # which-compiler oracle stage 2 runs over libc, one subsystem down.
+    v10_sh "cd $K; ar x os.a slp.x; mv slp.x tape.slp.x" 600
+    set cok [v10_try "cd $K; cc -B$T1/lib/ -t02p \$KF -S \$Q/os/slp.c > kctl.log 2>&1 && sed -f \$P/asm.sed < slp.s | as -o ours.slp.x && test -s ours.slp.x && echo KX\$OK" \
+            "KX-ok" 1800]
+    note "the control member compiles by the same route" $cok
+    if {$cok} {
+        fact "cc reproduces the tape's own object byte for byte" \
+            [v10_try "cd $K; if cmp ours.slp.x tape.slp.x; then S=KS\$OK; else S=KD\$OK; fi; echo \$S" \
+                "KS-ok" 600]
+    } else {
+        v10_sh "sed -e 12q $K/kctl.log" 300
+    }
+    if {!$allobj} {
+        puts "\nV10-NOTE: at least one overlay object did not build, so the"
+        puts "V10-NOTE: kernel below is NOT the patched one.  Read the log above."
+    }
+}
 
 # ----------------------------------------------------------- 5. ld ----------
 #

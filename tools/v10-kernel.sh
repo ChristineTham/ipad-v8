@@ -14,7 +14,25 @@
 # its config, so the tree is copied to local disk first).
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT/tools/norun.sh"
 source "$ROOT/tools/v10clone.sh"
+source "$ROOT/tools/srcid.sh"
+
+# THE GUARD THIS HARNESS DID NOT HAVE, AND K12.2 IS WHY IT NEEDS ONE.  Until the
+# overlay carried kernel sources, this script read only the tape's `lsys/' and our
+# `ipnx780.m' off the source disk, and a stale disk cost nothing but a slightly
+# old config.  It now compiles `v10/src/lsys/**.c' into the tape's own archives,
+# so a stale disk silently links the PREVIOUS generation of a kernel patch and
+# reports a clean 22/22 about it -- the exact failure mode srcid was written for,
+# in the one harness that lacked it.  v10-link.sh shipped without its source line
+# once and announced "the source disk is stale" about a disk four minutes old; a
+# guard that cannot run must not be mistaken for one that passed.
+for fn in srcid_check no_overlap v10_clone; do
+    declare -F "$fn" >/dev/null || {
+        echo "v10-kernel: $fn is not defined -- a tools/*.sh source line is missing."
+        exit 2
+    }
+done
 
 GOLD="${1:-ipnx-v10-ra81.img.stage1}"
 SRC="${2:-$ROOT/work/v10gold/ipnx-v10-src.img}"
@@ -23,6 +41,12 @@ LOG="$ROOT/work/v10-kernel.log"
 [[ -f "$SRC" ]] || { echo "v10-kernel: no $SRC -- run tools/v10-srcdisk.sh"; exit 1; }
 pgrep -f "BIN/vax750" >/dev/null && { echo "v10-kernel: a vax750 is already running"; exit 1; }
 python3 "$ROOT/tools/v10-overlay.py" --check || { echo "regenerate the overlay first"; exit 1; }
+
+srcid_check "$SRC" || {
+    echo "v10-kernel: the source disk is stale -- bash tools/v10-srcdisk.sh"
+    exit 1
+}
+no_overlap "$SRC" "$ROOT/work/v10gold/$GOLD" || exit 1
 
 IMG=$(v10_clone "$GOLD" k7) || exit 1
 echo "== K7: a 780 kernel on $(basename "$IMG") =="
