@@ -65,7 +65,13 @@ echo "== building netfsd =="
 [[ -x "$NETFSD" ]] || { echo "netfsd did not build"; exit 1; }
 
 echo "== starting netfsd on 127.0.0.1:$PORT =="
-"$NETFSD" -p "$PORT" -v "$EXPORT" > "$ROOT/work/netfs-tcpfs.log" 2>&1 &
+# `-w', OR THE WRITE ASSERTION CANNOT PASS.  netfsd defaults to readOnly =
+# true, so without this the guest is told "Read-only file system" -- the
+# CORRECT answer to a request the harness itself forbade -- and the run
+# reports a transport failure that is nothing of the kind.  Same shape as
+# K11's "a test whose subject does not exist, so it tests something else",
+# one level up: a test whose premise the harness denied.
+"$NETFSD" -p "$PORT" -w -v "$EXPORT" > "$ROOT/work/netfs-tcpfs.log" 2>&1 &
 SRV_PID=$!
 sleep 1
 kill -0 "$SRV_PID" 2>/dev/null || {

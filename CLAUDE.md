@@ -2396,7 +2396,25 @@ which does just what we want"*. **`dirread` is V10 syscall 22** — the slot V8
 fills with `sumount` — and `resdir.c` is a complete drop-in at 33 lines against
 104, since `libdir`'s extra function is `static`.
 
-**K12.1 — THE TRANSPORT WORKS** (2026-08-18, `bash tools/v10-tcpfs.sh`, 21/24).
+**K12 IS COMPLETE — A macOS FOLDER IS MOUNTED INSIDE THE TENTH EDITION,
+READ/WRITE** (2026-08-18, `bash tools/v10-tcpfs.sh`, **24/24, exit 0**). V10
+autoconfigured the Interlan, brought IP up with the tape's own `dipconfig`, pushed
+the TCP line discipline onto `/dev/ip6`, resolved the host by ARP, connected to
+`netfsd` and mounted a netafs filesystem with `fmount(2)`. Then it read the share
+and wrote to it — a 209-byte file written by the guest lands byte-for-byte on
+APFS, and netfsd's trace witnesses both directions (`NNAMI flags=13`, `NWRT
+count=209`, `NUPDAT`, `NPUT`; and `NGET`, `NREAD 512 -> 52`, `NREAD off=52 -> 0`
+for EOF). **The courier disk is retired.**
+
+**One patch did it, and the machine chose it over the other one.**
+`lsys/os/streamio.c`'s `istread()` copied `min(count, …)` and then `freeb(bp)`
+regardless, so the read of a reply *header* discarded the payload sharing its
+block and the read of the *data* timed out — `neta: read -1 expected 48`, the
+kernel's own words. Fixed on V8's proven model and built into `os.a` by the new
+overlay-object step in K7 (`cc -S`, `sed -f asm.sed`, `as`, `ar r`, relink; 20/20).
+The QDELIM half was **retracted after it hung the machine** — see Gotchas.
+
+**Superseded, kept for the measurements: K12.1 at 21/24.**
 V10 autoconfigured the Interlan, brought IP up on it with the tape's own
 `dipconfig`, pushed the TCP line discipline onto `/dev/ip6` with `tcpconfig`, put
 an ARP frame on the wire, opened a TCP connection to the host and **mounted a

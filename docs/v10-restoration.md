@@ -344,7 +344,7 @@ carried forward out of habit:
       32,768 bits, so the ceiling is now **31,457,280 blocks of 4096 = 128 GB**,
       four hundred times the largest disk this project emulates. The whole 243 MB
       tree fits on one filesystem with room to spare.
-- [~] **K12 — netfs on V10, and no more courier disks.** **K12.0 is done** — netfs
+- [x] **K12 — netfs on V10, and no more courier disks. COMPLETE** (24/24). K12.0 — netfs
       mounts over a pipe, 16/16 — so the client, the netb protocol library and `fmount(2)`
       all work and only the transport is open. K12.1 below is that transport and is the
       one live item in this plan. "There is no netfs on V10" was
@@ -419,7 +419,14 @@ carried forward out of habit:
       call, which does just what we want"*. `dirread` is V10 syscall 22, the slot
       V8 fills with `sumount`.
 
-- [ ] **K12.1 — the transport.** What is left after K12.0, and every input to it is
+- [x] **K12.1/K12.2 — the transport. DONE, 24/24** (2026-08-18, `tools/v10-tcpfs.sh`):
+      V10 mounts a macOS folder over TCP and writes to it; a 209-byte file written by
+      the guest lands byte-for-byte on APFS. One overlay patch did it —
+      `lsys/os/streamio.c`'s `istread()` freeing a block whose tail the caller had
+      not read — built into `os.a` by the new overlay-object step in K7. The QDELIM
+      half was **retracted**: it hung the machine, and `tcp_device.c` leaves the flag
+      clear on purpose. Original plan text follows.
+- [ ] ~~**K12.1 — the transport.**~~ What is left after K12.0, and every input to it is
       already measured: the config carries `ni1010a 0 ub 0 reg 0764000 vec 0350`,
       the SIMH model is `libsimh/patches/pdp11_il.c`, and of the N track's four
       stream faults only three transfer (the hang is fixed; the 512-byte head, the
