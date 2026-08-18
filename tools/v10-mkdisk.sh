@@ -24,12 +24,41 @@ GOLD="${1:-ipnx-v10-ra81.img.stage1.k102.k7.k13}"
 BLANK="$ROOT/work/v10gold/ipnx-v10-made.img"
 TPORT="${TPORT:-9290}"; OPORT="${OPORT:-9291}"; MPORT="${MPORT:-9292}"
 
-# THE LAYOUT, DEFINED ONCE AND PASSED DOWN.  It used to live in v10-mkdisk.exp
-# while the host-side check below hard-coded partition `h' separately, which is the
-# shape of fault CLAUDE.md records as "a component list that appears twice will
-# disagree, silently".  Root is partition `a' as alice configures it -- see the
-# retraction at the top of v10-mkdisk.exp -- and 10,240 blocks is the whole of it.
-BLKS="${BLKS:-10240}"; PART="${PART:-a}"
+# THE LAYOUT, IN THE UNITS ra_sizes[] ACTUALLY USES, CONVERTED ONCE HERE.
+#
+# `ra_sizes[]' IS IN 512-BYTE SECTORS, NOT BLOCKS, and asking mkbitfs for 10,240
+# *blocks* of partition `a' is asking for eight times the partition.  That is the
+# V8 RP06 trap word for word -- CLAUDE.md: "RP06 partition `a' is 15,884 SECTORS,
+# not blocks" -- on a different disk, and `tools/v10-free.py' had the conversion
+# right in a comment the whole time.  It caught the error rather than the harness:
+#
+#	v10-free: s_fsize reads 0, which is not a size partition a can hold (max 1280)
+#
+# The numbers, therefore, and they explain the golden's own layout exactly:
+#
+#	part  sectors  offset   4K blocks       MB
+#	a      10240        0       1280       5.0   root -- and the golden's root
+#	                                             filesystem IS 1280 blocks, so
+#	                                             Bell Labs sized it to the
+#	                                             partition to the block
+#	b      20480    10240       2560      10.0   swap, and dump shares it
+#	c     249848    30720      31231     122.0   /usr -- the golden uses 30752,
+#	                                             which is MAXSMALL exactly
+#	h     891072        0     111384     435.1   the whole drive
+#
+# SO THERE ARE TWO FILESYSTEMS, WHICH IS NOT A CHOICE.  A 5 MB root cannot hold
+# the 6.4 MB this run copies, and root cannot go anywhere else:
+# `lsys/boot/README' requires /unix to be "in the filesystem beginning at the front
+# of the boot device" and `star/uda.s' carries no partition offset, so root is the
+# filesystem at sector 0 -- `a' or `h' and nothing else.  `h' overlaps swap (see
+# v10-mkdisk.exp).  That leaves the layout V10 itself uses, which needs no kernel
+# patch at all: root on `a', swap on `b', /usr on `c', mounted by the /etc/rc the
+# golden already ships.
+SECT_PER_BLK=8
+RA_SECT_A=10240
+ROOTPART="${ROOTPART:-a}"; USRPART="${USRPART:-c}"
+ROOTBLKS="${ROOTBLKS:-$(( RA_SECT_A / SECT_PER_BLK ))}"   # 1280, the whole of `a'
+USRBLKS="${USRBLKS:-30752}"                               # MAXSMALL, as the golden does
 NETFSD="$ROOT/netfs/.build/release/netfsd"
 LOG="$ROOT/work/v10-mkdisk.log"
 
@@ -91,14 +120,15 @@ dd if="$ROOT/work/v10/src/lsys/boot/bb/4kb" of="$BLANK" \
 
 echo "== V10 builds a disk on $(basename "$BLANK") =="
 expect "$ROOT/tools/v10-mkdisk.exp" "$IMG" "$BLANK" "$TPORT" "$OPORT" "$MPORT" \
-    "$BLKS" "$PART" 2>&1 | tee "$LOG"
+    "$ROOTBLKS" "$ROOTPART" "$USRBLKS" "$USRPART" 2>&1 | tee "$LOG"
 rc=${PIPESTATUS[0]}
 
 # THE HOST READS WHAT THE GUEST WROTE, because a full V10 filesystem SLEEPS rather
 # than failing and no guest-side probe can see past that.
 echo
 echo "== what is actually on the disk V10 built =="
-python3 "$ROOT/tools/v10-free.py" "$BLANK" "$PART" || rc=1
+python3 "$ROOT/tools/v10-free.py" "$BLANK" "$ROOTPART" || rc=1
+python3 "$ROOT/tools/v10-free.py" "$BLANK" "$USRPART" || rc=1
 # BLOCK 0, READ FROM THE IMAGE.  The ROM jumps to offset 0xC inside it, so an
 # all-zero block 0 is a HALT at PC 0000000D and nothing past it is ever read.
 BB0=$(python3 -c "print(sum(1 for b in open('$BLANK','rb').read(512) if b))")
@@ -115,10 +145,16 @@ printf '   block 0: %s of 512 bytes non-zero%s\n' "$BB0" \
 # is that the filesystem is the size we asked for and that s_tfree agrees with the
 # bitmap -- two readings from different places in the superblock, so a disagreement
 # is real news rather than a restatement.
-FREE=$(python3 "$ROOT/tools/v10-free.py" "$BLANK" "$PART" 2>/dev/null)
+FREE=$(python3 "$ROOT/tools/v10-free.py" "$BLANK" "$ROOTPART" 2>/dev/null)
 FS=$(printf '%s\n' "$FREE" | sed -n 's/^  filesystem size *\([0-9]*\) blocks.*/\1/p')
-if [[ "$FS" != "$BLKS" ]]; then
-    echo "== NO MEASUREMENT: filesystem size reads '${FS:-nothing}', not $BLKS =="
+if [[ "$FS" != "$ROOTBLKS" ]]; then
+    echo "== NO MEASUREMENT: root filesystem size reads '${FS:-nothing}', not $ROOTBLKS =="
+    rc=1
+fi
+UFS=$(python3 "$ROOT/tools/v10-free.py" "$BLANK" "$USRPART" 2>/dev/null | \
+      sed -n 's/^  filesystem size *\([0-9]*\) blocks.*/\1/p')
+if [[ "$UFS" != "$USRBLKS" ]]; then
+    echo "== NO MEASUREMENT: /usr filesystem size reads '${UFS:-nothing}', not $USRBLKS =="
     rc=1
 fi
 if printf '%s\n' "$FREE" | grep -q 'disagrees'; then

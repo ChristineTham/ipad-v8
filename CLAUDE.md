@@ -898,17 +898,40 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   **The fix is to move the DISK, not the kernel**, and the authenticity rule is
   what settles it: `alice.m` and `seki.m` both say `root regfs ra 0100`, so a
   whole-drive root is *our* deviation and needs no patch once the disk is laid
-  out the way V10 lays out disks. Measured sizes make it comfortable rather than
-  merely correct — the golden's own root is **1,280 blocks (5.0 MB)** with 1.9 MB
-  free, partition `a` allows 10,240 (40 MB), and a boot-path copy is 6.4 MB.
+  out the way V10 lays out disks.
+  - **AND `ra_sizes[]` IS IN 512-BYTE SECTORS, WHICH IS THE V8 RP06 TRAP ON A
+    DIFFERENT DISK.** Reading `10240` as blocks made the harness ask `mkbitfs`
+    for eight times partition `a`, and the guest said nothing — `mkbitfs` wrote
+    an `s_fsize` of 0 and every later step failed on a filesystem that was never
+    made. **`tools/v10-free.py` caught it host-side and named the number**, which
+    is the whole argument for reading a disk from the host:
+
+	v10-free: s_fsize reads 0, which is not a size partition a can hold (max 1280)
+
+    Converted once (÷8), the table explains the golden exactly: `a` = **1,280
+    blocks / 5.0 MB**, and the golden's own root filesystem **is 1,280 blocks**,
+    so Bell Labs sized it to the partition to the block; `c` = 31,231 blocks /
+    122 MB, of which the golden uses 30,752 = MAXSMALL exactly. CLAUDE.md already
+    carried this warning for V8 — *"RP06 partition `a` is 15,884 **sectors**, not
+    blocks"* — and `v10-free.py` carried the conversion in a comment. Neither was
+    read.
+  - **SO A V10 SYSTEM DISK HAS TWO FILESYSTEMS, AND THAT IS FORCED RATHER THAN
+    TIDY.** A 5 MB root cannot hold the 6.4 MB a boot-path copy measures, and
+    root cannot move: `lsys/boot/README` requires `/unix` to be *"in the
+    filesystem beginning at the front of the boot device"* and `star/uda.s`
+    carries no partition offset, so root is the filesystem at **sector 0** —
+    `a` or `h`, and `h` is the one that overlaps swap. Hence root on `a`, swap on
+    `b`, `/usr` on `c`, mounted by the `/etc/rc` the golden already ships — and
+    `/lib` goes to `/usr/lib` on the copy, because it is the compiler's and no
+    boot opens it.
   - **`/usr` on the golden is EXACTLY 30,752 blocks, which is `MAXSMALL` to the
     block** (`BITMAP*BITCELL` = 961*32, `cmd/mkbitfs.c`). Bell Labs sized it to
     the largest filesystem an in-superblock bitmap can address — precisely the
     ceiling K11 broke. Consequence for a *root* filesystem: 10,240 blocks is
-    inside MAXSMALL, so `mkbitfs` chooses `smallfree()` and the bitmap stays in
-    the superblock, **`flag=0`**. An assertion demanding K11's `flag=1` therefore
+    inside MAXSMALL (as is `/usr` at 30,752), so `mkbitfs` chooses `smallfree()`
+    and the bitmap stays in the superblock, **`flag=0`**. An assertion demanding K11's `flag=1` therefore
     fails on a perfectly correct root disk, which is what it did here. K11's
-    N-arm bitmap is not retired by this; it is just not what a 40 MB root uses.
+    N-arm bitmap is not retired by this; it is just not what a 5 MB root uses.
   - **Derive the minor, never write it down.** `64 | (unit<<3) | part` reproduces
     every value this project has measured — `/dev/ra0a` 64 and `/dev/ra0c` 66 off
     Bell Labs' own nodes, K11's 87 on rq2, K14's 79 on rq1 — so a computed minor

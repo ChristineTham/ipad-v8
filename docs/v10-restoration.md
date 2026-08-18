@@ -702,8 +702,10 @@ result.
    is our own `ipnx780.m` rather than a Bell Labs machine
 6. ~~Boot block + filesystem image assemble~~ — **done 2026-08-19** (K14). The boot
    block is written host-side, `/unix` is copied first because
-   `lsys/boot/README` requires it to be at most singly indirect, and root is
-   partition `a` as `alice.m` configures it — see the swap-overlap finding in
+   `lsys/boot/README` requires it to be at most singly indirect, and the disk gets
+   V10's own layout — root on `a` (1,280 blocks, which is what the golden's root
+   is), swap on `b`, `/usr` on `c` — because `ra_sizes[]` is in **sectors** and a
+   5 MB root cannot hold a 6.4 MB copy. See
    [v10-log/2026-08-19.md](v10-log/2026-08-19.md)
 7. ~~**Kernel reaches single-user on SIMH**~~ — **done 2026-08-17**, and it went
    straight past single-user to **multi-user with a login prompt** (K9,

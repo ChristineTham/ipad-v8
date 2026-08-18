@@ -34,40 +34,48 @@
 # said otherwise.  So this harness derives the minor from $UNIT and $PART below and
 # writes neither.
 #
-# AND ROOT IS PARTITION `a', WHICH RETRACTS THE WHOLE-DRIVE FILESYSTEM.  K14 first
-# built one 111,384-block filesystem on partition `h' and changed the KERNEL to
-# root on it, because `ra_sizes[]' gives `a' only 10,240 blocks and a kernel rooted
-# on `a' cannot read a 435 MB superblock:
-#
-#	unix
-#	mem = 6062080
-#	panic: iinit mount
-#
-# That is the clamp in `lsys/io/ra.c' firing exactly as written -- limit is
-# `min(radsize - blkoff, nblocks)', and K11 put the free-block bitmap in the LAST
-# blocks of a large filesystem, so the mount reads past 10,240 and gets ENOSPC.
-# Two things make partition `a' the better answer, and the second is decisive:
+# AND ROOT IS PARTITION `a' WITH /usr ON `c' -- V10's OWN LAYOUT, WHICH NEEDS NO
+# KERNEL PATCH.  K14 first built one 111,384-block filesystem on partition `h' and
+# changed the KERNEL to root on it.  Two things make that wrong, and the second is
+# decisive:
 #
 #   THE SWAP OVERLAPS.  `ipnx780.m' has `swap ra 01 20480' -- partition `b',
-#   blocks 10240..30720 -- which is INSIDE a whole-drive filesystem.  That disk
-#   boots and then swaps over its own data blocks.
+#   sectors 10240..30720 -- which is INSIDE a whole-drive filesystem.  That disk
+#   boots and then swaps over its own data blocks, and nothing complains.
 #
-#   AND alice ROOTS ON 0100, so a whole-drive root is OUR deviation and not the
-#   tape's.  `seki' agrees (v10/src/PATCHES.md).  Building the disk the way V10
-#   builds disks needs no patch at all, which is what the authenticity rule asks
-#   for -- so the DISK moved and the kernel went back to alice's value.
+#   AND alice ROOTS ON 0100, as does seki, so a whole-drive root is OUR deviation
+#   and not the tape's.  Building the disk the way V10 builds disks needs no patch,
+#   which is what the authenticity rule asks for.
 #
-# 10,240 blocks is 40 MB, against the golden's own root of 1,280 blocks (5.0 MB)
-# and the 6.4 MB this run copies, so there is eight times the room Bell Labs used.
-# It is also inside MAXSMALL (BITMAP*BITCELL = 961*32 = 30,752), so V10's mkbitfs
-# chooses smallfree() and the bitmap lives IN the superblock -- flag=0, exactly as
-# the golden's root and /usr both read.  K11's N-arm bitmap is not retired by this;
-# it is simply not what a 40 MB root uses.
+# `ra_sizes[]' IS IN 512-BYTE SECTORS, AND READING IT AS BLOCKS COST A RUN.  This
+# harness asked mkbitfs for 10,240 *blocks* of a partition that holds 1,280, which
+# is eight times too big -- the V8 RP06 trap word for word ("partition `a' is
+# 15,884 SECTORS, not blocks"), on a different disk.  Nothing in the guest said so;
+# `tools/v10-free.py' caught it host-side and named the number:
 #
-# AND THE COPY'S /etc/rc MUST STILL LOSE ITS /usr MOUNT, for a different reason
-# than before.  `a' and `c' do not overlap, so nothing would be written through
-# anything -- but there is no filesystem on `c' yet, so the mount would fail on
-# every boot.  The line goes before the disk is ever booted.
+#	v10-free: s_fsize reads 0, which is not a size partition a can hold (max 1280)
+#
+# The table, converted once, in the driver:
+#
+#	part  sectors  offset   4K blocks       MB
+#	a      10240        0       1280       5.0   root
+#	b      20480    10240       2560      10.0   swap + dump
+#	c     249848    30720      31231     122.0   /usr
+#	h     891072        0     111384     435.1   the whole drive
+#
+# The golden's own root filesystem IS 1,280 blocks, so Bell Labs sized it to the
+# partition to the block -- and its /usr is 30,752, which is MAXSMALL
+# (BITMAP*BITCELL = 961*32) exactly.  Both are copied here rather than invented.
+#
+# SO THERE ARE TWO FILESYSTEMS, AND THAT IS FORCED.  A 5 MB root cannot hold the
+# 6.4 MB the previous run measured, and root cannot move: `lsys/boot/README'
+# requires /unix to be "in the filesystem beginning at the front of the boot
+# device" and `star/uda.s' carries no partition offset, so root is the filesystem
+# at sector 0 -- `a' or `h', and `h' is the one that overlaps swap.
+#
+# Being inside MAXSMALL, both filesystems use `smallfree()' and keep the bitmap IN
+# the superblock -- `flag=0', as the golden's root and /usr both read.  K11's N-arm
+# bitmap is not retired by this; it is simply not what a 5 MB root uses.
 log_user 1
 
 set here [file dirname [info script]]
@@ -77,8 +85,9 @@ set V10_SIMH [file normalize [file join $here .. work opensimh BIN vax780]]
 set V10_ROM  [file normalize [file join $here .. work v10 src lsys boot star uda]]
 set V10_RUN_SECS 7200
 
-if {[llength $argv] < 7} {
-    puts "usage: v10-mkdisk.exp <k13-image> <blank> <tport> <oport> <mport> <blocks> <part>"
+if {[llength $argv] < 9} {
+    puts "usage: v10-mkdisk.exp <k13-image> <blank> <tport> <oport> <mport>\
+ <rootblks> <rootpart> <usrblks> <usrpart>"
     exit 2
 }
 set img   [lindex $argv 0]
@@ -86,19 +95,27 @@ set blank [lindex $argv 1]
 set tport [lindex $argv 2]
 set oport [lindex $argv 3]
 set mport [lindex $argv 4]
-set BLKS  [lindex $argv 5]
-set PART  [lindex $argv 6]
+set RBLKS [lindex $argv 5]
+set RPART [lindex $argv 6]
+set UBLKS [lindex $argv 7]
+set UPART [lindex $argv 8]
 
 # THE MINOR, COMPUTED.  BITFS|unit|part, and the disk is attached as rq1 because
 # `ipnx780.m' configures `ra 0' and `ra 1' and stops -- its own comment says "ra
 # 2..5 REMOVED, one controller and we have two disks" -- so a disk on rq2 has no
 # device behind it and mkbitfs answers `No such device or address'.
 set UNIT  1
-set PIDX  [string first $PART "abcdefgh"]
-if {$PIDX < 0} { puts "v10-mkdisk: partition '$PART' is not a..h"; exit 2 }
-set MINOR [expr {64 | ($UNIT << 3) | $PIDX}]
-set NODE  /dev/ra$UNIT$PART
-puts "== target $NODE, minor $MINOR, $BLKS blocks =="
+proc ra_minor {unit part} {
+    set i [string first $part "abcdefgh"]
+    if {$i < 0} { puts "v10-mkdisk: partition '$part' is not a..h"; exit 2 }
+    return [expr {64 | ($unit << 3) | $i}]
+}
+set RMINOR [ra_minor $UNIT $RPART]
+set UMINOR [ra_minor $UNIT $UPART]
+set RNODE  /dev/ra$UNIT$RPART
+set UNODE  /dev/ra$UNIT$UPART
+puts "== root $RNODE minor $RMINOR, $RBLKS blocks =="
+puts "== /usr $UNODE minor $UMINOR, $UBLKS blocks =="
 
 set T1    /usr/s1
 set OBJ   /usr/k14obj
@@ -141,11 +158,14 @@ set shares [expr {$sh1 && $sh2 && $sh3}]
 
 if {!$shares} {
     note "mkbitfs builds from the share" 0
-    note "the whole-drive BITFS node exists" 0
-    note "mkbitfs writes a $BLKS-block filesystem" 0
-    note "V10 mounts the disk it just made" 0
+    note "both BITFS nodes exist" 0
+    note "mkbitfs writes the $RBLKS-block root" 0
+    note "mkbitfs writes the $UBLKS-block /usr" 0
+    note "V10 mounts the root it just made" 0
+    note "and mounts /usr inside it" 0
     note "the system copies onto it" 0
     note "/unix is on the new disk" 0
+    note "the copy's /etc/rc still mounts /usr, as the golden's does" 0
     note "boot 2: THE DISK V10 BUILT reaches a login prompt" 0
     set failed [report]
     v10_halt
@@ -163,23 +183,50 @@ note "mkbitfs builds from the share" \
     [v10_try "cd $OBJ/mkbitfs; make -f /n/mk/mkbitfs.mk \$A \$B \$C > m.log 2>&1 && echo MB\$OK" \
         "MB-ok" 1800]
 
-v10_sh "rm -f $NODE" 60
-v10_sh "/etc/mknod $NODE b 7 $MINOR" 300
-v10_sh "ls -l $NODE" 120
-note "the whole-drive BITFS node exists" \
-    [v10_try "test -b $NODE && echo ND\$OK" "ND-ok" 300]
-note "mkbitfs writes a $BLKS-block filesystem" \
-    [v10_try "$OBJ/mkbitfs/mkbitfs $NODE $BLKS && echo MF\$OK" "MF-ok" 1800]
+# THE SIZES, MEASURED AND REPORTED BEFORE ANYTHING IS BUILT.  A full V10
+# filesystem does NOT fail -- `lsys/fs/alloc.c' prints `file system full' and then
+# SLEEPS -- so an overflowing copy hangs the guest and costs the whole run's
+# timeout with nothing to show.  These go to the transcript as facts rather than
+# assertions, so even a hung run leaves the numbers behind.  `wc' is one of the six
+# tools K13.1 installed; `cat dir/*' is enough because /bin and /lib are flat.
+foreach d {bin etc lib dev} {
+    v10_sh "echo SZ $d `cat /$d/* 2>/dev/null | wc -c`" 900
+}
+v10_sh "echo SZ unix `wc -c < /unix`" 300
+
+v10_sh "rm -f $RNODE $UNODE" 60
+v10_sh "/etc/mknod $RNODE b 7 $RMINOR" 300
+v10_sh "/etc/mknod $UNODE b 7 $UMINOR" 300
+v10_sh "ls -l $RNODE $UNODE" 120
+note "both BITFS nodes exist" \
+    [v10_try "test -b $RNODE -a -b $UNODE && echo ND\$OK" "ND-ok" 300]
+note "mkbitfs writes the $RBLKS-block root" \
+    [v10_try "$OBJ/mkbitfs/mkbitfs $RNODE $RBLKS && echo MF\$OK" "MF-ok" 1800]
+note "mkbitfs writes the $UBLKS-block /usr" \
+    [v10_try "$OBJ/mkbitfs/mkbitfs $UNODE $UBLKS && echo MU\$OK" "MU-ok" 1800]
 
 v10_sh "rm -rf $MP; mkdir $MP" 300
-set mounted [v10_try "/etc/mount $NODE $MP && echo M1\$OK" "M1-ok" 900]
-note "V10 mounts the disk it just made" $mounted
+set mounted [v10_try "/etc/mount $RNODE $MP && echo M1\$OK" "M1-ok" 900]
+note "V10 mounts the root it just made" $mounted
+set umounted 0
+if {$mounted} {
+    v10_sh "mkdir $MP/usr" 120
+    set umounted [v10_try "/etc/mount $UNODE $MP/usr && echo M2\$OK" "M2-ok" 900]
+}
+note "and mounts /usr inside it" $umounted
 
 if {$mounted} {
     # find | cpio -pd, the idiom K13.1 installed the tools for.  Directory by
     # directory, because copying `/' would copy the mount point into itself.
-    foreach d {bin etc lib dev} { v10_sh "mkdir $MP/$d" 120 }
-    foreach d {usr tmp n} { v10_sh "mkdir $MP/$d" 120 }
+    # WHAT GOES ON ROOT IS DECIDED BY THE BOOT, NOT BY TIDINESS.  Root is 5 MB
+    # and the previous run measured 6.4 MB of content, so something must move --
+    # and the choice is forced rather than arbitrary: /etc/init, /etc/rc,
+    # /etc/getty, /bin/sh and /dev are what reach a login prompt, while /lib is
+    # the compiler's (libc.a and the three passes) and nothing in a boot opens it.
+    # So /lib becomes /usr/lib on the copy, which is where a 122 MB partition is.
+    foreach d {bin etc dev} { v10_sh "mkdir $MP/$d" 120 }
+    foreach d {tmp n} { v10_sh "mkdir $MP/$d" 120 }
+    v10_sh "mkdir $MP/usr/lib" 120
     # /unix FIRST, and lsys/boot/README is why: "/unix must be in the filesystem
     # beginning at the front of the boot device, and must be no more than singly
     # indirect".  The boot block is 508 bytes and follows at most one level of
@@ -187,26 +234,23 @@ if {$mounted} {
     # copied files may be unreachable even though the file is perfectly good.
     # tools/v10-golden.exp records the same ordering for the same reason.
     v10_sh "cp /unix $MP/unix" 1800
-    foreach d {bin etc lib dev} {
+    foreach d {bin etc dev} {
         v10_sh "cd /$d; find . -print | cpio -pd $MP/$d > /dev/null 2>&1" 3600
     }
+    v10_sh "cd /lib; find . -print | cpio -pd $MP/usr/lib > /dev/null 2>&1" 3600
     note "the system copies onto it" \
         [v10_try "test -s $MP/bin/sh && test -s $MP/etc/init && echo CP\$OK" "CP-ok" 600]
     note "/unix is on the new disk" \
         [v10_try "test -s $MP/unix && echo UX\$OK" "UX-ok" 300]
-    # THE /usr MOUNT HAS TO GO, and no longer because anything overlaps: root is
-    # partition `a' and /usr would be `c', which are disjoint.  There is simply no
-    # filesystem on `c' of the new disk, so the mount fails on every boot.
-    v10_sh "sed -e '/ra0c/d' $MP/etc/rc > $MP/etc/rc.new" 600
-    v10_sh "cp $MP/etc/rc.new $MP/etc/rc; rm -f $MP/etc/rc.new" 300
-    # `grep X; echo TOKEN' PRINTS THE TOKEN WHATEVER grep FOUND -- the semicolon
-    # trap, which cost K11 three assertions that reported "icheck reads it back:
-    # ok" directly above "cannot open /dev/ra2h".  The ABSENCE of a line is what
-    # has to be asserted here, so the success path is the else branch and it
-    # writes the marker itself.
-    note "the copy's /etc/rc no longer mounts ra0c over its own root" \
-        [v10_try "if grep ra0c $MP/etc/rc > /dev/null; then echo RCBAD; else echo RC\$OK; fi" \
-            "RC-ok" 600]
+    # AND THE /usr MOUNT IS NOW CORRECT, SO IT STAYS -- this assertion is the
+    # inverse of the one it replaces.  Earlier generations of K14 built one
+    # whole-drive filesystem, where `ra0c' overlapped root and the line had to be
+    # stripped; with the layout V10 itself uses, `/dev/ra0c' on the new disk is a
+    # real 122 MB filesystem and /etc/rc mounting it is exactly right.  Nothing was
+    # edited: the golden's own rc is carried across unchanged, which is one fewer
+    # deviation than the previous three runs had.
+    note "the copy's /etc/rc still mounts /usr, as the golden's does" \
+        [v10_try "grep ra0c $MP/etc/rc > /dev/null && echo RC\$OK" "RC-ok" 600]
     v10_sh "cd /; sync" 600
     v10_sh "/etc/umount -a" 900
     v10_sh "sync" 300
