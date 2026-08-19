@@ -498,8 +498,24 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
     is **never negotiated** — `proto.h` sizes the receive buffer statically and
     `precv.c:89` *rejects* an oversized packet — so a 124-byte host against a
     64-byte terminal fails cleanly rather than corrupting, and matching is
-    necessary and sufficient. Since we build the host, building it at 64 restores
-    the tape's own earlier value.
+    necessary and sufficient.
+    - **"BUILDING IT AT 64 RESTORES THE TAPE'S OWN EARLIER VALUE" WAS WRONG, AND
+      BELL LABS' OWN OBJECT SAYS SO.** That claim stood here on the strength of
+      the `/* was 64 */` annotation, which is a comment about the *source*. The
+      tape also ships the *compiled* `lib.a` beside it, and `mux.o` declares
+      `_buf` as a **common** symbol — where the symbol's value **is** its size:
+
+	124  _buf         (`char buf[MAXPKTDSIZE]`, mux.c:57)
+	132  _precvpkt    (`struct Pktstate` = Packet 128 + state + timo)
+
+      So the shipped artefact was built at **124**, and the annotation records a
+      change made *before* 1989. Building at 64 is therefore a **deviation for
+      interoperability**, not a restoration — and the authenticity rule allows a
+      deviation only when the tape cannot run as-is, which here it can. K15 builds
+      124 and asserts it through `sizeof(struct Packet) == 128`; 64 remains a
+      separate decision, needed only when V10's `mux` is actually pointed at V8's
+      `muxterm`. *A comment in a header is evidence about intent; an object is
+      evidence about what ran.*
   - So the reachable result is V10's own host-side `mux` driving the 5620
     `muxterm` this project already builds and widens, with one measured constant
     matched. Rung 9 (`sam`/`samterm`) inherits all of this, because `samterm` is
@@ -2702,12 +2718,57 @@ Next, in order of what is blocked by what:
   libraries, stage 1's toolchain — then the Swift work to carry a second machine
   beside V8 (two committed images with identity stamps, two working copies under
   `~/Library/Application Support/ipnx/`, `app-check` proving both chains).
-- **Rung 8's reachable half**: V10's own host-side `mux` from
-  `history/ix/src/jerq/mux/`, built with `MAXPKTDSIZE` at 64 to match the only
-  5620 `muxterm` we possess. Its four missing headers are already located —
-  `sys/pex.h` in the same `history/ix` tree the source comes from, `sys/label.h` as
-  r70's top-level `include/label.h`, and `tty.h`/`jioctl.h` via the
-  `/usr/jerq/include` that K10.2 installs and mux's own mkfile already puts on `-I`.
+- **Rung 8's reachable half** is K15 — `bash tools/v10-mux.sh`, generator in
+  `v10/mk/mkdep.py`'s `emit_mux()`. Built at the tape's **124**, not 64: see the
+  correction under the 5620-compiler entry in Decisions.
+  - **THE MISSING-HEADER COUNT WAS FOUR AND IS SIX, because a scan of the seven
+    sources' own includes is not the requirement — the TRANSITIVE closure is.**
+    `sys/xtproto.h` is reached only through `proto.h`/`packets.h` and
+    `sys/jlabel.h` only through `sys/label.h`, so **no `.c` file names either**
+    and two rounds of reading the sources missed both. And two entries in the
+    old list were wrong rather than merely incomplete: `tty.h` and `jioctl.h`
+    are **already installed** (`tty.h` is one of the 21 in the v10blit tree that
+    `v10_jerq_inc` copies; `jioctl.h` comes from our overlay), and `sys/label.h`
+    is taken from the **ix** tree, not from "r70's top-level `include/label.h`"
+    — r70's copy includes `sys/jlabel.h` and **r70 has no `jlabel.h` anywhere**,
+    so V10's own copy is unusable as shipped. What is actually needed:
+
+	aouthdr.h filehdr.h scnhdr.h   630/3binc     COFF, for 32ld.c
+	sys/label.h sys/pex.h          history/ix    the V9 path convention
+	sys/jlabel.h                   history/ix    reached via label.h
+
+    They install into `/usr/jerq/include`, never `/usr/include`: all 44
+    consumers of `<sys/label.h>` and every consumer of `<sys/pex.h>` are under
+    `src/history/ix/`, so this is the **Ninth** edition's path convention rather
+    than a gap in V10, whose own tree writes `<label.h>` unprefixed.
+  - **`sys/xtproto.h` IS A FALSE ALARM and the tape says so in both files.**
+    `proto.h` and `packets.h` each wrap it in `#ifdef XT` with every definition
+    inline in the `#else`, and the mkfile never defines `XT`. V8's copies are
+    structurally identical and V8 *does* ship `jerq/include/sys/xtproto.h`, so
+    the header is real — it is the XT variant's, and no V10 build of mux wants
+    it. Named in `MUX_UNREACHED` with that reason, because a resolver that
+    *drops* what it cannot find is how a missing header becomes a mystery three
+    hours into a build.
+  - **The COFF variant was measured, not preferred.** Two copies of each survive
+    and a probe compiled against both prints identical sizes and offsets for
+    every field `32ld.c` touches (`filehdr` 40, `f_magic@0`, `f_nscns@2`,
+    `f_opthdr@32`; `aouthdr` 56; `scnhdr` 72). So provenance decides: the 5620 is
+    a WE32100, `630/3binc` is the BELLMAC-32 include tree and its `filehdr.h`
+    carries the `F_BM32*` identification flags, while `cmd/kasb` is a **KMC11**
+    assembler opening `#define pdp11`. `32ld.c` takes no magic number from a
+    header at all — it defines `FBOMAGIC 0560` itself.
+  - **Neither directory goes on `-I`, only the six named files.** `630/3binc`
+    also holds `ctype.h`, `string.h`, `memory.h`, `search.h`; `history/ix/include`
+    holds V9 copies of `sys/param.h`, `sys/types.h`, `sys/stat.h`, `sys/stream.h`,
+    `sys/ttyio.h`, `sys/filio.h`. Putting either on `-I` silently replaces V10
+    headers with someone else's — the trap already recorded for `include/CC`. mux
+    must see **V10's** kernel interface however old its source is.
+  - **`pcheck.c` is inline VAX assembly and it compiles.** Its `#ifdef vax` arm
+    is four `asm()` lines using the VAX `crc` instruction; `asm` is in V10 ccom's
+    keyword table (`scan.c:862`) and V10's `as` knows `crc` at opcode `0x0b` with
+    exactly the four operands it writes (`cmd/as/instrs:101`). The 1989 object
+    confirms that arm was the one built: `pcheck.o` carries a 64-byte `.data`,
+    which is `crc16t[16]`.
 
 Also **submit** — the remaining steps need the Apple account and a
 final name decision, all listed in [docs/app-store.md](docs/app-store.md).
