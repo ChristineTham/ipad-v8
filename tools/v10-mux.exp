@@ -60,8 +60,8 @@ set V10_SIMH [file normalize [file join $here .. work opensimh BIN vax780]]
 set V10_ROM  [file normalize [file join $here .. work v10 src lsys boot star uda]]
 set V10_RUN_SECS 5400
 
-if {[llength $argv] < 5} {
-    puts "usage: v10-mux.exp <k13-image> <tport> <oport> <mport> <xport>"
+if {[llength $argv] < 6} {
+    puts "usage: v10-mux.exp <k13-image> <tport> <oport> <mport> <xport> <liba-size>"
     exit 2
 }
 set img   [lindex $argv 0]
@@ -69,6 +69,10 @@ set tport [lindex $argv 1]
 set oport [lindex $argv 2]
 set mport [lindex $argv 3]
 set xport [lindex $argv 4]
+# The oracle archive's length, measured HOST-SIDE by the driver and passed in --
+# never written down here, because a constant that restates a measurement drifts
+# away from it silently.
+set LIBASZ [lindex $argv 5]
 
 set T1   /usr/s1
 set OBJ  /usr/k15obj
@@ -146,7 +150,8 @@ set shares [expr {$sh1 && $sh2 && $sh3 && $sh4}]
 # passed.  Without this, `test -s' against a path under an unmounted /n/tree
 # tests the mount POINT and passes.
 if {!$shares} {
-    foreach n {"the 5620 include tree installs" \
+    foreach n {"the oracle archive reads to its full length" \
+               "the 5620 include tree installs" \
                "mux.inc's headers install" \
                "all seven objects compile" \
                "mux links" \
@@ -238,7 +243,24 @@ note "MAXPKTDSIZE is the tape's 124 (struct Packet = $PKTSZ)" \
 # ================================ the oracle ================================
 # `ar' is not on the golden -- stage 1 builds it as a BUILDTOOL -- and `ar x' of
 # the tape's own lib.a is what makes a per-object comparison possible at all.
-set tape_ok [v10_try "cd $OBJ/mux; mkdir tape; cd tape; ar x $MUXD/lib.a && test -s mux.o && echo AR\$OK" "AR-ok" 900]
+# THE ARCHIVE IS READ WHOLE OVER NETFS FIRST, AND ITS LENGTH IS ASSERTED, because
+# a netfs read on V10 can stop after one block SILENTLY -- K15's first run lost
+# 1774 bytes of a 5870-byte source that way and the failure presented as a syntax
+# error in Bell Labs' code.  lib.a is $LIBASZ bytes, FIFTEEN blocks, so it is
+# squarely in that risk.
+#
+# `test -s mux.o' cannot stand in for this: CLAUDE.md's own rule is that an object
+# file is not evidence a compiler ran, and `test -s' cannot tell a truncated
+# archive member from a whole one.  A short `ar x' would hand the oracle a
+# corrupted symbol table and the 124-byte answer would be wrong with nothing
+# saying so.  $w is unquoted because `wc -c' prints %7ld -- right-aligned in seven
+# columns -- so a quoted compare is false for every file.
+set ar_ok [v10_try "w=`wc -c < $MUXD/lib.a`; if test \$w = $LIBASZ; then echo AZ\$OK; else echo AZBAD \$w; fi" "AZ-ok" 900]
+note "the oracle archive reads to its full length" $ar_ok
+set tape_ok 0
+if {$ar_ok} {
+    set tape_ok [v10_try "cd $OBJ/mux; mkdir tape; cd tape; ar x $MUXD/lib.a && test -s mux.o && echo AR\$OK" "AR-ok" 900]
+}
 note "the tape's own lib.a extracts (the oracle)" $tape_ok
 
 if {$tape_ok} {

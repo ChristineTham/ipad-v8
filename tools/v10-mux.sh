@@ -72,7 +72,12 @@ no_overlap "$ROOT/work/v10gold/$GOLD" || exit 1
 IMG=$(v10_clone "$GOLD" k15) || exit 1
 
 echo "== V10 builds mux from the ix tree =="
-expect "$ROOT/tools/v10-mux.exp" "$IMG" "$TPORT" "$OPORT" "$MPORT" "$XPORT" 2>&1 | tee "$LOG"
+# The oracle archive's length, measured here rather than written into the harness.
+LIBA="$ROOT/work/v10/src/history/ix/src/jerq/mux/lib.a"
+[[ -f "$LIBA" ]] || { echo "v10-mux: no $LIBA -- tools/v10-import.py"; exit 1; }
+LIBASZ=$(stat -f%z "$LIBA")
+
+expect "$ROOT/tools/v10-mux.exp" "$IMG" "$TPORT" "$OPORT" "$MPORT" "$XPORT" "$LIBASZ" 2>&1 | tee "$LOG"
 rc=${PIPESTATUS[0]}
 
 # ===================== the oracle, counted HOST-SIDE from the log ===========
