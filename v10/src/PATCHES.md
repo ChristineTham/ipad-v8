@@ -962,7 +962,7 @@ the kernel threw them away; nothing about the transport was wrong.
 `usr/sys/sys/streamio.c` makes three changes for exactly this reason
 (`tools/drive-streamfix.sh`, phase N6), and two of the three transfer to V10:
 
-	a zero-length read returns 0          transfers -- V10 would sleep 30 ticks
+	a zero-length read returns 0          transfers -- V10 would sleep 30 SECONDS
 	                                      and then return -1
 	a partly consumed block is put back   transfers -- this is the fault above
 	an empty queue waits for more         TRANSFERS AFTER ALL, and the first
@@ -1021,12 +1021,14 @@ even though the correction is the same.
 ```diff
 --- tarball/lsys/os/streamio.c
 +++ ours/lsys/os/streamio.c
-@@ -302,9 +302,21 @@
+@@ -302,9 +302,23 @@
  	if ((stq = stenter(ip)) == NULL)
  		return(-1);
 +	/* ipnx: a byte stream never sends the zero-length write that
 +	   produced Datakit's delimiter, so waiting for one here costs
-+	   30 ticks and then reports failure.  See PATCHES.md. */
++	   30 SECONDS -- tsleep's third argument is seconds, not ticks,
++	   per slp.c's own comment -- and then reports failure.  See
++	   PATCHES.md. */
 +	if (count == 0) {
 +		stexit(ip);
 +		return(0);
@@ -1045,7 +1047,7 @@ even though the correction is the same.
 +			if (stq->flag&HUNGUP) {
  				splx(s);
  				stexit(ip);
-@@ -333,7 +345,17 @@
+@@ -333,7 +347,17 @@
  			nc += n;
  			count -= n;
 -			n = bp->class;

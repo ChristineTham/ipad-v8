@@ -303,7 +303,9 @@ caddr_t addr;
 		return(-1);
 	/* ipnx: a byte stream never sends the zero-length write that
 	   produced Datakit's delimiter, so waiting for one here costs
-	   30 ticks and then reports failure.  See PATCHES.md. */
+	   30 SECONDS -- tsleep's third argument is seconds, not ticks,
+	   per slp.c's own comment -- and then reports failure.  See
+	   PATCHES.md. */
 	if (count == 0) {
 		stexit(ip);
 		return(0);
