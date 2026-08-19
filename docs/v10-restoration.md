@@ -771,6 +771,30 @@ result.
 9. `sam`/`samterm` running — depends on rung 8, and on the same absent `3cc` for
    `samterm`, which is also a 5620 program
 10. Reproducible `v10.disk` build script → merge into the app as "Edition 10" —
-    K14 is its mechanism; what remains after it is choosing what to copy (K10.3's
-    203 commands, K10.2's 26 libraries, stage 1's toolchain) and the Swift work
-    for a second machine beside V8
+    K14 is its mechanism; what remains after it is choosing what to copy and the
+    Swift work for a second machine beside V8.
+
+    **What it would carry, from the generated lists** (2026-08-20 — counts read
+    from `v10/mk/gen`, never written down here, because a number that restates a
+    measurement drifts away from it):
+
+    | on the disk | count | source |
+    |---|---|---|
+    | root boot path | 23 | `bootpath.order` |
+    | commands in `/usr` | 288 rows, 203 link | `world.link` |
+    | libraries | 26 (+libc) | K10.2 |
+    | libc members | 260 | `libc.ord` |
+    | toolchain | 7 | `tc.order` |
+
+    **The size budget is not the constraint, and K14 measured it.** Root is
+    partition `a` = 1280 blocks = 5.0 MB against a boot path measured at 2.1 MB;
+    `/usr` is partition `c` = 31231 blocks = 122 MB, of which `mkbitfs` will use
+    at most `MAXSMALL` = 30752 = 120 MB. Bell Labs' own golden `/usr` is 30752
+    blocks *exactly*, so the layout is theirs and the room is ample.
+
+    **The real open question is where the staged root comes from.** K10.3 installs
+    its 203 commands into `/usr/w10` on the `.k102.k103` image, and K14 builds
+    disks on the `.k13` chain — two different machines. So rung 10 needs either
+    K10.3's link-and-install re-run on the disk-building machine, or the staged
+    tree carried between images. That is a *sequencing* decision, not a content
+    one, and it should be settled before any of it is coded.
