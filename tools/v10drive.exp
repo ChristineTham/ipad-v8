@@ -608,6 +608,46 @@ proc v10_run {cmd endpat {t 120}} {
 # v10-srcdisk.exp both do it explicitly.  v10-stage1.exp did not, and this is
 # the wrong place to leave it to each caller: /usr is mounted by the MACHINE,
 # not by the harness, so the machine's driver unmounts it.
+# v10_ilstats -- ask the Interlan model what it did, at sim>, before quitting.
+#
+# ONE LINE OF OUTPUT THAT MAY EXPLAIN EVERY SLOW V10 RUN.  netfsd serves the V10
+# guest at about one request every 9.6 seconds (measured twice during K15, and
+# again across K14), which is two orders of magnitude off the V8 figure.  The
+# request COUNT is reasonable -- 6.6 per distinct file, no netfs-level retries --
+# so the cost is per round trip, and 9.6 s is the shape of a lost frame plus one
+# TCP retransmit rather than a scheduling delay.
+#
+# The mechanism is in OUR OWN device model, already counted.
+# libsimh/patches/pdp11_il.c:659:
+#
+#	if (il.rxq_count == 0) {          /* nowhere to put it */
+#	    il.lost = 1;
+#	    il.ierrors++;
+#	    sim_debug (DBG_PKT, &il_dev, "receive with no buffer, frame dropped\n");
+#	    return;
+#	    }
+#
+# and V10's ni1010a.c posts ONE receive command at a time -- ilrcvbufs() returns
+# 0 immediately if (is->flags & CMDACT) -- so the window between an interrupt and
+# the driver re-posting is real. V8's ill.c supplies the next buffer from inside
+# ilrint(), which is the driver il_rxpump() was written and MEASURED against.
+#
+# So `receive errors' on the order of the request count confirms it outright, and
+# il_show_stats() already prints it. No code change, no extra run: this is why it
+# goes in the shared halt rather than in one harness.
+#
+# BOUNDED AND NON-FATAL, like everything else in the teardown: the guest is
+# already halted and the disk already synced, so nothing here may delay the quit.
+# A machine with the card disabled answers with an error and that is fine.
+proc v10_ilstats {} {
+    send " show il stats\r"
+    expect -timeout 30 -- "receive errors" {} \
+                          "Non-existent device" {} \
+                          "Invalid argument" {} \
+                          timeout {}
+    expect -timeout 10 -- "sim>" {} timeout {}
+}
+
 proc v10_halt {} {
     global V10_RUNNING
     # THE TEARDOWN GETS ITS OWN DEADLINE, AND IT MUST EXCEED THE LEGITIMATE
@@ -697,6 +737,7 @@ proc v10_halt {} {
         # comment below describes, sitting ten lines above the comment that
         # describes it.  `timeout {}' does not mean "briefly".
         expect -timeout 30 -- "sim>" {} timeout {} eof {}
+        v10_ilstats
         set V10_RUNNING 0
         send "quit\r"
         expect -timeout 60 eof {} timeout {}
@@ -724,6 +765,7 @@ proc v10_halt {} {
     # `sim>' may already have been consumed with the line above, in which case
     # there is nothing more coming and waiting for it is waiting for ever.
     expect -timeout 15 -- "sim>" {} timeout {}
+    v10_ilstats
     send "quit\r"
     expect -timeout 60 eof {} \
                        timeout { puts "V10-WARN: sent quit but the simulator did not exit" }
