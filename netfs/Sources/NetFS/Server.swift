@@ -134,12 +134,40 @@ final class Connection {
         defer { close(wire.fd) }
         guard handshake() else { log("handshake failed; dropping connection"); return }
         log("mounted \(cfg.root) as dev \(export.dev)\(cfg.readOnly ? " (read-only)" : "")")
-        while let header = wire.readExactly(Senda.size) {
+
+        // WHERE THE TIME GOES -- the one question this trace could never answer,
+        // and the reason a wrong answer stood for a day.  K15's "~9.6 s per
+        // request" was the run's elapsed time divided by 399, which is a request
+        // RATE: a guest compiling between requests produces exactly the same
+        // number as a slow server does, and the units ("per request") read as
+        // latency either way.
+        //
+        // Two clocks separate them, and the loop already has the boundary:
+        // readExactly BLOCKS until the guest asks, so time inside it is the
+        // guest's, and time inside serve() is ours.  Monotonic, because a wall
+        // clock that steps mid-run would silently corrupt the sum -- and this
+        // process runs for hours beside a guest that thinks it is 1976.
+        var waitingNs: UInt64 = 0, servingNs: UInt64 = 0, worstNs: UInt64 = 0
+        while true {
+            let t0 = DispatchTime.now().uptimeNanoseconds
+            guard let header = wire.readExactly(Senda.size) else { break }
+            let t1 = DispatchTime.now().uptimeNanoseconds
             let x = Senda(header)
             requests += 1
-            guard serve(x) else { break }
+            let ok = serve(x)
+            let t2 = DispatchTime.now().uptimeNanoseconds
+            waitingNs &+= t1 &- t0
+            servingNs &+= t2 &- t1
+            worstNs = max(worstNs, t2 &- t1)
+            guard ok else { break }
         }
-        log("connection closed after \(requests) requests")
+        let ms = { (n: UInt64) in Double(n) / 1_000_000 }
+        log(String(format: "connection closed after %d requests"
+                   + "  (serving %.1f ms total, %.2f ms mean, %.1f ms worst;"
+                   + " waiting on the guest %.1f s)",
+                   requests, ms(servingNs),
+                   requests > 0 ? ms(servingNs) / Double(requests) : 0,
+                   ms(worstNs), ms(waitingNs) / 1000))
     }
 
     // MARK: Handshake

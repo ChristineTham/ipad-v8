@@ -80,7 +80,12 @@ TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
 # v10/mk/gen/mux.inc names the rest.
 JERQINC = /usr/jerq/include
 
-OBJS = 32ld.o mux.o pcheck.o pinit.o precv.o psend.o ptimeout.o
+# IX's own libc sources, and ours.  labEQ/labLE are Bell Labs' and unchanged;
+# muxix.c is ours and carries its argument in v10/src/PATCHES.md.
+IXLIBC  = $(SRC)/history/ix/src/libc
+MUXOURS = $(OURS)/history/ix/src/jerq/mux
+
+OBJS = 32ld.o mux.o pcheck.o pinit.o precv.o psend.o ptimeout.o labEQ.o labLE.o muxix.o
 
 all: mux
 
@@ -107,6 +112,15 @@ psend.o: $(SRC)/history/ix/src/jerq/mux/proto/psend.c $(INCDIR)/stdio.h $(INCDIR
 
 ptimeout.o: $(SRC)/history/ix/src/jerq/mux/proto/ptimeout.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(SRC)/history/ix/src/jerq/mux/proto/packets.h $(SRC)/history/ix/src/jerq/mux/proto/pconfig.h $(SRC)/history/ix/src/jerq/mux/proto/proto.h $(SRC)/history/ix/src/jerq/mux/proto/pstats.h $(TOOLS)
 	$(COMPILE) $(SRC)/history/ix/src/jerq/mux/proto/ptimeout.c
+
+labEQ.o: $(IXLIBC)/labEQ.c $(JERQINC)/sys/jlabel.h $(JERQINC)/sys/label.h $(TOOLS)
+	$(COMPILE) $(IXLIBC)/labEQ.c
+
+labLE.o: $(IXLIBC)/labLE.c $(JERQINC)/sys/jlabel.h $(JERQINC)/sys/label.h $(TOOLS)
+	$(COMPILE) $(IXLIBC)/labLE.c
+
+muxix.o: $(MUXOURS)/muxix.c $(INCDIR)/sys/types.h $(TOOLS)
+	$(COMPILE) $(MUXOURS)/muxix.c
 
 install: mux
 	-mkdir $(DESTDIR)/usr

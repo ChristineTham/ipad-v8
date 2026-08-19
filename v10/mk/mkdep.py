@@ -1039,6 +1039,33 @@ MUX_INC = [
 # variant's and no V10 build of mux wants it.  Named here with its reason,
 # because scan_includes()' habit of dropping what it cannot find is how a
 # missing header becomes a mystery three hours into a build.
+# THE FIVE EXTERNALS V10's libc DOES NOT HAVE, and they split three ways.
+#
+# `src/history/ix' is IX -- the security-enhanced Ninth Edition -- so mux's seven
+# objects want interfaces a V10 kernel has never had.  `lib.a' defines 98
+# externals and leaves 45 for libc; five are absent, and the tape supplies two of
+# them itself:
+#
+#   MUX_IX    labEQ.c, labLE.c -- IX's OWN libc sources, compiled UNCHANGED.
+#             Pure K&R against <sys/label.h>, which MUX_INC installs.  Using
+#             Bell Labs' own code is the authentic answer and needs no patch.
+#   MUX_OURS  muxix.c -- unsafe(), pex(), unpex().  A NEWFILES entry in
+#             tools/v10-overlay.py with the full argument; the short form is that
+#             unsafe(2) is a LABELLED select and V10's slot 64+36 is `nosys',
+#             while pex(2) drives an ioctl on a FIOPX V10 does not define.
+#
+# NONE OF THE THREE IN muxix.c CAN BE REACHED AT RUN TIME on V10: checklabs() is
+# armed only by SIGLAB, r70's signal.h:37 calls that "secure unix only", and the
+# signal appears nowhere in lsys/.  They exist so the program LINKS.
+MUX_IX_DIR = "history/ix/src/libc"
+MUX_IX = [
+    ("labEQ.o", "labEQ.c"),
+    ("labLE.o", "labLE.c"),
+]
+MUX_OURS = [
+    ("muxix.o", "muxix.c"),
+]
+
 MUX_UNREACHED = {
     "sys/xtproto.h": "behind #ifdef XT; the mkfile never defines XT",
 }
@@ -1123,14 +1150,25 @@ def emit_mux():
         if not os.path.exists(p):
             sys.exit("mkdep: mux: MUX_INC names %s, which is not at %s" % (name, p))
     srcdir = "$(SRC)/" + MUX_DIR
+    ixdir  = os.path.join(SRC, MUX_IX_DIR)
+    ourdir = os.path.join(OURS, MUX_DIR)
     jerqpaths = {v: k for k, v in jerq.items()}
 
+    # THREE SOURCE ROOTS NOW, and a dependency naming the wrong one is a rule make
+    # cannot satisfy: `Make: Don't know how to make ...' for every object at once.
+    # Each root is tested before the fallback rather than after it, because
+    # mkgen.rel() against the wrong base yields a plausible-looking `../..' path
+    # instead of an error.
     def dep(path):
         path = os.path.normpath(path)
         if path in jerqpaths:
             return "$(JERQINC)/" + jerqpaths[path]
         if path.startswith(INC + os.sep):
             return "$(INCDIR)/" + mkgen.rel(path, INC)
+        if path.startswith(ixdir + os.sep):
+            return "$(IXLIBC)/" + mkgen.rel(path, ixdir)
+        if path.startswith(ourdir + os.sep):
+            return "$(MUXOURS)/" + mkgen.rel(path, ourdir)
         return srcdir + "/" + mkgen.rel(path, d)
 
     out = [PREAMBLE % dict(
@@ -1146,8 +1184,14 @@ def emit_mux():
 # v10/mk/gen/mux.inc names the rest.
 JERQINC = /usr/jerq/include
 
-""" % len(MUX_INC))
-    out.append("OBJS = " + " ".join(o for o, _ in MUX_OBJS) + "\n")
+# IX's own libc sources, and ours.  labEQ/labLE are Bell Labs' and unchanged;
+# muxix.c is ours and carries its argument in v10/src/PATCHES.md.
+IXLIBC  = $(SRC)/%s
+MUXOURS = $(OURS)/%s
+
+""" % (len(MUX_INC), MUX_IX_DIR, MUX_DIR))
+    out.append("OBJS = " + " ".join(o for o, _ in MUX_OBJS + MUX_IX + MUX_OURS)
+               + "\n")
     out.append("\nall: mux\n")
     out.append("\nmux: $(OBJS) $(LD) $(LIBC)\n"
                "\t$(CC) $(CFLAGS) -o mux $(OBJS) $(LIBC)\n")
@@ -1161,6 +1205,20 @@ JERQINC = /usr/jerq/include
         out.append("\n%s: %s\n\t$(COMPILE) %s/%s\n"
                    % (obj, " ".join(["%s/%s" % (srcdir, src)] + deps
                                     + ["$(TOOLS)"]), srcdir, src))
+    # The IX libc members and our glue, each from its own root.
+    for objs, root, var in ((MUX_IX, ixdir, "$(IXLIBC)"),
+                            (MUX_OURS, ourdir, "$(MUXOURS)")):
+        for obj, src in objs:
+            full = os.path.join(root, src)
+            if not os.path.exists(full):
+                sys.exit("mkdep: mux: no %s -- %s" % (full,
+                         "run tools/v10-overlay.py" if var == "$(MUXOURS)"
+                         else "run tools/v10-import.py"))
+            deps = sorted(dep(pp) for pp in mux_closure(full, jerq)
+                          if os.path.normpath(pp) != os.path.normpath(full))
+            out.append("\n%s: %s\n\t$(COMPILE) %s/%s\n"
+                       % (obj, " ".join(["%s/%s" % (var, src)] + deps
+                                        + ["$(TOOLS)"]), var, src))
     out.append("\ninstall: mux\n")
     out.extend(mkgen.mkdirs_for("$(DESTDIR)", "usr/jerq/bin/mux"))
     out.append("\tcp mux $(DESTDIR)/usr/jerq/bin/mux\n")

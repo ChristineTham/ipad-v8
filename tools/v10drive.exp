@@ -639,12 +639,28 @@ proc v10_run {cmd endpat {t 120}} {
 # BOUNDED AND NON-FATAL, like everything else in the teardown: the guest is
 # already halted and the disk already synced, so nothing here may delay the quit.
 # A machine with the card disabled answers with an error and that is fine.
+# THE PARAMETER IS `STATISTICS', AND `stats' COST A 30 s TIMEOUT PER HALT WHILE
+# READING NOTHING.  pdp11_il.c's MTAB row is
+#
+#	{ MTAB_XTD|MTAB_VDV|MTAB_NMO, 0, "STATISTICS", NULL, ... }
+#
+# and SIMH matches the name in full, so `show il stats' answers
+#
+#	%SIM-ERROR: IL device: Non-existent parameter: STATS
+#
+# -- which is not one of the patterns below either, so the first expect fell
+# through to its own timeout and the reading was silently absent.  A diagnostic
+# that cannot fail is not a diagnostic; the error text is matched explicitly now
+# so a future rename is LOUD rather than slow.
 proc v10_ilstats {} {
-    send " show il stats\r"
+    send " show il statistics\r"
     expect -timeout 30 -- "receive errors" {} \
                           "Non-existent device" {} \
+                          "Non-existent parameter" {
+                              puts "\nv10_ilstats: SIMH rejected the parameter -- read the MTAB in pdp11_il.c"
+                          } \
                           "Invalid argument" {} \
-                          timeout {}
+                          timeout { puts "\nv10_ilstats: no answer in 30 s" }
     expect -timeout 10 -- "sim>" {} timeout {}
 }
 

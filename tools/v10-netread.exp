@@ -1,0 +1,143 @@
+#!/usr/bin/env expect
+# Does a V10 netfs read return the WHOLE file?  Nothing else.
+#
+#	expect tools/v10-netread.exp <image> <port> <list>
+#
+# WHY THIS EXISTS.  K15's build died on
+#
+#	"/n/tree/.../32ld.c":214:syntax error
+#	"/n/tree/.../32ld.c":214:saw EOF
+#
+# and 32ld.c is 295 lines.  netfsd served ONE `NREAD count=4096 off=0' of a
+# 5870-byte file and was never asked again -- and byte 4096 of that file falls on
+# line 213, so cpp really did see exactly one block and take it for the whole
+# file.  The failure presented as a defect in Bell Labs' source.
+#
+# THE READING THAT MATTERS IS `wc -c', because it is the whole point: it reads
+# every byte and reports how many there were.  A file whose count matches the
+# host's `stat' was read completely; one that stops at 4096 says so in the
+# number.  So the probe needs no compiler, no build, no libraries -- which is why
+# it costs one boot instead of the fifty minutes K15 spent to find this once.
+#
+# AND IT IS INTERMITTENT, which is why every file is read PASSES times.  K14 read
+# a 5106-byte file correctly in three requests on the same transport, so a single
+# clean pass proves nothing and a single failure does not give a rate.
+#
+# THE TALLY IS A FILE, NOT A VARIABLE.  1970s sh forks for a compound command
+# carrying a redirection, so a count kept in a shell variable inside a redirected
+# loop is lost in a dead child while the `echo >>' beside it survives -- and the
+# verdict then always reads GOOD.  CLAUDE.md records that costing K10.2 a run.
+
+log_user 1
+
+set here [file dirname [info script]]
+source $here/v10drive.exp
+
+set V10_SIMH [file normalize [file join $here .. work opensimh BIN vax780]]
+set V10_ROM  [file normalize [file join $here .. work v10 src lsys boot star uda]]
+set V10_RUN_SECS 3600
+
+if {[llength $argv] < 3} {
+    puts "usage: v10-netread.exp <image> <port> <list>"
+    exit 2
+}
+set img    [lindex $argv 0]
+set port   [lindex $argv 1]
+set list   [lindex $argv 2]
+set PASSES 3
+
+set results {}
+proc note {name ok} { global results; lappend results [list $name $ok] }
+proc report {} {
+    global results
+    puts "\n===== V10 netfs read probe ====="
+    set failed 0
+    foreach r $results {
+        puts [format "  %-52s %s" [lindex $r 0] [expr {[lindex $r 1] ? "ok" : "NO"}]]
+        if {!([lindex $r 1])} { incr failed }
+    }
+    puts "===== [expr {[llength $results] - $failed}]/[llength $results] =====\n"
+    return $failed
+}
+
+# THE LIST IS TAB-SEPARATED AND v10_rows CHECKS THE COLUMN COUNT, because a
+# space-separated generated list read as rows gave "has 1 columns, expected 3"
+# once and silently mis-destructured before that.
+set rows [v10_rows $list 2]
+puts "== [llength $rows] files, $PASSES passes each =="
+
+v10_boot $img [list "set il enable" "set il address=2013E800" "set il vector=E8" \
+                    "attach il nat:"]
+note "the machine came up with the card" 1
+v10_login root
+v10_sh "PATH=/bin:/etc:/usr/bin; export PATH" 120
+v10_sh "OK=-ok" 120
+
+# The verdict tokens are spelled through SHELL VARIABLES so the tty's echo of the
+# command carries `$S'/`$D' and only the ANSWER carries the literal.  Echoing
+# `NRSAME $f' would put the pass token in the log whatever the result.
+v10_sh "S=NRSAME; D=NRSHORT" 120
+v10_sh "rm -f /tmp/nrbad" 120
+
+set mounted [v10_try "/etc/nafsmnt 10.0.2.2 $port /n/tree 0" "mounted on" 900]
+note "the tape mounts over TCP" $mounted
+
+# GATED ON THE MOUNT.  A `wc -c' under an unmounted /n/tree reads the mount
+# POINT's empty directory and reports 0 -- which would be recorded as a
+# truncation, blaming the transport for a mount that never happened.
+if {!$mounted} {
+    note "every file reads to its full length" 0
+    note "the guest's own tally agrees"        0
+    set failed [report]
+    v10_halt
+    exit 1
+}
+
+# TWO READERS, BECAUSE THEY EXERCISE DIFFERENT CODE AND ONE CANNOT SEPARATE THEM.
+#
+#   wc  reads with NBUF = 64*1024 (cmd/wc.c:3), so it issues ONE read(2) and
+#       naread()'s own do/while loop fetches the file BUFSIZE at a time.
+#   cat reads with BLOCK = 4096 (cmd/cat.c:8) in a loop, which is exactly what
+#       cpp does -- refill() calls read(fileno(fin), pbuf, BUFSIZ) and r70's
+#       stdio.h makes BUFSIZ 4096.  cpp asked for 4096, GOT 4096, and then its
+#       next read never reached the server.
+#
+# So `wc' tests the kernel's internal loop and `cat' tests a SECOND read(2) on an
+# already-open netfs file.  K15's failure was the latter, and a probe with only
+# the former could have passed while the bug stood.
+#
+# `cat' is measured off LOCAL disk afterwards, so the count is of bytes that
+# actually arrived rather than of a second netfs read.
+foreach row $rows {
+    set rel  [lindex $row 0]
+    set size [lindex $row 1]
+    for {set p 1} {$p <= $PASSES} {incr p} {
+        # Every line is well under CANBSIZ = 256; a longer one is discarded by
+        # the tty in silence.
+        #
+        # AND $w IS DELIBERATELY UNQUOTED IN `test'.  cmd/wc.c's printout() uses
+        # printf("%7ld"), so `wc -c' answers "   5870" -- right-aligned in seven
+        # columns.  Quoted, `test "   5870" = 5870' is false for EVERY file, and
+        # the probe would have reported total truncation over a working
+        # transport.  Unquoted, sh's field splitting discards the padding.
+        v10_sh "w=`wc -c < /n/tree/$rel`" 600
+        v10_sh "if test \$w = $size; then echo \$S W$p; else echo \$D W$p \$w; echo x >> /tmp/nrbad; fi" 600
+        v10_sh "cat /n/tree/$rel > /tmp/nrc" 600
+        v10_sh "c=`wc -c < /tmp/nrc`" 600
+        v10_sh "if test \$c = $size; then echo \$S C$p; else echo \$D C$p \$c; echo x >> /tmp/nrbad; fi" 600
+    }
+}
+
+# The guest's OWN verdict, independent of the host's count of the transcript.
+# Two instruments that share a parse are one instrument; this one shares nothing
+# with the driver's grep.
+note "the guest's own tally agrees" \
+    [v10_try "test ! -f /tmp/nrbad && echo NB\$OK" "NB-ok" 300]
+
+# A netfs mount is a gmount(2) object keyed by device number; umount(8) knows
+# only block filesystems and answers a bare I/O error.
+v10_sh "/etc/nafsmnt -u /n/tree" 900
+
+set failed [report]
+v10_halt
+exit [expr {$failed ? 1 : 0}]
