@@ -28,6 +28,7 @@ done
 
 GOLD="${1:-ipnx-v10-ra81.img.stage1.k102.k7.k13}"
 TPORT="${TPORT:-9310}"; OPORT="${OPORT:-9311}"; MPORT="${MPORT:-9312}"
+XPORT="${XPORT:-9313}"
 NETFSD="$ROOT/netfs/.build/release/netfsd"
 LOG="$ROOT/work/v10-mux.log"
 
@@ -54,6 +55,13 @@ serve() { "$NETFSD" -p "$1" -v "$2" > "$ROOT/work/netfs-$3.log" 2>&1 & PIDS+=($!
 serve "$TPORT" "$ROOT/work/v10"      muxtree
 serve "$OPORT" "$ROOT/v10/src"       muxours
 serve "$MPORT" "$ROOT/v10/mk/gen"    muxmk
+# A FOURTH SHARE, SERVING THE MUX DIRECTORY ITSELF.  netfs charges a round trip
+# per PATH COMPONENT and walks from the mount root every time -- measured
+# 2026-08-20, two accesses to one 1905-byte source over a root-mounted share cost
+# 28 walk requests against 6 read requests, at ~7.5 s each.  So 80% of this
+# build's traffic was spent finding files, and mounting them one component deep
+# is the fix.  Copying to local disk is NOT: the copy pays the same walk.
+serve "$XPORT" "$ROOT/work/v10/src/history/ix/src/jerq/mux" muxdir
 sleep 1
 for pid in "${PIDS[@]}"; do
     kill -0 "$pid" 2>/dev/null || { echo "netfsd died"; tail -5 "$ROOT"/work/netfs-mux*.log; exit 1; }
@@ -64,7 +72,7 @@ no_overlap "$ROOT/work/v10gold/$GOLD" || exit 1
 IMG=$(v10_clone "$GOLD" k15) || exit 1
 
 echo "== V10 builds mux from the ix tree =="
-expect "$ROOT/tools/v10-mux.exp" "$IMG" "$TPORT" "$OPORT" "$MPORT" 2>&1 | tee "$LOG"
+expect "$ROOT/tools/v10-mux.exp" "$IMG" "$TPORT" "$OPORT" "$MPORT" "$XPORT" 2>&1 | tee "$LOG"
 rc=${PIPESTATUS[0]}
 
 # ===================== the oracle, counted HOST-SIDE from the log ===========

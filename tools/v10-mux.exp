@@ -60,19 +60,22 @@ set V10_SIMH [file normalize [file join $here .. work opensimh BIN vax780]]
 set V10_ROM  [file normalize [file join $here .. work v10 src lsys boot star uda]]
 set V10_RUN_SECS 5400
 
-if {[llength $argv] < 4} {
-    puts "usage: v10-mux.exp <k13-image> <tport> <oport> <mport>"
+if {[llength $argv] < 5} {
+    puts "usage: v10-mux.exp <k13-image> <tport> <oport> <mport> <xport>"
     exit 2
 }
 set img   [lindex $argv 0]
 set tport [lindex $argv 1]
 set oport [lindex $argv 2]
 set mport [lindex $argv 3]
+set xport [lindex $argv 4]
 
 set T1   /usr/s1
 set OBJ  /usr/k15obj
 set JQ   /usr/jerq/include
-set MUXD /n/tree/src/history/ix/src/jerq/mux
+# The shallow mount, not the deep path: every reader of $MUXD pays netfs's
+# per-component walk, and this one is read once per object in the compare step.
+set MUXD /n/mux
 set DEST /usr/w15
 
 # The seven objects, in the mkfile's own $LL order.  Restated here ONLY as the
@@ -117,14 +120,26 @@ v10_sh "S=CMPSAME; D=CMPDIFF; Z=CMPGONE" 120
 
 # The three shares, on three device numbers -- neta.h's `server may be using
 # several', and nadomount() answers EBUSY for a repeat.
-v10_sh "mkdir /n; mkdir /n/tree; mkdir /n/ours; mkdir /n/mk" 120
+# A FOURTH SHARE, AND IT IS THE MUX DIRECTORY ITSELF -- because netfs charges a
+# round trip per PATH COMPONENT, walking from the mount root every time, and that
+# is 80% of this build's traffic.  Measured 2026-08-20 against a share mounted at
+# the tarball root: two accesses to one 1905-byte source cost 28 walk requests
+# and 6 read requests, at ~7.5 s each.
+#
+# COPYING THE SOURCES TO LOCAL DISK FIRST WOULD NOT HELP -- the copy pays the
+# identical walk.  Shortening the PATH is what helps, so mux.mk names its source
+# directory through $(MUXSRC) and this points it at a one-component mount:
+# /n/mux/32ld.c instead of /n/tree/src/history/ix/src/jerq/mux/32ld.c.
+v10_sh "mkdir /n; mkdir /n/tree; mkdir /n/ours; mkdir /n/mk; mkdir /n/mux" 120
 set sh1 [v10_try "/etc/nafsmnt 10.0.2.2 $tport /n/tree 0" "mounted on" 900]
 set sh2 [v10_try "/etc/nafsmnt 10.0.2.2 $oport /n/ours 1" "mounted on" 900]
 set sh3 [v10_try "/etc/nafsmnt 10.0.2.2 $mport /n/mk   2" "mounted on" 900]
+set sh4 [v10_try "/etc/nafsmnt 10.0.2.2 $xport /n/mux  3" "mounted on" 900]
 note "the tape mounts over TCP" $sh1
 note "our overlay mounts"       $sh2
 note "the makefiles mount"      $sh3
-set shares [expr {$sh1 && $sh2 && $sh3}]
+note "the mux directory mounts shallow" $sh4
+set shares [expr {$sh1 && $sh2 && $sh3 && $sh4}]
 
 # EVERYTHING BELOW IS GATED ON THE MOUNT, and a skipped assertion is reported as
 # a failure rather than omitted: a phase that did not run is not a phase that
@@ -178,7 +193,10 @@ note "mux.inc's headers install" $inc_ok
 
 # ==================================================== build mux ==============
 v10_sh "rm -rf $OBJ; mkdir $OBJ; mkdir $OBJ/mux" 300
-v10_sh "A='SRC=/n/tree/src OURS=/n/ours INCDIR=/usr/include TOOLDIR=$OBJ DESTDIR=$DEST'" 120
+# MUXSRC is the shallow mount; SRC stays the tarball root because IXLIBC still
+# reads labEQ.c/labLE.c through it (two files, so its depth costs little).
+v10_sh "A='SRC=/n/tree/src OURS=/n/ours MUXSRC=/n/mux'" 120
+v10_sh "A=\"\$A INCDIR=/usr/include TOOLDIR=$OBJ DESTDIR=$DEST\"" 120
 v10_sh "B='CC=cc CCPATH=/bin/cc CPP=$T1/lib/cpp CCOM=$T1/lib/ccom C2=$T1/lib/c2'" 120
 v10_sh "C='AS=/bin/as LD=/bin/ld LIBC=/lib/libc.a'" 120
 

@@ -68,7 +68,7 @@ LIBC = $(V10LIB)/libc.a
 INCDIR = /usr/v10/include
 
 CFLAGS = -O 
-INCS   = -I$(SRC)/history/ix/src/jerq/mux/proto -I$(JERQINC) -I$(INCDIR)
+INCS   = -I$(MUXSRC)/proto -I$(JERQINC) -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) $(INCS) -c
 TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
 
@@ -85,6 +85,15 @@ JERQINC = /usr/jerq/include
 IXLIBC  = $(SRC)/history/ix/src/libc
 MUXOURS = $(OURS)/history/ix/src/jerq/mux
 
+# THE MUX SOURCE DIRECTORY, AS A MACRO, SO IT CAN BE A SHALLOW MOUNT.
+#
+# netfs walks from the mount root and charges a round trip per path component --
+# 80% of this build's traffic, measured.  The default below is correct when the
+# whole tarball is served at $(SRC); a harness that instead serves
+# history/ix/src/jerq/mux directly can pass MUXSRC=/n/mux and pay two
+# components instead of eight.  Nothing else in this file changes.
+MUXSRC  = $(SRC)/history/ix/src/jerq/mux
+
 OBJS = 32ld.o mux.o pcheck.o pinit.o precv.o psend.o ptimeout.o labEQ.o labLE.o muxix.o
 
 all: mux
@@ -92,26 +101,26 @@ all: mux
 mux: $(OBJS) $(LD) $(LIBC)
 	$(CC) $(CFLAGS) -o mux $(OBJS) $(LIBC)
 
-32ld.o: $(SRC)/history/ix/src/jerq/mux/32ld.c $(INCDIR)/errno.h $(INCDIR)/signal.h $(INCDIR)/sys/stat.h $(INCDIR)/sys/types.h $(JERQINC)/aouthdr.h $(JERQINC)/filehdr.h $(JERQINC)/scnhdr.h $(JERQINC)/sys/jlabel.h $(JERQINC)/sys/label.h $(TOOLS)
-	$(COMPILE) $(SRC)/history/ix/src/jerq/mux/32ld.c
+32ld.o: $(MUXSRC)/32ld.c $(INCDIR)/errno.h $(INCDIR)/signal.h $(INCDIR)/sys/stat.h $(INCDIR)/sys/types.h $(JERQINC)/aouthdr.h $(JERQINC)/filehdr.h $(JERQINC)/scnhdr.h $(JERQINC)/sys/jlabel.h $(JERQINC)/sys/label.h $(TOOLS)
+	$(COMPILE) $(MUXSRC)/32ld.c
 
-mux.o: $(SRC)/history/ix/src/jerq/mux/mux.c $(INCDIR)/errno.h $(INCDIR)/libc.h $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/filio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/stream.h $(INCDIR)/sys/ttyio.h $(INCDIR)/sys/types.h $(INCDIR)/tmpnam.h $(JERQINC)/jioctl.h $(JERQINC)/sys/jlabel.h $(JERQINC)/sys/label.h $(JERQINC)/sys/pex.h $(JERQINC)/tty.h $(SRC)/history/ix/src/jerq/mux/msgs.h $(SRC)/history/ix/src/jerq/mux/proto/packets.h $(SRC)/history/ix/src/jerq/mux/proto/pconfig.h $(SRC)/history/ix/src/jerq/mux/proto/proto.h $(SRC)/history/ix/src/jerq/mux/proto/pstats.h $(TOOLS)
-	$(COMPILE) $(SRC)/history/ix/src/jerq/mux/mux.c
+mux.o: $(MUXSRC)/mux.c $(INCDIR)/errno.h $(INCDIR)/libc.h $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/sys/filio.h $(INCDIR)/sys/param.h $(INCDIR)/sys/stream.h $(INCDIR)/sys/ttyio.h $(INCDIR)/sys/types.h $(INCDIR)/tmpnam.h $(JERQINC)/jioctl.h $(JERQINC)/sys/jlabel.h $(JERQINC)/sys/label.h $(JERQINC)/sys/pex.h $(JERQINC)/tty.h $(MUXSRC)/msgs.h $(MUXSRC)/proto/packets.h $(MUXSRC)/proto/pconfig.h $(MUXSRC)/proto/proto.h $(MUXSRC)/proto/pstats.h $(TOOLS)
+	$(COMPILE) $(MUXSRC)/mux.c
 
-pcheck.o: $(SRC)/history/ix/src/jerq/mux/proto/pcheck.c $(TOOLS)
-	$(COMPILE) $(SRC)/history/ix/src/jerq/mux/proto/pcheck.c
+pcheck.o: $(MUXSRC)/proto/pcheck.c $(TOOLS)
+	$(COMPILE) $(MUXSRC)/proto/pcheck.c
 
-pinit.o: $(SRC)/history/ix/src/jerq/mux/proto/pinit.c $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(SRC)/history/ix/src/jerq/mux/proto/packets.h $(SRC)/history/ix/src/jerq/mux/proto/pconfig.h $(SRC)/history/ix/src/jerq/mux/proto/proto.h $(SRC)/history/ix/src/jerq/mux/proto/pstats.h $(TOOLS)
-	$(COMPILE) $(SRC)/history/ix/src/jerq/mux/proto/pinit.c
+pinit.o: $(MUXSRC)/proto/pinit.c $(INCDIR)/signal.h $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(MUXSRC)/proto/packets.h $(MUXSRC)/proto/pconfig.h $(MUXSRC)/proto/proto.h $(MUXSRC)/proto/pstats.h $(TOOLS)
+	$(COMPILE) $(MUXSRC)/proto/pinit.c
 
-precv.o: $(SRC)/history/ix/src/jerq/mux/proto/precv.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(SRC)/history/ix/src/jerq/mux/proto/packets.h $(SRC)/history/ix/src/jerq/mux/proto/pconfig.h $(SRC)/history/ix/src/jerq/mux/proto/proto.h $(SRC)/history/ix/src/jerq/mux/proto/pstats.h $(TOOLS)
-	$(COMPILE) $(SRC)/history/ix/src/jerq/mux/proto/precv.c
+precv.o: $(MUXSRC)/proto/precv.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(MUXSRC)/proto/packets.h $(MUXSRC)/proto/pconfig.h $(MUXSRC)/proto/proto.h $(MUXSRC)/proto/pstats.h $(TOOLS)
+	$(COMPILE) $(MUXSRC)/proto/precv.c
 
-psend.o: $(SRC)/history/ix/src/jerq/mux/proto/psend.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(SRC)/history/ix/src/jerq/mux/proto/packets.h $(SRC)/history/ix/src/jerq/mux/proto/pconfig.h $(SRC)/history/ix/src/jerq/mux/proto/proto.h $(SRC)/history/ix/src/jerq/mux/proto/pstats.h $(TOOLS)
-	$(COMPILE) $(SRC)/history/ix/src/jerq/mux/proto/psend.c
+psend.o: $(MUXSRC)/proto/psend.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(MUXSRC)/proto/packets.h $(MUXSRC)/proto/pconfig.h $(MUXSRC)/proto/proto.h $(MUXSRC)/proto/pstats.h $(TOOLS)
+	$(COMPILE) $(MUXSRC)/proto/psend.c
 
-ptimeout.o: $(SRC)/history/ix/src/jerq/mux/proto/ptimeout.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(SRC)/history/ix/src/jerq/mux/proto/packets.h $(SRC)/history/ix/src/jerq/mux/proto/pconfig.h $(SRC)/history/ix/src/jerq/mux/proto/proto.h $(SRC)/history/ix/src/jerq/mux/proto/pstats.h $(TOOLS)
-	$(COMPILE) $(SRC)/history/ix/src/jerq/mux/proto/ptimeout.c
+ptimeout.o: $(MUXSRC)/proto/ptimeout.c $(INCDIR)/stdio.h $(INCDIR)/tmpnam.h $(MUXSRC)/proto/packets.h $(MUXSRC)/proto/pconfig.h $(MUXSRC)/proto/proto.h $(MUXSRC)/proto/pstats.h $(TOOLS)
+	$(COMPILE) $(MUXSRC)/proto/ptimeout.c
 
 labEQ.o: $(IXLIBC)/labEQ.c $(JERQINC)/sys/jlabel.h $(JERQINC)/sys/label.h $(TOOLS)
 	$(COMPILE) $(IXLIBC)/labEQ.c

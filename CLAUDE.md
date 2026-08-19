@@ -1962,35 +1962,90 @@ at the old flat `v8/` is moved on first launch, never abandoned.
     over 4096 bytes off a share is suspect until checked. K14 checks out (its
     `mkbitfs.c` read whole, and its verification was host-side and independent);
     K10.1/K10.3 used the courier disk; K12's files were small.
-  - Consistent with the frame-loss suspicion below rather than separate from it:
-    a 4096-byte reply is roughly three Ethernet frames, and
-    `libsimh/patches/pdp11_il.c:659` drops one outright when the guest has no
-    receive buffer posted.
-- **AND THE V10 GUEST IS SLOW AT WORK THAT NEEDS NO NETWORK, so "netfs is slow"
-  is probably the wrong diagnosis.** Measured: netfsd serves the V10 guest at
-  ~9.6 s per request — but during K15 the guest also spent **110+ seconds
-  compiling one 5,870-byte source** whose other headers were all on local disk.
-  Network latency cannot explain that, so the netfs figure is likely a
-  *symptom*: a guest not executing fast enough to issue requests faster.
-  - The baseline that settles the order of magnitude is in our own comment,
-    `pdp11_il.c:775`: unpatched V8 measured *"~16 ms a request and ~30 files a
-    minute"*. V10's 9600 ms is **600× worse**, i.e. worse than V8 was *before*
-    `il_rxpump()`'s fast-poll window existed — so the polling fallback cannot be
-    the cause, since its worst case *is* that unpatched behaviour.
-  - The suspect is the burst itself: `il_svc()` re-activates every 1000
-    instructions (`sim_activate (uptr, 1000)`) and every service call polls
-    SLiRP through `eth_read()`, a host `select()`. `pdp11_il.c:791` documents the
-    symptom from the earlier unbounded version — *"99.5% of a core at an idle
-    login ... and a guest so starved that `date` took 30 s"*. The present code
-    bounds the *re-arm*; whether it bounds the *cost* for V10's traffic pattern
-    has never been measured, because `il_rxpump()` was written for V8's `ill.c`.
-  - **CPU share cannot answer it** (the V10 config never sets `set cpu idle`, so
-    the simulator burns a core either way — measured 43:20 of CPU in 44:24
-    elapsed, which carries no information). **`tools/v10-clock.sh` is the
-    control**: fixed local work, timed by the host, card attached then disabled.
-    Run it before touching `pdp11_il.c`, and afterwards re-run
-    `tools/net-selftest.sh` against V8, whose 290 s → 11 s is measured and must
-    not regress to fix V10.
+  - **THE TRUNCATION POINT IS EXACTLY ONE BLOCK, PROVED HOST-SIDE WITH NO
+    SIMULATOR.** `32ld.c` is 5870 bytes and 295 lines, and
+    `head -c 4096 | wc -l` is **213** — against cpp's error at line **214**. So
+    cpp really did see the first block and take it for the whole file. One
+    command, no boot.
+  - **AND IT IS NOT A FRAME-SIZE PROBLEM: three 4096-byte replies were served
+    perfectly in the very run that failed.** That retracts the frame-loss
+    suspicion this bullet used to carry (*"a 4096-byte reply is roughly three
+    Ethernet frames and `pdp11_il.c:659` drops one"*):
+
+	mpx.h      4096 @ 0,  804 @ 4096, 0 @ 4900    complete
+	pads.h     4096 @ 0, 1247 @ 4096, 0 @ 5343    complete
+	filehdr.h  4096 @ 0, 1134 @ 4096, 0 @ 5230    complete
+	32ld.c     4096 @ 0   -- and nothing, ever    TRUNCATED
+
+    A full-size reply is not what breaks. The failing read also never sent
+    `NPUT` for its tag where every completed read does — the shape of an
+    abandoned handle.
+  - **`naread()` IS NOT THE BUG, so do not go looking there.**
+    `lsys/fs/neta.c:222` is a clean read-until-short loop —
+    `while(u.u_error == 0 && u.u_count != 0 && n > 0)` — that never consults
+    `i_size`. The caller asked 4096, got 4096, `u_count` hit zero, the loop
+    ended correctly. The fault is a **second `read(2)`** that never reached the
+    wire.
+  - **The probe is `tools/v10-netread.sh`, and it uses TWO READERS because one
+    cannot localise it.** `wc` reads with `NBUF` = 64\*1024 (`cmd/wc.c:3`), so it
+    issues one `read(2)` and `naread()`'s own loop does the work; `cat` reads
+    4096 at a time (`cmd/cat.c:8`), which is exactly cpp's pattern —
+    `refill()` calls `read(fileno(fin), pbuf, BUFSIZ)` and r70's `stdio.h` makes
+    `BUFSIZ` 4096. **A probe with only `wc` could pass while the bug stands.**
+- **"~9.6 s PER REQUEST" WAS A REQUEST *RATE*, NOT A SERVICE TIME, AND THE GUEST
+  IS NOT STARVED. Both halves of that diagnosis were mine and both are
+  withdrawn** (2026-08-20). netfsd's trace carried **no timestamps**, so the
+  figure could only ever have been K15's elapsed time over `connection closed
+  after 399 requests` — and a guest that spends its time compiling produces
+  exactly that number without the server being slow at all. The units read as
+  latency because of the words "per request". Same shape as the withdrawn "530
+  file reads in 2 s" and as `used = s_fsize - s_tfree` counting the i-list as
+  content: **a quotient whose divisor does not mean what the units imply.**
+  - **`tools/v10-clock.sh` settled the starvation half and the answer is no.**
+    228,310 bytes read off local disk: **72 ms** with the card attached, **44 ms**
+    without (46/44/44, tight to ±2 ms). The harness declines to interpret the
+    1.64× and is right to — 44 ms is near the tty round trip that measures it,
+    and the `on` arm has an outlier — but the question it was built for is
+    answered: a guest that fast is not too starved to issue requests. There is
+    probably a real ~64% cost to having the card attached; that is worth knowing
+    and is a different bug. Grow the workload before quoting the ratio.
+  - **The honest figure is 7.50 s per request**, sampled over a 90-second window
+    of `tools/v10-netread.sh` — a workload of `wc -c` and `cat` with *no*
+    compilation, so the divisor means what it says. So netfs really is
+    seconds-per-request slow; the old number simply could not have shown it.
+  - **netfsd now measures this itself**, so it need never be inferred again: the
+    connection loop reports its own service time separately from time blocked in
+    `readExactly()` waiting for the guest, on a monotonic clock (`DispatchTime`,
+    not `Date` — this process runs for hours beside a guest that thinks it is
+    1976).
+  - **The mechanism is Bell Labs', in their own words, and it is the GUEST DRIVER
+    rather than our device model.** `lsys/io/ni1010a.c`'s receive-buffer poster
+    carries the comment *"let it be an ordinary command, interrupt when complete,
+    for now. **this is probably too slow**"*, and it is: `ilrcvbufs()` posts ONE
+    buffer per command and refuses to post while any command is active
+    (`if (is->flags & CMDACT) return (0)`), wanting `ILRBYTES` = 3000 bytes in
+    `ILRSIZE` = 1024-byte blocks — three buffers, three command round trips.
+    **V8's `ill.c` chains instead**, supplying the next buffer from *inside*
+    `ilrint()`, so it never pays that. Same card, same device model, different
+    driver — which is the right shape for 7.5 s against the ~16 ms per request
+    `pdp11_il.c:775` records for *unpatched* V8.
+  - A near miss worth not repeating: `ilincmd()` waits for command completion
+    with `tsleep(…, PZERO, 5)` and `slp.c:86` declares that argument **seconds**,
+    which is tantalisingly close to 7.5. It is **not** the cause — its only
+    callers are lines 180/195/207, all `ILC_RESET`/`ILC_STAT`/`ILC_ONLINE`, i.e.
+    init.
+  - **CPU share cannot answer any of this** (the V10 config never sets `set cpu
+    idle`, so the simulator burns a core either way — measured 43:20 of CPU in
+    44:24 elapsed, which carries no information). And after any change to
+    `pdp11_il.c`, re-run `tools/net-selftest.sh` against V8: its 290 s → 11 s is
+    measured and must not regress to fix V10.
+- **`show il stats` HAS NEVER WORKED, so every V10 halt has silently recorded
+  nothing.** `pdp11_il.c`'s MTAB row names the parameter **`STATISTICS`** and
+  SIMH matches it in full, so the command answered `%SIM-ERROR: Non-existent
+  parameter: STATS` — which was not one of `v10_ilstats`'s patterns either, so it
+  fell through to a 30-second timeout and produced no reading at all. Fixed
+  2026-08-20, with the error text matched explicitly so a future rename is loud
+  rather than slow. *A diagnostic that cannot fail is not a diagnostic.*
 - **netfs costs a round trip per path component, not per byte** — so diagnose it by
   counting *files*, never bytes, and never benchmark it with one big read.
   **The round trip was the emulator's, not the protocol's.** `il_svc()` ended in

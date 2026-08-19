@@ -1149,7 +1149,22 @@ def emit_mux():
         p = os.path.join(SRC if prov == "tape" else OURS, rel)
         if not os.path.exists(p):
             sys.exit("mkdep: mux: MUX_INC names %s, which is not at %s" % (name, p))
-    srcdir = "$(SRC)/" + MUX_DIR
+    # `$(MUXSRC)', NOT `$(SRC)/history/ix/src/jerq/mux' inlined into 14 rules.
+    #
+    # WHY A VARIABLE IS WORTH THE INDIRECTION HERE: netfs costs a round trip per
+    # PATH COMPONENT, walking from the mount root every time, and it dominates
+    # everything else.  Measured on 2026-08-20, two accesses to a 1905-byte
+    # source over a share mounted at the tarball root:
+    #
+    #	9 NGET + 9 NNAMI + 10 NPUT   = 28 requests of path walking
+    #	6 NREAD                      =  6 requests of actual data
+    #
+    # -- 80% of the traffic spent finding an eight-component path, at ~7.5 s a
+    # request.  Copying the file to local disk first does NOT help: the copy pays
+    # the identical walk.  Mounting the mux directory ITSELF shortens the path to
+    # one or two components, and a makefile that names the directory through a
+    # macro can be pointed at such a mount without regenerating anything.
+    srcdir = "$(MUXSRC)"
     ixdir  = os.path.join(SRC, MUX_IX_DIR)
     ourdir = os.path.join(OURS, MUX_DIR)
     jerqpaths = {v: k for k, v in jerq.items()}
@@ -1189,7 +1204,16 @@ JERQINC = /usr/jerq/include
 IXLIBC  = $(SRC)/%s
 MUXOURS = $(OURS)/%s
 
-""" % (len(MUX_INC), MUX_IX_DIR, MUX_DIR))
+# THE MUX SOURCE DIRECTORY, AS A MACRO, SO IT CAN BE A SHALLOW MOUNT.
+#
+# netfs walks from the mount root and charges a round trip per path component --
+# 80%% of this build's traffic, measured.  The default below is correct when the
+# whole tarball is served at $(SRC); a harness that instead serves
+# %s directly can pass MUXSRC=/n/mux and pay two
+# components instead of eight.  Nothing else in this file changes.
+MUXSRC  = $(SRC)/%s
+
+""" % (len(MUX_INC), MUX_IX_DIR, MUX_DIR, MUX_DIR, MUX_DIR))
     out.append("OBJS = " + " ".join(o for o, _ in MUX_OBJS + MUX_IX + MUX_OURS)
                + "\n")
     out.append("\nall: mux\n")
