@@ -1936,6 +1936,61 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   bytes in a different order — pick wrong and the inode addresses look almost
   plausible. This turned "what is actually on that disk?" from a five-minute boot
   into a one-second question, which is what made the retirement audit possible at all.
+- **A netfs READ ON V10 CAN STOP AFTER ONE BLOCK, SILENTLY, AND THE FAILURE READS
+  AS A DEFECT IN BELL LABS' SOURCE.** K15's build died on
+
+	"/n/tree/.../32ld.c":214:syntax error
+	"/n/tree/.../32ld.c":214:saw EOF
+
+  and `32ld.c` is **295 lines**. netfsd's own trace names the cause: one
+  `NREAD count=4096 off=0` serving 4096 bytes of a 5870-byte file, and **no
+  second read anywhere in the trace** — so `cpp` reached EOF three-quarters of
+  the way through, at about line 214. Nothing said "short read". Sixty requests
+  later the transport failed outright (`connection closed after 399 requests`),
+  which is where `lib.a: I/O error`, `nafsmnt: funmount: I/O error` and
+  `Make: Don't know how to make .../32ld.c` came from — three symptoms whose
+  cause was invisible where each appeared.
+  - **It is intermittent, and K14 is the control.** The same shape read
+    correctly there: `4096` at off 0, `1010` at off 4096, `0` at off 5106 for a
+    5106-byte `mkbitfs.c`. So multi-block reads are not broken in general.
+  - **Slow is survivable; silently wrong is not.** The syntax error is the
+    *lucky* outcome — it is what made this visible at all. A truncated source
+    that happened to compile cleanly would put wrong bytes into a build with
+    nothing to say so, which is the app's *"it is in the golden, it will arrive
+    on Reset"* in a new place.
+  - **Consequence for reading results**: any V10 measurement that read a file
+    over 4096 bytes off a share is suspect until checked. K14 checks out (its
+    `mkbitfs.c` read whole, and its verification was host-side and independent);
+    K10.1/K10.3 used the courier disk; K12's files were small.
+  - Consistent with the frame-loss suspicion below rather than separate from it:
+    a 4096-byte reply is roughly three Ethernet frames, and
+    `libsimh/patches/pdp11_il.c:659` drops one outright when the guest has no
+    receive buffer posted.
+- **AND THE V10 GUEST IS SLOW AT WORK THAT NEEDS NO NETWORK, so "netfs is slow"
+  is probably the wrong diagnosis.** Measured: netfsd serves the V10 guest at
+  ~9.6 s per request — but during K15 the guest also spent **110+ seconds
+  compiling one 5,870-byte source** whose other headers were all on local disk.
+  Network latency cannot explain that, so the netfs figure is likely a
+  *symptom*: a guest not executing fast enough to issue requests faster.
+  - The baseline that settles the order of magnitude is in our own comment,
+    `pdp11_il.c:775`: unpatched V8 measured *"~16 ms a request and ~30 files a
+    minute"*. V10's 9600 ms is **600× worse**, i.e. worse than V8 was *before*
+    `il_rxpump()`'s fast-poll window existed — so the polling fallback cannot be
+    the cause, since its worst case *is* that unpatched behaviour.
+  - The suspect is the burst itself: `il_svc()` re-activates every 1000
+    instructions (`sim_activate (uptr, 1000)`) and every service call polls
+    SLiRP through `eth_read()`, a host `select()`. `pdp11_il.c:791` documents the
+    symptom from the earlier unbounded version — *"99.5% of a core at an idle
+    login ... and a guest so starved that `date` took 30 s"*. The present code
+    bounds the *re-arm*; whether it bounds the *cost* for V10's traffic pattern
+    has never been measured, because `il_rxpump()` was written for V8's `ill.c`.
+  - **CPU share cannot answer it** (the V10 config never sets `set cpu idle`, so
+    the simulator burns a core either way — measured 43:20 of CPU in 44:24
+    elapsed, which carries no information). **`tools/v10-clock.sh` is the
+    control**: fixed local work, timed by the host, card attached then disabled.
+    Run it before touching `pdp11_il.c`, and afterwards re-run
+    `tools/net-selftest.sh` against V8, whose 290 s → 11 s is measured and must
+    not regress to fix V10.
 - **netfs costs a round trip per path component, not per byte** — so diagnose it by
   counting *files*, never bytes, and never benchmark it with one big read.
   **The round trip was the emulator's, not the protocol's.** `il_svc()` ended in
