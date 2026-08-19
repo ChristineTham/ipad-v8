@@ -912,6 +912,262 @@ errlst.o: %(src)s/gen/errlst.c $(TOOLS)
     return "".join(out)
 
 
+# ------------------------------------------------------------------- mux ---
+#
+# RUNG 8's HOST HALF.  `mux' is the 5620 window multiplexer, and it is two
+# programs: `muxterm', which runs ON the terminal, and `mux', which runs on the
+# VAX.  The terminal half CANNOT BE BUILT FROM THIS TAPE and that is a
+# measurement, not a preference -- muxterm's own makefile names `3cc'/`3as'/
+# `3ld'/`3nm', `src/man/man9/3cc.9' documents all eight of those as the MAC-32
+# cross-compiler for the DMD-5620, and THE MAN PAGE IS THE ONLY ONE OF THE
+# EIGHT ON THE TAPE.  See docs/v10-log/2026-08-19.md.
+#
+# The host half is ordinary VAX C: its mkfile names `$CC', links no library but
+# libc, and every construct in it is K&R.  So this is what rung 8 can reach.
+#
+# WHY IT IS NOT A component() ENTRY, for the same reason libc is not: the
+# machinery in mkgen.emit() assumes `cmd/<name>.c' with one source directory
+# and include paths that are all under $(SRC).  mux has SEVEN objects across
+# TWO directories and needs an absolute system include directory that stands in
+# for a tree which did not survive.  Every one of those is a special case, so
+# the emitter is here where the special cases can be stated.
+#
+# `mux' IS NOT IN V10's LIVE SOURCE TREE.  `src/cmd/' has no jerq, mux, blit,
+# 5620 or dmd directory; every mux.c on the tape is in `blit/src/mux/' (the
+# 68000 Blit's), `src/630/src/' (the 630 MTG's) or here -- and `ix' is the
+# NINTH EDITION.  On a real V10 the 5620 software arrived as a separate 5620
+# distribution tape installed into /usr/jerq, which is the shape of what V8's
+# golden has and V10's has not.  So this restores V9-era source onto a V10
+# system, which is exactly what the surviving tree offers.
+MUX_DIR = "history/ix/src/jerq/mux"
+
+# The seven objects, READ OFF THE MKFILE'S OWN $LL and in its order:
+#
+#	LL=	$L(32ld.o) $L(mux.o) $L(pcheck.o) $L(pinit.o) $L(precv.o) \
+#		$L(psend.o) $L(ptimeout.o)
+#
+# Five of the seven sources are in proto/, which is why the mkfile's CFLAGS
+# carry `-I$INCL' with INCL=proto: mux.c writes `#include "pconfig.h"' and the
+# file is one directory down.
+#
+# THE TAPE BUILDS THESE INTO lib.a AND THEN LINKS `$CC -u _main lib.a'.  We
+# link the objects directly, which is equivalent here -- all seven are needed,
+# so there is nothing for the archive to leave out, and `-u _main' exists only
+# to make ld extract the member holding main() from an archive.  The archive
+# was Bell Labs' idiom for sharing one build among mux/tmux/smux (plain,
+# -DTRACING and -DPSTATISTICS); we build one variant.  Stated rather than
+# silent, because it IS a difference from the recipe on the tape.
+MUX_OBJS = [
+    ("32ld.o",     "32ld.c"),
+    ("mux.o",      "mux.c"),
+    ("pcheck.o",   "proto/pcheck.c"),
+    ("pinit.o",    "proto/pinit.c"),
+    ("precv.o",    "proto/precv.c"),
+    ("psend.o",    "proto/psend.c"),
+    ("ptimeout.o", "proto/ptimeout.c"),
+]
+
+# FIVE HEADERS mux NEEDS THAT ARE ON NO SEARCH PATH ITS MKFILE NAMES, and the
+# count grew twice while it was being measured -- first four, then five --
+# because a scan of the seven sources' OWN includes is not the requirement.
+# The requirement is the TRANSITIVE closure: `sys/xtproto.h' is reached only
+# through proto.h and packets.h, and neither of the two `.c' files names it.
+#
+# They install into /usr/jerq/include, which is where the mkfile's `-I$JINCL'
+# already points and where the 5620's own include tree would have been.  NOT
+# into /usr/include: all 44 consumers of <sys/label.h> and every consumer of
+# <sys/pex.h> live under src/history/ix/, so this is the NINTH edition's path
+# convention rather than a gap in V10 -- V10's own live tree writes <label.h>
+# unprefixed and r70 provides that at top level.  Installing V9 headers
+# system-wide to build one V9 program would be the wrong trade, and nothing
+# outside mux is touched this way.
+#
+# THE COFF HEADERS COME FROM 630/3binc AND THE CHOICE WAS MEASURED.  Two
+# copies of each survive -- `src/cmd/kasb/' and `src/630/3binc/' -- and a probe
+# compiled against both prints identical sizes and identical offsets for every
+# field 32ld.c touches (filehdr 40, f_magic@0, f_nscns@2, f_opthdr@32; aouthdr
+# 56; scnhdr 72, s_scnptr@32, s_size@24, s_paddr@8).  So correctness does not
+# decide it and provenance does: the 5620 is a WE32100, `3binc' is the
+# BELLMAC-32/3B include tree and its filehdr.h carries the BM32 identification
+# flags, while `cmd/kasb' is a KMC11 assembler that opens `#define pdp11'.
+# 32ld.c does not even take the magic number from a header -- it defines
+# `FBOMAGIC 0560' itself.
+#
+# ONLY THE THREE AND THE TWO, never the directories they come from.
+# `630/3binc' also holds ctype.h, string.h, memory.h and search.h, and
+# `history/ix/include' holds V9 copies of sys/param.h, sys/types.h,
+# sys/stat.h, sys/stream.h, sys/ttyio.h and sys/filio.h -- putting either on
+# -I would silently replace V10 headers with someone else's, which is the trap
+# already recorded for include/CC.  mux must see V10's kernel interface: it is
+# a program for a V10 kernel however old its source is.
+#
+# fields: installed name, provenance, path within it
+MUX_INC = [
+    ("aouthdr.h",   "tape", "630/3binc/aouthdr.h"),
+    ("filehdr.h",   "tape", "630/3binc/filehdr.h"),
+    ("scnhdr.h",    "tape", "630/3binc/scnhdr.h"),
+    ("sys/label.h", "tape", "history/ix/include/sys/label.h"),
+    ("sys/pex.h",   "tape", "history/ix/include/sys/pex.h"),
+    # THE SIXTH, AND THE RESOLVER FOUND IT RATHER THAN A READING OF THE
+    # SOURCES.  `sys/label.h' line 48 is `#include "sys/jlabel.h"', so no .c
+    # file names it and two rounds of scanning the seven sources missed it.
+    # mkgen.scan_includes() would have DROPPED it silently and the build would
+    # have failed on `Can't find include file sys/jlabel.h' twenty minutes
+    # into a boot -- which is the whole argument for mux_closure() raising.
+    #
+    # It also settles the label.h choice, in the opposite direction to the one
+    # measured first.  r70's own top-level `label.h' includes the same line and
+    # r70 HAS NO sys/jlabel.h ANYWHERE, so V10's copy is unusable as shipped --
+    # another r70 reconstruction gap, and a reason to take the pair from the ix
+    # tree that carries both rather than mixing generations.
+    ("sys/jlabel.h", "tape", "history/ix/include/sys/jlabel.h"),
+]
+
+# REFERENCED AND NEVER COMPILED, so the resolver must not fail on it and must
+# not silently drop it either.  proto.h and packets.h both open
+#
+#	#ifdef XT
+#	#ifndef MAXPCHAN
+#	#include "sys/xtproto.h"
+#	#endif
+#	#else
+#	   ... every definition, inline ...
+#
+# and the mkfile's CFLAGS never define XT, so the `#else' arm is what compiles.
+# V8's copies of both headers are structurally identical, and V8 DOES ship
+# `jerq/include/sys/xtproto.h' -- so the header is real, it is simply the XT
+# variant's and no V10 build of mux wants it.  Named here with its reason,
+# because scan_includes()' habit of dropping what it cannot find is how a
+# missing header becomes a mystery three hours into a build.
+MUX_UNREACHED = {
+    "sys/xtproto.h": "behind #ifdef XT; the mkfile never defines XT",
+}
+
+
+def mux_jerq_map():
+    """-> {include name: host path} for our /usr/jerq/include, exactly.
+
+    THE HOST MODEL MUST MATCH WHAT THE GUEST GETS, or the makefile names a
+    prerequisite that does not exist and make answers `Don't know how to
+    make' -- the app's `it is in the golden, it will arrive on Reset' lesson
+    in a third place.  So this is built from the two things that actually
+    install: the 21-file blit include tree that tools/v10drive.exp's
+    v10_jerq_inc copies, and MUX_INC above.
+    """
+    m = {}
+    blit = os.path.join(ROOT, "work/v10/blit/include")
+    if os.path.isdir(blit):
+        for f in sorted(os.listdir(blit)):
+            p = os.path.join(blit, f)
+            if os.path.isfile(p):
+                m[f] = p
+    for name, prov, rel in MUX_INC:
+        m[name] = os.path.join(SRC if prov == "tape" else OURS, rel)
+    # Our overlay's jioctl.h wins, as v10_jerq_inc installs it -- it adds
+    # `#define JMUX JMPX', an alias no header on the tape defines.
+    ours = os.path.join(OURS, "include/jioctl.h")
+    if os.path.exists(ours):
+        m["jioctl.h"] = ours
+    return m
+
+
+def mux_closure(path, jerq, seen=None, chain=()):
+    """Transitive include closure for one mux source, resolved as cpp will.
+
+    Its own directory first for a quoted include, then proto/, then
+    /usr/jerq/include, then the system tree -- the mkfile's `-I$INCL -I$JINCL'
+    with /usr/include implicit last.
+
+    UNLIKE mkgen.scan_includes() THIS RAISES on an include it cannot place.
+    A dropped header is not a smaller dependency list, it is a build that
+    compiles against something nobody chose.
+    """
+    if seen is None:
+        seen = {}
+    if path in seen or not os.path.exists(path):
+        return seen
+    seen[path] = True
+    d = os.path.join(SRC, MUX_DIR)
+    proto = os.path.join(d, "proto")
+    own = os.path.dirname(path)
+    for kind, raw in mkgen.INCLUDE.findall(open(path, "rb").read()):
+        name = raw.decode("ascii", "replace")
+        if name in MUX_UNREACHED:
+            continue
+        cands = [os.path.join(own, name)] if kind == b'"' else []
+        cands += [os.path.join(proto, name)]
+        if name in jerq:
+            cands.append(jerq[name])
+        cands.append(os.path.join(INC, name))
+        for c in cands:
+            c = os.path.normpath(c)
+            if os.path.isfile(c):
+                mux_closure(c, jerq, seen, chain + (name,))
+                break
+        else:
+            raise SystemExit(
+                "mkdep: mux: cannot resolve #include %s, reached via %s.\n"
+                "  Either add it to MUX_INC with its provenance, or -- if it "
+                "is behind a #ifdef this build never takes -- to "
+                "MUX_UNREACHED with the reason." % (name, " -> ".join(chain) or path))
+    return seen
+
+
+def emit_mux():
+    d = os.path.join(SRC, MUX_DIR)
+    if not os.path.isdir(d):
+        sys.exit("mkdep: no %s -- run tools/v10-import.py" % d)
+    jerq = mux_jerq_map()
+    for name, prov, rel in MUX_INC:
+        p = os.path.join(SRC if prov == "tape" else OURS, rel)
+        if not os.path.exists(p):
+            sys.exit("mkdep: mux: MUX_INC names %s, which is not at %s" % (name, p))
+    srcdir = "$(SRC)/" + MUX_DIR
+    jerqpaths = {v: k for k, v in jerq.items()}
+
+    def dep(path):
+        path = os.path.normpath(path)
+        if path in jerqpaths:
+            return "$(JERQINC)/" + jerqpaths[path]
+        if path.startswith(INC + os.sep):
+            return "$(INCDIR)/" + mkgen.rel(path, INC)
+        return srcdir + "/" + mkgen.rel(path, d)
+
+    out = [PREAMBLE % dict(
+        name="mux",
+        cflags="",
+        incs="-I%s/proto -I$(JERQINC)" % srcdir)]
+    out.append("""\
+# THE 5620 INCLUDE TREE, WHICH IS A STAND-IN AND SAYS SO.  A real V10 machine
+# had /usr/jerq from the separate 5620 distribution tape; the V10 golden has no
+# /usr/jerq at all, so ours is the v10blit tarball's 21 headers -- the 68000
+# Blit's -- plus the %d this build needs that no surviving tree provides at the
+# path mux names.  tools/v10drive.exp's v10_jerq_inc installs the 21 and
+# v10/mk/gen/mux.inc names the rest.
+JERQINC = /usr/jerq/include
+
+""" % len(MUX_INC))
+    out.append("OBJS = " + " ".join(o for o, _ in MUX_OBJS) + "\n")
+    out.append("\nall: mux\n")
+    out.append("\nmux: $(OBJS) $(LD) $(LIBC)\n"
+               "\t$(CC) $(CFLAGS) -o mux $(OBJS) $(LIBC)\n")
+    for obj, src in MUX_OBJS:
+        full = os.path.join(d, src)
+        deps = sorted(dep(p) for p in mux_closure(full, jerq)
+                      if os.path.normpath(p) != os.path.normpath(full))
+        # `pcheck.c' includes NOTHING -- it is the CRC, and its vax arm is
+        # four asm() lines -- so its dependency list is empty and a plain
+        # format string leaves a double space behind.
+        out.append("\n%s: %s\n\t$(COMPILE) %s/%s\n"
+                   % (obj, " ".join(["%s/%s" % (srcdir, src)] + deps
+                                    + ["$(TOOLS)"]), srcdir, src))
+    out.append("\ninstall: mux\n")
+    out.extend(mkgen.mkdirs_for("$(DESTDIR)", "usr/jerq/bin/mux"))
+    out.append("\tcp mux $(DESTDIR)/usr/jerq/bin/mux\n")
+    out.append("\nclean:\n\t-rm -f $(OBJS) mux\n")
+    return "".join(out)
+
+
 def source_for(name, root):
     """Where this command's source is: cmd/<name>.c, or cmd/<name>/<name>.c."""
     loose = os.path.join(root, "cmd", name + ".c")
@@ -1082,6 +1338,25 @@ def main():
     _order, _objmap = libc_built()
     put("libc.src", "".join("%s %s\n" % (o, _objmap[o]) for o in _order))
 
+    # RUNG 8's HOST HALF -- its own emitter, for the reasons above emit_mux().
+    put("mux.mk", emit_mux())
+    entries.append(("mux", MUX_DIR, "usr/jerq/bin/mux"))
+    # The five headers, as DATA with their provenance, so the harness applies a
+    # list rather than restating five copies in Tcl.  inc.extra's lesson, one
+    # directory over: a list that appears twice will disagree, and the copy
+    # that disagreed was the one nobody ran.
+    put("mux.inc",
+        "# The headers mux needs that /usr/jerq/include does not carry.\n"
+        "# Generated by v10/mk/mkdep.py -- see MUX_INC for the evidence\n"
+        "# behind each choice.  Destination is /usr/jerq/include, never\n"
+        "# /usr/include: these are the NINTH edition's path convention.\n"
+        "#\n"
+        "# fields: installed-name  tape|ours  path-within\n"
+        # TAB-separated, because v10_rows() in tools/v10drive.exp splits on tab
+        # and checks the column count -- aligned spaces gave it one column and it
+        # bailed with "has 1 columns, expected 3".  Same shape as bootpath.order.
+        + "".join("%s\t%s\t%s\n" % (n, w, f) for n, w, f in MUX_INC))
+
     put("bootpath.order",
         "".join("%s\t%s\t%s\n" % e
                 for e in entries if e[0] in BOOTPATH))
@@ -1164,7 +1439,11 @@ def main():
     print("generated %d of %d components in %s"
           % (len(entries),
              len(BOOTPATH) + len(FSTOOLS) + len(SHUTDOWN)
-             + len(BUILDTOOLS) + len(TOOLCHAIN_SIMPLE) + len(TOOLCHAIN) + 1,
+             + len(BUILDTOOLS) + len(TOOLCHAIN_SIMPLE) + len(TOOLCHAIN)
+             # the two with hand-written emitters: libc (an archive) and mux
+             # (seven objects across two directories).  A bare `+ 1' here
+             # printed "42 of 41" the moment mux was added.
+             + 2,
              mkgen.rel(GEN, os.getcwd())))
     order, _, lcc = libc_from_tape()
     built, _ = libc_built()
