@@ -1,0 +1,121 @@
+#!/usr/bin/env expect
+# Is the V10 guest STARVED, or is netfs merely slow?  One boot answers it.
+#
+#	expect tools/v10-clock.exp <image> <il on|off>
+#
+# WHY THIS EXISTS.  netfsd serves the V10 guest at about one request every 9.6
+# seconds (measured twice in K15, same order in K14), and the obvious reading is
+# that netfs is slow.  K15 then spent forty-five minutes compiling its FIRST
+# object -- and a compile is almost entirely guest CPU, since the source is read
+# once and its other headers are local.  Network latency cannot explain a slow
+# compile.  So the 9.6 s may be a SYMPTOM: a guest that cannot issue requests
+# faster because it is not executing fast enough.
+#
+# THE CANDIDATE, AND OUR OWN COMMENT DOCUMENTS THE SYMPTOM.  During a receive
+# burst libsimh/patches/pdp11_il.c re-activates the unit every 1000 instructions
+# (`sim_activate (uptr, 1000)') and each service call polls SLiRP through
+# eth_read(), which is a host select().  pdp11_il.c:791 records what the earlier,
+# unbounded version of that did:
+#
+#	"99.5% of a core at an idle login ... and a guest so starved that
+#	 `date' took 30 s"
+#
+# The present code bounds the RE-ARM (`if (got && il.rxburst == 0)').  Whether it
+# bounds the COST for V10's traffic pattern has never been measured -- il_rxpump()
+# was written for V8's ill.c and measured against it.
+#
+# WHAT IS MEASURED, AND WHY IT NEEDS NO NETWORK.  A fixed amount of guest work,
+# timed by the HOST, with the Interlan attached and then detached:
+#
+#	guest work costs the same either way   -> not starved.  The 9.6 s is real
+#	                                         network latency.
+#	guest work is much slower with the card-> STARVED.  The netfs rate is a
+#	                                         symptom and the fix is in the
+#	                                         device model's polling, not in
+#	                                         netfs.
+#
+# CPU SHARE CANNOT ANSWER THIS, which is why the test is a stopwatch instead.
+# The V10 config never sets `set cpu idle', so SIMH burns a core whatever
+# happens -- 100% CPU is the expected reading and carries no information.
+#
+# `cat /unix > /dev/null' is the work: 228,310 bytes off the LOCAL disk, no
+# network, and /bin/cat is on the golden.  Repeated, because one reading of a
+# thing this noisy is not a measurement.
+
+log_user 1
+
+set here [file dirname [info script]]
+source $here/v10drive.exp
+
+set V10_SIMH [file normalize [file join $here .. work opensimh BIN vax780]]
+set V10_ROM  [file normalize [file join $here .. work v10 src lsys boot star uda]]
+set V10_RUN_SECS 1800
+
+if {[llength $argv] < 2} {
+    puts "usage: v10-clock.exp <image> <on|off>"
+    exit 2
+}
+set img [lindex $argv 0]
+set il  [lindex $argv 1]
+
+set REPS 3
+set WORK "cat /unix > /dev/null"
+
+set results {}
+proc note {name ok} { global results; lappend results [list $name $ok] }
+proc report {} {
+    global results
+    puts "\n===== V10 clock probe ====="
+    set failed 0
+    foreach r $results {
+        puts [format "  %-50s %s" [lindex $r 0] [expr {[lindex $r 1] ? "ok" : "NO"}]]
+        if {!([lindex $r 1])} { incr failed }
+    }
+    puts "===== [expr {[llength $results] - $failed}]/[llength $results] =====\n"
+    return $failed
+}
+
+# The card, or deliberately not it.  `/etc/rc' guards on /dev/il0 exactly as V8's
+# does, so a machine with no card attached boots the same way it did before the N
+# track -- it simply has no network.
+if {$il eq "on"} {
+    set extra [list "set il enable" "set il address=2013E800" "set il vector=E8" \
+                    "attach il nat:"]
+} else {
+    set extra [list "set il disable"]
+}
+
+v10_boot $img $extra
+note "the machine came up with il $il" 1
+v10_login root
+v10_sh "PATH=/bin:/etc:/usr/bin; export PATH" 120
+v10_sh "OK=-ok" 120
+
+# THE STOPWATCH IS THE HOST'S, and that is the point: a starved guest's own clock
+# is exactly what cannot be trusted here.  `clock milliseconds' is Tcl's, taken
+# either side of a command whose completion the marker proves.
+set times {}
+for {set i 1} {$i <= $REPS} {incr i} {
+    set t0 [clock milliseconds]
+    set ok [v10_try "$WORK && echo W\$OK" "W-ok" 600]
+    set t1 [clock milliseconds]
+    set ms [expr {$t1 - $t0}]
+    lappend times $ms
+    puts "== il $il, run $i: $ms ms =="
+    note "run $i completed" $ok
+}
+
+# The median, not the mean: one long reading from an unrelated hiccup should not
+# move the answer.
+set sorted [lsort -integer $times]
+set med [lindex $sorted [expr {[llength $sorted] / 2}]]
+puts "\n== il $il: median [set med] ms over $REPS runs ($times) ==\n"
+
+# A FACT FOR THE DRIVER TO COMPARE, printed in a form it can grep unambiguously.
+# The token carries the value so a stale log cannot be mistaken for this run --
+# the driver truncates the log before starting, and this line names its own arm.
+puts "CLOCKPROBE il=$il median=$med"
+
+set failed [report]
+v10_halt
+exit [expr {$failed ? 1 : 0}]
