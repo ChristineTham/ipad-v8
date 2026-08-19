@@ -21,7 +21,10 @@ struct  stdata *stenter();
 int	strput(), stwsrv(), nulldev(), nilput();
 long	nilopen();
 
-struct	qinit strdata = { strput, NULL, nilopen, nulldev, 512, 256 };
+/* ipnx: 512/256 -> 8192/4096.  A 4096-byte netfs reply cannot pass
+   through a 512-byte stream head; V8's netfs fix raised these same
+   two numbers to these same values.  See PATCHES.md. */
+struct	qinit strdata = { strput, NULL, nilopen, nulldev, 8192, 4096 };
 struct	qinit stwdata = { nulldev, stwsrv, nilopen, nulldev, 0, 0};
 struct	qinit nilw = { nilput, NULL, nilopen, nulldev, 1, 0 };
 struct	streamtab nilinfo = { &nilw, &nilw };

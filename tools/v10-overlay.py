@@ -560,7 +560,26 @@ even though the correction is the same.""",
                 "\t\t\t}\n"
                 "\t\t\tif (count == 0) {\t/* ipnx: satisfied */\n"
                 "\t\t\t\tstexit(ip);\n\t\t\t\treturn(nc);\n\t\t\t}\n"
-                "\t\t\tcontinue;\n", 1)],
+                "\t\t\tcontinue;\n", 1),
+               # THE FOURTH DATAKIT ASSUMPTION, AND THE ONLY ONE V10 STILL HAD.
+               # V8's own netfs fix raised the stream head's water marks from the
+               # tape's 512/256 to 8192/4096; V10's copy is still at 512, and
+               # tcp_device.c:265 drains only `while ((q->next->flag&QFULL) == 0)'
+               # -- so every netfs reply has to squeeze through a 512-byte queue.
+               #
+               # MEASURED, not inferred (tools/v10-netread.sh, 2026-08-20):
+               # twelve replies of 744 and 1905 bytes all read complete, and THE
+               # FIRST reply that filled a whole 4096-byte request killed the
+               # connection, after which every read returned 0 bytes SILENTLY.
+               # netfsd served that request in 0.31 ms and the card reported ZERO
+               # receive errors and zero queue loss, so it is neither the server
+               # nor a dropped frame.  K15 died the same way on the same shape.
+               ("struct\tqinit strdata = { strput, NULL, nilopen, nulldev, 512, 256 };",
+                "/* ipnx: 512/256 -> 8192/4096.  A 4096-byte netfs reply cannot pass\n"
+                "   through a 512-byte stream head; V8's netfs fix raised these same\n"
+                "   two numbers to these same values.  See PATCHES.md. */\n"
+                "struct\tqinit strdata = { strput, NULL, nilopen, nulldev, 8192, 4096 };",
+                1)],
     ),
 ]
 

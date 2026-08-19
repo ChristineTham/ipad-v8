@@ -1021,7 +1021,17 @@ even though the correction is the same.
 ```diff
 --- tarball/lsys/os/streamio.c
 +++ ours/lsys/os/streamio.c
-@@ -302,9 +302,23 @@
+@@ -22,5 +22,8 @@
+ long	nilopen();
+ 
+-struct	qinit strdata = { strput, NULL, nilopen, nulldev, 512, 256 };
++/* ipnx: 512/256 -> 8192/4096.  A 4096-byte netfs reply cannot pass
++   through a 512-byte stream head; V8's netfs fix raised these same
++   two numbers to these same values.  See PATCHES.md. */
++struct	qinit strdata = { strput, NULL, nilopen, nulldev, 8192, 4096 };
+ struct	qinit stwdata = { nulldev, stwsrv, nilopen, nulldev, 0, 0};
+ struct	qinit nilw = { nilput, NULL, nilopen, nulldev, 1, 0 };
+@@ -302,9 +305,23 @@
  	if ((stq = stenter(ip)) == NULL)
  		return(-1);
 +	/* ipnx: a byte stream never sends the zero-length write that
@@ -1047,7 +1057,7 @@ even though the correction is the same.
 +			if (stq->flag&HUNGUP) {
  				splx(s);
  				stexit(ip);
-@@ -333,7 +347,17 @@
+@@ -333,7 +350,17 @@
  			nc += n;
  			count -= n;
 -			n = bp->class;
