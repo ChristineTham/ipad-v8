@@ -58,7 +58,13 @@ source $here/v10drive.exp
 
 set V10_SIMH [file normalize [file join $here .. work opensimh BIN vax780]]
 set V10_ROM  [file normalize [file join $here .. work v10 src lsys boot star uda]]
-set V10_RUN_SECS 5400
+# 7200.  The first run reached its report in ~3000 s having only got through the
+# header installs, so at the measured ~7 s a netfs request the whole of this
+# harness -- 27 headers, 10 objects, a link, the oracle's 15-block archive and an
+# install -- does not fit 5400.  A generous deadline costs only that a genuinely
+# hung run takes longer to give up, and CLAUDE.md's rule cuts this way: a watchdog
+# that can fire during legitimate work is worse than the hang it guards against.
+set V10_RUN_SECS 7200
 
 if {[llength $argv] < 6} {
     puts "usage: v10-mux.exp <k13-image> <tport> <oport> <mport> <xport> <liba-size>"
@@ -174,7 +180,18 @@ if {!$shares} {
 # that survived -- plus the six from v10/mk/gen/mux.inc that no surviving tree
 # provides at the path mux names.
 v10_sh "mkdir /usr/jerq; mkdir $JQ; mkdir $JQ/sys" 120
-v10_sh "cd /n/tree/blit/include; cp *.h $JQ" 900
+# 2400, NOT 900, AND THE NUMBER IS MEASURED RATHER THAN PADDED.  This copy is 21
+# files and `cp *.h' is about the cheapest shape there is -- after the `cd', each
+# file costs NNAMI + NGET + two NREAD + NPUT, five requests, with no path walk to
+# save.  At the ~7 s per netfs request measured on 2026-08-20 that is ~735 s
+# against a 900 s bound, so it succeeded once and then bailed:
+#
+#	V10-BAIL: never saw '+ok11+' after 900s
+#
+# There is nothing structural left to shorten here -- the cost is entirely the
+# latency (see the netfs entry in CLAUDE.md), so the honest fix is to stop
+# pretending it is faster than it is.
+v10_sh "cd /n/tree/blit/include; cp *.h $JQ" 2400
 note "the 5620 include tree installs" \
     [v10_try "test -s $JQ/tty.h && echo JQ\$OK" "JQ-ok" 300]
 
