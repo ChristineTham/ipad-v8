@@ -1189,7 +1189,25 @@ def emit_mux():
     out = [PREAMBLE % dict(
         name="mux",
         cflags="",
-        incs="-I%s/proto -I$(JERQINC)" % srcdir)]
+        # -I$(MUXSRC) AS WELL AS ITS proto/, AND THE TAPE'S OWN MKFILE IS WHY.
+        #
+        # mux.c includes five headers with QUOTES -- "msgs.h", "pconfig.h",
+        # "proto.h", "packets.h", "pstats.h" -- and V10's cpp resolves a quoted
+        # include from the COMPILING PROCESS'S CWD, not from the source file's
+        # directory.  The tape gets away with it by compiling in place:
+        # mkfile:53 is `$CC -c $CFLAGS $stem.c' with `INCL = $PDIR', a RELATIVE
+        # path that only means anything when cwd is the mux directory.
+        #
+        # We build out-of-tree in a per-component object directory, so cwd holds
+        # none of them and `-I$(MUXSRC)/proto' alone finds four of the five --
+        # msgs.h is in the mux directory itself, not in proto/.  Measured
+        # 2026-08-20: five `Can't find include file' lines and `*** Error code 1'
+        # on mux.c, while 32ld.c compiled fine because every one of ITS includes
+        # is angle-bracketed.
+        #
+        # This is CLAUDE.md's standing warning -- "the tape's makefiles assume you
+        # build in the source directory" -- in a new subsystem.
+        incs="-I%s -I%s/proto -I$(JERQINC)" % (srcdir, srcdir))]
     out.append("""\
 # THE 5620 INCLUDE TREE, WHICH IS A STAND-IN AND SAYS SO.  A real V10 machine
 # had /usr/jerq from the separate 5620 distribution tape; the V10 golden has no

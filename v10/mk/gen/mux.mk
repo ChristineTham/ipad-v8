@@ -68,7 +68,7 @@ LIBC = $(V10LIB)/libc.a
 INCDIR = /usr/v10/include
 
 CFLAGS = -O 
-INCS   = -I$(MUXSRC)/proto -I$(JERQINC) -I$(INCDIR)
+INCS   = -I$(MUXSRC) -I$(MUXSRC)/proto -I$(JERQINC) -I$(INCDIR)
 COMPILE = $(CC) $(CFLAGS) $(INCS) -c
 TOOLS  = $(CCPATH) $(CCOM) $(CPP) $(C2) $(AS)
 
