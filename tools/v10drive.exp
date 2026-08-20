@@ -384,6 +384,35 @@ proc v10_must {pat {t 0}} {
 # `extra' is where a caller attaches its own units -- the source disk is
 #	{"set rq1 ra81" "attach rq1 /path/to/src.img"}
 # and nothing else in this file needs to know it exists.
+# AN OPTIONAL PACKET TRACE, because the netfs LATENCY is still unexplained and a
+# trace is the instrument that would settle it.
+#
+# What is already ruled out (2026-08-20): netfsd is not slow (0.2-0.3 ms mean
+# service), no frames are dropped (`show il statistics' reports zero receive
+# errors and zero queue loss), the guest is not CPU-starved (228 KB read locally
+# in 72 ms), and the 512-byte stream head -- which really did cause the
+# TRUNCATION -- left the latency untouched at 6.92 s against 6.67-7.50.  What
+# remains is that the guest sent 978 packets and received 833 for 249 exchanges
+# with no loss, which points at retransmission; V10's TCPTV_MIN is 2 s where V8's
+# is 1, so the penalty is seconds.  A duplicate packet is visible directly in a
+# trace and by inference nowhere else.
+#
+# OFF unless V10_IL_TRACE names a file, so it costs nothing normally and no
+# harness has to be edited to get it:
+#
+#	V10_IL_TRACE=work/il.trace bash tools/v10-netread.sh
+#
+# It is appended AFTER $extra deliberately: `set il debug' is rejected while the
+# device is disabled, so it has to follow whatever `set il enable' the caller
+# passed.
+proc v10_iltrace {} {
+    global env
+    if {![info exists env(V10_IL_TRACE)] || $env(V10_IL_TRACE) eq ""} { return {} }
+    return [list "set debug $env(V10_IL_TRACE)" \
+                 "set debug -t" \
+                 "set il debug=PKT;DAT"]
+}
+
 proc v10_boot {img {extra {}} {r5 0}} {
     # `global spawn_id' IS LOAD-BEARING -- spawn sets spawn_id in the CURRENT
     # scope, so a spawn inside a proc leaves the global one alone and every
@@ -427,7 +456,7 @@ proc v10_boot {img {extra {}} {r5 0}} {
         "set dz enable"
         "set dz lines=8"
         "set tto 7b"
-    } [list "set rq0 ra81" "attach rq0 $img"] $extra] {
+    } [list "set rq0 ra81" "attach rq0 $img"] $extra [v10_iltrace]] {
         send "$c\r"
         v10_must "sim>" 60
     }
