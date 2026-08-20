@@ -86,6 +86,7 @@ set JQ   /usr/jerq/include
 # The shallow mount, not the deep path: every reader of $MUXD pays netfs's
 # per-component walk, and this one is read once per object in the compare step.
 set MUXD /n/mux
+set IXLIB /n/tree/src/history/ix/src/libc
 set DEST /usr/w15
 
 # The seven objects, in the mkfile's own $LL order.  Restated here ONLY as the
@@ -247,15 +248,29 @@ v10_sh "rm -rf $OBJ; mkdir $OBJ; mkdir $OBJ/mux" 300
 v10_sh "mkdir $OBJ/mux/proto" 300
 v10_sh "cp $MUXD/*.c $MUXD/*.h $OBJ/mux" 2400
 v10_sh "cp $MUXD/proto/*.c $MUXD/proto/*.h $OBJ/mux/proto" 2400
+# AND THE OTHER THREE OBJECTS TOO -- labEQ.c and labLE.c from IX's own libc, and
+# our muxix.c.  Run 5 compiled labEQ.c off the share and then failed on labLE.c
+# from the SAME directory with
+#
+#	0: No source file /n/tree/src/history/ix/src/libc/labLE.c
+#
+# after netfsd had already answered the lookup (`labLE.c = ino 229 ... size=389').
+# Lookup succeeded, open failed -- the same shape as the quoted includes, and the
+# same remedy: if the build compiles it, it lives locally.  Nothing here is
+# read over netfs more than once.
+v10_sh "cp $IXLIB/labEQ.c $IXLIB/labLE.c $OBJ/mux" 1200
+v10_sh "cp /n/ours/history/ix/src/jerq/mux/muxix.c $OBJ/mux" 1200
 note "the mux sources stage locally" \
-    [v10_try "test -s $OBJ/mux/msgs.h && test -s $OBJ/mux/proto/proto.h && echo ST\$OK" "ST-ok" 300]
+    [v10_try "test -s $OBJ/mux/msgs.h && test -s $OBJ/mux/proto/proto.h && test -s $OBJ/mux/labLE.c && test -s $OBJ/mux/muxix.c && echo ST\$OK" "ST-ok" 300]
 
 # MUXSRC is `.' -- the object directory the sources were just staged into, so cpp
 # sees exactly the layout the tape's own build gives it.  SRC stays the tarball
 # root because IXLIBC still reads labEQ.c/labLE.c through it (two files, both
 # using only angle includes, so neither the depth nor the quoted-include defect
 # costs anything there).
-v10_sh "A='SRC=/n/tree/src OURS=/n/ours MUXSRC=.'" 120
+# Every source the build compiles is now in the object directory, so all three
+# source-directory macros are `.' and the compile touches netfs not at all.
+v10_sh "A='SRC=/n/tree/src OURS=/n/ours MUXSRC=. IXLIBC=. MUXOURS=.'" 120
 v10_sh "A=\"\$A INCDIR=/usr/include TOOLDIR=$OBJ DESTDIR=$DEST\"" 120
 v10_sh "B='CC=cc CCPATH=/bin/cc CPP=$T1/lib/cpp CCOM=$T1/lib/ccom C2=$T1/lib/c2'" 120
 v10_sh "C='AS=/bin/as LD=/bin/ld LIBC=/lib/libc.a'" 120
