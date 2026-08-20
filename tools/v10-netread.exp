@@ -35,7 +35,11 @@ source $here/v10drive.exp
 
 set V10_SIMH [file normalize [file join $here .. work opensimh BIN vax780]]
 set V10_ROM  [file normalize [file join $here .. work v10 src lsys boot star uda]]
-set V10_RUN_SECS 3600
+# 5400, NOT 3600.  The first run hit the 3600 s deadline at 24 of 42 verdicts and
+# the watchdog gave up the image mid-measurement.  The list is trimmed to 24
+# verdicts (see v10-netread.sh) and this leaves headroom, because netfs really is
+# ~7 s a request and a deep path costs ~28 walk requests before a byte is read.
+set V10_RUN_SECS 5400
 
 if {[llength $argv] < 3} {
     puts "usage: v10-netread.exp <image> <port> <list>"

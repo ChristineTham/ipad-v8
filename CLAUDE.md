@@ -1869,6 +1869,27 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   halted perfectly. **A run that ends 120 s late looks like a slow machine,
   not a broken pattern.** Use the flat form; `tools/v10drive.exp` carries the
   measurements.
+- **THE DEADLINE PATH LEFT AN ORPHANED SIMULATOR SPINNING AT 98% OF A CORE, AND
+  `close` IS WHY.** `v10_reap` is `close` plus `wait -nowait`, and **close only
+  ends the simulator if the simulator is READING its console** — a guest wedged
+  in a netfs read is not, so SIMH never sees the EOF. `v10_expired` then ran
+  `exit 3` and left it behind. Measured 2026-08-20 after a `v10-netread` run hit
+  its 3600 s deadline: `vax780` pid 83844, **PPID 1**, 97.9% CPU, still holding
+  its disk image, with no pty left to reach it through — so nothing but a signal
+  could stop it, which is exactly what the rule below forbids. The bug was in the
+  deadline path, not in the response to it. `v10_expired` now sends **^E then
+  `quit`** (bounded, non-fatal, the same fallback `v10_halt` already uses) before
+  reaping. *A watchdog that cannot stop what it is watching is not a watchdog.*
+  - **And the run was mis-sized, which is what fired the deadline.** Seven files
+    × 3 passes × 2 readers is 42 verdicts, and at ~7 s a netfs request that is
+    ~150 s a verdict — 6300 s against a 3600 s bound. **A probe that cannot
+    finish inside its own deadline is badly sized, not unlucky**; the list is
+    four files now (one per interesting block count, plus the historical
+    casualty) and the bound is 5400.
+  - Only a **clone** was ever at risk, which is the clone rule earning its keep
+    for the third time: the harness had already declared that image damaged, all
+    three baselines were verified untouched before and after, and `lsof` confirmed
+    the orphan held nothing else.
 - **A harness must terminate itself; needing to kill one is the bug.** A run
   that hangs still *owns* the disk image, so the next round cannot start — and
   overlapping simulators are how images get corrupted here. Both drivers now

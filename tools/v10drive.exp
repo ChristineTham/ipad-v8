@@ -318,6 +318,28 @@ proc v10_expired {secs} {
     if {$V10_RUNNING} {
         puts "V10-DEADLINE: the guest was NOT cleanly halted -- treat this"
         puts "V10-DEADLINE: image as damaged until a hash says otherwise."
+        # ^E AND `quit' BEFORE THE CLOSE, AND THIS IS NOT TIDINESS.
+        #
+        # v10_reap is `close' plus `wait -nowait', and close only ends the
+        # simulator if the simulator is READING its console.  A guest wedged in a
+        # netfs read is not, so SIMH never sees the EOF -- and the driver then
+        # runs `exit 3' and leaves it behind.  Measured 2026-08-20: after this
+        # deadline fired, vax780 pid 83844 was still spinning at 97.9% of a core
+        # with PPID 1, orphaned, holding its disk image, with no pty left to
+        # reach it through.  Nothing could stop it but a signal, which is exactly
+        # what CLAUDE.md's "a harness must terminate itself; needing to kill one
+        # is the bug" forbids -- so the bug was here.
+        #
+        # ^E drops a local-tty console to `sim>' and `quit' ends the process, the
+        # same two steps v10_halt already uses as its fallback.  Both are bounded
+        # and non-fatal: a machine that has genuinely gone away answers with eof
+        # and costs nothing.
+        catch {
+            send "\005"
+            expect -timeout 20 -- "sim>" {} timeout {} eof {}
+            send "quit\r"
+            expect -timeout 30 eof {} timeout {}
+        }
     }
     v10_reap
     exit 3

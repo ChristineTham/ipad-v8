@@ -52,12 +52,18 @@ TRACE="$ROOT/work/netfs-netread.log"
 # restates a measurement will disagree with it.  The set deliberately straddles
 # the 4096 boundary in both directions, and includes the two files K15 and K14
 # already measured -- 32ld.c, which failed, and a two-block file that worked.
+# FOUR FILES, NOT SEVEN, AND THE FIRST RUN IS WHY.  Seven files x 3 passes x 2
+# readers is 42 verdicts, and at ~7 s a netfs request that measured ~150 s a
+# verdict -- so the run hit v10-netread.exp's own 3600 s deadline at 24 of 42, and
+# the watchdog gave up the image mid-measurement.  A probe that cannot finish
+# inside its own deadline is badly sized, not unlucky.
+#
+# So the list is trimmed to what the question needs: one file per interesting
+# block count, plus the historical casualty.  1905 was redundant with 744, and
+# 4900/6289 were redundant with 5870 as two-block cases.
 FILES=(
-    blit/include/ctype.h                              # 744    one block
-    src/history/ix/src/jerq/mux/proto/psend.c         # 1905   one block
-    blit/include/mpx.h                                # 4900   two, KNOWN GOOD
-    src/history/ix/src/jerq/mux/32ld.c                # 5870   two, KNOWN BAD
-    src/history/ix/src/jerq/mux/proto/precv.c         # 6289   two
+    blit/include/ctype.h                              # 744    ONE block, control
+    src/history/ix/src/jerq/mux/32ld.c                # 5870   two -- what K15 died on
     src/history/ix/src/jerq/mux/term/control.c        # 12961  four
     src/history/ix/src/jerq/mux/mux.c                 # 23747  six
 )
