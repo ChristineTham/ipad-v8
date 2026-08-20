@@ -156,7 +156,8 @@ set shares [expr {$sh1 && $sh2 && $sh3 && $sh4}]
 # passed.  Without this, `test -s' against a path under an unmounted /n/tree
 # tests the mount POINT and passes.
 if {!$shares} {
-    foreach n {"the oracle archive reads to its full length" \
+    foreach n {"the mux sources stage locally" \
+               "the oracle archive reads to its full length" \
                "the 5620 include tree installs" \
                "mux.inc's headers install" \
                "all seven objects compile" \
@@ -215,9 +216,46 @@ note "mux.inc's headers install" $inc_ok
 
 # ==================================================== build mux ==============
 v10_sh "rm -rf $OBJ; mkdir $OBJ; mkdir $OBJ/mux" 300
-# MUXSRC is the shallow mount; SRC stays the tarball root because IXLIBC still
-# reads labEQ.c/labLE.c through it (two files, so its depth costs little).
-v10_sh "A='SRC=/n/tree/src OURS=/n/ours MUXSRC=/n/mux'" 120
+# ===================== BUILD IN-TREE, BECAUSE THE TAPE DOES ==================
+#
+# V10's cpp CANNOT RESOLVE A QUOTED INCLUDE FOR AN OUT-OF-TREE SOURCE, and adding
+# the directory to -I does not help.  Measured 2026-08-21, twice: mux.c includes
+# msgs.h, pconfig.h, proto.h, packets.h and pstats.h with quotes, and with
+#
+#	cc -O -I/n/mux -I/n/mux/proto -I/usr/jerq/include -I/usr/include -c /n/mux/mux.c
+#
+# cpp answered `Can't find include file' for all five -- while netfsd's trace shows
+# it never looked for ANY of them.  Each name appears exactly once in the trace,
+# and that once is MAKE stat'ing a prerequisite.  The control is in the same run:
+# `aouthdr.h', which 32ld.c includes with ANGLE brackets, appears three times
+# because cpp really did search these directories for it.  So angle includes search
+# the -I list and quoted ones do not reach the filesystem at all.
+#
+# cpp.c explains the shape: the search is `for (dirp = dirs + inctype; *dirp;
+# ++dirp)' with inctype 1 for angle and 0 for quoted, and dirs[0] is a POINTER
+# INTO argv that trmdir() truncated in place (cpp.c:2317), reassigned on every
+# include entry and exit (cpp.c:551, :1174).
+#
+# The tape never meets this because it compiles IN the source directory --
+# mkfile:53 is `$CC -c $CFLAGS $stem.c' over `INCL = $PDIR', a RELATIVE path.  So
+# we do the same: stage the sources into the object directory and build with
+# MUXSRC=`.'.  CLAUDE.md's standing warning, "the tape's makefiles assume you
+# build in the source directory", with the remedy rather than a workaround.
+#
+# It is also much FASTER: the compile then reads nothing over netfs, and netfs is
+# ~7 s a request.
+v10_sh "mkdir $OBJ/mux/proto" 300
+v10_sh "cp $MUXD/*.c $MUXD/*.h $OBJ/mux" 2400
+v10_sh "cp $MUXD/proto/*.c $MUXD/proto/*.h $OBJ/mux/proto" 2400
+note "the mux sources stage locally" \
+    [v10_try "test -s $OBJ/mux/msgs.h && test -s $OBJ/mux/proto/proto.h && echo ST\$OK" "ST-ok" 300]
+
+# MUXSRC is `.' -- the object directory the sources were just staged into, so cpp
+# sees exactly the layout the tape's own build gives it.  SRC stays the tarball
+# root because IXLIBC still reads labEQ.c/labLE.c through it (two files, both
+# using only angle includes, so neither the depth nor the quoted-include defect
+# costs anything there).
+v10_sh "A='SRC=/n/tree/src OURS=/n/ours MUXSRC=.'" 120
 v10_sh "A=\"\$A INCDIR=/usr/include TOOLDIR=$OBJ DESTDIR=$DEST\"" 120
 v10_sh "B='CC=cc CCPATH=/bin/cc CPP=$T1/lib/cpp CCOM=$T1/lib/ccom C2=$T1/lib/c2'" 120
 v10_sh "C='AS=/bin/as LD=/bin/ld LIBC=/lib/libc.a'" 120
