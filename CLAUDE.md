@@ -1936,8 +1936,40 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   bytes in a different order — pick wrong and the inode addresses look almost
   plausible. This turned "what is actually on that disk?" from a five-minute boot
   into a one-second question, which is what made the retirement audit possible at all.
-- **A netfs READ ON V10 CAN STOP AFTER ONE BLOCK, SILENTLY, AND THE FAILURE READS
-  AS A DEFECT IN BELL LABS' SOURCE.** K15's build died on
+- **A netfs READ ON V10 STOPPED AFTER ONE BLOCK, SILENTLY, AND IT WAS A
+  512-BYTE STREAM HEAD — FIXED 2026-08-20, and the two numbers are the whole
+  story:**
+
+	V8    struct qinit strdata = { strput, NULL, nulldev, nulldev, 8192, 4096 };
+	V10   struct qinit strdata = { strput, NULL, nilopen, nulldev,  512,  256 };
+
+  The N track raised V8's stream head sixteenfold as part of the netfs fix and
+  V10's copy was never touched, while `tcp_device.c:265` drains only
+  `while ((q->next->flag&QFULL) == 0)` — so every netfs reply squeezed through a
+  512-byte queue. Our V10 overlay had fixed **two** of `streamio.c`'s Datakit
+  assumptions (the freed block tail, the zero-length read) and left this one. The
+  patch is one line with V8's own values, in `v10/src` with its reasoning in
+  `PATCHES.md`.
+  - **The before/after could hardly be tighter** — `tools/v10-netread.sh`, same
+    file, same tag, same request number, one variable changed:
+
+	                        before            after
+	#249 NREAD 4096 off=0   4096 served       4096 served
+	#250                    CONNECTION CLOSED NREAD 4096 off=4096
+
+    The second `read(2)` that never reached the wire *is* the K15 failure, and it
+    is gone. **`streamio.c` is kernel source, so a change needs
+    `v10-srcdisk.sh` → `v10-kernel.sh` → `v10-netboot.sh`** before any harness
+    sees it; K7's own assertions (*"streamio.x replaces the tape's in os.a"*)
+    are what prove it arrived.
+  - **THE LATENCY IS A SEPARATE FAULT AND IS STILL OPEN**: 6.92 s per request
+    after the fix against 6.67–7.50 before. Do not assume one patch cured both.
+  - **AND THE REPLY-SIZE DISTRIBUTION IS HOW TO READ A netfs FAULT.** Twelve
+    replies of 744 and 1905 bytes were complete; the FIRST reply that filled a
+    whole 4096-byte request killed the connection, after which every read
+    returned **0 bytes** — EOF, not an error. So a dead share reads as an empty
+    file, and 20 assertions flew past with the request count frozen.
+- **The diagnosis, kept because the reasoning is reusable.** K15's build died on
 
 	"/n/tree/.../32ld.c":214:syntax error
 	"/n/tree/.../32ld.c":214:saw EOF
