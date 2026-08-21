@@ -181,6 +181,7 @@ if {!$shares} {
     note "and the tools to build the NEXT disk" 0
     note "K10.3's 203 commands overlay onto it" 0
     note "no build scratch shipped" 0
+    note "the gettys are enabled on all eight ttys" 0
     note "the copy's /etc/rc still mounts /usr, as the golden's does" 0
     note "boot 2: THE DISK V10 BUILT reaches a login prompt" 0
     set failed [report]
@@ -361,6 +362,30 @@ if {$mounted} {
     # another machine's mount table.  Truncated rather than removed: /etc/mtab must
     # EXIST for mount to append to it.
     v10_sh "cat /dev/null > $MP/etc/mtab" 300
+    # AND THE GETTYS ARE TURNED ON, because the golden ships with all eight OFF
+    # and a machine with no terminal is not a machine anyone can use.  The
+    # golden's /etc/ttys is
+    #
+    #	12console
+    #	02tty00 ... 02tty07        <- column 1 is `0': getty disabled
+    #
+    # so V10 in the app booted, idled correctly at 13.6% and answered on no tty
+    # at all -- the console is read-only behind a lock there, so the user would
+    # see a login prompt they could not type into.  Found by launching the app and
+    # dialling a line, which is the only way it WOULD have been found.
+    #
+    # NOT AN AUTHENTICITY QUESTION.  /etc/ttys is configuration -- how many
+    # terminals THIS machine has -- and V8's golden has its gettys enabled for
+    # exactly the same reason.  The tape does not dictate a site's terminal count.
+    # Supported by the disk as built: all eight /dev/tty0N nodes exist and
+    # ipnx780.m carries one dz11, which SIMH gives eight lines.
+    #
+    # `sed' is the tape's own and this is plain BRE with no groups, so there is no
+    # dialect to get wrong; the type digit is 2 on every line the golden ships.
+    v10_sh "sed 's/^02tty/12tty/' $MP/etc/ttys > $OBJ/ttys.new" 300
+    v10_sh "cp $OBJ/ttys.new $MP/etc/ttys" 300
+    note "the gettys are enabled on all eight ttys" \
+        [v10_try "test `grep -c '^12tty' $MP/etc/ttys` = 8 && echo TY\$OK" "TY-ok" 600]
     note "the system copies onto it" \
         [v10_try "test -s $MP/bin/sh && test -s $MP/etc/init && echo CP\$OK" "CP-ok" 600]
     note "/unix is on the new disk" \

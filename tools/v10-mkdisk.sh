@@ -316,6 +316,14 @@ for p in ("/unix", "/bin/sh", "/etc/init", "/etc/getty", "/etc/login",
     elif p != "/etc/rc" and not (ino["mode"] & 0o111):
         bad.append("%s is not executable -- ld left symbols undefined" % p)
 
+# THE GETTYS, read off the finished image.  A guest-side `grep -c' proves the
+# file was written; this proves the file that SHIPPED says so.
+ttys = root.read(root.lookup("/etc/ttys")).decode("ascii", "replace")
+on = [l for l in ttys.split("\n") if l.startswith("12tty")]
+if len(on) != 8:
+    bad.append("/etc/ttys enables %d gettys, not 8 -- a machine with no terminal"
+               % len(on))
+
 usr = m.Fs(img, "c")
 if counts["c"][1] == 0:
     bad.append("/usr holds no files at all, so this is not a system")

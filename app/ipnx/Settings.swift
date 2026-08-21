@@ -221,6 +221,11 @@ final class Settings: ObservableObject {
     /// Stored here only long enough to be typed into passwd(1) on the guest;
     /// V8 hashes it with its own crypt(3) and this is cleared afterwards.
     @Published var accountPassword: String { didSet { store.set(accountPassword, forKey: Key.passwd) } }
+
+    /// Which edition to bring up. Takes effect at the next launch, because a
+    /// machine is chosen once — `Machine` is constructed in `IpnxApp.init` and
+    /// owns a SIMH thread, a disk and ten listening ports from that moment.
+    @Published var edition: String { didSet { store.set(edition, forKey: Key.edition) } }
     /// Font size in points, or nil for "fit the window". Stored as 0 for fit,
     /// which is also what an absent default reads as.
     @Published var glassFontSize: CGFloat? {
@@ -244,10 +249,19 @@ final class Settings: ObservableObject {
         static let autoLogin = "session.autoLoginRoot"
         static let network = "machine.networkEnabled"
         static let passwd = "account.password"
+        // Deliberately MachineSpec's own constant rather than a second string:
+        // `Machine' is built in IpnxApp.init, before any Settings exists, so it
+        // reads this key directly.  Two spellings of one key is a list that
+        // appears twice.
+        static let edition = MachineSpec.defaultsKey
     }
 
     init(store: UserDefaults = .standard) {
         self.store = store
+        // `MachineSpec.current' is the authority on what actually booted -- it
+        // falls back when the stored choice names media this build does not
+        // carry -- so the control shows what is running, not what was wished for.
+        edition = MachineSpec.current.id
         phosphor = Phosphor(rawValue: store.string(forKey: Key.phosphor) ?? "") ?? .green
         scaling = Scaling(rawValue: store.string(forKey: Key.scaling) ?? "") ?? .fit
         screenShape = ScreenShape(rawValue: store.string(forKey: Key.shape) ?? "") ?? .wide

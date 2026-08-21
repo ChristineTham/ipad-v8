@@ -137,4 +137,36 @@ struct MachineSpec: Identifiable, Hashable {
     )
 
     static let all: [MachineSpec] = [.v8, .v10]
+
+    /// The UserDefaults key. Read directly rather than through `Settings`,
+    /// because `Machine` is constructed in `IpnxApp.init` and needs its spec
+    /// before any ObservableObject exists.
+    static let defaultsKey = "machine.edition"
+
+    /// Whether this machine's media is actually in the bundle.
+    ///
+    /// The embed phase WARNS and carries on when `work/` has no image, so a
+    /// build without V10 media is a normal build — and offering an edition the
+    /// bundle cannot provision would turn a missing file into a launch that
+    /// throws `mediaMissing` with nothing to say why.
+    var isAvailable: Bool {
+        Bundle.main.url(forResource: diskFile, withExtension: nil) != nil
+            && Bundle.main.url(forResource: bootFile, withExtension: nil) != nil
+    }
+
+    /// Only the editions this build can actually boot.
+    static var available: [MachineSpec] { all.filter(\.isAvailable) }
+
+    /// Which machine to bring up, and it FALLS BACK rather than failing.
+    ///
+    /// A stored preference can outlive the media it names: the user selects the
+    /// Tenth Edition, the next build is made on a checkout without
+    /// `work/v10gold/`, and the bundle no longer carries `v10.disk`. Booting
+    /// what is there beats refusing to boot at all, and V8 is always present in
+    /// a real build.
+    static var current: MachineSpec {
+        let want = UserDefaults.standard.string(forKey: defaultsKey) ?? v8.id
+        if let m = all.first(where: { $0.id == want }), m.isAvailable { return m }
+        return v8
+    }
 }

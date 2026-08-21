@@ -227,6 +227,23 @@ struct SettingsView: View {
     /// whether the account first boot created has a password.
     private var machineSection: some View {
         Section("Machine") {
+            // Only the editions this build can boot.  The embed phase warns and
+            // carries on when work/ has no image, so a build without V10 media is
+            // a normal build -- and offering an edition the bundle cannot
+            // provision would turn a missing file into a launch that throws
+            // mediaMissing with nothing to say why.
+            if MachineSpec.available.count > 1 {
+                Picker("Edition", selection: $settings.edition) {
+                    ForEach(MachineSpec.available) { spec in
+                        Text(spec.name).tag(spec.id)
+                    }
+                }
+                Text(settings.edition == machine.spec.id
+                     ? "Takes effect at the next launch: a machine is chosen once, and this one already owns a SIMH thread, a disk and its listening ports. Each edition keeps its own disk, snapshot and terminal state — switching does not disturb the other."
+                     : "Running \(machine.spec.name) until the app is relaunched.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             Toggle("Ethernet card (NI1010)", isOn: $settings.networkEnabled)
             Text("Gives the VAX an Interlan NI1010 on SLiRP's user-mode NAT, "
                + "which is what lets /etc/rc bring the network up and mount "

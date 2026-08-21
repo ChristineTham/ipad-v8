@@ -50,7 +50,12 @@ struct IpnxApp: App {
     #endif
 
     init() {
-        let machine = Machine()
+        // WHICH EDITION, read from UserDefaults rather than from `Settings',
+        // because the machine has to exist before any ObservableObject does --
+        // the SessionStore below starts the console session in its initialiser
+        // and that must happen before the VAX. `MachineSpec.current' falls back
+        // to V8 when the stored choice names media this build does not carry.
+        let machine = Machine(spec: .current)
         let dmd = Terminal5620()
         let settings = Settings()
         _machine = StateObject(wrappedValue: machine)
