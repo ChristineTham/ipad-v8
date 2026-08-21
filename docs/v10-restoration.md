@@ -807,9 +807,56 @@ result.
     at most `MAXSMALL` = 30752 = 120 MB. Bell Labs' own golden `/usr` is 30752
     blocks *exactly*, so the layout is theirs and the room is ample.
 
-    **The real open question is where the staged root comes from.** K10.3 installs
-    its 203 commands into `/usr/w10` on the `.k102.k103` image, and K14 builds
-    disks on the `.k13` chain — two different machines. So rung 10 needs either
-    K10.3's link-and-install re-run on the disk-building machine, or the staged
-    tree carried between images. That is a *sequencing* decision, not a content
-    one, and it should be settled before any of it is coded.
+    **~~The real open question is where the staged root comes from.~~ ANSWERED
+    2026-08-21, and it was not a question.** `.k13` is `stage1.k102.k7.k13` — it
+    **descends from `.k102`**, so the disk-building machine already carries
+    K10.2's 26 archives, which is K10.3's only precondition. Read off the image
+    with `tools/v10fs.py` rather than booted: `/usr/lib` holds all 26 plus
+    `yaccpar`, `/usr/s1` holds stage 1's complete toolchain. So K10.3 runs on the
+    `.k13` chain and one machine carries everything.
+    - The shortcut — extract `/usr/w10` from the existing `.k103` host-side,
+      serve it over netfs, save the relink — was **rejected on principle**: it
+      would put the reader in the *build* path as well as the *verification*
+      path, so a bug in it would write and then bless the same wrong bytes.
+      *"Two readings agreeing is not two readings being right."*
+
+    **THE CONTENT DECISION: the disk carries what V10 BUILT, and the tape's
+    binaries only where we cannot build the program.** The instinct is the
+    reverse, and CLAUDE.md rules it out in its own words — the 46 prebuilt
+    commands are *"developers' working directories, so what survived is whatever
+    was last compiled in place"*, and they are *"an ORACLE, not a shortcut … use
+    the 46 to check what we build, never to skip building it"*. Build detritus is
+    not a specification; the source is. Stage 2 settled the identical question
+    the identical way, by building libc rather than shipping the tape's archive.
+    So the 40 prebuilt commands we cannot build — `2500 adb bcp picasso lcc lex`
+    — keep Bell Labs' bytes untouched, because nothing overlays them.
+    - Measured before deciding: of K10.3's 203 staged files **50 collide** with a
+      builder path and **153 are new**; of the 50, nineteen are the tape's bytes
+      and thirty-one are ours already; and **nine of ten sampled collisions have
+      byte-identical text+data**, differing only by twelve bytes of symbol table.
+      So the build is deterministic in generated code and the choice decides
+      almost nothing — except `/etc/login`, genuinely smaller in K10.3's build,
+      which is the documented Share-scheduler removal.
+    - **All 203 carry the execute bit**, checked host-side, so `ld` resolved
+      every symbol in every one — the property that separates this from V8 stage
+      8's disk that *"walked 4,507 files and then stopped dead"*.
+    - **And 0 of 203 are the tape's bytes**, so every staged command is genuinely
+      built rather than a copied prebuilt binary.
+
+    **What the shipped TOOLCHAIN is, stated because "ours wins" does not hold
+    throughout:** `/lib/ccom` and `/lib/libc.a` are **the tape's**; `/lib/cpp`,
+    `/lib/c2`, `/lib/ld` and `/lib/crt0.o` are ours from stage 1. That is the
+    golden's own toolchain and the configuration every V10 harness has run on,
+    stages 1–3 included. Stage 2's 260-member libc and stage 3's fixpoint passes
+    live on the `.s2`/`.s3` chain; carrying them across is a separate step. It
+    changes nothing about the 203 commands — V10 links statically — only what a
+    future compile on the shipped machine would link against.
+
+    **A bug found on the way, which would have shipped a disk that boots and then
+    stops.** `world.link` specified `sh` into `/usr/bin`, because `where.txt` had
+    no row for it (`commands()` asked *"does `cmd/X` hold `X.c`"* and `cmd/sh`'s
+    main is `main.c`, dropping 92 units). `/etc/init` execs **`/bin/sh`** — read
+    out of the golden's own binary — and `/etc/rc`, which init runs *through*
+    that shell, is what mounts `/usr`. The fix reads the tape's own install
+    rules: 43 of them, moving ten commands and giving thirty more real evidence.
+    See [v10-log/2026-08-21.md](v10-log/2026-08-21.md).

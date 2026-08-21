@@ -118,6 +118,99 @@ IMG=$(v10_clone "$GOLD" k14) || exit 1
 # nothing.  The risk is the opposite one: if `mkbitfs' zeroes sector 0 on its way
 # past, this is lost.  That is exactly what the block-0 check below measures, so a
 # wrong guess here reports itself instead of hiding.
+# WILL IT FIT?  ASKED HERE, BECAUSE A FULL V10 FILESYSTEM DOES NOT FAIL -- IT
+# SLEEPS.  lsys/fs/alloc.c prints `file system full' and then waits for space
+# that is not coming, so the process blocks in the kernel rather than getting an
+# error, and no guest-side probe can guard against it: a `dd' or `cat' canary
+# blocks in the identical alloc() sleep as the thing it is meant to protect.  It
+# presents as a simulator at 100% CPU with a run that neither progresses nor dies.
+#
+# So the question is asked on the HOST, off the source image, before a simulator
+# starts -- the same argument that produced tools/v10-free.py.  And it is not
+# theoretical on root: partition `a' is 1,280 blocks and the copy needs about
+# 1,115 of them, so the disk ships about 87% full.  /usr has 106 MB spare.
+echo "== will it fit?  (asked host-side: a full V10 filesystem SLEEPS) =="
+python3 - "$ROOT/work/v10gold/$GOLD" "$ROOTBLKS" "$USRBLKS" <<'PYFIT' || exit 1
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("v10fs", "tools/v10fs.py")
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+img, rootblks, usrblks = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+
+def cost(size):
+    """Data blocks plus the indirect blocks bmap() would need for them."""
+    n = -(-size // m.BSIZE)
+    if n > 10:
+        n += 1
+        rest = n - 10 - m.NINDIR
+        if rest > 0:
+            n += 1 + -(-rest // m.NINDIR)
+    return n
+
+root, usr = m.Fs(img, "a"), m.Fs(img, "c")
+
+# The builder's own root, minus what K14 does not copy.  Device nodes occupy no
+# data blocks, which is why /dev is nearly free.
+have, base = {}, 0
+for p, ino in root.walk("/"):
+    k = ino["mode"] & m.IFMT
+    if k == m.IFREG:
+        base += cost(ino["size"]); have[p] = ino["size"]
+    elif k == m.IFDIR:
+        base += cost(ino["size"]) or 1
+
+# /usr: only the directories K14 carries.  obj/k13obj/k14obj/k10lib/s1/w10 are
+# deliberately not among them, and w10 is accounted for separately below.
+ucost = 0
+for d in ("/bin", "/lib", "/include", "/jerq", "/blit"):
+    try:
+        for p, ino in usr.walk(d):
+            k = ino["mode"] & m.IFMT
+            if k == m.IFREG:
+                ucost += cost(ino["size"])
+            elif k == m.IFDIR:
+                ucost += cost(ino["size"]) or 1
+    except SystemExit:
+        pass                      # absent on an image without it; not fatal
+
+# The staged root, split the way it actually lands.
+radd = uadd = 0
+staged = 0
+for top, dest in (("/bin", "root"), ("/etc", "root"), ("/lib", "root"),
+                  ("/usr/bin", "usr"), ("/usr/games", "usr"), ("/usr/lib", "usr")):
+    try:
+        walk = list(usr.walk("/w10" + top))
+    except SystemExit:
+        continue
+    for p, ino in walk:
+        if (ino["mode"] & m.IFMT) != m.IFREG:
+            continue
+        staged += 1
+        real = p[len("/w10"):]
+        if dest == "root":
+            radd += cost(ino["size"]) - (cost(have[real]) if real in have else 0)
+        else:
+            uadd += cost(ino["size"])
+
+OVER = 2                                   # block 0 and the superblock
+rneed = OVER + root.isize + base + radd
+uneed = OVER + usr.isize + ucost + uadd
+bad = False
+for label, need, have_blocks in (("root", rneed, rootblks), ("/usr", uneed, usrblks)):
+    pct = 100.0 * need / have_blocks
+    flag = ""
+    if need >= have_blocks:
+        flag = "   <-- DOES NOT FIT"; bad = True
+    elif pct > 95:
+        flag = "   <-- under 5% spare"
+    print("   %-5s needs %6d of %6d blocks (%.0f%% full, %d spare)%s"
+          % (label, need, have_blocks, pct, have_blocks - need, flag))
+print("   (%d staged files counted)" % staged)
+if bad:
+    print("\n== NO RUN: the copy does not fit, and V10 would HANG rather than")
+    print("   say so.  Trim what ships, or grow the partition.")
+    sys.exit(1)
+PYFIT
+
 echo "== placing the tape's own 4K boot block at sector 0 =="
 dd if="$ROOT/work/v10/src/lsys/boot/bb/4kb" of="$BLANK" \
    bs=512 count=1 conv=notrunc 2>/dev/null
