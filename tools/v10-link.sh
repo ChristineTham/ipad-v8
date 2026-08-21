@@ -248,7 +248,24 @@ echo "         own makefile, so they are named rather than guessed at."
 # directories, so what was compiled in place is evidence of what the build uses.
 # Closing this means reading each unit's own object list, which is mkdep.py's
 # job and not a generic recipe's.
-if ! grep -qE 'CLINKED sh$' "$LOG" 2>/dev/null; then
+# `sh$' DOES NOT MATCH `sh\r', AND THIS PRINTED A FALSEHOOD ABOUT ITS OWN RUN.
+# CLINKED is echoed by the GUEST, so it arrives through the tty as "CLINKED sh\r\n"
+# -- and BSD grep's `$' anchors after the \r, not before it.  So the test was
+# permanently true and the report said "sh did NOT build" in a run whose log said
+# CLINKED sh three lines apart, and whose staged root holds a 57,494-byte
+# /w10/bin/sh.  The anchor cannot simply be dropped: unanchored, `CLINKED sh'
+# also matches `CLINKED showq'.  [[:space:]]*$ keeps the anchor and tolerates the
+# carriage return.
+#
+# THE DISTINCTION THAT MATTERS, since four sibling harnesses anchor on `$' and are
+# all correct: those match lines EXPECT printed with `puts' (\n only).  This one
+# matches a line the GUEST printed.  Anchor freely on our own output; never on the
+# guest's without allowing for the \r.
+#
+# It also hid because my interactive shell's `grep' is a ugrep shim, which treats
+# \r\n as the terminator and DOES match -- so checking the pattern by hand
+# confirmed the opposite of what the harness saw.  Test with the tool that runs.
+if ! grep -qE 'CLINKED sh[[:space:]]*$' "$LOG" 2>/dev/null; then
     echo
     echo "   sh did NOT build, and it is the generic recipe's limit rather than"
     echo "   a fact about the tape: cmd/sh/profile.c is not in sh's \$OFILES and"
