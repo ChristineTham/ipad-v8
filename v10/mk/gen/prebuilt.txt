@@ -13,15 +13,15 @@
 #
 # fields: name<TAB>install<TAB>source<TAB>how<TAB>size
 #
-# 57 commands, 30 default, 3 man, 6 toolchain, 18 v8
+# 57 commands, 22 default, 3 man, 1 mk, 14 mkfile, 17 v8
 #
 # skipped ccom       src/cmd/cyntax/cyn/ccom      cyntax's compiler, not the system ccom
 # skipped cpp        src/cmd/lcc/ph/cpp           lcc's preprocessor, not the system cpp
 #
 2500	usr/bin/2500	src/cmd/2500/2500	default	88761
 adb	usr/bin/adb	src/cmd/adb/vax/adb	default	63936
-as	bin/as	src/cmd/as/as	toolchain	57203
-bcp	usr/bin/bcp	src/cmd/bcp/bcp	default	282624
+as	bin/as	src/cmd/as/as	mk	57203
+bcp	usr/bin/bcp	src/cmd/bcp/bcp	mkfile	282624
 byteyears	usr/bin/byteyears	src/cmd/byteyears	v8	25404
 compress	usr/bin/compress	src/cmd/monk/cmd/monk/compress	v8	40164
 cpio	usr/bin/cpio	src/cmd/cpio	v8	43628
@@ -31,7 +31,7 @@ cyntax	usr/bin/cyntax	src/cmd/cyntax/cem/cyntax	default	19294
 dag	usr/lib/dag	src/cmd/dag/dag	v8	143661
 dcheck	etc/dcheck	src/cmd/dcheck	v8	14757
 diff	bin/diff	src/cmd/diff/diff	v8	24576
-diff3	usr/bin/diff3	src/cmd/diff3/diff3	default	12288
+diff3	usr/lib/diff3	src/cmd/diff3/diff3	mkfile	12288
 dmesg	etc/dmesg	src/cmd/dmesg	man	14854
 error	usr/bin/error	src/cmd/error/error	default	45353
 file	usr/bin/file	src/cmd/lp/file	v8	35527
@@ -39,38 +39,38 @@ gre	usr/bin/gre	src/cmd/gre/gre	default	204519
 imscan	usr/bin/imscan	src/cmd/imscan/imscan	default	15066
 last	usr/bin/last	src/cmd/last	v8	27855
 lcc	usr/bin/lcc	src/cmd/lcc/etc/lcc	default	14496
-lex	usr/bin/lex	src/cmd/lex/lex	toolchain	39936
+lex	usr/bin/lex	src/cmd/lex/lex	mkfile	39936
 library	usr/bin/library	src/cmd/library/library	default	60004
 logtty	usr/bin/logtty	src/cmd/logtty	default	18927
 ls	bin/ls	src/cmd/ls	v8	29816
-make	bin/make	src/cmd/make/make	toolchain	50624
-map	usr/bin/map	src/cmd/map/map	default	107339
+make	bin/make	src/cmd/make/make	mkfile	50624
+map	usr/maps/map	src/cmd/map/map	mkfile	107339
 monk	usr/bin/monk	src/cmd/monk/cmd/monk/monk	default	46704
 newer	usr/bin/newer	src/cmd/movie/newer	v8	4216
 picasso	usr/bin/picasso	src/cmd/picasso/picasso	default	356113
-pico	usr/bin/pico	src/cmd/pico/pico	default	161719
+pico	usr/bin/pico	src/cmd/pico/pico	mkfile	161719
 post	usr/bin/post	src/cmd/post/post	default	27960
-pp	usr/bin/pp	src/cmd/pp/pp	default	20480
+pp	usr/bin/pp	src/cmd/pp/pp	mkfile	20480
 pr	bin/pr	src/cmd/pr	v8	28528
 prefer	usr/bin/prefer	src/cmd/prefer/pref/prefer	default	36276
-ps	bin/ps	src/cmd/ops/ps	v8	27300
-ps	bin/ps	src/cmd/ps/ps	v8	43686
+ps	bin/ps	src/cmd/ops/ps	mkfile	27300
+ps	bin/ps	src/cmd/ps/ps	mkfile	43686
 punct	usr/bin/punct	src/cmd/wwb/punct	default	47888
 qsnap	usr/bin/qsnap	src/cmd/qsnap/qsnap	default	60324
-ranlib	usr/bin/ranlib	src/cmd/ranlib	toolchain	12288
+ranlib	usr/bin/ranlib	src/cmd/ranlib	v8	12288
 rarepl	etc/rarepl	src/cmd/rarepl/rarepl	v8	13758
-refer	usr/bin/refer	src/cmd/refer/refer	default	98524
-sed	bin/sed	src/cmd/sed/sed	toolchain	40143
+refer	usr/bin/refer	src/cmd/refer/refer	mkfile	98524
+sed	usr/bin/sed	src/cmd/sed/sed	mkfile	40143
 setpart	usr/bin/setpart	src/cmd/setpart	default	14532
-sh	bin/sh	src/cmd/sh/sh	toolchain	36864
+sh	bin/sh	src/cmd/sh/sh	mkfile	36864
 sign	usr/bin/sign	src/cmd/sign/sign	default	17408
 sum	usr/bin/sum	src/cmd/sum/sum	v8	26258
-tbl	usr/bin/tbl	src/cmd/tbl/tmp/tbl	default	64154
+tbl	usr/bin/tbl	src/cmd/tbl/tmp/tbl	mkfile	64154
 tee	usr/bin/tee	src/cmd/learn/lib/lib/tee	v8	3072
 test	bin/test	src/cmd/test	v8	6743
 town	usr/bin/town	src/cmd/town/town	default	33063
 u9fs	usr/bin/u9fs	src/cmd/u9fs/u9fs	default	53203
-units	usr/bin/units	src/cmd/units/units	default	33792
+units	usr/bin/units	src/cmd/units/units	mkfile	33792
 uucp	usr/bin/uucp	src/cmd/uucp/uucp	default	60416
 view2d	usr/bin/view2d	src/cmd/view2d/view2d	default	38322
 vsw	usr/bin/vsw	src/cmd/vsw/vsw	default	66142

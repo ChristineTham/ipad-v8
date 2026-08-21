@@ -101,6 +101,78 @@ def man_paths():
     return out
 
 
+# An install rule in a recipe: `cp sh /bin/sh', `mv tp ${DESTDIR}/bin'.
+# Anchored on the whole command, so an argument in the middle cannot match.
+INSTALL = re.compile(
+    r'^\s*-?\s*(?:cp|mv|install)\s+(?:-[A-Za-z]+\s+)*'
+    r'([A-Za-z0-9_.]+)\s+(\S+)\s*$')
+
+# $(DESTDIR)/bin, ${DESTDIR}/bin, $DESTDIR/bin -- all mean /bin here, because
+# DESTDIR is where the system being built is rooted and we are asking where
+# inside it the command goes.
+DESTVAR = re.compile(r'^\$[({]?[A-Za-z_][A-Za-z0-9_]*[)}]?')
+
+SYSDIRS = ("/bin", "/etc", "/lib", "/usr")
+
+
+def mk_paths(names):
+    """command -> (directory, the line that says so), from the tape's makefiles.
+
+    THE STRONGEST EVIDENCE THERE IS, and it was going unread.  where.txt used to
+    carry five hand-quoted install rules in MK and infer everything else, so a
+    unit whose directory holds no <name>.c -- cmd/sh's main is main.c, cmd/make's
+    is main.c, cmd/sed's is sed0.c -- got no row at all and world.link defaulted
+    it to /usr/bin.  For `sh' that is not a cosmetic error: /etc/init execs
+    `/bin/sh' (measured, in the golden's own binary), and /etc/rc -- which init
+    runs THROUGH that shell -- is what mounts /usr.  A shell only in /usr/bin
+    does not exist at the moment it is needed, which is V8 stage 8's disk that
+    "walked 4,507 files and then stopped dead after autoconfig with the CPU
+    idle".
+
+    THE SOURCE TOKEN MUST BE THE PRODUCT'S OWN NAME, which is what separates an
+    install from a backup.  cmd/sh/makefile:37 is
+
+	mv /bin/sh /bin/osh;	cp sh /bin/sh;	strip /bin/sh
+
+    -- three commands on one line, of which the FIRST would answer "/bin/osh"
+    to a scanner that only looked at destinations.  Reading `cp sh ...', whose
+    source is the bare product, gets it right and rejects `cp $(FILES)
+    /usr/src/cmd/make' at the same time.
+
+    Two more traps, both of them CLAUDE.md's:  a recipe is a BLOCK and a line
+    may hold several commands, so split on `;'; and continuation lines are
+    joined FIRST, because sh's $OFILES showed what reading them separately does.
+    """
+    out = {}
+    cmd = os.path.join(V10SRC, "cmd")
+    for name in names:
+        for mf in ("makefile", "Makefile", "mkfile"):
+            path = os.path.join(cmd, name, mf)
+            if not os.path.exists(path):
+                continue
+            try:
+                text = open(path, errors="replace").read()
+            except OSError:
+                continue
+            text = text.replace("\\\n", " ")          # join continuations FIRST
+            for line in text.splitlines():
+                for piece in line.split(";"):
+                    m = INSTALL.match(piece)
+                    if not m or m.group(1) != name:
+                        continue
+                    dst = m.group(2)
+                    dst = DESTVAR.sub("", dst) or dst   # $(DESTDIR)/bin -> /bin
+                    if os.path.basename(dst) == name:   # /bin/make -> /bin
+                        dst = os.path.dirname(dst)
+                    dst = dst.rstrip("/")
+                    if dst.startswith(SYSDIRS) and name not in out:
+                        out[name] = (dst, "cmd/%s/%s: %s"
+                                     % (name, mf, piece.strip()))
+            if name in out:
+                break
+    return out
+
+
 def v8_paths():
     """command -> directory, as measured on a real V8 disk."""
     out = {}
@@ -149,18 +221,60 @@ def commands():
         p = os.path.join(cmd, f)
         if f.endswith(".c") and os.path.isfile(p):
             names.add(f[:-2])
-        elif os.path.isdir(p) and os.path.exists(os.path.join(p, f + ".c")):
-            names.add(f)
+        elif os.path.isdir(p):
+            # ANY .c, NOT <name>.c.  The old test was `does cmd/X hold X.c',
+            # which is the same blind spot the MK comment below records for the
+            # toolchain -- and it silently dropped cmd/sh (main.c), cmd/make
+            # (main.c) and cmd/sed (sed0.c) among 92 others, so where.txt had no
+            # row and world.link defaulted them to /usr/bin.  A `--' row is
+            # honest; an absent row is invisible, which is the failure this
+            # file's own header warns about.
+            try:
+                if any(g.endswith(".c") for g in os.listdir(p)):
+                    names.add(f)
+            except OSError:
+                pass
     return sorted(names)
 
 
 def build():
     man = man_paths()
     v8 = v8_paths()
-    rows, counts = [], {"mk": 0, "man": 0, "v8": 0, "--": 0}
+    names = sorted(set(commands()) | set(MK))
+    mkscan = mk_paths(names)
+    rows = []
+    counts = {"mk": 0, "mkfile": 0, "man": 0, "v8": 0, "--": 0}
+    # WHERE THE SCANNED RULE DISAGREES WITH AN INFERENCE, IT WINS AND SAYS SO.
+    # Not silently: a makefile contradicting the manual or V8 is a finding about
+    # the tape, and letting one win by ordering buries it.  Hand-written MK still
+    # HALTS on a disagreement (five entries, each read by a human); a scan over
+    # 350 units reports instead, because a hard stop there would make the
+    # generator hostage to one odd recipe.
+    notes = []
+    for name in sorted(mkscan):
+        got = mkscan[name][0]
+        for other, label in ((man.get(name), "the manual"), (v8.get(name), "V8")):
+            if other and other != got:
+                notes.append("# DISAGREES  %-12s makefile says %-10s %s says %s"
+                             % (name, got, label, other))
+    # THE HAND-TRANSCRIBED RULES AND THE SCANNED ONES MUST AGREE, and four of
+    # the five overlap, so this is a real control rather than a formality: if
+    # the scanner regresses or a transcription is wrong, one of them moves and
+    # this fires.  (ccom is the fifth and is deliberately not found by the scan
+    # -- its rule is `cp comp /lib/ccom', whose source token is `comp', not the
+    # product name.  A scanner that accepted it would also accept
+    # `mv /bin/sh /bin/osh'.)
+    for name in sorted(set(MK) & set(mkscan)):
+        if MK[name][0] != mkscan[name][0]:
+            sys.exit("v10-where: %s -- transcribed as %s from\n  %s\nbut the "
+                     "scan reads %s from\n  %s\nOne of them is wrong; fix it "
+                     "rather than choosing."
+                     % (name, MK[name][0], MK[name][1],
+                        mkscan[name][0], mkscan[name][1]))
+
     # MK's keys are unioned in: the toolchain components are directories with
     # no <name>.c, so commands() cannot see them.
-    for name in sorted(set(commands()) | set(MK)):
+    for name in names:
         if name in MK:
             # Assert rather than prefer, where both exist.  If the manual and
             # the makefile ever disagreed about a path that would be a real
@@ -171,6 +285,9 @@ def build():
                          % (name, man[name], MK[name][1]))
             rows.append((name, MK[name][0], "mk"))
             counts["mk"] += 1
+        elif name in mkscan:
+            rows.append((name, mkscan[name][0], "mkfile"))
+            counts["mkfile"] += 1
         elif name in man:
             rows.append((name, man[name], "man"))
             counts["man"] += 1
@@ -192,6 +309,10 @@ def build():
         "#   mk    the tape's OWN makefile install rule, quoted in\n"
         "#         tools/v10-where.py.  The build stating what it does with\n"
         "#         its own product, which is the rule we reimplement.\n"
+        "#   mkfile  the same thing, READ rather than transcribed: the unit's\n"
+        "#         own makefile, scanned for `cp <name> <dir>'.  Equal\n"
+        "#         authority to mk and far wider -- it is what finally placed\n"
+        "#         sh in /bin, where /etc/init actually execs it.\n"
         "#   man   V10's own manual, section 8 SYNOPSIS.  Bell Labs stating it.\n"
         "#   v8    v8/mk/where.txt, measured on a real V8 disk.  Inference from\n"
         "#         the previous edition of the same system on the same machine.\n"
@@ -201,9 +322,11 @@ def build():
         "#\n"
         "# fields: name<TAB>directory<TAB>source\n"
         "#\n"
-        "# %d from the tape's makefiles, %d from the manual, %d inferred from V8,\n"
-        "# %d unresolved\n"
-        "#\n" % (counts["mk"], counts["man"], counts["v8"], counts["--"]))
+        "# %d transcribed from the tape's makefiles, %d read from them, %d from\n"
+        "# the manual, %d inferred from V8, %d unresolved\n"
+        "#\n%s" % (counts["mk"], counts["mkfile"], counts["man"], counts["v8"],
+                   counts["--"],
+                   ("#\n" + "\n".join(notes) + "\n#\n") if notes else ""))
     body = "".join("%s\t%s\t%s\n" % r for r in rows)
     return head + body, counts
 
@@ -228,9 +351,10 @@ def main():
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     if old != text:
         open(OUT, "w").write(text)
-    print("v10/mk/where.txt: %d from the tape's makefiles, %d from the manual, "
-          "%d inferred from V8, %d unresolved"
-          % (counts["mk"], counts["man"], counts["v8"], counts["--"]))
+    print("v10/mk/where.txt: %d transcribed + %d read from the tape's makefiles, "
+          "%d from the manual, %d inferred from V8, %d unresolved"
+          % (counts["mk"], counts["mkfile"], counts["man"], counts["v8"],
+             counts["--"]))
     return 0
 
 

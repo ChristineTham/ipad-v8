@@ -8,6 +8,10 @@
 #   mk    the tape's OWN makefile install rule, quoted in
 #         tools/v10-where.py.  The build stating what it does with
 #         its own product, which is the rule we reimplement.
+#   mkfile  the same thing, READ rather than transcribed: the unit's
+#         own makefile, scanned for `cp <name> <dir>'.  Equal
+#         authority to mk and far wider -- it is what finally placed
+#         sh in /bin, where /etc/init actually execs it.
 #   man   V10's own manual, section 8 SYNOPSIS.  Bell Labs stating it.
 #   v8    v8/mk/where.txt, measured on a real V8 disk.  Inference from
 #         the previous edition of the same system on the same machine.
@@ -17,57 +21,78 @@
 #
 # fields: name<TAB>directory<TAB>source
 #
-# 5 from the tape's makefiles, 22 from the manual, 144 inferred from V8,
-# 95 unresolved
+# 5 transcribed from the tape's makefiles, 39 read from them, 23 from
+# the manual, 152 inferred from V8, 128 unresolved
 #
+#
+# DISAGREES  at           makefile says /bin       V8 says /usr/bin
+#
+2500		--
 2621		--
 300		--
 300s		--
 4014		--
 450		--
 512restor		--
+PDP11		--
 ac	/etc	man
 accton	/etc	v8
 agh		--
+ansi		--
 apply	/usr/bin	v8
+apsend	/usr/lib	mkfile
 ar	/bin	v8
 arcv		--
 arff	/bin	v8
 as	/bin	mk
 asa	/usr/bin	v8
 ascii	/usr/bin	v8
-at	/usr/bin	v8
+asd	/etc	v8
+asd++		--
+at	/bin	mkfile
+awk	/usr/bin	v8
+backup.old		--
 bad144		--
 basename	/usr/bin	v8
 bcd	/usr/games	v8
-bcp		--
+bcp	/usr/bin	mkfile
 bigcore		--
+bison		--
 books		--
+btree		--
 byteyears	/usr/bin	v8
 c2	/lib	mk
 cal	/usr/bin	v8
+calendar	/usr/bin	mkfile
 calendar2	/usr/lib	v8
 call		--
 cat	/bin	v8
-cb	/usr/bin	v8
+cb	/usr/bin	mkfile
+cbt	/usr/bin	mkfile
 cc	/bin	v8
 ccom	/lib	mk
+cflow	/usr/bin	v8
+cfront	/usr/bin	v8
 charge		--
 chdate		--
 checkeq	/usr/bin	v8
 chmod	/bin	v8
 chown	/etc	man
-clear		--
+chuck	/etc	man
+clear	/usr/bin	mkfile
 clri	/etc	man
 cmp	/bin	v8
 col	/usr/bin	v8
 comm	/usr/bin	v8
 compact		--
+compat	/usr/bin	v8
 compress	/usr/bin	v8
+config	/etc	mkfile
 coreid	/usr/bin	v8
 cp	/bin	v8
 cpio	/usr/bin	v8
 cpp	/lib	mk
+cref		--
 cron	/etc	man
 ct	/usr/bin	v8
 ctags	/usr/bin	v8
@@ -78,31 +103,42 @@ daemon		--
 dag	/usr/lib	v8
 date	/bin	v8
 dblbuf		--
-dc	/usr/bin	v8
+dc	/usr/bin	mkfile
 dcheck	/etc	v8
 dd	/bin	v8
 deroff	/usr/bin	v8
+descrypt		--
 df	/bin	v8
+dict		--
 diction		--
 diff	/bin	v8
-diff3		--
+diff3	/usr/lib	mkfile
 dimpress		--
-dired		--
+dired	/usr/bin	mkfile
 dirname	/usr/bin	v8
 dis		--
 dkname		--
 dkstat		--
 dmesg	/etc	man
-docgen		--
+docgen	/usr/bin	mkfile
 dskcpy	/etc	v8
 du	/bin	v8
+dump	/etc	mkfile
 dumpcatch		--
 dumpdir		--
 echo	/bin	v8
 ed	/bin	v8
-egrep	/usr/bin	v8
+efl	/usr/bin	v8
+egrep	/usr/bin	mkfile
+eqn	/usr/bin	v8
+equal		--
+error		--
+ether		--
 ex	/usr/bin	v8
 expand	/usr/bin	v8
+f2c		--
+f77	/usr/bin	mkfile
+face		--
 factor	/usr/bin	v8
 false	/bin	v8
 fcopy		--
@@ -111,6 +147,7 @@ file	/usr/bin	v8
 find	/usr/bin	v8
 findo		--
 flcopy		--
+flex		--
 fmt	/usr/bin	v8
 fold	/usr/bin	v8
 fsck	/etc	man
@@ -119,13 +156,16 @@ gcc		--
 getopt	/usr/bin	v8
 getty	/etc	man
 getuid	/usr/bin	v8
-graph	/usr/bin	v8
+grap	/usr/bin	v8
+graph	/usr/bin	mkfile
+gre		--
 grep	/bin	v8
 groups		--
 halt	/etc	v8
 hang	/usr/bin	v8
 head		--
 hideblock		--
+hoc	/usr/bin	mkfile
 hp		--
 icheck	/etc	man
 id	/usr/bin	v8
@@ -135,15 +175,19 @@ idle		--
 imscan		--
 init	/etc	man
 iostat	/bin	v8
-join	/usr/bin	v8
+join	/usr/bin	mkfile
+kasb	/bin	mkfile
 kill	/bin	v8
 labmake		--
 last	/usr/bin	v8
+lcomp	/usr/bin	v8
 ld	/bin	v8
 learn		--
+lex	/usr/bin	mkfile
 lfactor		--
 library		--
 limiter		--
+lint		--
 ln	/bin	v8
 load	/usr/bin	v8
 log		--
@@ -151,11 +195,13 @@ logdir		--
 login	/etc	man
 logtty		--
 look	/usr/bin	v8
+lp		--
 ls	/bin	v8
 m4	/usr/bin	v8
+make	/bin	mkfile
 makekey	/usr/lib	man
 man	/usr/bin	v8
-map		--
+map	/usr/maps	mkfile
 markbad		--
 mc	/usr/bin	v8
 mesg	/usr/bin	v8
@@ -166,9 +212,11 @@ mkfs	/etc	man
 mknod	/etc	man
 mkstr	/usr/bin	v8
 mount	/etc	man
+movie		--
 mt	/bin	v8
 mv	/bin	v8
 ncheck	/etc	v8
+neqn	/usr/bin	v8
 netfsbug	/usr/bin	v8
 newer	/usr/bin	v8
 newgrp	/bin	v8
@@ -176,37 +224,53 @@ news	/usr/bin	v8
 nice	/bin	v8
 nm	/bin	v8
 number	/usr/bin	v8
-numdate		--
+numdate	/usr/bin	mkfile
+nupas		--
+oasd++		--
 od	/bin	v8
 ofsck		--
+omovie		--
 oops	/bin	v8
-p	/usr/bin	v8
+ops		--
+osh		--
+oworm		--
+p	/usr/bin	mkfile
 pack	/usr/bin	v8
+paper		--
 passwdx		--
 paste	/usr/bin	v8
 patch		--
+pic	/usr/bin	v8
+picasso		--
+pico	/usr/bin	mkfile
+plot	/usr/bin	v8
+poly		--
 post		--
-pp		--
+pp	/usr/bin	mkfile
 pr	/bin	v8
+pret	/usr/bin	mkfile
 primes	/usr/bin	v8
 printenv	/usr/bin	v8
 printf		--
 procmount		--
 prof		--
 prof.old		--
-ps	/bin	v8
+ps	/bin	mkfile
 pstat	/etc	man
 pti		--
 ptx	/usr/bin	v8
+punct		--
 pwd	/bin	v8
 qsnap		--
 quot	/etc	man
 random	/usr/bin	v8
 ranlib	/usr/bin	v8
 rarepl	/etc	v8
+ratfor	/usr/bin	v8
 readslow	/usr/bin	v8
 reboot	/etc	v8
 reccp		--
+refer	/usr/bin	mkfile
 reloc		--
 renice	/etc	v8
 restor	/etc	v8
@@ -217,26 +281,36 @@ rmdir	/bin	v8
 rscan		--
 sa	/etc	man
 savecore	/etc	man
+sdb	/usr/bin	mkfile
+sed	/usr/bin	mkfile
 seq	/usr/bin	v8
 server		--
 setgid		--
 setlog		--
 setpart		--
 settod		--
+sh	/bin	mkfile
 showq	/etc	man
 sign		--
 size	/bin	v8
+sky		--
 sleep	/usr/bin	v8
 smash	/etc	man
+sno	/usr/bin	mkfile
 sort	/usr/bin	v8
 sp		--
+spell		--
+spell.old		--
+spitbol		--
 spline	/usr/bin	v8
 split	/usr/bin	v8
 spool		--
 stat		--
 strings		--
 strip	/usr/bin	v8
+struct		--
 stty	/bin	v8
+style	/usr/lib	v8
 su	/etc	man
 sum	/usr/bin	v8
 swapon	/etc	v8
@@ -245,6 +319,7 @@ tabs	/usr/bin	v8
 tail	/usr/bin	v8
 tape	/usr/bin	v8
 tar	/bin	v8
+tbl	/usr/bin	mkfile
 tee	/usr/bin	v8
 telno		--
 test	/bin	v8
@@ -252,37 +327,50 @@ time	/bin	v8
 tk	/usr/bin	v8
 touch	/usr/bin	v8
 town		--
+tp	/bin	mkfile
 tpr		--
 tr	/usr/bin	v8
+trace	/usr/bin	mkfile
 track		--
 treesum		--
+troff	/usr/bin	v8
 true	/bin	v8
 tsort	/usr/bin	v8
 tty	/usr/bin	v8
+twig		--
 u9fs		--
-ul	/usr/bin	v8
+udemon		--
+ul	/usr/bin	mkfile
 umount	/etc	v8
 und		--
 unexpand		--
 uniq	/usr/bin	v8
+units	/usr/bin	mkfile
 update	/etc	v8
+usgmake		--
 uucp		--
 uudecode	/usr/bin	v8
+uudiff		--
 uuencode	/usr/bin	v8
 v7		--
 v8	/usr/bin	v8
 view2d		--
 vis	/usr/bin	v8
+visi	/usr/bin	mkfile
 vmstat	/bin	v8
 vpr		--
+vsw		--
 wall	/etc	man
 wc	/usr/bin	v8
 weather		--
 who	/bin	v8
+worm	/usr/games	v8
 write	/bin	v8
+wwb	/usr/bin	v8
 wwv		--
 xargs		--
 xd		--
+xref		--
 yacc	/usr/bin	mk
 yes		--
 zero		--

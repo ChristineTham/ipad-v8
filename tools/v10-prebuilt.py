@@ -49,8 +49,17 @@ IMPOSTORS = {
 }
 
 # Where the toolchain goes, which the manual does not describe as commands.
+# `sed' WAS HERE AND SAID /bin, AND IT WAS WRONG.  Removed 2026-08-21 on two
+# independent sources that both say /usr/bin -- the tape's own install rule
+# (cmd/sed/makefile: `cp sed /usr/bin') and v8/mk/where.txt, measured on a real
+# Eighth Edition disk.  It was never evidence: these six were hardcoded when
+# v10-where.py could not see units whose directory holds no <name>.c, so the
+# file had no row for any of them.  The makefile scanner now reads all six and
+# agrees with the five that remain, which is why they stay -- as a live control
+# rather than as an answer.  Nothing needs sed before /usr mounts: /etc/rc is
+# four lines and uses only /etc/mount and cat.
 TOOLCHAIN = {"as": "/bin", "ranlib": "/usr/bin", "lex": "/usr/bin",
-             "make": "/bin", "sh": "/bin", "sed": "/bin"}
+             "make": "/bin", "sh": "/bin"}
 
 
 def load_where():
@@ -104,13 +113,34 @@ def build():
             skipped.append((name, path, "unreadable"))
             continue
 
-        if name in TOOLCHAIN:
+        if name in TOOLCHAIN and name not in where:
+            # ONLY WHERE where.txt IS SILENT.  TOOLCHAIN predates
+            # v10-where.py's makefile scanner: before it, the file had no row
+            # for as, make, sh, sed or lex -- their directories hold no
+            # <name>.c, so commands() never saw them -- and these six were
+            # hardcoded here to fill the hole.  The scanner now reads the tape's
+            # own install rules, and it AGREES with five of the six.  It
+            # disagrees about `sed', where this table said /bin and both the
+            # tape (cmd/sed/makefile: `cp sed /usr/bin') and V8's measured disk
+            # say /usr/bin -- so the hardcoded value was simply wrong, and
+            # deferring to the evidence fixes it.  Exactly CLAUDE.md's "a
+            # component list that appears twice will disagree, silently".
             d, src = TOOLCHAIN[name], "toolchain"
         elif name in where:
             d, src = where[name]
         else:
             d, src = "/usr/bin", "default"
         rows.append((name, d.lstrip("/") + "/" + name, path, src, size))
+
+    # AND WHERE BOTH SPEAK, THEY MUST AGREE.  Five of the six overlap, so this
+    # is a live control: if the scanner regresses or someone re-hardcodes a
+    # path, one of them moves and this fires rather than one silently winning.
+    for name, d in sorted(TOOLCHAIN.items()):
+        if name in where and where[name][0] != d and where[name][1] != "default":
+            sys.exit("v10-prebuilt: %s -- TOOLCHAIN says %s, but where.txt says "
+                     "%s on %s authority.\n  Two lists of the same thing have "
+                     "disagreed.  Fix one; do not let ordering choose."
+                     % (name, d, where[name][0], where[name][1]))
 
     rows.sort()
     counts = {}
