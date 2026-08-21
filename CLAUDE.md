@@ -3173,6 +3173,26 @@ logs in:
 
 i.e. **our own built `/bin/sh` executing commands inside the app**.
 
+**AND `/usr` CAME UP EMPTY, BECAUSE THE HALT MARKER IS V8's WORD.** The app's
+own console named it — `mount /dev/ra0c on /usr type 0: In use` — and the same
+disk mounts `/usr` silently under the desktop `vax780` *and* under `libsimh`,
+idle on or off, so the disk and the simulator were never at fault.
+`waitForHalt` waited for **`"halting"`**, which V8's `boot()` prints after
+`update()` has drained the I/O; **V10's `boot()` is two lines and prints
+`death`**. So the wait timed out, the provisioning restart relaunched over a
+guest that had confirmed nothing, and because V10's halt neither syncs nor
+unmounts, `/usr` kept `s_valid = 0` — which `fs.c:107` refuses, and only `fsoff`
+restores. `relaunchProcess()` was not at fault: it runs *after* a halt; the halt
+was what went unconfirmed. Both are now `MachineSpec` fields — `haltMarker`, and
+a `shutdown` list where V10 gets the load-bearing **`/etc/umount -a`** that V8
+does not need. Verified in the app on a fresh provision: `/usr/bin/wc` and
+`/usr/bin/find` — our own builds — running off K10.2's libraries, and the disk
+reading back `s_valid = 1` after a clean quit.
+- **A harness that tears down correctly cannot discover a teardown bug in the
+  thing that ships.** K14's boot 2 halts cleanly, so the disk it leaves is
+  right; all 23 assertions passed; `app-check` passed. Only launching the app and
+  dialling a line found it.
+
 **LAUNCHING IT FOUND A DEFECT NOTHING ELSE COULD.** The golden ships
 `/etc/ttys` with all eight gettys **disabled** (`02tty00`…`02tty07`, column 1 is
 the on/off flag), so V10 came up with a login prompt on the console — read-only
