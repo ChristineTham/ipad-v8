@@ -182,6 +182,7 @@ if {!$shares} {
     note "K10.3's 203 commands overlay onto it" 0
     note "no build scratch shipped" 0
     note "the gettys are enabled on all eight ttys" 0
+    note "the motd describes this disk, not the golden" 0
     note "the copy's /etc/rc still mounts /usr, as the golden's does" 0
     note "boot 2: THE DISK V10 BUILT reaches a login prompt" 0
     set failed [report]
@@ -386,6 +387,38 @@ if {$mounted} {
     v10_sh "cp $OBJ/ttys.new $MP/etc/ttys" 300
     note "the gettys are enabled on all eight ttys" \
         [v10_try "test `grep -c '^12tty' $MP/etc/ttys` = 8 && echo TY\$OK" "TY-ok" 600]
+
+    # AND THE MOTD DESCRIBES *THIS* DISK.  The golden's says "The kernel is seki
+    # -- `Unix 10e Mar 15 04:03 1990' -- linked at Bell Labs", which was true of
+    # the golden and is false here: /unix on this disk is our own ipnx780,
+    # configured and built by K7, and the commands are what V10 compiled.  It is
+    # OUR text -- written by tools/v10-golden.exp, not by Bell Labs -- so
+    # correcting it is not a deviation from anything; leaving it would be the
+    # machine describing itself incorrectly to every user who logs in.
+    #
+    # Written with plain `echo' rather than a here-document: no apostrophes, no
+    # backquotes, no dollar signs, and every line well under CANBSIZ (256), so
+    # there is no quoting to get wrong through expect and then through 1970s sh.
+    set motd {
+        {}
+        {Research UNIX, Tenth Edition.}
+        {}
+        {Restored by ipnx from the 1995 CSRC source tape.  The kernel is}
+        {ipnx780 -- configured for this machine and built here by V10 itself.}
+        {The commands are what V10 compiled from that tape, with Bell Labs own}
+        {binaries kept wherever we cannot build the program.}
+        {}
+        {The filesystems on this disk were made, and filled, by the Tenth}
+        {Edition running on an emulated VAX.  It had never been booted.}
+        {}
+    }
+    set redir ">"
+    foreach line $motd {
+        v10_sh "echo \"$line\" $redir $MP/etc/motd" 300
+        set redir ">>"
+    }
+    note "the motd describes this disk, not the golden" \
+        [v10_try "grep ipnx780 $MP/etc/motd > /dev/null && echo MD\$OK" "MD-ok" 600]
     note "the system copies onto it" \
         [v10_try "test -s $MP/bin/sh && test -s $MP/etc/init && echo CP\$OK" "CP-ok" 600]
     note "/unix is on the new disk" \

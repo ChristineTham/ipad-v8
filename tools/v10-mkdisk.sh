@@ -324,6 +324,11 @@ if len(on) != 8:
     bad.append("/etc/ttys enables %d gettys, not 8 -- a machine with no terminal"
                % len(on))
 
+# And the motd must not still be describing the golden.
+motd = root.read(root.lookup("/etc/motd")).decode("ascii", "replace")
+if "seki" in motd or "ipnx780" not in motd:
+    bad.append("/etc/motd still describes the golden's kernel, not this disk's")
+
 usr = m.Fs(img, "c")
 if counts["c"][1] == 0:
     bad.append("/usr holds no files at all, so this is not a system")
