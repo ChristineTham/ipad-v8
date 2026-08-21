@@ -50,6 +50,9 @@ n=$(pgrep -x ipnx 2>/dev/null | wc -l | tr -d ' ')
 
 # --- 2. the golden exists and is the committed one -------------------------
 GOLD="$ROOT/work/myv8/rp07new"
+# The disk V10 built (K14).  Not committed and not required: the build phase
+# warns and carries on without it, so this check is conditional on its presence.
+V10GOLD="$ROOT/work/v10gold/ipnx-v10-made.img"
 if [[ ! -f "$GOLD" ]]; then
     bad "golden present" "no work/myv8/rp07new (tools/drive-stages48.sh)"
 else
@@ -102,6 +105,36 @@ while IFS= read -r app; do
         fi
     fi
     note "$rel" "current (image $(cut -c1-12 < "$res/v8.disk.id"))"
+
+    # THE TENTH EDITION'S CHAIN, ON EXACTLY THE SAME ARGUMENT.  The whole reason
+    # this script exists is that "it is in the golden, it will arrive on Reset"
+    # is not shipping it: the app copies its image into Application Support on
+    # first launch and then uses that working copy forever, so a rebuilt golden
+    # reaches the bundle and stops there.  A second machine has a second way to
+    # go stale, and an unchecked one is exactly as invisible as V8's was.
+    #
+    # Absent V10 media is NOT a failure -- a fresh checkout has no work/, and the
+    # build phase says so and carries on.  What must not pass is a bundle that
+    # carries a v10.disk whose stamp disagrees with the image on disk.
+    if [[ -f "$V10GOLD" ]]; then
+        if [[ ! -f "$res/v10.disk" ]]; then
+            bad "$rel" "V10 media exists but no v10.disk in the bundle -- rebuild"
+        elif [[ ! -f "$res/v10.disk.id" ]]; then
+            bad "$rel" "no v10.disk.id -- rebuild to stamp it"
+        elif [[ ! -f "$res/uda" ]]; then
+            bad "$rel" "no uda -- V10's boot ROM is missing from the bundle"
+        elif [[ $FULL == 1 ]]; then
+            w10=$(shasum -a 256 "$V10GOLD" | cut -d' ' -f1)
+            g10=$(tr -d '[:space:]' < "$res/v10.disk.id")
+            if [[ "$w10" == "$g10" ]]; then
+                note "$rel" "V10 current (image ${g10:0:12})"
+            else
+                bad "$rel" "v10.disk.id does not match work/v10gold/ipnx-v10-made.img"
+            fi
+        else
+            note "$rel" "V10 present (image $(cut -c1-12 < "$res/v10.disk.id"))"
+        fi
+    fi
 done < <(find "$ROOT/app/build" -maxdepth 5 -name "ipnx.app" -type d 2>/dev/null)
 
 [[ $found == 0 ]] && note "built bundles" "none yet -- nothing to be stale"

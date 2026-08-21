@@ -105,17 +105,27 @@ struct MachineSpec: Identifiable, Hashable {
         // FA00 and entered at FA02. It reads /unix off the disk itself, which
         // is why V10 needs no equivalent of bootV8's second-stage loader.
         bootFile: "uda",
-        // NO `set cpu idle' HERE, AND THAT IS A KNOWN GAP RATHER THAN AN
-        // OMISSION. V8's `idle=4.1BSD' matches its kernel because that kernel
-        // is 4.1BSD-derived; V10's is not, and no V10 harness has ever set an
-        // idle pattern — measured 43:20 of CPU in 44:24 elapsed, i.e. a core
-        // burned throughout. Harmless on a desktop and not harmless on an iPad
-        // battery, so finding V10's idle loop is work this machine needs before
-        // it ships. `set cpu 8m' is the memory size the harnesses use.
-        cpu: ["set cpu 8m"],
-        // Deliberately empty: see resumeCpu. And when V10's idle loop is found,
-        // it belongs in BOTH lists, for the reason V8's is in both.
-        resumeCpu: [],
+        // `idle=4.1BSD' WORKS ON V10, MEASURED: 99.8% of a core down to 1.7%
+        // (tools/v10-idle.sh, an A/B on the same disk with one variable). That
+        // is better than V8's 2.7%, and the guest's clock still reads correctly
+        // afterwards — an idle that slept through timer interrupts would be
+        // worse than none.
+        //
+        // It works because V10's kernel carries the SAME idle loop. SIMH's
+        // 4.1BSD-family detection (`VAX_IDLE_ULT1X', vax_cpu.c:2579) fires on an
+        // FFS that finds no set bits, at IPL 0, in system space, below virtual
+        // 0x3000. `lsys/ml/swtch.s' has the identical four instructions V8's
+        // `locore.s' does — byte-for-byte identical source — and the built
+        // kernel puts `sw1' at 0x80001136, i.e. low 0x1136, inside that window.
+        // All five conditions hold, and the machine agrees.
+        //
+        // `set cpu 8m' is the memory size every V10 harness uses.
+        cpu: ["set cpu 8m", "set cpu idle=4.1BSD"],
+        // The idle pattern must be re-issued after `restore' -- `cpu_idle_mask'
+        // is not saved -- and the MEMORY SIZE must not be, because sizing memory
+        // after a restore writes over what was just restored. This is the whole
+        // reason the two lists are separate.
+        resumeCpu: ["set cpu idle=4.1BSD"],
         preDevices: ["set dz enable"],
         disk: ["set rq0 ra81", "attach rq0 v10.disk"],
         extraDevices: [],

@@ -1,0 +1,72 @@
+#!/usr/bin/env expect
+# Does `set cpu idle=4.1BSD' make V10 idle?  One variable, measured as a duty
+# cycle rather than read off `%cpu'.
+#
+#	expect tools/v10-idle.exp <image> on|off
+#
+# WHY IT SHOULD WORK, WHICH IS WHY IT IS WORTH ASKING.  SIMH's idle detection for
+# the 4.1BSD family (`VAX_IDLE_ULT1X', vax_cpu.c:2579) fires on an FFS that finds
+# no set bits, at IPL 0, in system space, below virtual 0x3000.  V10's
+# lsys/ml/swtch.s carries the identical four instructions V8's locore.s does --
+# byte-for-byte identical source -- and the built kernel puts `sw1' at
+# 0x80001136, i.e. low 0x1136, well inside that window.  All five conditions hold
+# on paper; this is the machine's answer.
+#
+# THE DUTY CYCLE, NOT `%cpu'.  macOS `ps -o %cpu' is a decaying average, so a
+# single reading says little.  Two samples of CUMULATIVE cpu time either side of a
+# known wall-clock wait give the exact fraction of a core burned in between.
+set here [file dirname [info script]]
+source $here/v10drive.exp
+
+if {[llength $argv] < 2} { puts "usage: v10-idle.exp <image> on|off"; exit 2 }
+set img  [lindex $argv 0]
+set mode [lindex $argv 1]
+set WINDOW 30
+
+set V10_SIMH [file normalize [file join $here .. work opensimh BIN vax780]]
+set V10_ROM  [file normalize [file join $here .. work v10 src lsys boot star uda]]
+
+# `set cpu idle=' has to precede `run', like every other configuration line.
+set extra {}
+if {$mode eq "on"} { lappend extra "set cpu idle=4.1BSD" }
+
+# cputime <pid> -- cumulative CPU seconds, from ps's MM:SS.ss or HH:MM:SS.ss.
+proc cputime {pid} {
+    if {[catch {exec ps -o time= -p $pid} out]} { return -1 }
+    set f [split [string trim $out] ":"]
+    set secs 0.0
+    foreach p $f { set secs [expr {$secs * 60 + $p}] }
+    return $secs
+}
+
+v10_select_machine $img
+v10_boot $img $extra
+v10_login root
+v10_sh "PATH=/bin:/etc:/usr/bin; export PATH" 120
+v10_sh "OK=-ok" 120
+set pid [exp_pid -i $spawn_id]
+
+# LET IT SETTLE FIRST.  getty has just started and the kernel is still finishing
+# autoconfiguration; sampling immediately measures the boot, not the idle.
+# Settle: getty has just started and autoconfiguration is still finishing, so
+# sampling immediately measures the boot rather than the idle.
+after 5000
+
+set t0 [cputime $pid]
+after [expr {$WINDOW * 1000}]
+set t1 [cputime $pid]
+
+if {$t0 < 0 || $t1 < 0} {
+    puts "\nIDLE-RESULT $mode: could not read cpu time"
+} else {
+    set duty [expr {100.0 * ($t1 - $t0) / $WINDOW}]
+    puts [format "\nIDLE-RESULT %s: %.1f%% of a core over %ds (cpu %.2f -> %.2f)" \
+              $mode $duty $WINDOW $t0 $t1]
+}
+
+# AND THE GUEST'S CLOCK MUST STILL BE RIGHT, because an idle that sleeps through
+# timer interrupts is worse than no idle at all -- V8's patch was only acceptable
+# once `90 guest seconds per 90.1 host seconds' was measured.
+v10_sh "date" 120
+v10_halt
+v10_reap
