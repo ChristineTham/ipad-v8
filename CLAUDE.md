@@ -3153,19 +3153,48 @@ deltas, because `ps -o %cpu` on macOS is a decaying average. Better than V8's
 2.7%, and the guest's clock still reads correctly — an idle that slept through
 timer interrupts would be worse than none.
 
-Next, in order of what is blocked by what:
-- **Wiring the second machine into the UI**, which is the last piece and the one
-  that needs a human at a mouse to verify. The app is deliberately single-machine
-  today: `machine`, `dmd`, `store` and both `FileShare`s are `@StateObject`
-  singletons in `IpnxApp`, `SessionStore(machine:dmd:settings:)` binds sessions to
-  the one machine, and the `WindowGroup` is keyed by `TerminalShape` alone. A
-  second machine needs a second of each, a window key that carries which machine,
-  and the menus/settings/suspend lifecycle for both — and the DMD half cannot be
-  checked without driving it interactively.
-- **One known inaccuracy on the shipped disk**: `/etc/motd` is the golden's and
-  says *"The kernel is seki"*, where the disk V10 built runs `ipnx780`. Same class
-  as the duplicate executables — recorded, and fixed by an edited golden or
-  another K14 run.
+**AND THE APP BOOTS IT.** Settings → **Machine → Edition** selects V8 or V10;
+the choice takes effect at the next launch, because a machine is chosen once and
+owns a SIMH thread, a disk and ten ports from that moment. Each edition keeps its
+own disk, snapshot and terminal state under `~/Library/Application Support/ipnx/<id>`.
+`MachineSpec.current` **falls back** when the stored choice names media this build
+does not carry, and the picker offers only `MachineSpec.available` — a missing
+file must not become a launch that throws `mediaMissing` with nothing to say why.
+
+**Verified by launching, not by reading the diff.** V8 is unchanged (same
+`boot.conf` line numbering, `tty07` answering `ipnx-v8 login:` with mark parity,
+clean quit with a 1.9 MB snapshot). V10 provisions, boots, **idles at 13.6% of a
+core for the whole app** — the dmd thread plus a SIMH no longer burning one — and
+logs in:
+
+	# cat /etc/motd        -> the Tenth Edition's banner
+	# /bin/sh -c 'echo SHELL-OK'
+	SHELL-OK
+
+i.e. **our own built `/bin/sh` executing commands inside the app**.
+
+**LAUNCHING IT FOUND A DEFECT NOTHING ELSE COULD.** The golden ships
+`/etc/ttys` with all eight gettys **disabled** (`02tty00`…`02tty07`, column 1 is
+the on/off flag), so V10 came up with a login prompt on the console — read-only
+behind a lock there — and eight dead terminal windows. Not visible in the build,
+the config, the boot transcript or `app-check`; only dialling a line showed it.
+K14 enables them, and the host-side check asserts the **shipped** file. Not an
+authenticity question: `/etc/ttys` is configuration — how many terminals *this*
+machine has — and V8's golden has its gettys on for the same reason. The motd was
+corrected the same way, and for the same reason: it is **our** text and it was
+describing the golden's kernel rather than this disk's.
+
+Next:
+- **Two machines at ONCE**, which is a different thing from choosing between
+  them and is the piece that needs a human at a mouse. `machine`, `dmd`, `store`
+  and both `FileShare`s are `@StateObject` singletons in `IpnxApp`,
+  `SessionStore(machine:dmd:settings:)` binds sessions to the one machine, and
+  the `WindowGroup` is keyed by `TerminalShape` alone. A second of each, plus a
+  window key carrying which machine — and the DMD half cannot be checked
+  without driving it interactively.
+- **#13, the netfs latency**, which bounds every V10 harness: 0.84 ms in the
+  server against 9.46 s in the guest, with the server, wire, dropped frames and
+  retransmission all excluded. The packet trace is built and unused.
 - **Rung 8's reachable half** is K15 — `bash tools/v10-mux.sh`, generator in
   `v10/mk/mkdep.py`'s `emit_mux()`. Built at the tape's **124**, not 64: see the
   correction under the 5620-compiler entry in Decisions.
