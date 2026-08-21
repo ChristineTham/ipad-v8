@@ -3121,19 +3121,51 @@ installs at the tape-specified ones; `ld` and `sleep` predate this work. Nothing
 breaks (PATH is `/bin:/etc:/usr/bin`), and tidying it means rebuilding the golden
 and the whole chain above it.
 
+**V10 IS IN THE APP BUNDLE** (2026-08-21). The `Embed V8 media` phase carries
+both machines in both targets — `v10.disk` from `work/v10gold/ipnx-v10-made.img`,
+the tape's own boot ROM (`lsys/boot/star/uda`) and `v10.disk.id` — and
+`tools/app-check.sh` asserts that chain too, with both new gates proved to bite.
+**No second committed binary was needed and none was added**: the embed phase
+reads `v8.disk` out of `work/` as well, and `image/ipnx-v8-rp07.img.xz` is
+committed for an unrelated reason — stage 8 lifts `carry.txt` off it, so it is an
+*input to the next build* rather than the app's media. A claim that this needed a
+policy decision stood here briefly and was wrong.
+
+`app/ipnx/MachineSpec.swift` holds everything that differs, with `.v8` and
+`.v10`: `rq0` (RA81/MSCP) against `rp0` (RP07/Massbus), and `run FA02` — the
+tape's ROM loads `/unix` itself — against `load -o bootV8 0; run 2`. Two
+distinctions in it are load-bearing. **`resumeCpu` is not `cpu`**: V8 must
+re-issue its idle pattern after `restore` because `cpu_idle_mask` is not saved,
+while V10 must *not* re-issue `set cpu 8m`, which would write over the state just
+restored. **`preDevices` exists because order is not cosmetic**: V10 enables the
+DZ before configuring it. V8's emitted configs are byte-identical to before,
+compared line by line, and the bundle lookups were checked against the real built
+bundle.
+
+**AND `set cpu idle=4.1BSD` WORKS ON V10 — 99.8% of a core down to 1.7%**
+(`bash tools/v10-idle.sh`), which retires the iPad-battery unknown. Predicted
+host-side first: SIMH's `VAX_IDLE_ULT1X` (`vax_cpu.c:2579`) needs an `FFS` finding
+no set bits, at IPL 0, in system space, **below virtual 0x3000** — and
+`lsys/ml/swtch.s:82-85` is **byte-identical** to V8's `locore.s:705-708` while the
+built kernel's symbol table puts `sw1` at **0x80001136** (low `0x1136`), inside
+that window. Then measured A/B on one disk as a **duty cycle** from cpu-time
+deltas, because `ps -o %cpu` on macOS is a decaying average. Better than V8's
+2.7%, and the guest's clock still reads correctly — an idle that slept through
+timer interrupts would be worse than none.
+
 Next, in order of what is blocked by what:
-- **The Swift work to carry a second machine beside V8**, which is more than
-  renaming paths: V10 is a different machine — **`rq0` (RA81/MSCP) not `rp0`
-  (RP07/Massbus)**, and **`run FA02`** (the boot ROM loads `/unix`) instead of
-  `load -o bootV8 0; run 2`. The V8 hardcoding is concentrated in
-  `app/ipnx/Machine.swift` (supportDir `…/ipnx/v8`, `workingDiskURL`,
-  `pendingDiskURL`, the bundled `v8.disk.id`, `imageIDURL`, both configs' `at rp0
-  v8.disk`, and the `forResource: "v8"` lookup) plus `SettingsView`'s export
-  name. **One real unknown**: the V10 config sets no `set cpu idle`, so it burns a
-  core, and V8's `idle=4.1BSD` pattern may not match V10's kernel — which matters
-  for battery on iPad. Also needs a decision that is the user's, not ours:
-  committing a second big binary would be a **second** exception to the
-  no-binaries rule, whose sole current exception is `image/ipnx-v8-rp07.img.xz`.
+- **Wiring the second machine into the UI**, which is the last piece and the one
+  that needs a human at a mouse to verify. The app is deliberately single-machine
+  today: `machine`, `dmd`, `store` and both `FileShare`s are `@StateObject`
+  singletons in `IpnxApp`, `SessionStore(machine:dmd:settings:)` binds sessions to
+  the one machine, and the `WindowGroup` is keyed by `TerminalShape` alone. A
+  second machine needs a second of each, a window key that carries which machine,
+  and the menus/settings/suspend lifecycle for both — and the DMD half cannot be
+  checked without driving it interactively.
+- **One known inaccuracy on the shipped disk**: `/etc/motd` is the golden's and
+  says *"The kernel is seki"*, where the disk V10 built runs `ipnx780`. Same class
+  as the duplicate executables — recorded, and fixed by an edited golden or
+  another K14 run.
 - **Rung 8's reachable half** is K15 — `bash tools/v10-mux.sh`, generator in
   `v10/mk/mkdep.py`'s `emit_mux()`. Built at the tape's **124**, not 64: see the
   correction under the 5620-compiler entry in Decisions.
