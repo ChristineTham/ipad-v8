@@ -3204,14 +3204,35 @@ machine has — and V8's golden has its gettys on for the same reason. The motd 
 corrected the same way, and for the same reason: it is **our** text and it was
 describing the golden's kernel rather than this disk's.
 
+**TWO MACHINES AT ONCE IS PRECLUDED BY THE EMULATOR CORE, so one-at-a-time is
+the answer rather than a stepping stone** (settled 2026-08-21, four independent
+pieces of evidence). The roadmap said V10 would be "a second machine beside this
+one"; that was written before this was known, and it is wrong in one specific
+way — *beside* cannot mean *simultaneously*, in one process:
+- **`Machine.swift`'s own note, describing a met failure**: *"SIMH cannot be run
+  twice in one process: its globals are never reinitialised, so a second
+  `simh_main` walks the first session's event queue and `sim_cancel` calls
+  `abort()`."* It is why `relaunchProcess()` exists at all.
+- **It was tried by accident and crashed.** `Machine.start()` guards on its own
+  flag because two windows in one runloop turn both spawned a SIMH thread —
+  *"two VAX-11/780s inside one process, binding the same ports and attached to
+  the same `v8.disk`. It died on the spot, which was the lucky outcome"*, since
+  two simulators writing one disk is this project's central corruption hazard.
+- **The globals are pervasive, not incidental**: `scp.c` carries ~1,250
+  file-scope definitions, `sim_tmxr.c` ~309, `vax_cpu.c` ~155. Making the core
+  re-entrant is a rewrite of upstream, not a refactor here.
+- **And the app's ports are per-PROCESS**: `portBase` is
+  `42000 + f(getpid())`, so two `Machine`s would compute the *same* base and
+  bind the same ten ports — whose failure mode is the documented one, `scp.c`
+  skipping every remaining attach so the machine comes back **with no disk**.
+
+So the reachable design is the one that is built: **one machine at a time,
+selected in Settings**, each with its own support directory, disk, snapshot and
+terminal state. Two at once would need a second *process* — an XPC-style split
+that iOS does not allow for this shape of app — and it is not on the roadmap any
+more.
+
 Next:
-- **Two machines at ONCE**, which is a different thing from choosing between
-  them and is the piece that needs a human at a mouse. `machine`, `dmd`, `store`
-  and both `FileShare`s are `@StateObject` singletons in `IpnxApp`,
-  `SessionStore(machine:dmd:settings:)` binds sessions to the one machine, and
-  the `WindowGroup` is keyed by `TerminalShape` alone. A second of each, plus a
-  window key carrying which machine — and the DMD half cannot be checked
-  without driving it interactively.
 - **#13, the netfs latency**, which bounds every V10 harness: 0.84 ms in the
   server against 9.46 s in the guest, with the server, wire, dropped frames and
   retransmission all excluded. The packet trace is built and unused.

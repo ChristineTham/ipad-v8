@@ -803,8 +803,22 @@ result.
     the tape's source. Provenance: 7 of root's 97 files are Bell Labs' bytes and
     414 of `/usr`'s 578, which is the content decision delivered.
 
-    What remains is **the Swift work for a second machine beside V8**, and it is
-    more than renaming paths: V10 is a different machine — `rq0` (RA81/MSCP) not
+    **DONE (2026-08-21): the app boots Edition 10.** Settings → Machine →
+    Edition selects it; each edition keeps its own support directory, disk,
+    snapshot and terminal state. Verified by launching — `/usr/bin/wc` and
+    `/usr/bin/find`, our own builds, running off K10.2's libraries — and
+    `set cpu idle=4.1BSD` works on V10 (99.8% of a core down to 1.7%).
+
+    **"A second machine BESIDE V8" cannot mean simultaneously, and that is
+    settled rather than deferred.** SIMH cannot run twice in one process — its
+    globals are never reinitialised, so a second `simh_main` aborts inside
+    `sim_cancel`; it was met by accident when two windows each spawned a thread,
+    and it crashed at once. `scp.c` alone has ~1,250 file-scope definitions. The
+    app's `portBase` is a function of `getpid()`, so two machines would bind the
+    same ten ports. One at a time is the reachable design, not a stepping stone.
+
+    The original scoping, kept because the machine differences it lists are all
+    still true and now live in `app/ipnx/MachineSpec.swift`: V10 is a different machine — `rq0` (RA81/MSCP) not
     `rp0` (RP07/Massbus), and `run FA02` (the boot ROM loads `/unix`) instead of
     `load -o bootV8 0; run 2`. One real unknown: the V10 config sets no
     `set cpu idle`, so it burns a core, and V8's `idle=4.1BSD` pattern may not
