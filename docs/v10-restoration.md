@@ -786,8 +786,38 @@ result.
 9. `sam`/`samterm` running — depends on rung 8, and on the same absent `3cc` for
    `samterm`, which is also a 5620 program
 10. Reproducible `v10.disk` build script → merge into the app as "Edition 10" —
-    K14 is its mechanism; what remains after it is choosing what to copy and the
-    Swift work for a second machine beside V8.
+    **THE MECHANISM AND THE CONTENT ARE BOTH DONE (2026-08-21,
+    `bash tools/v10-mkdisk.sh ipnx-v10-ra81.img.stage1.k102.k7.k13.k103`,
+    21/21, exit 0). The disk V10 built reaches a login prompt and it is now a
+    SYSTEM rather than a bootable filesystem:**
+
+    |            | K14 before (2026-08-19) | now |
+    |---|---|---|
+    | root       | 61 files, 2.1 MB | **97 files, 3.4 MB** |
+    | `/usr`     | 0 files (one empty directory) | **578 files, 7.7 MB** |
+
+    Both free readings agree in both filesystems (root 323 blocks by `s_tfree`
+    and 323 counted out of the bitmap; `/usr` 27,873 both ways), and block 0
+    carries the boot block. `/bin/sh` is **ours** — 57,494 bytes against the
+    tape's 36,864 — so the shell `/etc/init` execs is the one V10 compiled from
+    the tape's source. Provenance: 7 of root's 97 files are Bell Labs' bytes and
+    414 of `/usr`'s 578, which is the content decision delivered.
+
+    What remains is **the Swift work for a second machine beside V8**, and it is
+    more than renaming paths: V10 is a different machine — `rq0` (RA81/MSCP) not
+    `rp0` (RP07/Massbus), and `run FA02` (the boot ROM loads `/unix`) instead of
+    `load -o bootV8 0; run 2`. One real unknown: the V10 config sets no
+    `set cpu idle`, so it burns a core, and V8's `idle=4.1BSD` pattern may not
+    match V10's kernel — which matters for battery on iPad.
+
+    Known blemish, recorded rather than tidied: four executables appear at two
+    paths. `sed` and `diff3` are the consequence of the existing golden having
+    been built under the OLD `prebuilt.txt`, so it carries the tape's copies at
+    the old paths while our build installs at the tape-specified ones; a rebuilt
+    golden puts them at the same path and ours would overlay. `ld` and `sleep`
+    predate this work. Nothing breaks — PATH is `/bin:/etc:/usr/bin` and every
+    copy works — and tidying it means rebuilding the golden and the whole chain
+    above it.
 
     **What it would carry, from the generated lists** (2026-08-20 — counts read
     from `v10/mk/gen`, never written down here, because a number that restates a
