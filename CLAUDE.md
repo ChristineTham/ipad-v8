@@ -3063,11 +3063,51 @@ What remains for a *full* rung 8 is pointing this `mux` at the 5620 `muxterm`
 this project builds for V8, which needs `MAXPKTDSIZE` matched at **64** — a
 deviation for interoperability with its own patch and its own decision.
 
+**RUNG 10 IS DONE, AND THE DISK V10 BUILT IS A SYSTEM** (2026-08-21,
+`bash tools/v10-mkdisk.sh ipnx-v10-ra81.img.stage1.k102.k7.k13.k103`, **21/21**,
+exit 0). The last assertion is the one that matters — *boot 2: THE DISK V10 BUILT
+reaches a login prompt* — and what changed is that `/usr` is no longer empty:
+
+	              K14 before (2026-08-19)     now
+	root          61 files, 2.1 MB            97 files, 3.4 MB
+	/usr          0 files (1 empty dir)       578 files, 7.7 MB
+
+Both free readings agree in both filesystems (root 323 blocks by `s_tfree` and
+323 counted out of the bitmap; `/usr` 27,873 both ways) and block 0 carries the
+boot block. **`/bin/sh` is OURS** — 57,494 bytes against the tape's 36,864 — so
+the shell `/etc/init` execs is the one V10 compiled from the tape's source.
+Provenance is the content decision delivered: **7 of root's 97 files are Bell
+Labs' bytes and 414 of `/usr`'s 578**, four of root's seven being commands whose
+oracle did not link under the generic recipe.
+
+Two things worth carrying forward. The **fit check was conservative in the right
+direction** — it predicted 147 spare root blocks and the disk came out with 323;
+a pre-flight that over-estimates refuses a run that would have worked, one that
+under-estimates hangs the guest. And **netfs cost eleven minutes on one `make`**,
+measured at `+10 requests in 90 seconds` = 9 s/request, consistent with
+`tools/v10-netread.sh`'s 7.50 s: task #13 is not a curiosity, it bounds every V10
+harness.
+
+Known blemish, recorded rather than tidied: **four executables appear at two
+paths** — `sed` and `diff3` because the existing golden was built under the *old*
+`prebuilt.txt`, so it carries the tape's copies at the old paths while our build
+installs at the tape-specified ones; `ld` and `sleep` predate this work. Nothing
+breaks (PATH is `/bin:/etc:/usr/bin`), and tidying it means rebuilding the golden
+and the whole chain above it.
+
 Next, in order of what is blocked by what:
-- **What to copy** for a shippable `v10.disk` — K10.3's 203 commands, K10.2's 26
-  libraries, stage 1's toolchain — then the Swift work to carry a second machine
-  beside V8 (two committed images with identity stamps, two working copies under
-  `~/Library/Application Support/ipnx/`, `app-check` proving both chains).
+- **The Swift work to carry a second machine beside V8**, which is more than
+  renaming paths: V10 is a different machine — **`rq0` (RA81/MSCP) not `rp0`
+  (RP07/Massbus)**, and **`run FA02`** (the boot ROM loads `/unix`) instead of
+  `load -o bootV8 0; run 2`. The V8 hardcoding is concentrated in
+  `app/ipnx/Machine.swift` (supportDir `…/ipnx/v8`, `workingDiskURL`,
+  `pendingDiskURL`, the bundled `v8.disk.id`, `imageIDURL`, both configs' `at rp0
+  v8.disk`, and the `forResource: "v8"` lookup) plus `SettingsView`'s export
+  name. **One real unknown**: the V10 config sets no `set cpu idle`, so it burns a
+  core, and V8's `idle=4.1BSD` pattern may not match V10's kernel — which matters
+  for battery on iPad. Also needs a decision that is the user's, not ours:
+  committing a second big binary would be a **second** exception to the
+  no-binaries rule, whose sole current exception is `image/ipnx-v8-rp07.img.xz`.
 - **Rung 8's reachable half** is K15 — `bash tools/v10-mux.sh`, generator in
   `v10/mk/mkdep.py`'s `emit_mux()`. Built at the tape's **124**, not 64: see the
   correction under the 5620-compiler entry in Decisions.
