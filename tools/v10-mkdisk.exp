@@ -123,6 +123,10 @@ puts "== /usr $UNODE minor $UMINOR, $UBLKS blocks =="
 set T1    /usr/s1
 set OBJ   /usr/k14obj
 set MP    /mnt2
+# K10.3's staged root, if this image has one.  `bash tools/v10-link.sh <k13>'
+# leaves it here; on an image without it the overlay loop is a no-op guarded by
+# `test -d', so K14 still answers its original question.
+set STAGED /usr/w10
 
 set results {}
 proc note {name ok} { global results; lappend results [list $name $ok assert] }
@@ -168,6 +172,15 @@ if {!$shares} {
     note "and mounts /usr inside it" 0
     note "the system copies onto it" 0
     note "/unix is on the new disk" 0
+    # A PHASE THAT DID NOT RUN IS NOT A PHASE THAT PASSED, so every assertion
+    # above is restated here as a failure rather than skipped.
+    note "/usr carries the tape's own commands" 0
+    note "/usr carries K10.2's libraries" 0
+    note "/usr carries the headers, so it can compile" 0
+    note "/usr carries the 5620 tree" 0
+    note "and the tools to build the NEXT disk" 0
+    note "K10.3's 203 commands overlay onto it" 0
+    note "no build scratch shipped" 0
     note "the copy's /etc/rc still mounts /usr, as the golden's does" 0
     note "boot 2: THE DISK V10 BUILT reaches a login prompt" 0
     set failed [report]
@@ -241,6 +254,22 @@ if {$mounted} {
     # partition `a', so the split bought nothing and cost fidelity.
     foreach d {bin etc lib dev} { v10_sh "mkdir $MP/$d" 120 }
     foreach d {tmp n} { v10_sh "mkdir $MP/$d" 120 }
+    # AND THE /usr SIDE, because a disk with an empty /usr is not a system.
+    # K14's first generations filled root and left partition `c' with one
+    # directory and no files -- 1,280 blocks of boot path against 30,752 blocks
+    # of nothing -- which was right for the question it asked ("can V10 build a
+    # bootable disk?") and is not a system anyone can use.  Measured with
+    # tools/v10fs.py, no simulator involved: root 61 files / 2.1 MB, /usr 0
+    # files.  It also LOST three commands the builder has, because K13.1 installs
+    # find, cpio and wc into /usr/bin -- so the disk V10 built could not walk a
+    # filesystem, i.e. could not build the next one.
+    #
+    # `mkdir' MAKES ONE LEVEL and cpio -pd does NOT create its destination
+    # (CLAUDE.md, twice over), so every directory is made here, parent first,
+    # before any copy names it.
+    foreach d {bin lib include games jerq blit adm tmp} {
+        v10_sh "mkdir $MP/usr/$d" 120
+    }
     # /unix FIRST, and lsys/boot/README is why: "/unix must be in the filesystem
     # beginning at the front of the boot device, and must be no more than singly
     # indirect".  The boot block is 508 bytes and follows at most one level of
@@ -250,6 +279,62 @@ if {$mounted} {
     v10_sh "cp /unix $MP/unix" 1800
     foreach d {bin etc lib dev} {
         v10_sh "cd /$d; find . -print | cpio -pd $MP/$d > /dev/null 2>&1" 3600
+    }
+    # WHAT /usr CARRIES, AND WHAT IT DELIBERATELY DOES NOT.
+    #
+    #   bin      the tape's 40 prebuilt commands plus find/cpio/wc/yacc, which
+    #            K13.1 built because the golden has none of them
+    #   lib      K10.2's 26 archives, ranlib'd and installed under every -l name
+    #            each answers to, plus yaccpar
+    #   include  so the shipped machine can compile
+    #   jerq     the 5620 tree, which is where K15's `mux' lands
+    #   blit     the 68000 Blit tree that libblit.a and lib5620.a were built from
+    #   games    made empty here; K10.3 stages one program into it
+    #   adm tmp  made empty because /etc/init writes /usr/adm/wtmp (read out of
+    #            init's own binary) and things expect /usr/tmp
+    #
+    # NOT COPIED, and each for a stated reason rather than by omission:
+    #   obj k13obj k14obj k10lib   build scratch and logs.  k14obj is THIS run's.
+    #   s1                         stage 1's STAGING tree.  The toolchain is
+    #                              already installed at its system paths --
+    #                              /lib/{ccom,cpp,c2,crt0.o,libc.a}, /bin/{cc,as,
+    #                              ld,ar,cmp} -- so /usr/s1 is a second copy of a
+    #                              thing the disk already has, under a name
+    #                              nothing references.
+    #   w10                        K10.3's staged root, whose CONTENTS are
+    #                              overlaid below at their real paths.  The
+    #                              directory itself must not ship: a /usr/w10 on
+    #                              a shipped disk is a build artefact wearing a
+    #                              system path.
+    foreach d {bin lib include jerq blit} {
+        v10_sh "cd /usr/$d; find . -print | cpio -pd $MP/usr/$d > /dev/null 2>&1" 3600
+    }
+    # THE 203 COMMANDS V10 BUILT, OVER THE TAPE'S OWN BINARIES, AND THAT IS THE
+    # AUTHENTIC CHOICE RATHER THAN THE CONVENIENT ONE.  The instinct is the
+    # reverse -- keep Bell Labs' binary wherever one exists -- and CLAUDE.md
+    # rules it out in its own words: the 46 prebuilt commands are "developers'
+    # working directories, so what survived is whatever was last compiled in
+    # place", and they are "an ORACLE, not a shortcut ... use the 46 to check
+    # what we build, never to skip building it".  Build detritus is not a
+    # specification; the SOURCE is, and these were built from it by V10's own
+    # compiler.  Stage 2 already settled the same question the same way, by
+    # building libc rather than shipping the tape's archive and accepting a
+    # falling byte-identical count as progress.
+    #
+    # Where we CANNOT build a program the tape's binary stays untouched, because
+    # nothing overlays it -- 2500, adb, bcp, picasso, lcc, lex and the rest of
+    # the 40 keep Bell Labs' bytes exactly where they are.  That is the honest
+    # split: our build where we have one, theirs where we do not.
+    #
+    # MEASURED SAFE BEFORE BEING WRITTEN.  V10's `ld' writes its output file even
+    # when symbols are undefined -- it reports them and CLEARS THE EXECUTE BITS
+    # -- so overlaying a bad /etc/init is how V8's stage 8 produced a disk that
+    # walked 4,507 files and stopped dead after autoconfig with the CPU idle.
+    # tools/v10fs.py checked all 203 staged files host-side and every one carries
+    # x, so ld resolved every symbol in every one.
+    foreach {from to} {bin bin etc etc lib lib usr/bin usr/bin
+                       usr/games usr/games usr/lib usr/lib} {
+        v10_sh "test -d $STAGED/$from && cd $STAGED/$from && find . -print | cpio -pdu $MP/$to > /dev/null 2>&1" 3600
     }
     # AND THE COPIED /etc/mtab IS THE BUILDER'S, NOT THE NEW DISK'S.  Copying /etc
     # wholesale brings the builder's mount table with it, so the previous run's boot
@@ -264,6 +349,38 @@ if {$mounted} {
         [v10_try "test -s $MP/bin/sh && test -s $MP/etc/init && echo CP\$OK" "CP-ok" 600]
     note "/unix is on the new disk" \
         [v10_try "test -s $MP/unix && echo UX\$OK" "UX-ok" 300]
+    # /usr, ASSERTED THROUGH ONE FILE OF EACH KIND rather than by counting.  A
+    # count read over a tty is a count the tty can corrupt (stage 2's DIFF list
+    # lost six member names that way and the error ran in the flattering
+    # direction); the host reads the finished image afterwards, which is what
+    # tools/v10fs.py is for.  What these prove is that each COPY happened at all.
+    note "/usr carries the tape's own commands" \
+        [v10_try "test -s $MP/usr/bin/lex && test -s $MP/usr/bin/adb && echo UB\$OK" "UB-ok" 600]
+    note "/usr carries K10.2's libraries" \
+        [v10_try "test -s $MP/usr/lib/libm.a && test -s $MP/usr/lib/libcurses.a && echo UL\$OK" "UL-ok" 600]
+    note "/usr carries the headers, so it can compile" \
+        [v10_try "test -s $MP/usr/include/stdio.h && echo UI\$OK" "UI-ok" 600]
+    note "/usr carries the 5620 tree" \
+        [v10_try "test -d $MP/usr/jerq/include && echo UJ\$OK" "UJ-ok" 600]
+    # THE THREE COMMANDS THE PREVIOUS DISK LOST.  K13.1 installs find, cpio and
+    # wc into /usr/bin, and K14 copied only /bin /etc /lib /dev -- so the disk
+    # V10 built could not walk a filesystem and therefore could not build the
+    # next one.  This is the assertion that would have caught it.
+    note "and the tools to build the NEXT disk" \
+        [v10_try "test -s $MP/usr/bin/find && test -s $MP/usr/bin/cpio && test -s $MP/usr/bin/wc && echo UT\$OK" "UT-ok" 600]
+    # THE STAGED ROOT ARRIVED.  `basename' is one of the 153 K10.3 builds that
+    # exist nowhere on the golden, so it cannot be satisfied by the copy above --
+    # which is the whole point of choosing it over a name both trees carry.
+    note "K10.3's 203 commands overlay onto it" \
+        [v10_try "test -s $MP/usr/bin/basename && test -s $MP/usr/bin/comm && echo SO\$OK" "SO-ok" 600]
+    # AND THE BUILD SCRATCH DID NOT.  Asserted as absence, deliberately, because
+    # this is the one place where absence IS the property being shipped: a
+    # /usr/w10 or /usr/s1 on a shipped disk is a build artefact wearing a system
+    # path.  `test ! -d' answers about the type, not merely the name -- v8's
+    # retire-check compared paths and passed a disk whose /bin/sh was a
+    # DIRECTORY.
+    note "no build scratch shipped" \
+        [v10_try "test ! -d $MP/usr/w10 && test ! -d $MP/usr/s1 && test ! -d $MP/usr/obj && echo NS\$OK" "NS-ok" 600]
     # AND THE /usr MOUNT IS NOW CORRECT, SO IT STAYS -- this assertion is the
     # inverse of the one it replaces.  Earlier generations of K14 built one
     # whole-drive filesystem, where `ra0c' overlapped root and the line had to be

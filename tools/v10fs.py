@@ -468,6 +468,23 @@ def main():
     img, part = split(sys.argv[2])
     path = sys.argv[3] if len(sys.argv) > 3 else "/"
     fs = Fs(img, part)
+    # SAY WHICH FILESYSTEM WAS READ, ON STDERR, EVERY TIME.  An RA81 image holds
+    # two filesystems and answering about the wrong one is indistinguishable from
+    # a correct answer about a missing file -- K11's "a guest can report success
+    # about the wrong disk", host-side.  It is not hypothetical: in zsh
+    #
+    #	K=work/v10gold/ipnx-v10-ra81.img.stage1.k102.k7.k13
+    #	python3 tools/v10fs.py stat "$K:c" /bin/lex
+    #
+    # SILENTLY DROPS THE `:c' -- `$K:c' is a history modifier, so the argument
+    # arrives with no partition, defaults to root, and the tool truthfully
+    # reports that /bin/lex is not there.  Nine files read as MISSING when all
+    # nine existed.  `${K}:c' is the fix in the shell; this line is the fix here,
+    # because the next person will make the same mistake and a banner is the only
+    # thing that shows it.  stderr, so a pipeline parsing `find' is unaffected.
+    sys.stderr.write("v10fs: %s partition %s (%s), %d blocks of %d\n"
+                     % (os.path.basename(img), part, fs.fsmnt or "unnamed",
+                        fs.fsize, BSIZE))
 
     if verb == "ls":
         ino = fs.lookup(path)

@@ -166,6 +166,81 @@ if printf '%s\n' "$FREE" | grep -q 'disagrees'; then
     rc=1
 fi
 
+# AND THE HOST READS THE CONTENTS, not just the superblock.  tools/v10fs.py
+# walks the finished image directly, so this is an independent witness to what the
+# guest asserted -- the guest said "test -s" about seven files, and this counts
+# every one and checks the properties that decide whether the disk is a SYSTEM
+# rather than merely a bootable filesystem.
+#
+# /bin/sh IS THE ONE THAT MATTERS MOST, and it is checked here because it is the
+# one a guest-side test would have flattered.  /etc/init execs `/bin/sh' -- read
+# out of init's own binary -- and /etc/rc, which init runs THROUGH that shell, is
+# what mounts /usr.  So a shell at /usr/bin/sh and not /bin/sh gives a disk that
+# autoconfigures and then stops dead with the CPU idle, which is exactly what
+# world.link used to specify before the tape's own install rules were read.
+echo
+echo "== the CONTENTS of the disk V10 built, read from the image =="
+python3 - "$BLANK" <<'PYCHECK' || rc=1
+import importlib.util, os, sys
+here = os.path.dirname(os.path.abspath("tools/v10fs.py"))
+spec = importlib.util.spec_from_file_location("v10fs", "tools/v10fs.py")
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+img = sys.argv[1]
+bad = []
+counts = {}
+for part, label in (("a", "root"), ("c", "/usr")):
+    fs = m.Fs(img, part)
+    files = dirs = execs = 0
+    total = 0
+    for p, ino in fs.walk("/"):
+        k = ino["mode"] & m.IFMT
+        if k == m.IFDIR:
+            dirs += 1
+        elif k == m.IFREG:
+            files += 1
+            total += ino["size"]
+            if ino["mode"] & 0o111:
+                execs += 1
+    counts[part] = (dirs, files, execs, total)
+    print("   %-5s %4d directories %5d files %5d executable %10d bytes (%.1f MB)"
+          % (label, dirs, files, execs, total, total / 1048576.0))
+
+# The boot path, by property and not by name-existence: a file, non-empty, with
+# the execute bit set.  V10's ld clears x on an undefined symbol, so x IS the
+# link's verdict.
+root = m.Fs(img, "a")
+for p in ("/unix", "/bin/sh", "/etc/init", "/etc/getty", "/etc/login",
+          "/etc/mount", "/bin/cat", "/etc/rc"):
+    try:
+        ino = root.lookup(p)
+    except SystemExit:
+        bad.append("%s is MISSING" % p)
+        continue
+    if (ino["mode"] & m.IFMT) != m.IFREG:
+        bad.append("%s is not a regular file" % p)
+    elif ino["size"] == 0:
+        bad.append("%s is empty" % p)
+    elif p != "/etc/rc" and not (ino["mode"] & 0o111):
+        bad.append("%s is not executable -- ld left symbols undefined" % p)
+
+usr = m.Fs(img, "c")
+if counts["c"][1] == 0:
+    bad.append("/usr holds no files at all, so this is not a system")
+for d in ("/w10", "/s1", "/obj", "/k13obj", "/k14obj", "/k10lib"):
+    try:
+        usr.lookup(d)
+    except SystemExit:
+        continue
+    bad.append("/usr%s shipped -- build scratch wearing a system path" % d)
+
+if bad:
+    print("\n== NO MEASUREMENT: the disk is not a shippable system ==")
+    for b in bad:
+        print("   %s" % b)
+    sys.exit(1)
+print("   the boot path is present, executable and non-empty; no scratch shipped")
+PYCHECK
+
 echo
 echo "== K14: DID V10 BUILD A BOOTABLE DISK? =="
 if [[ "$rc" == 0 ]]; then
