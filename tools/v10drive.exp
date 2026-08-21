@@ -102,6 +102,10 @@ set V10_RUN_SECS 5400
 # project builds, and a bare name handed to v10_boot resolves here.  An
 # absolute path (which is what v10_clone returns) works either way.
 set V10_MEDIA [file normalize [file join [file dirname [info script]] .. work v10gold]]
+# Captured while THIS file is being sourced.  `info script' inside a proc
+# resolves to whatever script is being evaluated at CALL time -- the caller's,
+# not this one's -- so a proc that needs our directory must read it from here.
+set V10_TOOLS [file normalize [file dirname [info script]]]
 set V10_SIMH  [file normalize [file join [file dirname [info script]] .. work opensimh BIN vax750]]
 set V10_ROM   [file normalize [file join [file dirname [info script]] .. work v10boot uda750]]
 set V10_GEN   [file normalize [file join [file dirname [info script]] .. v10 mk gen]]
@@ -413,6 +417,83 @@ proc v10_iltrace {} {
                  "set il debug=PKT;DAT"]
 }
 
+# v10_select_machine <image>
+#
+# THE MACHINE IS A PROPERTY OF THE IMAGE, AND TAKING IT FROM THE HARNESS COSTS A
+# RUN.  K10.3 was written for the .k102 chain, which boots on a vax750.  Pointed
+# at the .k13 chain -- whose /unix is OUR ipnx780 kernel -- it panicked twice and
+# halted:
+#
+#	unix
+#	type 2 sp x7fffec00 code x0 pc x800139f8 ...  panic: trap
+#	type 8 sp x7fffec00 code x0 pc x80009581 ...  panic again: trap
+#	HALT instruction, PC: 80000BB3 (HALT)
+#
+# A 780 kernel on a 750 dies on hardware that is not there -- ms780, dw780, mba
+# -- and finding out costs the harness's whole 480-second wait for `ogin', after
+# which the failure reads as a broken build rather than a wrong simulator.
+#
+# So ASK THE KERNEL.  K7's kernel carries its own banner string, `Unix 10e ipnx
+# 780', which is what K9's transcript prints on the console; the golden's
+# lsys/astro/seki.u does not.  That is a measurement of the artefact rather than a
+# convention about its filename -- the same reason provenance here comes from
+# hashes and never from grepping for `vaxpcc2'.
+#
+# Reading it needs no simulator: tools/v10fs.py walks the image host-side.
+# v10_must_boot <pattern> <seconds>
+#
+# THE LOGIN WAIT, WITH A PANIC AS A FIRST-CLASS OUTCOME.  A kernel that panics
+# never prints a prompt, so `v10_must "ogin" 480' sits for the full eight minutes
+# and then reports `never saw ogin after 480s' -- which names the symptom and not
+# the cause.  It cost that, and the diagnosis came from reading the transcript by
+# hand:
+#
+#	unix
+#	type 2 ... panic: trap
+#	type 8 ... panic again: trap
+#	HALT instruction, PC: 80000BB3 (HALT)
+#
+# NO `--' HERE, DELIBERATELY.  `--' ends option processing, so every later
+# argument is a pattern -- which is fine for globs and would silently turn a
+# `-re' into a literal.  Both patterns here are plain globs and neither can begin
+# with a dash, so the flag is unnecessary and its absence is what keeps the
+# second pattern a pattern.  The flat form (pairs as direct arguments, not wrapped
+# in one brace) is the only one of expect's three spellings that both honours
+# -timeout and re-splits into pairs.
+proc v10_must_boot {pat {t 0}} {
+    global timeout
+    set use [expr {$t > 0 ? $t : $timeout}]
+    expect -timeout $use $pat {
+    } "panic: " {
+        v10_bail "THE KERNEL PANICKED during boot, so no prompt is coming.\n   Almost always the wrong simulator for this image: a 780 kernel on a\n   vax750 dies on hardware that is not there (ms780, dw780, mba).  See\n   v10_select_machine, which reads the machine off the image."
+    } timeout {
+        v10_bail "never saw '$pat' after ${use}s"
+    } eof {
+        v10_bail "simulator exited while waiting for '$pat'"
+    }
+}
+
+
+proc v10_select_machine {img} {
+    global V10_SIMH V10_ROM V10_TOOLS
+    set here $V10_TOOLS
+    set fs   [file join $here v10fs.py]
+    if {![file readable $fs]} { return }        ;# no reader: leave the default
+    set cmd "python3 [list $fs] cat [list $img:a] /unix 2>/dev/null |\
+             grep -a -c 'ipnx 780' || true"
+    if {[catch {exec sh -c $cmd} n]} { set n 0 }
+    set n [string trim $n]
+    if {![string is integer -strict $n]} { set n 0 }
+    if {$n > 0} {
+        set V10_SIMH [file normalize [file join $here .. work opensimh BIN vax780]]
+        set V10_ROM  [file normalize [file join $here .. work v10 src lsys boot star uda]]
+        puts "v10: $img carries the ipnx780 kernel -- using vax780"
+    } else {
+        puts "v10: $img carries no ipnx780 banner -- using vax750"
+    }
+}
+
+
 proc v10_boot {img {extra {}} {r5 0}} {
     # `global spawn_id' IS LOAD-BEARING -- spawn sets spawn_id in the CURRENT
     # scope, so a spawn inside a proc leaves the global one alone and every
@@ -475,7 +556,7 @@ proc v10_boot {img {extra {}} {r5 0}} {
     }
     # MARK PARITY.  getty sends its first banner with bit 7 set, so the plain
     # string "login:" can miss the whole line.  `ogin' survives either way.
-    v10_must "ogin" 480
+    v10_must_boot "ogin" 480
 }
 
 # Log in and take control, without ever matching a prompt.

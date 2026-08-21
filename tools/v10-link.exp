@@ -75,6 +75,10 @@ proc report {} {
     return $failed
 }
 
+# WHICH MACHINE?  Read off the image, because this harness runs on both chains:
+# .k102 is a vax750 and anything from .k7 onward carries our 780 kernel, which
+# panics on a 750.  See v10_select_machine.
+v10_select_machine $img
 v10_boot $img [list "set rq1 ra81" "attach rq1 $src"]
 v10_login root
 v10_sh "PATH=/bin:/etc:/usr/bin; export PATH" 120
