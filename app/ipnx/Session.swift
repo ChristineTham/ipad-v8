@@ -353,9 +353,14 @@ final class Session: ObservableObject, Identifiable {
         // shows the user one login: theirs.
         if creatingAccount, machine.isProvisioned {
             note("provisioned — halting, then restarting for a clean machine")
-            link.send(Array("cd /; sync; sync\r".utf8))
-            try? await Task.sleep(nanoseconds: 1_500_000_000)
-            link.send(Array("/etc/halt\r".utf8))
+            // The machine's own shutdown, in its own order: V10 needs an
+            // `umount -a' that V8 does not, because its kernel neither syncs nor
+            // unmounts and it then REFUSES to remount /usr.  See
+            // MachineSpec.shutdown.
+            for step in machine.spec.shutdown {
+                link.send(Array("\(step)\r".utf8))
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+            }
             // The kernel prints this once the disks are flushed and it is
             // spinning at IPL 31 — an output-anchored marker, not a timer.
             _ = await machine.waitForHalt(timeout: 60)

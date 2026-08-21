@@ -67,6 +67,35 @@ struct MachineSpec: Identifiable, Hashable {
     /// configured. The last line is always the one that starts it.
     let boot: [String]
 
+    /// What the kernel prints once it is spinning and the disk is safe.
+    ///
+    /// V8's `boot()` calls `update()`, prints `syncing disks... done` and then
+    /// `halting (in tight loop)` before spinning at IPL 31 — so the word
+    /// "halting" means the I/O has drained, which a timer never would. V10's
+    /// `boot()` is two lines (`lsys/md/machdep.c`): `if (howto&RB_HALT)
+    /// death();`, and `death()` prints **`death`**. Nothing else.
+    ///
+    /// GETTING THIS WRONG COSTS /usr, and it did. Waiting for "halting" on V10
+    /// simply times out, so the provisioning restart relaunched over a guest
+    /// that had never confirmed anything — and because V10 neither syncs nor
+    /// unmounts on halt, `/usr` kept `s_valid = 0`. The next boot then answered
+    ///
+    ///     mount /dev/ra0c on /usr type 0: In use
+    ///
+    /// and carried on into multi-user with root's empty `/usr` showing through:
+    /// `fs.c:107` refuses a bitmapped filesystem whose `s_valid` is clear, and
+    /// only `fsoff` — a real unmount — sets it back.
+    let haltMarker: String
+
+    /// The operator's shutdown, in order.
+    ///
+    /// V10 needs `umount -a` and V8 does not, and the difference is not style.
+    /// V8's `boot()` flushes for you; V10's does nothing at all, so the
+    /// userland `sync` is the whole flush — and neither kernel unmounts, but
+    /// only V10 then refuses to remount (V8's autoboot `fsck` self-heals).
+    /// `umount -a` walks mtab backwards, so nothing has to be named.
+    let shutdown: [String]
+
     /// THE EIGHTH EDITION, exactly as the app has always booted it.
     static let v8 = MachineSpec(
         id: "v8",
@@ -84,7 +113,12 @@ struct MachineSpec: Identifiable, Hashable {
         // the kernel on a 16-bit Massbus register read, which is why the tape
         // route is dead and media goes through `rp1' as a raw courier.
         extraDevices: ["set tu0 te16"],
-        boot: ["load -o bootV8 0", "run 2"]
+        boot: ["load -o bootV8 0", "run 2"],
+        haltMarker: "halting",
+        // Unchanged from what the app has always sent.  V8's boot() flushes and
+        // waits for the I/O itself, and its autoboot fsck repairs an unclean
+        // stop, so there is nothing to add here.
+        shutdown: ["cd /; sync; sync", "/etc/halt"]
     )
 
     /// THE TENTH EDITION. Every line is from the sequence
@@ -133,7 +167,14 @@ struct MachineSpec: Identifiable, Hashable {
         // and r1/r3/r5 cleared, exactly as v10_boot does before `run FA02'.
         boot: ["load -o uda FA00",
                "dep sp 200", "dep r1 0", "dep r3 0", "dep r5 0",
-               "run FA02"]
+               "run FA02"],
+        haltMarker: "death",
+        // `umount -a' is the load-bearing line: without it /usr keeps
+        // s_valid = 0 and the next boot cannot mount it.  Two syncs around a
+        // sleep because V10's sync(2) sets B_ASYNC and returns before the disk
+        // has the block (lsys/io/bio.c:692), so the flush needs time it does not
+        // wait for -- which is exactly what tools/v10drive.exp's v10_halt does.
+        shutdown: ["cd /; sync", "/etc/umount -a", "sync", "/etc/halt"]
     )
 
     static let all: [MachineSpec] = [.v8, .v10]

@@ -61,7 +61,7 @@ final class Machine: ObservableObject {
     /// and the I/O has drained, so it means the disk is safe — which a timer
     /// never would.
     func waitForHalt(timeout: TimeInterval) async -> Bool {
-        await console.waitFor("halting", timeout: timeout)
+        await console.waitFor(spec.haltMarker, timeout: timeout)
     }
 
     func relaunchProcess() {
