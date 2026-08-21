@@ -218,6 +218,7 @@ static struct il_ctx {
     int                 rie;                            /* receive interrupt armed */
     int                 cint;                           /* command interrupt pending */
     int                 rint;                           /* receive interrupt pending */
+    uint32              rpend;                          /* receive completions NOT YET REPORTED */
     int                 online;
     int                 promisc;
     int                 loopback;                       /* internal loopback mode */
@@ -283,6 +284,7 @@ REG il_reg[] = {
     { FLDATAD (LOOPBAK, il.loopback,0,              "internal loopback mode") },
     { FLDATAD (CINT,    il.cint,    0,              "command interrupt pending") },
     { FLDATAD (RINT,    il.rint,    0,              "receive interrupt pending") },
+    { DRDATAD (RPEND,   il.rpend,   32,             "receive completions unreported") },
     { DRDATAD (RXQ,     il.rxq_count, 8,            "queued receive buffers") },
     { FLDATAD (RXBUSY,  il.rxbusy,  0,              "frame spanning buffers in flight") },
     { DRDATAD (RXTOTAL, il.rxtotal, 32,             "bytes in the frame in flight") },
@@ -342,13 +344,43 @@ if (il.cie) {
     }
 }
 
+/* ONE INTERRUPT PER COMPLETION, AND THE FLAG THAT USED TO BE HERE COST SEVEN
+   SECONDS A REQUEST.
+
+   A real board holds its interrupt request asserted while any completion is
+   still unreported.  This modelled it as a single flag that the vector read
+   cleared, so two completions arriving before the guest was dispatched
+   produced ONE interrupt -- and ni1010a.c's il0int() handles exactly one
+   packet per interrupt and returns (`is->rnext = NULL' and out).  The second
+   frame then sat in guest memory, DMA'd, correct and unannounced, until some
+   later frame's interrupt let il0int() run again.
+
+   netfs is strict request/response, so nothing else is on the wire: that later
+   frame was the sender's RETRANSMISSION.  Every exchange therefore advanced at
+   an RTO -- on V10 a two-second minimum on a 1 Hz timer (TCPTV_MIN =
+   1*PR_SLOWHZ + 1, PR_SLOWHZ = 1) doubling from there.  Measured on
+   tools/v10-netread.sh: 41 of 125 data-carrying frames retransmitted (33%) and
+   7.18 s per netfs request against 0.37 ms of server time.
+
+   NOTHING WAS EVER LOST, WHICH IS WHY NO COUNTER COULD REPORT IT: `show il
+   statistics' read `receive errors: 0' and `Read Queue: Loss: 0' on the very
+   runs that were paying this, nineteen readings over.  Only a timestamped
+   packet trace shows it -- see tools/il-gaps.py.
+
+   AND V8 NEVER MET IT, BY ACCIDENT: ill.c's ILOUTSTANDING is 1, so V8 posts a
+   single receive buffer and il_svc() cannot deliver a second frame before the
+   first is taken.  V10's ni1010a.c keeps ILRBYTES = 3000 bytes in 1024-byte
+   blocks -- three buffers -- so it could, and did.  A limit measured through
+   an emulator is a property of the emulator until proven otherwise. */
+
 static void il_setrint (void)
 {
 il.csr |= ILCSR_RDONE;
 if (il.rie) {
+    il.rpend++;
     il.rint = 1;
     SET_INT (ILR);
-    sim_debug (DBG_INT, &il_dev, "receive interrupt\n");
+    sim_debug (DBG_INT, &il_dev, "receive interrupt (%u unreported)\n", il.rpend);
     }
 }
 
@@ -365,8 +397,20 @@ return 0;
 int32 il_rint_ack (void)
 {
 if (il.rint) {
-    il.rint = 0;
-    CLR_INT (ILR);
+    if (il.rpend > 0)
+        il.rpend--;
+    if (il.rpend > 0) {
+        /* Another completion the guest has not been told about: a real board
+           would still be asserting, so leave the request up rather than
+           waiting for unrelated traffic to raise it again. */
+        SET_INT (ILR);
+        sim_debug (DBG_INT, &il_dev, "receive vector taken, %u still unreported\n",
+                   il.rpend);
+        }
+    else {
+        il.rint = 0;
+        CLR_INT (ILR);
+        }
     return il_dib.vec;                                  /* receive vector is the base */
     }
 return 0;
@@ -452,6 +496,7 @@ switch (cmd) {
         il.promisc = 0;
         il.loopback = 0;
         il.rxq_head = il.rxq_count = il.rxburst = 0;
+        il.rpend = 0;
         il.txlen = 0;
         il.lost = 0;
         il.csr &= ~(ILCSR_CDONE | ILCSR_RDONE);
@@ -523,6 +568,7 @@ switch (cmd) {
     case ILC_FLUSH:
         il.rxq_head = il.rxq_count = 0;
         il.rxbusy = 0;
+        il.rpend = 0;                   /* the buffers are gone; so are their reports */
         break;
 
     case ILC_LDXMIT:
@@ -830,6 +876,7 @@ t_stat il_reset (DEVICE *dptr)
 {
 il.csr = il.bar = il.bcr = 0;
 il.cie = il.rie = il.cint = il.rint = 0;
+il.rpend = 0;
 il.online = il.promisc = il.loopback = il.lost = 0;
 il.rxq_head = il.rxq_count = il.rxq_warned = 0;
 il.txlen = 0;

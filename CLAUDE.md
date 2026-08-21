@@ -70,6 +70,15 @@ bash tools/net-selftest.sh rp07new
 bash tools/netfs-latency.sh rp07new
 ```
 
+```bash
+# WHERE does a netfs request's time go?  Timestamped frames, both directions,
+# with retransmissions counted -- the only instrument that can see a frame that
+# arrived and was not noticed.  Off unless V10_IL_TRACE names a file.
+V10_NETREAD_FILES=src/history/ix/src/jerq/mux/32ld.c \
+V10_IL_TRACE=work/il.trace bash tools/v10-netread.sh
+python3 tools/il-gaps.py work/il.trace            # --frames, --top N
+```
+
 Track B (V10). The tree is **not** in git — `v10/` holds only MANIFEST and
 CASEMAP, and `work/v10/` is rebuilt from the TUHS tarballs:
 
@@ -2217,8 +2226,12 @@ at the old flat `v8/` is moved on first launch, never abandoned.
     `readExactly()` waiting for the guest, on a monotonic clock (`DispatchTime`,
     not `Date` — this process runs for hours beside a guest that thinks it is
     1976).
-  - **The mechanism is Bell Labs', in their own words, and it is the GUEST DRIVER
-    rather than our device model.** `lsys/io/ni1010a.c`'s receive-buffer poster
+  - **"THE MECHANISM IS THE GUEST DRIVER RATHER THAN OUR DEVICE MODEL" WAS
+    EXACTLY BACKWARDS — IT WAS OUR DEVICE MODEL. See the resolution below.**
+    What follows is kept because its *exclusions* were right and are what
+    narrowed the search; only the attribution was wrong, and it was wrong in
+    the direction that flatters the code we control.
+    `lsys/io/ni1010a.c`'s receive-buffer poster
     carries the comment *"let it be an ordinary command, interrupt when complete,
     for now. **this is probably too slow**"*, and it is: `ilrcvbufs()` posts ONE
     buffer per command and refuses to post while any command is active
@@ -2249,11 +2262,48 @@ at the old flat `v8/` is moved on first launch, never abandoned.
       `tsleep(…, 1)` in **`stclose()`**, up to sixty of them draining a queue,
       so **closing a stream can take a minute** — worth knowing, not on the
       per-request path.
-    - So the question is narrow now: *what does the guest wait on for 9.46 s
-      between one reply and the next request?* The instrument for it is built
-      and still unused — `V10_IL_TRACE=work/il.trace bash
-      tools/v10-netread.sh` timestamps every frame, so it can say whether the
-      time falls before our reply reaches the guest or after.
+    - **ANSWERED 2026-08-22, AND IT WAS OURS: `pdp11_il.c` COALESCED TWO
+      RECEIVE INTERRUPTS INTO ONE.** `il_setrint()` raised a single flag that
+      the vector read cleared, so two completions arriving before the guest was
+      dispatched produced **one** interrupt — and `ni1010a.c`'s `il0int()`
+      handles exactly one packet per interrupt and returns. The second frame
+      then sat in guest memory, DMA'd and correct, with nothing to announce it.
+      netfs is strict request/response, so nothing else is on the wire: the
+      next receive interrupt was the sender's **retransmission**, and every
+      exchange advanced at an RTO — on V10 a two-second floor on a 1 Hz timer
+      (`TCPTV_MIN = 1*PR_SLOWHZ + 1`, `PR_SLOWHZ = 1`), doubling from there.
+      Fixed with `il.rpend`, a count of completions not yet reported:
+      `il_rint_ack()` decrements it and **leaves the request asserted** while
+      any remain, which is what a real board does. SIMH's VAX dispatch raises
+      IPL, so the re-assertion is taken after the handler's `REI` — one
+      interrupt per packet, in order.
+      - **Identical workload, same 154 requests:** waiting on the guest
+        **1009.4 s → 1.5 s (673x)**; median wait per request **4.941 s →
+        0.000 s**; max 40.912 s → 0.238 s. On the wire: 1091 frames spanning
+        **1025.1 s → 492 frames spanning 3.485 s**, and **267 retransmissions
+        of 602 data frames → 0 of 303**, where `distinct` now equals
+        `data-carrying`: every segment sent exactly once.
+      - **NOTHING WAS EVER LOST, WHICH IS WHY NO COUNTER COULD REPORT IT.**
+        `show il statistics` read `receive errors: 0` and `Read Queue: Loss: 0`
+        in *both* runs — nineteen such readings across the logs, every one true
+        and every one irrelevant — and netfsd saw no duplicate requests, because
+        TCP deduplicates below the application. **Only a timestamped packet
+        trace can see a frame that arrived and was not noticed.**
+      - **AND V8 WAS IMMUNE BY ACCIDENT, which is why this read as a property
+        of V10 for months.** `ill.c` sets `ILOUTSTANDING` to **1**, so V8 posts
+        a single receive buffer and `il_svc()` cannot deliver a second frame
+        before the first is taken; V10's `ni1010a.c` keeps `ILRBYTES` = 3000
+        bytes in 1024-byte blocks — three buffers — so it could, and did. *A
+        limit you measure through an emulator is a property of your emulator
+        until proven otherwise*, for the second time on this one file.
+      - **V8 did not regress and in fact got faster**: `net-selftest.sh` exit 0
+        on all three assertions, and `netfs-latency.sh`'s five-pass workload
+        measured **15, 13, 17 s** against the 32 / 47 / 49 s recorded below.
+        Three samples because that script has ~50% variance and cannot resolve
+        under about 2x; the new spread does not overlap the old.
+      - The instrument is `tools/il-gaps.py`, and **it guards the trace rather
+        than trusting it** — see the `set debug` entry in Gotchas for the three
+        ways the trace lied before it was fixed.
   - A near miss worth not repeating: `ilincmd()` waits for command completion
     with `tsleep(…, PZERO, 5)` and `slp.c:86` declares that argument **seconds**,
     which is tantalisingly close to 7.5. It is **not** the cause — its only
@@ -2271,6 +2321,44 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   fell through to a 30-second timeout and produced no reading at all. Fixed
   2026-08-20, with the error text matched explicitly so a future rename is loud
   rather than slow. *A diagnostic that cannot fail is not a diagnostic.*
+- **AND THE PACKET TRACE LIED IN THREE INDEPENDENT WAYS, ALL SILENTLY — read
+  this before trusting any `set debug` output.** The instrument this file
+  called "built and unused" was built wrong; every fault is an open-simh
+  default and none is visible from the simulator's behaviour:
+  - **`set debug -t` ON ITS OWN IS AN ERROR.** `sim_set_debon()` opens with
+    `if ((cptr == NULL) || (*cptr == 0)) return SCPE_2FARG` — the command
+    parser has already eaten `-t` as a switch, so the argument is empty. It
+    printed *"Too few arguments"*, `sim>` followed, and `v10_boot`'s generic
+    `v10_must "sim>"` accepted it. The switches must ride the **same** command
+    as the filename: `set debug -tf <file>`.
+  - **THE TIMESTAMP IS NOT A DEFAULT.** `sim_console.c:2358` does force `-T`
+    on, but that line sits inside `if (sim_deb_switches & SWMASK ('R'))`, so it
+    applies only when `-R` was asked for. A bare `set debug <file>` timestamps
+    nothing.
+  - **AND THE DEFAULT FILTER DELETES RETRANSMISSIONS.** `scp.c`'s
+    `_sim_debug_write_flush()` collapses consecutive identical lines into
+    `same as above (N times)` unless **`-F`** is given — and a retransmitted
+    frame is by definition an identical hex dump. *The one hypothesis the trace
+    existed to test is the one the filter erases.*
+  - **A relative path lands in the wrong directory**, because `v10_boot` does
+    `cd $V10_MEDIA` before spawning so ATTACH can use short image names.
+    `work/il.trace` became `work/v10gold/work/il.trace`, SIMH said `File open
+    error`, and the prompt-match passed again. `v10drive.exp` now resolves it
+    with `file normalize` **at source time** and asserts the file exists right
+    after the config loop — `sim_open_logfile()` creates it the instant it
+    succeeds, so its existence is a marker only the success path can write.
+  - **There is a FOURTH elision inside the dump itself**, and it is not fixable
+    by a switch: `eth_packet_trace_ex()` writes `%04X thru %04X same as above`
+    for a 16-byte group it judges identical using `eth_mac_cmp`, which compares
+    **six** bytes. So a hex dump from it is not a faithful record of the frame,
+    and the elision can begin at offset 0x30 — where the TCP window field
+    lives. `tools/il-gaps.py` quarantines those frames rather than guessing,
+    and says so, because a dropped frame is a **missed** duplicate and that
+    error runs in the flattering direction.
+  - **The dry runner cannot cover any of this**: `tools/v10-dryrun.sh` replaces
+    `v10_boot` with a stub, so code added *inside* `v10_boot` is never
+    executed by it. A clean dry run says nothing about it; only a real boot
+    does.
 - **netfs costs a round trip per path component, not per byte** — so diagnose it by
   counting *files*, never bytes, and never benchmark it with one big read.
   **The round trip was the emulator's, not the protocol's.** `il_svc()` ended in
@@ -2298,6 +2386,13 @@ at the old flat `v8/` is moved on first launch, never abandoned.
 
   	committed model   32 s   47 s   49 s
   	hardened model    50 s   60 s
+
+  **RETIRED 2026-08-22 by the interrupt-coalescing fix**, which cut the same
+  five-pass workload to **15, 13, 17 s** — three samples, taken because this
+  script cannot resolve under about 2x, and the new spread does not overlap the
+  old and is far tighter. V8 was largely protected from that bug by
+  `ILOUTSTANDING = 1`, but not entirely: a frame spanning two receive buffers
+  raises `il_setrint()` twice as well. Use 13-17 s as the current band.
 
   So ~530 reads take **32–60 s**, or 9–17 files/s — an order of magnitude off
   the retired claim, on an unmodified model. Two lessons, and the second
@@ -3111,8 +3206,10 @@ direction** — it predicted 147 spare root blocks and the disk came out with 32
 a pre-flight that over-estimates refuses a run that would have worked, one that
 under-estimates hangs the guest. And **netfs cost eleven minutes on one `make`**,
 measured at `+10 requests in 90 seconds` = 9 s/request, consistent with
-`tools/v10-netread.sh`'s 7.50 s: task #13 is not a curiosity, it bounds every V10
-harness.
+`tools/v10-netread.sh`'s 7.50 s: task #13 was not a curiosity, it bounded every
+V10 harness. **Closed 2026-08-22** — our own device model coalesced two receive
+interrupts into one, so every exchange advanced at a TCP retransmit timeout; a
+re-run of this rung would now cost seconds where it cost eleven minutes.
 
 Known blemish, recorded rather than tidied: **four executables appear at two
 paths** — `sed` and `diff3` because the existing golden was built under the *old*
@@ -3232,10 +3329,22 @@ terminal state. Two at once would need a second *process* — an XPC-style split
 that iOS does not allow for this shape of app — and it is not on the roadmap any
 more.
 
+**#13, THE netfs LATENCY, IS CLOSED — AND IT WAS OUR OWN DEVICE MODEL**
+(2026-08-22, [docs/v10-log/2026-08-22.md](docs/v10-log/2026-08-22.md)).
+`pdp11_il.c` raised the receive interrupt as a *flag* that the vector read
+cleared, so two completions arriving before the guest was dispatched produced
+one interrupt — and `ni1010a.c` handles one packet per interrupt. The second
+frame sat in guest memory unannounced until the sender's **retransmission**
+provided the next interrupt, so every netfs exchange advanced at a TCP RTO.
+`il.rpend` counts unreported completions and holds the request asserted, as a
+real board does. Identical workload, same 154 requests: **1009.4 s of guest wait
+→ 1.5 s (673x)**, median per request **4.941 s → 0.000 s**, and **267
+retransmissions of 602 data frames → 0 of 303**. V8 got faster too (five-pass
+netfs 32-49 s → 13-17 s) and `net-selftest.sh` still passes 3/3. The app carries
+it, and `app-check` now checks the whole chain — patches → xcframework → app —
+because it had been watching neither.
+
 Next:
-- **#13, the netfs latency**, which bounds every V10 harness: 0.84 ms in the
-  server against 9.46 s in the guest, with the server, wire, dropped frames and
-  retransmission all excluded. The packet trace is built and unused.
 - **Rung 8's reachable half** is K15 — `bash tools/v10-mux.sh`, generator in
   `v10/mk/mkdep.py`'s `emit_mux()`. Built at the tape's **124**, not 64: see the
   correction under the 5620-compiler entry in Decisions.

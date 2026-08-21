@@ -124,6 +124,10 @@ final class Connection {
 
     func trace(_ s: String) { if cfg.verbose { log(s) } }
 
+    /// Seconds spent blocked in readExactly() before the request now being
+    /// served arrived.  Carried on the request's own trace line.
+    private var lastWaitSeconds: Double = 0
+
     /// `BUFSIZE` from usr/sys/h/param.h -- the client's own ceiling, and so the
     /// natural one for us. `doread`/`donami` in the reference server allocate
     /// whatever `x->count` says without a bound; a server on a socket wants a
@@ -148,12 +152,15 @@ final class Connection {
         // clock that steps mid-run would silently corrupt the sum -- and this
         // process runs for hours beside a guest that thinks it is 1976.
         var waitingNs: UInt64 = 0, servingNs: UInt64 = 0, worstNs: UInt64 = 0
+        var waits: [Double] = []
         while true {
             let t0 = DispatchTime.now().uptimeNanoseconds
             guard let header = wire.readExactly(Senda.size) else { break }
             let t1 = DispatchTime.now().uptimeNanoseconds
             let x = Senda(header)
             requests += 1
+            lastWaitSeconds = Double(t1 &- t0) / 1_000_000_000
+            waits.append(lastWaitSeconds)
             let ok = serve(x)
             let t2 = DispatchTime.now().uptimeNanoseconds
             waitingNs &+= t1 &- t0
@@ -168,6 +175,39 @@ final class Connection {
                    requests, ms(servingNs),
                    requests > 0 ? ms(servingNs) / Double(requests) : 0,
                    ms(worstNs), ms(waitingNs) / 1000))
+        reportWaits(waits)
+    }
+
+    /// The distribution of the wait BEFORE each request, which is the guest's
+    /// time.  The bucket edges are the candidate mechanisms, not round numbers:
+    /// V10's minimum retransmit timeout is 2 s (TCPTV_MIN = 1*PR_SLOWHZ + 1,
+    /// PR_SLOWHZ = 1) where V8's is 1 s, and SLiRP's persist timer is
+    /// TCPTV_PERSMIN = 5 s doubling to TCPTV_PERSMAX = 60 s.  So a pile at 2 s
+    /// reads as retransmission, one at 5 and 10 s as a persist probe, and a flat
+    /// few milliseconds as neither.
+    private func reportWaits(_ waits: [Double]) {
+        guard !waits.isEmpty else { return }
+        let edges: [(String, Double)] = [
+            ("      < 1 ms", 0.001), ("     < 10 ms", 0.010),
+            ("    < 100 ms", 0.100), ("      < 1 s", 1.0),
+            ("   1 - 2 s", 2.0), ("   2 - 3 s", 3.0),
+            ("   3 - 6 s", 6.0), ("   6 - 12 s", 12.0),
+            ("  12 - 30 s", 30.0), ("     >= 30 s", .infinity)]
+        var counts = [Int](repeating: 0, count: edges.count)
+        for w in waits {
+            for (i, e) in edges.enumerated() where w < e.1 { counts[i] += 1; break }
+        }
+        let sorted = waits.sorted()
+        func q(_ f: Double) -> Double {
+            sorted[min(sorted.count - 1, max(0, Int(f * Double(sorted.count))))]
+        }
+        log("the wait BEFORE each request -- the guest's own time:")
+        for (i, e) in edges.enumerated() where counts[i] > 0 {
+            let bar = String(repeating: "#", count: min(50, counts[i]))
+            log(e.0 + String(format: "  %5d  ", counts[i]) + bar)
+        }
+        log(String(format: "   min %.3f  median %.3f  p90 %.3f  max %.3f  (n=%d)",
+                   sorted[0], q(0.5), q(0.9), sorted[sorted.count - 1], waits.count))
     }
 
     // MARK: Handshake
@@ -209,8 +249,15 @@ final class Connection {
             log("unknown command \(x.cmd); closing")
             return false
         }
+        // THE WAIT THAT PRECEDED THIS REQUEST, on the request's own line.  A
+        // total cannot say whether every request costs the same or a few cost
+        // everything, and those are different bugs: a fixed cost is a timer or a
+        // round trip, a heavy tail is a retransmit or a persist backoff.  It is
+        // also the only way to see WHICH operation the wait precedes -- a gap
+        // before an NREAD is not the same finding as a gap before an NNAMI.
         trace("#\(requests) \(op.name) tag=\(x.tag) ino=\(x.ino) "
-              + "count=\(x.count) off=\(x.offset) flags=\(x.flags) uid=\(x.uid)")
+              + "count=\(x.count) off=\(x.offset) flags=\(x.flags) uid=\(x.uid)"
+              + String(format: "  [+%.3fs]", lastWaitSeconds))
 
         switch op {
         case .get:   return doGet(x, &y)

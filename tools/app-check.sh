@@ -142,14 +142,32 @@ done < <(find "$ROOT/app/build" -maxdepth 5 -name "ipnx.app" -type d 2>/dev/null
 # --- 4. the bundle is newer than the sources -------------------------------
 # The image can be current while the CODE is not: a Swift change that was
 # never rebuilt launches the old binary against the new disk.
+#
+# AND THE EMULATOR CORES COUNT AS SOURCES, which this check missed until
+# 2026-08-22.  It watched app/ipnx and netfs/Sources only, so a change to
+# libsimh/patches/pdp11_il.c -- the NI1010 device model -- could be measured,
+# committed and never reach the app: the xcframework is an intermediate, and
+# nothing compared it with anything.  That is the golden-disk mistake in a
+# different layer ("it is in the repo, it will arrive in the build"), and the
+# fix that exposed it was worth 673x on V10's netfs, so it is exactly the kind
+# of change that must not go missing.  The two hand-maintained core patch sets
+# are libsimh/patches and tools/dmdbridge/patches -- libdmd has no patches
+# directory of its own, its build-xcframework.sh reads the dmd diffs out of
+# tools/dmdbridge.  Each xcframework is rebuilt from those and the app links
+# them, so requiring the app binary to be newer than the patches covers the
+# whole chain in one comparison.
 while IFS= read -r app; do
     [[ -z "$app" ]] && continue
     rel="${app#$ROOT/}"
     bin=$(find "$app" -type f -name ipnx -perm +111 2>/dev/null | head -1)
     [[ -z "$bin" ]] && continue
-    newer=$(find "$ROOT/app/ipnx" "$ROOT/netfs/Sources" -type f \
-                 \( -name '*.swift' -o -name '*.h' -o -name '*.metal' \) \
+    newer=$(find "$ROOT/app/ipnx" "$ROOT/netfs/Sources" \
+                 "$ROOT/libsimh/patches" "$ROOT/tools/dmdbridge/patches" -type f \
+                 \( -name '*.swift' -o -name '*.h' -o -name '*.metal' \
+                    -o -name '*.c' -o -name '*.diff' \) \
                  -newer "$bin" 2>/dev/null | head -3)
+    # (the patch sets are checked against the xcframeworks as well, below --
+    #  an app rebuilt over a STALE xcframework would satisfy this line alone)
     if [[ -n "$newer" ]]; then
         bad "$rel build is up to date" \
             "$(echo "$newer" | head -1 | sed "s|$ROOT/||") changed since it was built"
@@ -157,6 +175,54 @@ while IFS= read -r app; do
         note "$rel build is up to date" "ok"
     fi
 done < <(find "$ROOT/app/build" -maxdepth 5 -name "ipnx.app" -type d 2>/dev/null)
+
+# --- 4b. and the xcframeworks are newer than the core patches ---------------
+# THE APP-BINARY COMPARISON ALONE IS NOT ENOUGH, and the hole is exactly the
+# one section 4 was extended to close, one layer down: edit
+# libsimh/patches/pdp11_il.c, rebuild only the APP, and the binary is newest --
+# so the check passes while the app still links an xcframework built from the
+# previous device model.  The chain is patches -> xcframework -> app, and it
+# needs both comparisons.  Found by proving section 4's new gate bites: the
+# touch that made it fire was cleared by an app rebuild that could not
+# possibly have picked the change up.
+core_chain () {                 # <label> <patch-dir> <xcframework> <rebuild-cmd>
+    local label=$1 pdir=$2 fw=$3 cmd=$4
+    [[ -d "$pdir" ]] || return 0
+    if [[ ! -d "$fw" ]]; then
+        note "$label xcframework" "not built yet -- nothing to be stale"
+        return 0
+    fi
+    # The newest file anywhere in the framework: xcodebuild -create-xcframework
+    # rewrites the libraries, and comparing the directory's own mtime would
+    # miss a rebuild that replaced only what is inside it.
+    # CAPTURE, THEN TEST -- this file's own rule about `| grep -q' under
+    # pipefail, and the first version of this line broke on the other half of
+    # the same lesson: it carried a `-newermt '1970-01-01'' that BSD find
+    # cannot parse ("Can't parse date/time"), so the pipeline produced nothing
+    # and the check reported "empty -- cannot compare" and PASSED.  A predicate
+    # added for tidiness turned a gate into a rubber stamp.
+    local listing newest
+    listing=$(find "$fw" -type f -print0 2>/dev/null | xargs -0 stat -f '%m %N' 2>/dev/null)
+    newest=$(printf '%s\n' "$listing" | sort -rn | head -1 | cut -d' ' -f2-)
+    if [[ -z "$newest" || ! -f "$newest" ]]; then
+        bad "$label xcframework is built from the current patches" \
+            "cannot read $fw -- refusing to report a comparison not made"
+        return 0
+    fi
+    local newer
+    newer=$(find "$pdir" -type f \( -name '*.c' -o -name '*.h' -o -name '*.diff' \) \
+                 -newer "$newest" 2>/dev/null | head -1)
+    if [[ -n "$newer" ]]; then
+        bad "$label xcframework is built from the current patches" \
+            "$(echo "$newer" | sed "s|$ROOT/||") is newer -- run $cmd"
+    else
+        note "$label xcframework is built from the current patches" "ok"
+    fi
+}
+core_chain "libsimh" "$ROOT/libsimh/patches" \
+           "$ROOT/libsimh/dist/SimhVAX.xcframework" "libsimh/build-xcframework.sh"
+core_chain "libdmd " "$ROOT/tools/dmdbridge/patches" \
+           "$ROOT/libdmd/dist/DmdCore.xcframework" "libdmd/build-xcframework.sh"
 
 echo
 if [[ $fail == 0 ]]; then

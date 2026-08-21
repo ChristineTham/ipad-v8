@@ -67,6 +67,19 @@ FILES=(
     src/history/ix/src/jerq/mux/term/control.c        # 12961  four
     src/history/ix/src/jerq/mux/mux.c                 # 23747  six
 )
+
+# AND THE LIST IS OVERRIDABLE, FOR THE TRACE'S SAKE.  V10_IL_TRACE turns every
+# frame into ~100 lines of hex dump, and answering "between which two frames
+# does the time go" needs a handful of requests, not two dozen verdicts: the
+# full list is 24 verdicts at ~150 s each, which is the whole 5400 s deadline.
+# One file is 6 verdicts and still tens of requests.  Default unchanged.
+#
+#	V10_NETREAD_FILES=src/history/ix/src/jerq/mux/32ld.c \
+#	V10_IL_TRACE=work/il.trace bash tools/v10-netread.sh
+if [[ -n "${V10_NETREAD_FILES:-}" ]]; then
+    read -r -a FILES <<< "$V10_NETREAD_FILES"
+    echo "== V10_NETREAD_FILES overrides the list: ${#FILES[@]} file(s) =="
+fi
 : > "$LIST"
 for f in "${FILES[@]}"; do
     p="$ROOT/work/v10/$f"

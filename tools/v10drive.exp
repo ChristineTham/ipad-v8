@@ -110,6 +110,19 @@ set V10_SIMH  [file normalize [file join [file dirname [info script]] .. work op
 set V10_ROM   [file normalize [file join [file dirname [info script]] .. work v10boot uda750]]
 set V10_GEN   [file normalize [file join [file dirname [info script]] .. v10 mk gen]]
 
+# THE TRACE PATH IS RESOLVED HERE, AT SOURCE TIME, AND THE REASON IS v10_boot's
+# OWN `cd $V10_MEDIA'.  The simulator is spawned from the media directory so its
+# ATTACH lines can name images by their short names -- so a relative
+# V10_IL_TRACE=work/il.trace lands under work/v10gold/work/, whose directory
+# does not exist.  SIMH says `File open error', prints `sim>' as usual, and
+# v10_boot's generic `v10_must "sim>"' passes: a run with no trace at all and
+# nothing in the transcript that reads as a failure.  Normalising inside
+# v10_iltrace would be too late -- it is called after the cd.
+set V10_ILTRACE {}
+if {[info exists env(V10_IL_TRACE)] && $env(V10_IL_TRACE) ne ""} {
+    set V10_ILTRACE [file normalize $env(V10_IL_TRACE)]
+}
+
 # ARGUMENTS FOR THE SIMULATOR ITSELF, and the app's library is why this exists.
 #
 # The desktop open-simh binaries take no argument and drop straight to `sim>',
@@ -409,11 +422,37 @@ proc v10_must {pat {t 0}} {
 # It is appended AFTER $extra deliberately: `set il debug' is rejected while the
 # device is disabled, so it has to follow whatever `set il enable' the caller
 # passed.
+#
+# THE FIRST VERSION OF THIS PROC PRODUCED AN UNTIMESTAMPED, DUPLICATE-COLLAPSED
+# DUMP -- an instrument that removed the very evidence it was built to find --
+# and it was recorded in CLAUDE.md as "built and unused" for a week.  Both faults
+# are in scp.c and neither is visible from the simulator's behaviour:
+#
+#   * `set debug -t' ON ITS OWN IS AN ERROR.  sim_set_debon() opens with
+#     `if ((cptr == NULL) || (*cptr == 0)) return SCPE_2FARG' -- the switch is
+#     consumed by the command parser, so the filename argument is empty.  It
+#     printed "Too few arguments", `sim>' followed as usual, and v10_boot's
+#     generic `v10_must "sim>"' passed.  A silent failure, in a command whose
+#     whole purpose was to add the timestamps.
+#   * AND THE TIMESTAMP IS NOT A DEFAULT.  sim_console.c:2358 does force -T on,
+#     but that line sits INSIDE `if (sim_deb_switches & SWMASK ('R'))', so it
+#     applies only when -R was asked for.  A bare `set debug <file>' timestamps
+#     nothing at all.
+#   * WORSE, THE DEFAULT FILTER DELETES RETRANSMISSIONS.  scp.c's
+#     _sim_debug_write_flush() collapses consecutive identical lines into
+#     "same as above (N times)" unless -F is given -- and a retransmitted frame
+#     is BY DEFINITION an identical hex dump.  The one hypothesis this trace
+#     exists to test is the one the filter erases, timestamps included.
+#
+# sim_switches are case-insensitive and combine in one word (get_switches() ORs
+# SWMASK (sim_toupper (c))), and sim_set_deb_switches() is called from the same
+# invocation that names the file -- so it must be one command, `-tf <file>'.
+# Verified against the artefact rather than the announcement: tools/il-gaps.py
+# refuses a trace whose lines carry no timestamp or that contains an elision.
 proc v10_iltrace {} {
-    global env
-    if {![info exists env(V10_IL_TRACE)] || $env(V10_IL_TRACE) eq ""} { return {} }
-    return [list "set debug $env(V10_IL_TRACE)" \
-                 "set debug -t" \
+    global V10_ILTRACE
+    if {$V10_ILTRACE eq ""} { return {} }
+    return [list "set debug -tf $V10_ILTRACE" \
                  "set il debug=PKT;DAT"]
 }
 
@@ -500,6 +539,7 @@ proc v10_boot {img {extra {}} {r5 0}} {
     # other proc here then talks to stdin, reads EOF at once, and reports
     # "simulator exited".  A scoping bug arrives dressed as a dead simulator.
     global spawn_id V10_RUNNING V10_MEDIA V10_SIMH V10_SIMH_ARGS V10_ROM V10_RUN_SECS
+    global V10_ILTRACE
 
     # Say what is missing while it is still a filename.
     if {![file executable $V10_SIMH]} { puts "\nV10-BAIL: no simulator at $V10_SIMH"; exit 2 }
@@ -540,6 +580,18 @@ proc v10_boot {img {extra {}} {r5 0}} {
     } [list "set rq0 ra81" "attach rq0 $img"] $extra [v10_iltrace]] {
         send "$c\r"
         v10_must "sim>" 60
+    }
+
+    # THE TRACE IS ASSERTED HERE, NOT AT THE END OF THE RUN.  `set debug' can
+    # fail -- a bad path, a bad switch -- and it fails by printing one line and
+    # then `sim>', which the generic prompt-match above accepts.  Both of this
+    # instrument's earlier faults were exactly that shape and both cost a whole
+    # run.  sim_open_logfile() creates the file the instant it succeeds, so its
+    # existence is a marker only the success path can write.
+    if {$V10_ILTRACE ne "" && ![file exists $V10_ILTRACE]} {
+        puts "\nv10_boot: `set debug -tf $V10_ILTRACE' did not create the trace."
+        puts "v10_boot: the simulator's cwd is [pwd]; look for `File open error' above."
+        v10_bail "il trace requested but not opened"
     }
 
     send "load -o $V10_ROM FA00\r"; v10_must "sim>" 60
