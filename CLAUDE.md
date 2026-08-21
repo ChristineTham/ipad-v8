@@ -2228,6 +2228,32 @@ at the old flat `v8/` is moved on first launch, never abandoned.
     `ilrint()`, so it never pays that. Same card, same device model, different
     driver — which is the right shape for 7.5 s against the ~16 ms per request
     `pdp11_il.c:775` records for *unpatched* V8.
+    - **BUT THE MAGNITUDE RULES IT OUT AS A SUFFICIENT EXPLANATION** (measured
+      2026-08-21). Three command round trips coscheduled on a 10 ms clock is
+      ~30 ms, and the figure to explain is **9.46 s** — two orders of magnitude
+      out. So `ilrcvbufs()` may well be a real cost and it is not *the* cost.
+    - **The server, the wire, dropped frames and the queue are all excluded, in
+      one measurement.** netfsd's own instrument over K14's run: 122 requests,
+      **serving 102.8 ms total — 0.84 ms mean, 10.0 ms worst — against 1154.0 s
+      waiting on the guest**, a factor of eleven thousand. The card agrees: 560
+      received, 613 sent, **zero** receive errors, **zero** transmit errors,
+      **zero** queue loss. And 560/122 = 4.6 frames per request is exactly what
+      a 4096-byte reply costs unaided, so the counts are not evidence of
+      retransmission either.
+    - **Something in the guest waits on a SECONDS-scale timer, and it is none of
+      the obvious ones.** Every sleep on the V10 receive path, read host-side:
+      `ni1010a.c:167/188/233` are `tsleep(…, 5)` but **init only**
+      (`ILC_RESET`/`ILC_STAT`/`ILC_ONLINE`); `streamio.c:314/501` are
+      `tsleep(…, 30)` **timeouts, not delays** — they fire only when data does
+      *not* arrive; `neta.c:630` is untimed. `streamio.c:196` is a
+      `tsleep(…, 1)` in **`stclose()`**, up to sixty of them draining a queue,
+      so **closing a stream can take a minute** — worth knowing, not on the
+      per-request path.
+    - So the question is narrow now: *what does the guest wait on for 9.46 s
+      between one reply and the next request?* The instrument for it is built
+      and still unused — `V10_IL_TRACE=work/il.trace bash
+      tools/v10-netread.sh` timestamps every frame, so it can say whether the
+      time falls before our reply reaches the guest or after.
   - A near miss worth not repeating: `ilincmd()` waits for command completion
     with `tsleep(…, PZERO, 5)` and `slp.c:86` declares that argument **seconds**,
     which is tantalisingly close to 7.5. It is **not** the cause — its only
