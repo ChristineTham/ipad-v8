@@ -332,6 +332,22 @@ if {$mounted} {
     # walked 4,507 files and stopped dead after autoconfig with the CPU idle.
     # tools/v10fs.py checked all 203 staged files host-side and every one carries
     # x, so ld resolved every symbol in every one.
+    # WHAT THE SHIPPED TOOLCHAIN ACTUALLY IS, stated because "ours wins" does
+    # NOT hold for two of its files and a claim that it does would be a
+    # misreport.  Measured on the builder with tools/v10fs.py:
+    #
+    #	/lib/ccom     THE TAPE'S  (src/cmd/ccom/vax/comp)
+    #	/lib/libc.a   THE TAPE'S  (src/libc/libc.a, 261 members)
+    #	/lib/cpp /lib/c2 /lib/ld /lib/crt0.o        ours, from stage 1
+    #
+    # That is the golden's own toolchain, and it is the configuration every V10
+    # harness has run on -- stages 1, 2 and 3 included -- so shipping it is
+    # shipping something proven rather than something convenient.  Stage 2's
+    # 260-member libc and stage 3's fixpoint passes live on the .s2/.s3 chain,
+    # not this one; carrying them across is a separate step and a separate run.
+    # It changes nothing about the commands on this disk: V10 links statically,
+    # so each of the 203 already carries whatever libc linked it.  What it
+    # changes is what a FUTURE compile on the shipped machine links against.
     foreach {from to} {bin bin etc etc lib lib usr/bin usr/bin
                        usr/games usr/games usr/lib usr/lib} {
         v10_sh "test -d $STAGED/$from && cd $STAGED/$from && find . -print | cpio -pdu $MP/$to > /dev/null 2>&1" 3600
