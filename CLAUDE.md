@@ -2055,6 +2055,38 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   shell; `v10fs.py` prints the filesystem it read on **stderr** every time,
   because a banner is the only thing that makes the wrong answer visible instead
   of plausible.
+  - **IT IS NOT ONE LETTER — IT RECURRED WITHIN THE HOUR AS `:a`.** `"…/$i:a"`
+    in a loop over image names became *zsh's absolute-path modifier* and every
+    read returned nothing. zsh's modifiers are a family (`:h :t :r :e :a :A :c
+    :l :u :s`), so **any** `$var:` followed by a letter is a hazard: always
+    write `${var}:part`. And the banner does not save you when the call says
+    `2>/dev/null` — which that loop did, which is why it looked like an empty
+    kernel rather than a wrong path.
+- **THE SIMULATOR IS A PROPERTY OF THE IMAGE, AND A HARNESS THAT HARDCODES IT
+  PANICS.** `v10-link.exp` (K10.3) was written for the `.k102` chain, which
+  boots on a **vax750**; pointed at the `.k13` chain — whose `/unix` is our own
+  `ipnx780` kernel — it dies on hardware that is not there (`ms780`, `dw780`,
+  `mba`):
+
+	unix
+	type 2 sp x7fffec00 code x0 pc x800139f8 ...  panic: trap
+	type 8 sp x7fffec00 code x0 pc x80009581 ...  panic again: trap
+	HALT instruction, PC: 80000BB3 (HALT)
+
+  **`v10_select_machine` asks the kernel**: K7's carries the banner string
+  `Unix 10e ipnx 780` and `seki.u` does not, so `tools/v10fs.py` reads it off
+  the image host-side and the simulator follows. A measurement of the artefact,
+  not a convention about its filename.
+  - **And the wait for `login:` now treats a panic as an outcome.**
+    `v10_must "ogin" 480` sat the full eight minutes and then reported *"never
+    saw ogin after 480s"* — the symptom, not the cause. `v10_must_boot` matches
+    `panic: ` as well and names the likely reason. Two expect traps avoided on
+    purpose: **no `--`** (it ends option processing, so a later `-re` would
+    silently become a literal glob), and the **flat** form, the only one of
+    expect's three spellings that both honours `-timeout` and re-splits into
+    pairs. Proved against real processes on all three paths — prompt matches,
+    panic bails at once, timeout still fires on time — because the success path
+    is the one that would break every harness.
 - **`nohup … &` INSIDE A BACKGROUNDED CALL REPORTS "exit 0" OVER A RUN THAT IS
   STILL BOOTING.** The ampersand makes the wrapping shell exit at once, so the
   harness announces completion while `vax780`, `expect` and the driver are all
