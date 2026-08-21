@@ -148,7 +148,13 @@ final class Machine: ObservableObject {
     private var simThread: Thread?
     private var restartedAfterFailedRestore = false
 
-    init() {
+    /// Which machine this is. Defaults to the Eighth Edition, which is the
+    /// only one wired up today; see MachineSpec for what the Tenth needs.
+    let spec: MachineSpec
+
+    init(spec: MachineSpec = .v8) {
+        self.spec = spec
+        self.supportDir = Self.support(for: spec.id)
         console.onBytes = { [weak self] bytes in self?.onOutput?(bytes) }
     }
 
@@ -165,24 +171,30 @@ final class Machine: ObservableObject {
     /// Resolved once per process, and anything already at the old path is
     /// MOVED rather than abandoned — the disk in it is somebody's machine,
     /// with their account and their files on it.
-    private static let support: URL = {
+    private static func support(for id: String) -> URL {
         let fm = FileManager.default
         let root = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let dir = root.appendingPathComponent("ipnx", isDirectory: true)
-                      .appendingPathComponent("v8", isDirectory: true)
-        let legacy = root.appendingPathComponent("v8", isDirectory: true)
-        if !fm.fileExists(atPath: dir.path), fm.fileExists(atPath: legacy.path) {
+                      .appendingPathComponent(id, isDirectory: true)
+        // The flat legacy path only ever existed for v8, so the move is
+        // conditional on that: a `v10' directory at the root was never ours and
+        // must not be adopted.
+        let legacy = root.appendingPathComponent(id, isDirectory: true)
+        if id == "v8", !fm.fileExists(atPath: dir.path),
+           fm.fileExists(atPath: legacy.path) {
             try? fm.createDirectory(at: dir.deletingLastPathComponent(),
                                     withIntermediateDirectories: true)
             try? fm.moveItem(at: legacy, to: dir)
         }
         return dir
-    }()
+    }
 
-    private var supportDir: URL { Self.support }
+    /// Resolved once, in `init`, rather than computed: it is read from the SIMH
+    /// thread as well as the main one.
+    private let supportDir: URL
 
     /// The live working disk — what the user exports.
-    var workingDiskURL: URL { supportDir.appendingPathComponent("v8.disk") }
+    var workingDiskURL: URL { supportDir.appendingPathComponent(spec.diskFile) }
     /// The 5620's 8 KB NVRAM, kept beside the machine it belongs to.
     var nvramURL: URL { supportDir.appendingPathComponent("nvram.bin") }
     /// Terminal throughput log — which stage limits the wire is not guessable
@@ -208,7 +220,9 @@ final class Machine: ObservableObject {
 
     private var snapshotURL: URL { supportDir.appendingPathComponent("state.sav") }
     private var attemptURL: URL { supportDir.appendingPathComponent("restore.attempt") }
-    private var pendingDiskURL: URL { supportDir.appendingPathComponent("v8.disk.pending") }
+    private var pendingDiskURL: URL {
+        supportDir.appendingPathComponent(spec.diskFile + ".pending")
+    }
     private var resetMarkerURL: URL { supportDir.appendingPathComponent("reset.pending") }
 
     /// WHICH SYSTEM IMAGE THE WORKING DISK WAS CUT FROM.
@@ -225,7 +239,7 @@ final class Machine: ObservableObject {
     /// would launch, boot, and run last week's system with no sign anything
     /// was stale — every fix present in the repo, absent on the machine.
     private var bundledImageID: String? {
-        guard let u = Bundle.main.url(forResource: "v8.disk", withExtension: "id"),
+        guard let u = Bundle.main.url(forResource: spec.diskFile, withExtension: "id"),
               let s = try? String(contentsOf: u, encoding: .utf8) else { return nil }
         let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
         return t.isEmpty ? nil : t
@@ -306,21 +320,19 @@ final class Machine: ObservableObject {
     // 4.1BSD matches with no kernel change at all. Measured at the `login:`
     // prompt: ~97% of a core before, ~18% after.
 
-    private var bootConf: String { """
-    set console telnet=127.0.0.1:\(consolePort)
-    set remote telnet=127.0.0.1:\(controlPort)
-    set remote timeout=600
-    set cpu idle=4.1BSD
-    set tto 7b
-    set dz lines=8
-    \(dzAttachments)
-    set rp0 rp07
-    at rp0 v8.disk
-    set tu0 te16
-    \(ilAttachment)
-    load -o bootV8 0
-    run 2
-    """ }
+    private var bootConf: String {
+        ([
+            "set console telnet=127.0.0.1:\(consolePort)",
+            "set remote telnet=127.0.0.1:\(controlPort)",
+            "set remote timeout=600",
+        ] + spec.cpu + spec.preDevices + [
+            "set tto 7b",
+            "set dz lines=8",
+            dzAttachments,
+        ] + spec.disk + spec.extraDevices + [
+            ilAttachment,
+        ] + spec.boot).joined(separator: "\n")
+    }
 
     /// The Interlan NI1010, on SLiRP's user-mode NAT.
     ///
@@ -387,20 +399,22 @@ final class Machine: ObservableObject {
     //   restored kernel autoconfigured against a 1-mux DZ at C0-C4. It has to
     //   precede `restore` — dz_setnl resets the device, which would wipe the
     //   guest-configured CSR if it ran after.
-    private var resumeConf: String { """
-    set remote telnet=127.0.0.1:\(controlPort)
-    set remote timeout=600
-    set dz lines=8
-    set rp0 rp07
-    at rp0 v8.disk
-    \(ilEnable)
-    restore -D -Q state.sav
-    set cpu idle=4.1BSD
-    set console telnet=127.0.0.1:\(consolePort)
-    \(dzAttachments)
-    \(ilAttach)
-    cont
-    """ }
+    private var resumeConf: String {
+        ([
+            "set remote telnet=127.0.0.1:\(controlPort)",
+            "set remote timeout=600",
+        ] + spec.preDevices + [
+            "set dz lines=8",
+        ] + spec.disk + [
+            ilEnable,
+            "restore -D -Q state.sav",
+        ] + spec.resumeCpu + [
+            "set console telnet=127.0.0.1:\(consolePort)",
+            dzAttachments,
+            ilAttach,
+            "cont",
+        ]).joined(separator: "\n")
+    }
 
     // MARK: - Lifecycle
 
@@ -573,7 +587,8 @@ final class Machine: ObservableObject {
         }
 
         if !fm.fileExists(atPath: disk.path) {
-            guard let bundled = Bundle.main.url(forResource: "v8", withExtension: "disk") else {
+            guard let bundled = Bundle.main.url(forResource: spec.diskFile,
+                                                withExtension: nil) else {
                 throw MachineError.mediaMissing
             }
             try await Task.detached(priority: .userInitiated) {
@@ -587,9 +602,10 @@ final class Machine: ObservableObject {
             }
         }
 
-        let boot = supportDir.appendingPathComponent("bootV8")
+        let boot = supportDir.appendingPathComponent(spec.bootFile)
         if !fm.fileExists(atPath: boot.path) {
-            guard let bundled = Bundle.main.url(forResource: "bootV8", withExtension: nil) else {
+            guard let bundled = Bundle.main.url(forResource: spec.bootFile,
+                                                withExtension: nil) else {
                 throw MachineError.mediaMissing
             }
             try fm.copyItem(at: bundled, to: boot)
