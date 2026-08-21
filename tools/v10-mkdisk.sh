@@ -326,6 +326,42 @@ for d in ("/w10", "/s1", "/obj", "/k13obj", "/k14obj", "/k10lib"):
         continue
     bad.append("/usr%s shipped -- build scratch wearing a system path" % d)
 
+# EVERY EXECUTABLE THAT EXISTS TWICE, REPORTED RATHER THAN REMOVED.
+#
+# A shipped disk carries a few names at two paths, and the cause is known: the
+# golden was built under an OLDER prebuilt.txt, so it holds the tape's copy where
+# that table used to put it, while our build installs at the path the tape's own
+# makefile specifies.  A rebuilt golden puts them at the same path and ours would
+# overlay.
+#
+# A REMOVAL PASS WAS DESIGNED, COMPUTED AND REJECTED ON EVIDENCE.  The naive rule
+# -- "delete a copied file whose name our tables place elsewhere" -- matched FORTY
+# paths, almost all of them build scratch this harness never copies (/usr/obj,
+# /usr/s1, /usr/k13obj, /tmp/ct).  Restricted to what is actually copied it
+# matches three, and one of those must not be touched: removing /bin/sleep would
+# leave `sleep' only under /usr, which /etc/rc mounts -- so it would not exist in
+# SINGLE-USER mode, and V10's kernel does not sync on halt (lsys/md/machdep.c's
+# boot() is two lines), which makes the userland `sync; sleep; sync' the whole
+# flush.  Deleting from a shipped disk to tidy a path is not worth breaking a safe
+# shutdown.
+#
+# So it is reported.  A duplicate that every build names is a known property; one
+# that needs an ad-hoc audit to find is not.
+dups = {}
+for part, pfx in (("a", ""), ("c", "/usr")):
+    fs = m.Fs(img, part)
+    for p, ino in fs.walk("/"):
+        if (ino["mode"] & m.IFMT) != m.IFREG or not (ino["mode"] & 0o111):
+            continue
+        dups.setdefault(p.rsplit("/", 1)[1], []).append((pfx + p, ino["size"]))
+dups = {k: v for k, v in dups.items() if len(v) > 1}
+if dups:
+    print("   executables at more than one path (%d) -- see the note in this"
+          % len(dups))
+    print("   script; they are reported, not removed:")
+    for k in sorted(dups):
+        print("     %-9s %s" % (k, "  ".join("%s (%d)" % t for t in sorted(dups[k]))))
+
 if bad:
     print("\n== NO MEASUREMENT: the disk is not a shippable system ==")
     for b in bad:
