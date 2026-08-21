@@ -99,6 +99,13 @@ tools/v10-syscalls.py --callers
 ```
 
 ```bash
+# What is actually ON a V10 disk?  (host-side, no simulator, one second)
+python3 tools/v10fs.py sum   work/v10gold/ipnx-v10-ra81.img:a   # a=root c=/usr
+python3 tools/v10fs.py find  work/v10gold/ipnx-v10-made.img:c
+python3 tools/v10fs.py prov  work/v10gold/ipnx-v10-ra81.img:a   # tape's vs ours
+```
+
+```bash
 # Regenerate the V10 build metadata (all three have --check; all are host-side)
 tools/v10-where.py        # install paths, from V10's manual + V8's measurements
 tools/v10-overlay.py      # v10/src/ -- our corrections, derived from the tarball
@@ -425,6 +432,29 @@ Full spec: [docs/architecture.md](docs/architecture.md) · Phases:
   the include order the tape shows (`lsys/os/limits.C` reaches `lnode.h` only
   after `sys/param.h`, and `setlimits.c` includes `<shares.h>` and nothing
   else).
+- **A SHIPPED `v10.disk` CARRIES WHAT V10 BUILT, AND THE TAPE'S BINARIES ONLY
+  WHERE WE CANNOT BUILD THE PROGRAM** (decision 2026-08-21, rung 10). The
+  instinct is the reverse — keep Bell Labs' binary wherever one exists — and
+  this file rules it out in its own words: the 46 prebuilt commands are
+  *"developers' working directories, so what survived is whatever was last
+  compiled in place"*, and they are *"an ORACLE, not a shortcut … use the 46 to
+  check what we build, never to skip building it"*. **Build detritus is not a
+  specification; the source is**, and K10.3's 203 commands were built from it by
+  V10's own compiler. Stage 2 settled the identical question the identical way,
+  by building libc rather than shipping the tape's archive and accepting a
+  *falling* byte-identical count as progress. So the 40 prebuilt commands we
+  cannot build — `2500 adb bcp picasso lcc lex …` — keep Bell Labs' bytes
+  exactly where they are, because nothing overlays them. Our build where we have
+  one, theirs where we do not.
+  - Measured before deciding, host-side: of K10.3's 203 staged files, **50
+    collide** with a path the builder already has and **153 are new**. Of the
+    50, nineteen are the tape's own bytes and thirty-one are ours already — and
+    **nine of ten sampled collisions have byte-identical text+data**, differing
+    only by twelve bytes of symbol table (one entry, the source path). So the
+    build is deterministic in generated code and "which build wins" is a real
+    question for almost none of them. The exception is `/etc/login`, genuinely
+    smaller in K10.3's build (text 22528 → 20480), which is the documented
+    Share-scheduler removal.
 - **V10 MUST STAY AUTHENTIC. This outranks convenience, tidiness and our own
   taste** (Christine, 2026-08-17). V10 is a restoration: the artefact is worth
   something because it is what Bell Labs left, not because it is what we would
@@ -1915,6 +1945,36 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   reports an error after that line: it cost a stage-2 run in which `/usr/s1`
   (stage 1's whole toolchain) and `/usr/bin/ranlib` were invisible, so 255 of
   261 libc members failed to compile and the run read as a compiler problem.
+- **`sh` WAS SPECIFIED INTO `/usr/bin`, AND `/usr` IS A SEPARATE FILESYSTEM.**
+  `world.link` said `sh /usr/bin default` — `default` meaning *"ours, because it
+  had to go somewhere"* — because `where.txt` had **no row for `sh` at all**:
+  `commands()` asked *"does `cmd/X` hold `X.c`"* and `cmd/sh`'s main is
+  `main.c`. The same blind spot the `MK` comment already recorded for the
+  toolchain, and it silently dropped **92 units**. The consequence is not
+  cosmetic: `/etc/init` execs **`/bin/sh`** (read out of the golden's own
+  binary, not assumed) and `/etc/rc` — which init runs *through* that shell — is
+  the four-liner that mounts `/usr`. So a shell only in `/usr/bin` does not
+  exist at the moment it is needed: V8 stage 8's disk that *"walked 4,507 files
+  and then stopped dead after autoconfig with the CPU idle"*, on the Tenth
+  Edition.
+  - **The fix is to READ what the tape already says.** `mk_paths()` in
+    `tools/v10-where.py` scans every unit's own makefile for `cp <name> <dir>`
+    and finds **43** rules. Ten commands moved to the directory the tape names
+    (`sh make tp kasb` → `/bin`, `config dump` → `/etc`, `diff3 apsend style` →
+    `/usr/lib`, `map` → `/usr/maps`) and thirty more kept their directory and
+    gained real evidence. Two look odd and are historically right: `diff3`
+    belongs in `/usr/lib` because `diff -3` invokes it, and `map` really does
+    install to `/usr/maps`.
+  - **THE SOURCE TOKEN MUST BE THE PRODUCT'S NAME, which is what separates an
+    install from a backup.** `cmd/sh/makefile:37` is three commands on one line
+    — `mv /bin/sh /bin/osh;	cp sh /bin/sh;	strip /bin/sh` — of which the
+    **first** would answer `/bin/osh` to a scanner reading destinations.
+  - **And it caught a second list saying otherwise**: `prebuilt.txt` hardcoded
+    `TOOLCHAIN = {as, ranlib, lex, make, sh, sed}` to fill that very hole, and
+    the scan contradicts one of the six — it said `sed → /bin` where the tape
+    (`cp sed /usr/bin`) and V8's measured disk both say `/usr/bin`. Both
+    generators now **halt** on a disagreement, and both guards were proved to
+    bite before being trusted.
 - **A component list that appears twice will disagree, silently.**
   `v10/mk/mkdep.py` emits `tc.order`, `shutdown.order` and `buildtools.ord`;
   `v10-stage1.exp` also carried `set BUILDTOOLS {ar cmp tail}`. The day `ed`
@@ -1948,6 +2008,60 @@ at the old flat `v8/` is moved on first launch, never abandoned.
   `/usr/bin/{yacc,lex,ranlib}`, `/usr/lib/yaccpar` — there is no `/bin/strip`.
   `cc -B` is a bare `strspl`, so the prefix must name the passes' actual directory
   (`-B$(TOOLDIR)/lib/`), and `as`/`ld`/`crt0.o` have no `-B` equivalent at all.
+- **READ A V10 DISK FROM THE HOST TOO — `tools/v10fs.py`, and it is PROVEN
+  against the tape rather than reviewed.** `v8fs.py`'s argument applies twice
+  over on the Tenth Edition, because a V10 guest is a poor witness about its own
+  filesystem: `ls` exits 0 for a file that does not exist, and a full filesystem
+  **sleeps** instead of failing. The trap is that a block address has **two
+  encodings**: the inode packs 13 addresses at three bytes each (`l3tol`, whose
+  **vax** arm is three bytes little-endian with a zero high byte, where the
+  pdp11 arm of the same file packs the identical bytes in a different order),
+  while the **indirect blocks hold full 4-byte `daddr_t`** — `bmap()` reads them
+  as `b_un.b_daddr` sized `BSIZE/sizeof(daddr_t)` = 1024. Constants:
+  `lsys/sys/ino.h` (64-byte dinode), `lsys/sys/dir.h` (DIRSIZ 14, so 16 bytes),
+  `NADDR` 13 (`lsys/sys/inode.h:12`), `itod`/`itoo` (`param.h:86`), `fsbtodb =
+  b*8` (`param.h:88`).
+  - **The proof is nine binaries byte-identical to the tape's own prebuilt
+    copies** — `sh ls ps make sed diff pr test as` — extracted from the golden
+    with no simulator. `as` at 57,203 bytes spans fourteen blocks, so it goes
+    through the single indirect; that cannot come out right unless `itod`,
+    `itoo`, the `l3tol` arm, the 3-vs-4-byte split, `NADDR`, `NSHIFT` and
+    `NMASK` are *all* right at once. Block accounting against the bitmap's own
+    free count agrees to within four blocks of 516.
+  - **`prov` is the audit that answers "whose bytes are these?"**, and both of
+    its false readings ran in the FLATTERING direction. **An empty file is not
+    evidence**: `/etc/mtab` and `/etc/utmp` are zero bytes, every empty file has
+    the same sha256, and the tape carries one — so the oracle credited Bell Labs
+    with two files this project truncated. **And an archive identical in every
+    member read as foreign**: the golden's `/lib/libc.a` differs from the tape's
+    in exactly **ten bytes**, all the `__.SYMDEF` ar-header timestamp
+    (743340498 against 1786908310), because this file's own rule requires
+    re-`ranlib`ing an archive at its destination. The re-ranlib is *correct*;
+    the whole-file hash called the correct thing foreign. Archives are
+    fingerprinted per member with `__.SYMDEF` dropped.
+  - **NEVER put it in a BUILD path.** It is an instrument. Using it to extract a
+    tree *and* to bless the result makes the verification circular — if the
+    reader is wrong it writes and approves the same wrong bytes.
+- **`"$IMG:c"` IN zsh SILENTLY DROPS THE `:c`, so the tool reads the WRONG
+  FILESYSTEM and tells the truth about it.** `$K:c` is a history modifier, so
+
+	K=work/v10gold/ipnx-v10-ra81.img.stage1.k102.k7.k13
+	python3 tools/v10fs.py stat "$K:c" /bin/lex     # reads partition a
+
+  arrives with no partition, defaults to root, and correctly reports that
+  `/bin/lex` is not there. **Nine files read as MISSING when all nine existed.**
+  An RA81 image holds two filesystems, so this is K11's *"a guest can report
+  success about the wrong disk"* moved to the host. `${K}:c` is the fix in the
+  shell; `v10fs.py` prints the filesystem it read on **stderr** every time,
+  because a banner is the only thing that makes the wrong answer visible instead
+  of plausible.
+- **`nohup … &` INSIDE A BACKGROUNDED CALL REPORTS "exit 0" OVER A RUN THAT IS
+  STILL BOOTING.** The ampersand makes the wrapping shell exit at once, so the
+  harness announces completion while `vax780`, `expect` and the driver are all
+  still alive — and the log, read at that moment, stops mid-`attach il nat:`,
+  which looks exactly like the documented SLiRP bind failure. Nothing was
+  damaged, and only *not* starting the next run on top of it kept that true.
+  Background the call and let the tool track it; wait on the driver's own pid.
 - **Read a V8 disk from the host — don't boot one to look.** `tools/v8fs.py` walks a
   SIMH RP06/RP07 image directly (`ls`/`cat`/`stat`/`diff`, `IMAGE:PART`); every
   constant is quoted from the tree (`param.h`, `ino.h`, `dir.h`, `subr.c`'s `bmap`,
