@@ -718,7 +718,22 @@ result.
 7. ~~**Kernel reaches single-user on SIMH**~~ — **done 2026-08-17**, and it went
    straight past single-user to **multi-user with a login prompt** (K9,
    `tools/v10-boot780.sh app` 5/5, on the static library both app targets link)
-8. Multi-user; `mux` from a dmd_core 5620 — **ANSWERED 2026-08-19, AND THE
+8. Multi-user; `mux` from a dmd_core 5620 — **THE HOST HALF IS DONE: `mux` BUILT
+   BY V10, 2026-08-21** (`bash tools/v10-mux.sh`, **15/15**). Ten objects compiled
+   and linked by V10's own toolchain — the seven from the `ix` tree, `labEQ.o` and
+   `labLE.o` from Bell Labs' own IX libc unchanged, and our `muxix.o` supplying
+   `unsafe`/`pex`/`unpex`. `mux` links, is executable, and installs into the
+   staged root; `MAXPKTDSIZE` is asserted on the machine at the tape's 124 via
+   `sizeof(struct Packet) == 128`. Six runs, six named faults: the netfs
+   truncation (`strdata` 512→8192), quoted includes needing an in-tree build,
+   `JTOOB`/`JLABEL`/`JPEX` (a recorded deviation — IX's `jioctl.h` is lost), and
+   `labLE.c` failing to open over netfs. What remains for a *full* rung 8 is
+   pointing this `mux` at the 5620 `muxterm` this project builds for V8, which
+   needs `MAXPKTDSIZE` matched at **64** — a deviation for interoperability with
+   its own patch and its own decision. Details:
+   [docs/v10-log/2026-08-20.md](v10-log/2026-08-20.md).
+
+   The TERMINAL half remains impossible — **ANSWERED 2026-08-19, AND THE
    TERMINAL HALF IS IMPOSSIBLE FROM THE TAPE.** This rung was written on the
    assumption "protocol unchanged from V8", and that is half right in a way worth
    stating precisely:

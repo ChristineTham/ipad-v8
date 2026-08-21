@@ -2876,6 +2876,47 @@ short-return branch it guards is reachable on a larger transfer.
   SIMH prints is `il_rint_ack` returning `il_dib.vec` and `il_cint_ack` returning
   `il_dib.vec + 4`, which is why the config names only the base.
 
+**RUNG 8's HOST HALF IS DONE — V10 BUILT `mux`** (2026-08-21,
+`bash tools/v10-mux.sh`, **15/15**). Ten objects compiled and linked by V10's own
+toolchain: the seven from the `ix` tree, `labEQ.o`/`labLE.o` from Bell Labs' own
+IX libc **unchanged**, and our `muxix.o` supplying `unsafe`/`pex`/`unpex`. It
+links, is executable, and installs to `/usr/w15/usr/jerq/bin/mux`, and
+`MAXPKTDSIZE` is asserted **on the machine** at the tape's 124 through
+`sizeof(struct Packet) == 128`.
+
+Six runs, six named faults, and three of them are durable lessons:
+
+- **THE BUILD MUST BE IN-TREE, because V10's cpp cannot resolve a QUOTED include
+  for an out-of-tree source and `-I` does not help.** `mux.c` includes five
+  headers with quotes; with `-I/n/mux` explicitly on the command line cpp still
+  answered `Can't find include file` for all five, and **never looked for any of
+  them** — each name appears once in netfsd's trace and that once is *make*
+  stat'ing a prerequisite. The control is in the same run: `aouthdr.h`, which
+  `32ld.c` includes with **angle** brackets, appears three times because cpp
+  really did search there. `cpp.c`'s loop is
+  `for (dirp = dirs + inctype; *dirp; ++dirp)` with `inctype` 1 for angle and
+  **0 for quoted**, and `dirs[0]` is a pointer into `argv` that `trmdir()`
+  truncated in place. The tape never meets it because `mkfile:53` compiles in the
+  source directory over a *relative* `INCL = $PDIR`. **So: if the build compiles
+  it, it lives locally.** The same fault recurred one directory over as
+  `0: No source file .../labLE.c`, again after a successful lookup.
+- **`JTOOB`, `JLABEL` and `JPEX` are used in three IX files and defined NOWHERE
+  in the 25,682** — IX's own `jioctl.h` is lost, like the `3cc` family. They are
+  **wire-protocol opcodes**, not ioctls (`ctlvec[0]=JLABEL`), and `mux.c:232`'s
+  `buf[0]=JTIMO` proves the family is `JTYPE|n` put through a char. The surviving
+  headers use 1–10 and **disagree about 9 and 10**, so IX's numbers cannot be
+  deduced. Ours are a **recorded deviation** in `v10/src/include/jioctl.h`,
+  admissible only because both paths are dead twice over — labels and pex are
+  unused on V10, and the terminal that would read them cannot be built.
+- **The oracle is 0 of 7 byte-identical, and that is the right answer.** Same
+  finding as libc: Bell Labs' 1989 objects were built by a compiler that no
+  longer exists. What the archive was good for it already gave — `_buf` as a
+  124-byte common.
+
+What remains for a *full* rung 8 is pointing this `mux` at the 5620 `muxterm`
+this project builds for V8, which needs `MAXPKTDSIZE` matched at **64** — a
+deviation for interoperability with its own patch and its own decision.
+
 Next, in order of what is blocked by what:
 - **What to copy** for a shippable `v10.disk` — K10.3's 203 commands, K10.2's 26
   libraries, stage 1's toolchain — then the Swift work to carry a second machine
