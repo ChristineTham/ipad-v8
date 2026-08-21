@@ -44,7 +44,13 @@ v10_boot $img $extra
 v10_login root
 v10_sh "PATH=/bin:/etc:/usr/bin; export PATH" 120
 v10_sh "OK=-ok" 120
-set pid [exp_pid -i $spawn_id]
+# `exp_pid' bare, and guarded.  `exp_pid -i $spawn_id' reads the variable
+# directly, and under tools/v10-dryrun.sh's stubs nothing ever sets it -- so the
+# harness threw `can't read "spawn_id"' in the dry run while working perfectly in
+# a real one.  A harness that fails the cheap gate is a harness whose next scope
+# error gets found three hours into a boot instead (CLAUDE.md's own reason for
+# the dry run), so the bare form is used and the failure is survivable.
+if {[catch {exp_pid} pid]} { set pid 0 }
 
 # LET IT SETTLE FIRST.  getty has just started and the kernel is still finishing
 # autoconfiguration; sampling immediately measures the boot, not the idle.
